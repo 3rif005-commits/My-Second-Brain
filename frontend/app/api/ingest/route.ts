@@ -1,0 +1,50 @@
+import { createClient } from "@/lib/supabase/server";
+
+// POST /api/ingest — proxy to FastAPI ingest service with JWT forwarding
+// Body: FormData with file | { url: string }
+export async function POST(req: Request) {
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const fastApiUrl = process.env.FASTAPI_URL ?? "http://localhost:8000";
+
+  let res: Response;
+  try {
+    res = await fetch(`${fastApiUrl}/ingest/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        // Forward Content-Type verbatim — multipart/form-data MUST include its
+        // boundary or FastAPI cannot parse the body (returns 400).
+        ...(req.headers.get("Content-Type")
+          ? { "Content-Type": req.headers.get("Content-Type")! }
+          : {}),
+      },
+      body: req.body,
+      // @ts-expect-error — Node 18+ streams
+      duplex: "half",
+    });
+  } catch (e) {
+    const isRefused = e instanceof Error && e.message.includes("ECONNREFUSED");
+    return new Response(
+      JSON.stringify({
+        error: isRefused
+          ? `FastAPI backend is not running. Start it with: cd backend && uvicorn main:app --reload`
+          : `Failed to reach backend: ${e instanceof Error ? e.message : String(e)}`,
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  return new Response(res.body, {
+    status: res.status,
+    headers: { "Content-Type": res.headers.get("Content-Type") ?? "application/json" },
+  });
+}

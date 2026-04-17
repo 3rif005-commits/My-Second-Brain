@@ -1,0 +1,41 @@
+{
+  "name": "second-brain",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^3.0.63",
+    "@blocknote/core": "^0.48.0",
+    "@blocknote/mantine": "^0.48.0",
+    "@blocknote/react": "^0.48.0",
+    "@blocknote/xl-ai": "^0.48.0",
+    "@handlewithcare/prosemirror-inputrules": "^0.1.4",
+    "@handlewithcare/prosemirror-suggest-changes": "^0.1.8",
+    "@mantine/core": "^8.3.11",
+    "@mantine/hooks": "^8.3.11",
+    "@supabase/ssr": "^0.6.1",
+    "@supabase/supabase-js": "^2.49.0",
+    "ai": "^4.0.0",
+    "next": "16.2.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.3",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5"
+  }
+}
