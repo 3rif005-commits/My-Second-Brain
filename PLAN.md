@@ -1,7 +1,8 @@
 # Second Brain — Research, Data Models & Build Plan
 
-> LLM: **Gemma 4** (via Google AI SDK / Ollama for local dev)  
-> Generated: 2026-04-15
+> LLM: **Nemotron 120B** (primary) + **Gemma 4 26B** (fallback) via OpenRouter free tier  
+> Next session: migrate to local LLM via Ollama  
+> Last updated: 2026-04-17
 
 ---
 
@@ -148,8 +149,9 @@ CREATE INDEX notes_content_gin ON notes USING GIN (content);
 
 ### Q4 — pgvector Semantic Indexing
 
-**Embedding model:** `text-embedding-004` (Google, 768 dimensions) — pairs naturally with Gemma 4
-and is free via Google AI Studio. Fallback: `text-embedding-3-small` (OpenAI, 1536 dims).
+**Embedding model:** `gemini-embedding-001` (Google, 768 dimensions) — correct SDK name is `models/gemini-embedding-001` in google-genai SDK. Requires Gemini billing.
+Local alternative: `nomic-embed-text` via Ollama (768-dim, free, offline).
+Fallback: `text-embedding-3-small` (OpenAI, 1536 dims).
 
 **Column definition:**
 ```sql
@@ -484,51 +486,44 @@ type content → auto-saves → refresh → content restored.
 
 ---
 
-## Phase 2 Plan — Ingestion Pipeline
+## Phase 2 Plan — Ingestion Pipeline ✅ COMPLETE
 
-**Goal:** User drops a PDF or pastes a URL → Gemma 4 generates a structured mastery guide →
-streams live into the editor block by block.
+**Goal:** User drops a PDF or pastes a URL → LLM generates a structured mastery guide →
+parsed into BlockNote blocks and saved automatically.
 
-**Definition of done:** Drop a PDF, watch a structured note with H2 sections, bullet
-points, and summaries appear live in the editor.
+**Definition of done:** Drop a PDF → structured note with H2 sections, callouts, and
+deep-dive toggles appears in the editor → content saved → persists after reload.
 
-### Features (in implementation order)
+### What was built
 
-1. FastAPI `/api/ingest` proxy route in Next.js with JWT forwarding
-2. File upload UI — drag-and-drop dropzone (PDF, MP3, MP4), URL input
-3. Supabase Storage — upload raw file before processing
-4. FastAPI `/ingest/pdf` endpoint — `pymupdf` text extraction
-5. FastAPI `/ingest/url` endpoint — `trafilatura` article extraction
-6. Mastery guide prompt — Gemma 4 system prompt generating HTML for `aiDocumentFormats.html`
-7. `/api/ai` Next.js route — Gemma 4 via `@ai-sdk/google`, wired to `@blocknote/xl-ai`
-8. Live streaming — `AIExtension.invokeAI()` with extracted text, blocks appear in real time
-9. User review — "Accept & Save" / "Discard" buttons after streaming completes
-10. Auto-metadata extraction — Gemma 4 extracts title, topics[] as a small second call
-11. Ingestion progress UI — step indicators: Extracting → Generating → Streaming → Done
+- `frontend/app/(brain)/brain/ingest/page.tsx` — model selector UI (Nemotron default / Gemma fallback) + dropzone + progress steps
+- `frontend/app/api/ingest/route.ts` — Next.js proxy to FastAPI, forwards JWT + `X-LLM-Model` header
+- `frontend/components/ingestion/IngestDropzone.tsx` — drag-drop PDF + URL input
+- `frontend/components/ingestion/IngestionProgress.tsx` — Uploading → Extracting → Generating → Done
+- `backend/routers/ingest.py` — `/ingest/pdf`, `/ingest/url`, `/ingest/` (auto-dispatch), reads `x_llm_model` header
+- `backend/services/pdf_extractor.py` — PyMuPDF text extraction
+- `backend/services/url_extractor.py` — trafilatura article extraction
+- `backend/services/llm.py` — OpenRouter client (streaming), `generate_mastery_guide(model_override)`, `extract_metadata()`
+- `backend/prompts/mastery_guide.py` — two-layer HTML prompt: overview callout + deep-dive toggles
 
-### New Files
+### LLM Provider
 
-```
-frontend/app/(brain)/brain/ingest/page.tsx
-frontend/app/api/ai/route.ts
-frontend/app/api/ingest/route.ts
-frontend/components/ingestion/IngestDropzone.tsx
-frontend/components/ingestion/IngestionProgress.tsx
-backend/routers/ingest.py
-backend/services/pdf_extractor.py
-backend/services/url_extractor.py
-backend/services/llm.py
-backend/prompts/mastery_guide.py
-```
+| Value | Model | Notes |
+|-------|-------|-------|
+| `openrouter` (current) | `nvidia/nemotron-3-super-120b-a12b:free` (primary) | Fast, best quality |
+| `openrouter` (fallback) | `google/gemma-4-26b-a4b-it:free` | Selectable in UI |
+| `gemini` (future) | `gemini-2.0-flash` | Needs billing enabled |
+| `local` (next session) | Ollama + Nemotron/Gemma3 | Fully offline, no rate limits |
 
-### Milestone
+Controlled by `LLM_PROVIDER` in `backend/.env`. No code changes needed to switch.
 
-Paste a YouTube URL → transcript extracted → Gemma 4 streams a full mastery guide into
-the editor → click "Accept" → note saved with title and topics.
+### Known limitations
+- YouTube URL returns 400 — trafilatura can't extract YT transcripts (Phase 4: yt-dlp + whisper)
+- Nemotron 120B free tier: cold-start ~3–5 min after idle; warm requests are fast
 
 ---
 
-## Phase 3 Plan — Context Protocol
+## Phase 3 Plan — Context Protocol 🔧 IN PROGRESS
 
 **Goal:** The AI tutor knows the user's entire knowledge base and references their
 specific notes in responses.
@@ -536,20 +531,24 @@ specific notes in responses.
 **Definition of done:** User asks "explain chain rule" → tutor responds with a personalized
 explanation that links to `/brain/[noteId]` and says "as you noted in your Derivatives guide..."
 
-### Features (in implementation order)
+### Already scaffolded (code exists)
 
-1. pgvector extension enabled in Supabase, `embedding vector(768)` column populated
-2. HNSW index on `note_index.embedding`
-3. Embedding service — FastAPI endpoint calling Google `text-embedding-004`
-4. Indexing trigger — on note save with `is_indexed = false`, call embedding service
-5. Semantic retrieval endpoint — FastAPI `/retrieve`: embed query → top-K cosine similarity
-6. Context block assembly — build `<knowledge_context>` XML from retrieved notes
-7. Tutor chat UI — `/brain/chat` with message history and clickable deep links
-8. Context-augmented system prompt — inject `<knowledge_context>` before every call
-9. Inline deep links — Gemma 4 outputs `[note title](/brain/uuid)` → rendered as `<Link>`
-10. Context panel — sidebar showing which notes were retrieved
+- `supabase/migrations/004_vector_index.sql` — `note_index` table + HNSW index + `match_notes()` RPC + RLS — **needs to be run in Supabase SQL editor**
+- `backend/services/embedder.py` — `gemini-embedding-001` (768-dim) — **blocked on Gemini billing**
+- `backend/services/retriever.py` — semantic search via `match_notes()` Supabase RPC
+- `backend/routers/retrieval.py` — `POST /retrieval/index`, `POST /retrieval/retrieve`
 
-### New Files
+### Still to build (next session)
+
+1. **Local LLM** — replace OpenRouter with Ollama (`LLM_PROVIDER=local`); wire `services/llm.py`
+2. **Local embeddings** — `nomic-embed-text` via Ollama (or enable Gemini billing)
+3. **Run migration 004** in Supabase SQL editor
+4. Chat UI at `frontend/app/(brain)/brain/chat/page.tsx`
+5. `/api/chat` Next.js route — context-augmented system prompt injection
+6. `backend/prompts/tutor.py` — tutor system prompt with `{knowledge_context}` placeholder
+7. Context panel — sidebar showing which notes were retrieved
+
+### New Files Still Needed
 
 ```
 frontend/app/(brain)/brain/chat/page.tsx
@@ -557,11 +556,7 @@ frontend/app/api/chat/route.ts
 frontend/components/chat/ChatInterface.tsx
 frontend/components/chat/MessageBubble.tsx
 frontend/components/chat/ContextPanel.tsx
-backend/routers/retrieval.py
-backend/services/embedder.py
-backend/services/retriever.py
 backend/prompts/tutor.py
-supabase/migrations/003_vector_index.sql
 ```
 
 ### Milestone
@@ -660,7 +655,6 @@ trafilatura>=2.0.0
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-GOOGLE_GENERATIVE_AI_API_KEY=your-google-ai-key
 FASTAPI_URL=http://localhost:8000
 ```
 
@@ -669,7 +663,17 @@ FASTAPI_URL=http://localhost:8000
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 SUPABASE_JWT_SECRET=your-jwt-secret
-GOOGLE_API_KEY=your-google-ai-key
+GOOGLE_API_KEY=your-google-ai-key        # for embeddings (Phase 3, needs billing)
+OPENROUTER_API_KEY=your-openrouter-key   # current LLM provider
+LLM_PROVIDER=openrouter                  # "openrouter" | "gemini" | "local"
 FRONTEND_URL=http://localhost:3000
 DATABASE_URL=postgresql://postgres:password@db.your-project.supabase.co:5432/postgres
 ```
+
+### LLM_PROVIDER values
+
+| Value | Model used | When to use |
+|-------|-----------|-------------|
+| `openrouter` | Nemotron 120B (primary) / Gemma 4 (fallback) | Current — free tier |
+| `gemini` | `gemini-2.0-flash` | When Gemini billing is enabled |
+| `local` | Ollama (next session) | Fully offline development |

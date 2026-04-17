@@ -47,8 +47,9 @@ class UrlIngestRequest(BaseModel):
 async def ingest_pdf(
     file: UploadFile = File(...),
     authorization: str = Header(),
+    x_llm_model: str | None = Header(default=None),
 ):
-    """Upload a PDF → extract text → Gemini generates mastery guide → save note."""
+    """Upload a PDF → extract text → LLM generates mastery guide → save note."""
     user_id = get_user_id(authorization)
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
@@ -68,7 +69,7 @@ async def ingest_pdf(
         raise HTTPException(status_code=422, detail="Could not extract text from PDF.")
 
     # Generate mastery guide HTML
-    html_content = generate_mastery_guide(source_text, title=file.filename)
+    html_content = generate_mastery_guide(source_text, title=file.filename, model_override=x_llm_model)
 
     # Extract title & topics
     try:
@@ -108,8 +109,9 @@ async def ingest_pdf(
 async def ingest_url(
     body: UrlIngestRequest,
     authorization: str = Header(),
+    x_llm_model: str | None = Header(default=None),
 ):
-    """Fetch a URL → extract article text → Gemini generates mastery guide → save note."""
+    """Fetch a URL → extract article text → LLM generates mastery guide → save note."""
     user_id = get_user_id(authorization)
 
     try:
@@ -117,7 +119,7 @@ async def ingest_url(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    html_content = generate_mastery_guide(source_text, title=title)
+    html_content = generate_mastery_guide(source_text, title=title, model_override=x_llm_model)
 
     try:
         meta = extract_metadata(source_text)
@@ -152,12 +154,13 @@ async def ingest_url(
 @router.post("/")
 async def ingest_auto(
     authorization: str = Header(),
+    x_llm_model: str | None = Header(default=None),
     file: UploadFile | None = File(default=None),
     url: str | None = Form(default=None),
 ):
     """Auto-dispatch: if file is present → PDF ingest, else URL ingest."""
     if file:
-        return await ingest_pdf(file=file, authorization=authorization)
+        return await ingest_pdf(file=file, authorization=authorization, x_llm_model=x_llm_model)
     if url:
-        return await ingest_url(body=UrlIngestRequest(url=url), authorization=authorization)
+        return await ingest_url(body=UrlIngestRequest(url=url), authorization=authorization, x_llm_model=x_llm_model)
     raise HTTPException(status_code=400, detail="Provide either a file or a url.")

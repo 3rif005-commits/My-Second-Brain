@@ -26,12 +26,12 @@ def _get_openrouter():
     return _openrouter_client
 
 
-def _openrouter_complete(system: str, user: str) -> str:
+def _openrouter_complete(system: str, user: str, model: str | None = None) -> str:
     """Stream the response to avoid free-tier server-side timeouts on large generations."""
     client = _get_openrouter()
     try:
         stream = client.chat.completions.create(
-            model=OPENROUTER_MODEL,
+            model=model or OPENROUTER_MODEL,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -91,7 +91,7 @@ def _gemini_complete(prompt: str) -> str:
 
 # ── Public API ──────────────────────────────────────────────────────────────
 
-def generate_mastery_guide(source_text: str, title: str = "") -> str:
+def generate_mastery_guide(source_text: str, title: str = "", model_override: str | None = None) -> str:
     """Generate a mastery-guide HTML compatible with BlockNote from source_text."""
     prompt = build_mastery_guide_prompt(source_text, title)
 
@@ -102,6 +102,7 @@ def generate_mastery_guide(source_text: str, title: str = "") -> str:
     return _openrouter_complete(
         "Follow the instructions in the user message exactly. Output only HTML.",
         prompt,
+        model=model_override,
     )
 
 

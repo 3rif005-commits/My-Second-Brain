@@ -1,7 +1,6 @@
 # Second Brain — Project Status
 
-> This file is the source of truth across all conversations.
-> Read it at the start of every session. Update it at the end.
+> Source of truth across all conversations. Read at session start, update at session end.
 > Last updated: 2026-04-17
 
 ---
@@ -18,18 +17,18 @@ from where we left off.
 
 ## Current Phase
 
-**Phase 3 — Context Protocol** `[~] IN PROGRESS`
+**Phase 3 — Context Protocol** `[~] SCAFFOLDED — blocked on Gemini billing for embeddings`
 
 ---
 
 ## Phase Tracker
 
-| Phase | Name               | Status         | Started    | Completed  |
-|-------|--------------------|----------------|------------|------------|
-| 1     | Foundation         | ✅ Complete    | 2026-04-15 | 2026-04-15 |
-| 2     | Ingestion Pipeline | ✅ Complete    | 2026-04-15 | 2026-04-17 |
-| 3     | Context Protocol   | 🔧 In progress | 2026-04-17 | —          |
-| 4     | Polish & Expansion | Not started    | —          | —          |
+| Phase | Name               | Status          | Started    | Completed  |
+|-------|--------------------|-----------------|------------|------------|
+| 1     | Foundation         | ✅ Complete     | 2026-04-15 | 2026-04-15 |
+| 2     | Ingestion Pipeline | ✅ Complete     | 2026-04-15 | 2026-04-17 |
+| 3     | Context Protocol   | 🔧 In progress  | 2026-04-17 | —          |
+| 4     | Polish & Expansion | Not started     | —          | —          |
 
 ---
 
@@ -47,79 +46,62 @@ All verified end-to-end with Playwright (16/16 tests passing):
 
 ---
 
-## Phase 2 — What's Done
+## Phase 2 — COMPLETE ✅
 
-### Frontend (all files created + build passes clean)
-- `app/api/ai/route.ts` — Gemini 2.0 Flash via @ai-sdk/google, streams BlockNote tool calls
-  - Uses dynamic `import("@blocknote/xl-ai/server")` — CJS require() was incompatible with ESM-only peer deps
-  - `@blocknote/xl-ai` in `serverExternalPackages` (not `transpilePackages`) — prevents bundler conflict
-  - `types/xl-ai-server.d.ts` — local type stubs since server.d.ts is empty in 0.48
-- `app/api/ingest/route.ts` — proxy to FastAPI with JWT, catches ECONNREFUSED → 503
-- `app/(brain)/brain/ingest/page.tsx` — upload UI + progress flow with realistic step timers
-  - Stores FastAPI HTML response in sessionStorage (`ingest-pending-{note_id}`) before navigating
-- `components/ingestion/IngestDropzone.tsx` — drag-drop + URL input
-- `components/ingestion/IngestionProgress.tsx` — uploading → extracting → generating → done
-- `components/editor/BlockEditor.tsx` — **UPDATED**: added `AIExtension()`, `ingestHtml` prop
-  - `AIExtension()` from `@blocknote/xl-ai` — adds AI slash-menu and toolbar button
-  - `ingestHtml` prop: when set, calls `editor.tryParseHTMLToBlocks(html)` + `editor.replaceBlocks()` + saves immediately
-- `components/editor/NoteEditorPage.tsx` — **UPDATED**: reads sessionStorage on mount, passes `ingestHtml` to editor
-  - Shows "Applying generated content…" in the toolbar while ingest HTML is pending
-- `app/globals.css` — `@import "@blocknote/xl-ai/style.css"` added (AI menu styles)
-- `next.config.ts` — `@handlewithcare/*` in transpilePackages; `@blocknote/xl-ai` in serverExternalPackages
+### LLM Setup (final)
+- **Primary model**: `nvidia/nemotron-3-super-120b-a12b:free` via OpenRouter — faster, better output quality
+- **Fallback model**: `google/gemma-4-26b-a4b-it:free` via OpenRouter
+- **Provider**: OpenRouter (Gemini blocked — quota exhausted, needs billing enabled)
+- **Streaming**: enabled (`stream=True`) to prevent free-tier server-side timeout cutoffs
+- **Model selector UI**: user can switch between both models on the ingest page (Nemotron is default)
 
-### Backend (all files created + server starts clean)
-- `routers/ingest.py` — `/ingest/pdf`, `/ingest/url`, `/ingest/` (auto-dispatch)
-  - Returns `{ note_id, title, html, topics }`
-- `services/pdf_extractor.py` — PyMuPDF (fitz) text extraction
-- `services/url_extractor.py` — trafilatura article extraction
-- `services/llm.py` — **uses `google-genai` SDK**
-  - `generate_mastery_guide(source_text)` → HTML compatible with BlockNote
-  - `extract_metadata(source_text)` → `{ title, topics }`
-- `prompts/mastery_guide.py` — HTML system prompt for BlockNote format
-- `main.py` — `redirect_slashes=False`, ingest router registered
+### What works end-to-end (Playwright test passing, ~4 min)
+1. User drops PDF at `/brain/ingest` → selects model (Nemotron 120B default)
+2. Progress bar: Uploading → Extracting → Generating → Done
+3. FastAPI extracts text (PyMuPDF), calls OpenRouter → returns `{ note_id, html, title, topics }`
+4. Frontend stores HTML in `sessionStorage["ingest-pending-{note_id}"]`
+5. Navigates to `/brain/{note_id}`
+6. `NoteEditorPage` reads sessionStorage → `BlockEditor` parses HTML → `replaceBlocks()` → saves
+7. Content persists after page reload
 
-### End-to-end ingest flow (implemented, ready to test)
-1. User drops PDF or pastes URL at `/brain/ingest`
-2. Frontend shows: uploading → extracting → generating (timers simulate progress)
-3. POST `/api/ingest` → Next.js proxy → FastAPI
-4. FastAPI: extracts text + calls Gemini → returns `{ note_id, html, title, topics }`
-5. Frontend stores `html` in `sessionStorage["ingest-pending-{note_id}"]`
-6. Navigates to `/brain/{note_id}`
-7. `NoteEditorPage` reads sessionStorage → passes `ingestHtml` to `BlockEditor`
-8. `BlockEditor` calls `tryParseHTMLToBlocks(html)` → `replaceBlocks()` → saves via PATCH
+### Mastery guide prompt (two-layer system)
+- **Overview callout** (blue) — scannable in 2 min: What / How / Why / Takeaway
+- **Deep Dive toggles** (`<details>`) — sub-concepts, definitions, code, tables
+- `data-importance` on every `<h2>` (0–6 scale, maps to block background color)
+- Callout color semantics: red=exam-critical, orange=watch-out, purple=insight, blue=overview
+- Hidden `<div data-type="metadata">` block for Phase 3 indexer
+
+### Model selector wire-up
+- `X-LLM-Model` header flows: ingest page → Next.js proxy (`route.ts`) → FastAPI (`ingest.py`) → `llm.py` `model_override` param
+- `ingest_auto`, `ingest_pdf`, `ingest_url` all accept `x_llm_model: str | None = Header(default=None)`
+
+### Known limitations
+- YouTube URL returns 400 — trafilatura can't extract YT transcripts (Phase 4: yt-dlp + whisper)
+- Nemotron 120B cold-start on first request after model idle: ~3–5 min (acceptable, passes reliably once warm)
+- Gemini embeddings blocked until billing is enabled on Google AI key
 
 ---
 
-## What Needs Testing (Phase 2)
+## Phase 3 — SCAFFOLDED 🔧
 
-### Test the full PDF ingest flow
-```bash
-# Terminal 1
-cd /home/ayoub/projects/second_brain/frontend && npm run dev
+### What's built (code exists, not yet live)
+- `supabase/migrations/004_vector_index.sql` — `note_index` table, `vector(768)` column, HNSW index, `match_notes()` RPC function, RLS policies
+- `backend/services/embedder.py` — calls `gemini-embedding-001` (768-dim) via google-genai SDK
+- `backend/services/retriever.py` — semantic search via Supabase RPC `match_notes`
+- `backend/routers/retrieval.py` — `POST /retrieval/index`, `POST /retrieval/retrieve`
+- `backend/main.py` — retrieval router registered
 
-# Terminal 2
-cd /home/ayoub/projects/second_brain/backend
-source .venv/bin/activate && uvicorn main:app --reload
-```
-Then:
-1. Open http://localhost:3000 → log in
-2. Click the ↑ import button in the sidebar (or go to /brain/ingest)
-3. Drop any PDF file
-4. Watch the progress bar: uploading → extracting → generating → done
-5. App navigates to the new note — content should populate automatically
-6. Toolbar should briefly show "Applying generated content…" then "Saved HH:MM:SS"
-7. Refresh — content should still be there
+### What's blocked
+- **Migration 004** not yet run in Supabase SQL editor (user needs to run it)
+- **Gemini billing** not enabled → `gemini-embedding-001` returns 429 quota error
+- Chat UI not built yet (next session)
 
-### Test URL ingest
-Paste an article URL (e.g., a Wikipedia page) in the URL input and click Import.
-
-### Test the /api/ai endpoint (AI toolbar)
-```bash
-curl -X POST http://localhost:3000/api/ai \
-  -H "Content-Type: application/json" \
-  -d '{"messages":[{"role":"user","content":"hello"}],"toolDefinitions":[]}'
-# Should return a stream (or 503 if key is missing)
-```
+### Next session plan
+1. Replace OpenRouter with **local LLM (Ollama + Nemotron or Gemma 3)** — `LLM_PROVIDER=local`, wire `services/llm.py`
+2. Switch embeddings to a free local alternative (e.g., `nomic-embed-text` via Ollama) or enable Gemini billing
+3. Run migration 004 in Supabase SQL editor
+4. Build chat UI at `/brain/chat`
+5. Update PLAN.md phases to reflect local LLM direction
 
 ---
 
@@ -131,7 +113,7 @@ cd /home/ayoub/projects/second_brain/frontend
 npm run dev
 # → http://localhost:3000
 
-# Terminal 2 — Backend (needed for Phase 2 ingest)
+# Terminal 2 — Backend
 cd /home/ayoub/projects/second_brain/backend
 source .venv/bin/activate
 uvicorn main:app --reload
@@ -142,14 +124,20 @@ uvicorn main:app --reload
 
 ```bash
 cd /home/ayoub/projects/second_brain/frontend
-npx playwright test                        # all 16 tests
-npx playwright test --project=notes-crud  # Phase 1 CRUD tests
-npx playwright test --project=protected-routes
+
+# All tests (requires both servers running)
+npx playwright test
+
+# Phase 1 only
+npx playwright test --project=notes-crud
+
+# Phase 2 ingest (PDF upload — takes ~4 min on free LLM)
+npx playwright test --project=ingest --grep "PDF"
 ```
 
 ---
 
-## Key Technical Facts (for next session)
+## Key Technical Facts
 
 | Topic | Detail |
 |-------|--------|
@@ -158,39 +146,36 @@ npx playwright test --project=protected-routes
 | Auth email | `aubrif005@gmail.com` / `SecondBrain2026!` |
 | Next.js version | 16.2.3 (Turbopack) |
 | BlockNote version | 0.48.0 |
-| xl-ai server import | dynamic `import("@blocknote/xl-ai/server")` — CJS require() fails due to ESM deps |
-| xl-ai type stubs | `types/xl-ai-server.d.ts` — overrides empty server.d.ts in 0.48 |
-| xl-ai serverExternalPackages | `@blocknote/xl-ai` in serverExternalPackages, NOT transpilePackages |
-| @handlewithcare/* | In transpilePackages — ESM-only peer deps of xl-ai |
-| ai SDK version | `ai@4.3.19` → use `convertToCoreMessages`, `toDataStreamResponse()` |
-| @ai-sdk/google version | `3.0.63` → model cast to `any` due to LanguageModelV3 vs V1 |
-| Google AI SDK (backend) | `google-genai` (NOT deprecated `google-generativeai`) |
-| BlockNote CSS | globals.css: mantine first, then xl-ai, then tailwind |
-| Yjs dedup fix | `transpilePackages: ["@blocknote/core", "@blocknote/react", "@blocknote/mantine"]` |
+| LLM provider | OpenRouter (free tier) |
+| Primary model | `nvidia/nemotron-3-super-120b-a12b:free` — faster, better quality |
+| Fallback model | `google/gemma-4-26b-a4b-it:free` |
+| Model selector | `X-LLM-Model` header: frontend → proxy → FastAPI → llm.py `model_override` |
+| JWT validation | `supabase.auth.get_user(token)` — works for both HS256 and ES256 |
+| pydantic-settings | Does NOT populate `os.environ` — always use `settings.field_name` |
+| Streaming | `stream=True` on OpenRouter — prevents free-tier timeout cutoffs |
+| Ingest HTML handoff | `sessionStorage["ingest-pending-{note_id}"]` — read in NoteEditorPage on mount |
+| Embeddings | `gemini-embedding-001` (768-dim) — blocked until Gemini billing enabled |
+| Retrieval | Supabase RPC `match_notes()` — no direct DB connection needed |
+| xl-ai server import | dynamic `import("@blocknote/xl-ai/server")` — CJS require() fails |
 | SSR fix | `BlockEditor` loaded via `dynamic(() => import(...), { ssr: false })` |
 | Middleware file | `proxy.ts` (Next.js 16 renamed from middleware.ts) |
-| Sidebar refresh | `window.dispatchEvent(new Event("notes-changed"))` after delete |
-| Ingest HTML handoff | sessionStorage key `ingest-pending-{note_id}` — read in NoteEditorPage on mount |
 
 ---
 
 ## Decisions Log
 
-| Date       | Decision                                         | Reason                                       |
-|------------|--------------------------------------------------|----------------------------------------------|
-| 2026-04-15 | LLM: Gemini 2.0 Flash (not Gemma 4 locally)     | Gemma 4 not yet available via API            |
-| 2026-04-15 | google-genai SDK (not google-generativeai)       | Old package deprecated, no more updates      |
-| 2026-04-15 | Embeddings: Google text-embedding-004 (768d)     | Consistent with Gemini / Google AI stack     |
-| 2026-04-15 | Proxy FastAPI through Next.js API routes         | Simpler auth, no CORS issues in dev          |
-| 2026-04-15 | BlockNote Mantine theme                          | Most stable, self-contained Mantine setup    |
-| 2026-04-15 | proxy.ts / export proxy (Next.js 16)             | Next.js 16 renamed from middleware.ts        |
-| 2026-04-15 | dynamic import for BlockEditor (ssr:false)       | BlockNote/Yjs accesses window — can't SSR    |
-| 2026-04-15 | transpilePackages for @blocknote/*               | Deduplicates Yjs across packages             |
-| 2026-04-15 | dynamic import for @blocknote/xl-ai/server       | CJS require() fails: server.cjs → requires ESM-only @handlewithcare/* |
-| 2026-04-15 | serverExternalPackages for @blocknote/xl-ai      | Prevents Turbopack from bundling CJS chunk that requires ESM-only packages |
-| 2026-04-15 | types/xl-ai-server.d.ts stub                     | server.d.ts in 0.48.0 is 0 bytes — TypeScript needs stubs |
-| 2026-04-15 | ingestHtml via sessionStorage                    | Clean handoff from ingest page to note page without URL params |
-| 2026-04-15 | tryParseHTMLToBlocks + replaceBlocks             | Reliable HTML→blocks without transport version mismatch |
-| 2026-04-15 | AIExtension() with no transport                  | xl-ai@0.48 uses ai@6 internally; project uses ai@4; version mismatch prevents ClientSideTransport wiring — defer to Phase 3 |
-| 2026-04-15 | convertToCoreMessages (ai@4.x)                   | ai@4 uses Core not Model naming              |
-| 2026-04-15 | redirect_slashes=False in FastAPI                | Prevents 307 on /ingest POST                 |
+| Date       | Decision                                              | Reason                                                       |
+|------------|-------------------------------------------------------|--------------------------------------------------------------|
+| 2026-04-15 | google-genai SDK (not google-generativeai)            | Old package deprecated                                       |
+| 2026-04-15 | Proxy FastAPI through Next.js API routes              | Simpler auth, no CORS issues                                 |
+| 2026-04-15 | dynamic import for BlockEditor (ssr:false)            | BlockNote/Yjs accesses window — can't SSR                    |
+| 2026-04-15 | transpilePackages for @blocknote/*                    | Deduplicates Yjs across packages                             |
+| 2026-04-15 | ingestHtml via sessionStorage                         | Clean handoff without URL params                             |
+| 2026-04-15 | redirect_slashes=False in FastAPI                     | Prevents 307 redirect on POST /ingest                        |
+| 2026-04-17 | Switched from Gemini to OpenRouter                    | Gemini quota exhausted, needs billing                        |
+| 2026-04-17 | Nemotron 120B as primary (Gemma 4 as fallback)        | Nemotron is faster and produces better structured output     |
+| 2026-04-17 | Model selector UI with X-LLM-Model header             | User can choose model per ingest without code changes        |
+| 2026-04-17 | Streaming on OpenRouter                               | Non-streaming caused silent server-side timeouts             |
+| 2026-04-17 | JWT via supabase.auth.get_user() not local decode     | ES256 tokens can't be decoded with HS256 local secret        |
+| 2026-04-17 | Retrieval via Supabase RPC not direct asyncpg         | No DATABASE_URL password needed; Supabase handles auth       |
+| Next       | Replace OpenRouter with local Ollama LLM              | Free, no rate limits, fully offline, better for development  |

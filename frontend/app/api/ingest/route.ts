@@ -26,6 +26,9 @@ export async function POST(req: Request) {
         ...(req.headers.get("Content-Type")
           ? { "Content-Type": req.headers.get("Content-Type")! }
           : {}),
+        ...(req.headers.get("X-LLM-Model")
+          ? { "X-LLM-Model": req.headers.get("X-LLM-Model")! }
+          : {}),
       },
       body: req.body,
       // @ts-expect-error — Node 18+ streams
