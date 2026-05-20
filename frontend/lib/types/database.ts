@@ -44,7 +44,14 @@ export interface Note {
   source_filename: string | null;
   topics: string[];
   mastery_status: "not_started" | "learning" | "reviewing" | "mastered";
+  icon: string;
+  is_favorited: boolean;
+  last_viewed_at: string | null;
+  position: number;
   is_indexed: boolean;
+  is_public: boolean;
+  local_only: boolean;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -93,6 +100,9 @@ export type NoteUpdate = Partial<
     Note,
     | "collection_id"
     | "title"
+    | "icon"
+    | "is_favorited"
+    | "last_viewed_at"
     | "content"
     | "content_text"
     | "source_type"
@@ -101,6 +111,9 @@ export type NoteUpdate = Partial<
     | "topics"
     | "mastery_status"
     | "is_indexed"
+    | "is_public"
+    | "local_only"
+    | "position"
   >
 >;
 

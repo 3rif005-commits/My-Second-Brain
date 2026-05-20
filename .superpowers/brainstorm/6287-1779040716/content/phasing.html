@@ -1,0 +1,97 @@
+<h2>Phasing — three shipping phases, Android in parallel</h2>
+<p class="subtitle">Each phase ends with something usable. Android WebView is validated at the end of every phase. Tell me if the ordering's right or if you'd reshuffle.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="ok" onclick="toggleSelect(this)" style="grid-column:span 3">
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px">
+
+        <!-- Phase 1 -->
+        <div style="background:#eef2ff;border:1.5px solid #c7d2fe;border-radius:10px;padding:12px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="background:#6366f1;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">1</span>
+            <div style="font-weight:700;color:#3730a3;font-size:13px">Substrate + new chat</div>
+          </div>
+          <div style="font-size:11px;color:#475569;line-height:1.55">
+            <strong>Backend</strong><br/>
+            • Agent Engine (loop, tools, skills, permissions)<br/>
+            • Brain tools — internal + MCP exposure unified<br/>
+            • Model-mode toggle (Local / API)<br/>
+            • SSE streaming for everything<br/><br/>
+            <strong>Frontend</strong><br/>
+            • New chat at <code>/brain/chat</code> — replaces old<br/>
+            • Markdown + fence renderer (callout / interactive)<br/>
+            • Conversation history sidebar<br/>
+            • Local-only badge on notes<br/><br/>
+            <strong>Android</strong> → web app in WebView verified<br/><br/>
+            <em style="color:#6366f1">✓ Chat works end-to-end with full agent &amp; streaming</em>
+          </div>
+        </div>
+
+        <!-- Phase 2 -->
+        <div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:10px;padding:12px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="background:#d97706;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">2</span>
+            <div style="font-weight:700;color:#92400e;font-size:13px">The three doors</div>
+          </div>
+          <div style="font-size:11px;color:#475569;line-height:1.55">
+            <strong>Surfaces</strong><br/>
+            • Side panel dock (right side, collapsible)<br/>
+            • ⌘K floating launcher (anywhere)<br/>
+            • Inline <code>/ai</code> in editor — BlockNote xl-ai for block-level streaming<br/>
+            • Selection + ⌘J → ask AI about selected text<br/><br/>
+            <strong>Backend</strong><br/>
+            • Editor tools: <code>insert_block</code>, <code>replace_block</code>, <code>delete_block</code><br/>
+            • Tool-call streaming events ("🔍 Searching brain…")<br/><br/>
+            <strong>Android</strong> → ⌘K becomes floating button; panel becomes bottom sheet<br/><br/>
+            <em style="color:#d97706">✓ AI is genuinely everywhere</em>
+          </div>
+        </div>
+
+        <!-- Phase 3 -->
+        <div style="background:#ede9fe;border:1.5px solid #c4b5fd;border-radius:10px;padding:12px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="background:#7c3aed;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">3</span>
+            <div style="font-weight:700;color:#5b21b6;font-size:13px">Agentic ingest + skills + MCP</div>
+          </div>
+          <div style="font-size:11px;color:#475569;line-height:1.55">
+            <strong>Replacements</strong><br/>
+            • Drop <code>/brain/ingest</code> page — drag PDF anywhere triggers agent<br/>
+            • Interactive block gen → agent flow, streamed<br/>
+            • Mastery guide streams block-by-block into new note<br/><br/>
+            <strong>Configuration</strong><br/>
+            • Skill management UI — browse, edit, install<br/>
+            • MCP client — add external servers (web, calendar, etc.)<br/>
+            • Permission audit log<br/><br/>
+            <strong>Android</strong> → drag-drop from Files app; same skill files<br/><br/>
+            <em style="color:#7c3aed">✓ Every static AI flow is now agentic</em>
+          </div>
+        </div>
+
+      </div>
+
+      <div style="text-align:center;background:#f1f5f9;border-radius:6px;padding:8px;font-size:11px;color:#475569">
+        <strong>Android parity</strong> validated at end of every phase. Same WebView, same backend (laptop FastAPI or in-app Kotlin port — TBD per phase).
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="options" style="margin-top:22px">
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>Phasing looks right — write the spec</h3>
+      <p>I'll draft the design doc, commit it, and hand you the file to review.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="reshuffle" onclick="toggleSelect(this)">
+    <div class="letter">↻</div>
+    <div class="content">
+      <h3>Reshuffle — tell me how</h3>
+      <p>Describe what should move where in the terminal and I'll redraw.</p>
+    </div>
+  </div>
+</div>

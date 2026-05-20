@@ -1,0 +1,74 @@
+<h2>How does AI output render?</h2>
+<p class="subtitle">Today: chat uses a broken hand-rolled markdown parser. Editor uses BlockNote. Interactive blocks live in iframes. Three renderers, no streaming consistency. Pick the unification model.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="markdown" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fff;padding:0;height:160px;overflow:hidden;border-bottom:1px solid #e2e8f0">
+      <div style="padding:12px;font-size:11px;color:#334155">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><div style="width:18px;height:18px;border-radius:50%;background:#6366f1;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700">AI</div><span style="font-weight:600">Chat</span></div>
+        <p style="margin-bottom:6px">The <strong>chain rule</strong> lets you differentiate composed functions:</p>
+        <pre style="background:#0f172a;color:#a5f3fc;padding:6px 8px;border-radius:4px;font-size:9px;margin-bottom:6px;overflow:hidden">f(g(x))' = f'(g(x))·g'(x)</pre>
+        <p style="color:#64748b;font-size:10px">→ React-markdown + GFM + KaTeX + syntax highlighter</p>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Real markdown library</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:6px">Replace the hand-rolled parser with <code>react-markdown</code> + GFM + KaTeX + Prism. Chat looks polished — code, math, tables, lists all work. Editor stays separate.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.6">
+        ✅ Fast to ship (1 day)<br/>
+        ✅ Lightweight<br/>
+        ❌ Chat ≠ note visual style<br/>
+        ❌ No interactive blocks in chat<br/>
+        ❌ Two output formats AI must learn
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="markdown-plus" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fff;padding:0;height:160px;overflow:hidden;border-bottom:1px solid #e2e8f0">
+      <div style="padding:12px;font-size:11px;color:#334155">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><div style="width:18px;height:18px;border-radius:50%;background:#6366f1;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700">AI</div><span style="font-weight:600">Chat</span></div>
+        <p style="margin-bottom:4px">Compare bubble sort vs merge sort:</p>
+        <div style="background:#eef2ff;border-left:3px solid #6366f1;padding:6px 8px;border-radius:0 4px 4px 0;margin-bottom:6px;font-size:10px"><strong>💡 Insight</strong> · merge sort dominates on large inputs</div>
+        <div style="background:#0f172a;color:#fbbf24;padding:6px 8px;border-radius:4px;font-size:9px;text-align:center">⚡ Live sort animation iframe</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Markdown + embedded blocks</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:6px">Markdown library + AI can emit special fences (<code>:::callout</code>, <code>:::interactive</code>) that render as styled components. Chat gets <em>some</em> of the editor's visual richness.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.6">
+        ✅ Interactive blocks work in chat<br/>
+        ✅ Visual callouts<br/>
+        ⚠️ Two formats — partial overlap<br/>
+        ⚠️ Custom fence parser to maintain
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="unified" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fff;padding:0;height:160px;overflow:hidden;border-bottom:1px solid #e2e8f0">
+      <div style="padding:12px;font-size:11px;color:#334155">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><div style="width:18px;height:18px;border-radius:50%;background:#6366f1;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700">AI</div><span style="font-weight:600">Chat (BlockNote-rendered)</span></div>
+        <div style="background:#eef2ff;border-left:3px solid #6366f1;padding:6px 8px;border-radius:0 4px 4px 0;margin-bottom:4px;font-size:10px"><strong>📋 Overview</strong> · the chain rule in 3 bullets</div>
+        <div style="border:1px solid #e2e8f0;border-radius:4px;padding:4px;font-size:9px;color:#475569;margin-bottom:4px">▼ Deep dive — proof sketch</div>
+        <div style="background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;padding:4px 8px;border-radius:4px;font-size:9px;text-align:center">⚡ Interactive derivative plotter</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · Unified — BlockNote everywhere ⭐</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:6px">The chat panel <em>is</em> a read-only BlockNote view. AI streams block ops (via <code>xl-ai</code> tool calls). Callouts, toggles, code, tables, interactive blocks render <strong>identically</strong> in chat and in notes. "Save to note" = move blocks.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.6">
+        ✅ Chat output looks like notes — exactly<br/>
+        ✅ Interactive blocks "just work"<br/>
+        ✅ One output schema, one renderer<br/>
+        ✅ Block-level streaming (no jank)<br/>
+        ⚠️ More upfront work · BlockNote learning curve<br/>
+        ⚠️ Tablet/Gemma must reliably emit BlockNote tool calls
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:20px;text-align:center;font-size:13px">My recommendation: <strong>C</strong>. It directly answers your "output should match the app block" complaint, and it makes "drop the AI answer into the note" free. The risk is the small local model — we can mitigate with a structured-output prompt + JSON schema validation.</p>

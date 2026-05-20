@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Second Brain</string>
+    <string name="app_description">Your personal AI-powered knowledge base. Ingest PDFs, write notes, and chat with your knowledge using on-device AI.</string>
+</resources>

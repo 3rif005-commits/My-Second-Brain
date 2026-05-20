@@ -21,6 +21,9 @@ class NoteCreate(NoteBase):
 
 class NoteUpdate(BaseModel):
     title: str | None = None
+    icon: str | None = None
+    is_favorited: bool | None = None
+    last_viewed_at: datetime | None = None
     content: list[Any] | None = None
     content_text: str | None = None
     collection_id: str | None = None
@@ -32,6 +35,10 @@ class NoteUpdate(BaseModel):
 class NoteResponse(NoteBase):
     id: str
     user_id: str
+    icon: str = "📄"
+    is_favorited: bool = False
+    last_viewed_at: datetime | None = None
     is_indexed: bool
+    deleted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

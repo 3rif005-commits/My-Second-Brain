@@ -18,3 +18,7 @@ frontend/e2e/.auth/
 # OS
 .DS_Store
 *.log
+
+# Linked worktrees (managed via EnterWorktree/ExitWorktree)
+.claude/worktrees/
+.clone/

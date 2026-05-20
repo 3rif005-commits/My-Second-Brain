@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 
+// Allow up to 15 minutes for local LLM ingest (CPU-only is slow)
+export const maxDuration = 900;
+
 // POST /api/ingest — proxy to FastAPI ingest service with JWT forwarding
 // Body: FormData with file | { url: string }
 export async function POST(req: Request) {
@@ -21,8 +24,6 @@ export async function POST(req: Request) {
       method: "POST",
       headers: {
         Authorization: `Bearer ${session.access_token}`,
-        // Forward Content-Type verbatim — multipart/form-data MUST include its
-        // boundary or FastAPI cannot parse the body (returns 400).
         ...(req.headers.get("Content-Type")
           ? { "Content-Type": req.headers.get("Content-Type")! }
           : {}),
@@ -33,6 +34,7 @@ export async function POST(req: Request) {
       body: req.body,
       // @ts-expect-error — Node 18+ streams
       duplex: "half",
+      signal: AbortSignal.timeout(900_000), // 15 min — local LLM on CPU is slow
     });
   } catch (e) {
     const isRefused = e instanceof Error && e.message.includes("ECONNREFUSED");

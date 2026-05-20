@@ -1,8 +1,279 @@
 # Second Brain — Research, Data Models & Build Plan
 
-> LLM: **Nemotron 120B** (primary) + **Gemma 4 26B** (fallback) via OpenRouter free tier  
-> Next session: migrate to local LLM via Ollama  
-> Last updated: 2026-04-17
+> LLM: **Gemma 4 E2B** via LiteRT/MediaPipe on tablet (primary) · **Nemotron 120B** via OpenRouter (fallback)  
+> Embeddings: nomic-embed-text via llama.cpp on laptop CPU (always local)  
+> Last updated: 2026-05-12
+
+---
+
+## Hackathon Sprint Plan — Kaggle "Gemma 4 Good" (deadline May 18, 2026)
+
+> Prize targets: **LiteRT $10K** · **Cactus $10K** · **llama.cpp $10K** · **Main Track**  
+> Architecture locked: tablet = LiteRT inference · laptop = server + embeddings · cloud = fallback only
+
+### Infrastructure Decisions
+
+| Decision | Chosen | Dropped | Reason |
+|---|---|---|---|
+| Tablet inference | LiteRT / MediaPipe (NPU) | llama.cpp Vulkan | NPU faster, native Android, broader device support |
+| Laptop inference | llama.cpp embeddings only | Generation on laptop | i3-5005U at 3 tok/s unusable for demo |
+| Local gen backend | LiteRT on tablet | Ollama | Ollama redundant with llama.cpp in our stack |
+| Fine-tuning | Deferred (Unsloth) | — | Base Gemma 4 + good prompt sufficient; revisit if output quality insufficient |
+
+### Final Infrastructure Map
+
+```
+TABLET (Snapdragon 7s Gen 2 · Adreno 710 · 6-8GB RAM)
+  LiteRT Android app  →  Gemma 4 E2B  →  /v1/chat/completions :8082
+  Chrome browser      →  Second Brain web app (PWA)
+
+LAPTOP (i3-5005U · 4GB RAM — server only)
+  FastAPI             →  orchestration, Supabase, routing
+  Next.js             →  web app served to tablet browser
+  llama.cpp :8081     →  nomic-embed-text (embeddings, always local)
+  llama.cpp :8080     →  Gemma 4 E2B (slow demo only — llama.cpp prize)
+
+CLOUD
+  OpenRouter          →  Nemotron 120B (fallback when tablet offline)
+
+SmartRouter (backend/services/router.py):
+  embed / rerank  →  llama.cpp laptop :8081  (always)
+  chat / generate →  LiteRT tablet :8082     (primary, health-checked)
+                  →  OpenRouter cloud         (fallback)
+```
+
+---
+
+### A — SmartRouter
+
+**Goal:** Replace blunt `LLM_PROVIDER` env var with a service that routes per task and
+health-checks the tablet before every generation call.
+
+**Files to create / modify:**
+
+```
+backend/services/router.py          NEW — SmartRouter class
+backend/core/config.py              ADD litert_url, tablet_health_timeout fields
+backend/services/llm.py             MODIFY — call router.route(task) instead of settings.llm_provider
+backend/routers/chat.py             MODIFY — use SmartRouter for generation
+backend/.env                        ADD LITERT_URL=http://[tablet-ip]:8082
+```
+
+**SmartRouter logic:**
+```python
+class SmartRouter:
+    TASK_MAP = {
+        "embed":    "llamacpp",       # always laptop
+        "generate": "litert",         # tablet primary
+        "chat":     "litert",         # tablet primary
+        "metadata": "litert",         # tablet primary
+    }
+
+    def route(self, task: str) -> str:
+        target = self.TASK_MAP.get(task, "openrouter")
+        if target == "litert" and not self._tablet_alive():
+            return "openrouter"
+        return target
+
+    def _tablet_alive(self) -> bool:
+        # HEAD /health on tablet, 2s timeout, cached 30s
+```
+
+**Definition of done:** Drop a question in chat → logs show `router → litert` or `router → openrouter`
+depending on whether the tablet is online.
+
+---
+
+### B — Retrieval Quality
+
+**Goal:** Fix the retrieval root cause. Current problem: the full note is embedded as one vector
+from the first 500 chars of raw `content_text` — often the PDF title page. Replace with
+per-section embeddings so retrieval finds the right *section*, not just the right note.
+
+**New table:**
+```sql
+-- migration 007_note_chunks.sql
+CREATE TABLE note_chunks (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  note_id     UUID        NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+  user_id     UUID        NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  chunk_index INTEGER     NOT NULL,
+  chunk_text  TEXT        NOT NULL,
+  embedding   vector(768),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX note_chunks_user_idx ON note_chunks(user_id);
+CREATE INDEX note_chunks_embedding_hnsw ON note_chunks
+  USING hnsw (embedding vector_cosine_ops) WITH (m=16, ef_construction=64);
+
+-- RPC: returns best chunk per note, deduplicates
+CREATE OR REPLACE FUNCTION match_chunks(...)
+```
+
+**Files to create / modify:**
+```
+supabase/migrations/007_note_chunks.sql   NEW
+backend/services/chunker.py               NEW — split by \n## / \n# / double-newline after heading
+backend/routers/ingest.py                 MODIFY — call chunk_and_embed() after note insert
+backend/services/retriever.py             MODIFY — query note_chunks, threshold 0.70, top 8
+```
+
+**Chunking strategy:**
+```python
+def chunk_text(text: str) -> list[str]:
+    # split on markdown/plain section headers: ## Title, # Title, or ALL-CAPS lines
+    # minimum chunk size: 150 chars (skip title-only headers)
+    # maximum chunk size: 800 chars (split long sections at paragraph boundaries)
+```
+
+**Definition of done:** Ask "explain chain rule" → retrieved chunk contains actual chain rule
+explanation, not the PDF title page.
+
+---
+
+### C — Disco Blocks (Analyse Pillar)
+
+**Goal:** When the LLM generates a mastery guide, it also generates self-contained HTML/CSS/JS
+visualizations for concepts that benefit from interactivity. These render as sandboxed iframes
+inside the BlockNote editor — live, interactive, offline.
+
+**Design constraint:** LLM generates **vanilla JS + Canvas API only** — no CDN imports,
+no external libraries. Must work inside `sandbox="allow-scripts"` iframe with no network.
+
+**Files to create / modify:**
+```
+frontend/components/blocks/InteractiveBlock.tsx    NEW — custom BlockNote block
+frontend/components/editor/BlockEditor.tsx         MODIFY — register InteractiveBlock in schema
+frontend/components/editor/NoteEditorPage.tsx      MODIFY — parse data-type="interactive" → block
+backend/prompts/mastery_guide.py                   MODIFY — add interactive block generation
+```
+
+**InteractiveBlock spec:**
+```tsx
+// Props: { html: string, title: string }
+// Renders: <iframe sandbox="allow-scripts" srcDoc={html} />
+// Stored: in BlockNote content JSONB as { type: "interactive", props: { html, title } }
+```
+
+**Prompt addition (for sections where visualization helps):**
+```html
+<!-- After the deep-dive toggle, for visual concepts: -->
+<div data-type="interactive" data-title="[Concept Name] — Interactive">
+<canvas id="c" width="640" height="360"></canvas>
+<script>
+// self-contained vanilla JS only — no imports, no fetch
+// draws the concept on the canvas
+</script>
+</div>
+```
+
+**LLM guidance rule:** Only generate for: algorithms, physics, math functions, signal processing,
+circuits, geometry. Never for: history, law, literature, purely conceptual text.
+
+**Definition of done:** Ingest a calculus PDF → note contains a live function plotter that works
+offline inside the editor.
+
+---
+
+### D — LiteRT Android App
+
+**Goal:** Minimal Kotlin app on the tablet that runs Gemma 4 E2B via MediaPipe LLM Inference
+and exposes an OpenAI-compatible HTTP endpoint. The laptop backend calls this endpoint;
+the web app stays unchanged.
+
+**Architecture:** headless Android service (no visible UI) + Ktor embedded HTTP server.
+
+**Files:**
+```
+android/app/src/main/java/com/secondbrain/InferenceServer.kt    NEW
+android/app/src/main/java/com/secondbrain/MainActivity.kt       NEW (minimal, just starts service)
+android/app/build.gradle.kts                                    NEW
+android/build.gradle.kts                                        NEW
+```
+
+**Key dependencies:**
+```kotlin
+// build.gradle.kts
+implementation("com.google.mediapipe:tasks-genai:0.10.14")
+implementation("io.ktor:ktor-server-netty:2.3.7")
+```
+
+**Endpoint exposed:**
+```
+POST http://[tablet-ip]:8082/v1/chat/completions
+  body: { model, messages, stream, max_tokens }
+  response: SSE stream (same format as llama.cpp and OpenRouter)
+```
+
+**Model file:** Gemma 4 E2B in `.task` format from Google AI Edge model hub.
+Downloaded to `/sdcard/Download/gemma4_e2b.task` on tablet.
+
+**Definition of done:** `curl http://[tablet-ip]:8082/v1/chat/completions` from laptop
+→ streams a response generated by Gemma 4 on the tablet's NPU.
+
+---
+
+### E — PWA
+
+**Goal:** Second Brain is installable on the tablet home screen. Works offline
+(cached shell, assets). This is the mobile-first story for the Cactus prize.
+
+**Files to create / modify:**
+```
+frontend/public/manifest.json        NEW — name, icons, theme_color, display: standalone
+frontend/public/icons/               NEW — 192×192 and 512×512 app icons
+frontend/app/layout.tsx              MODIFY — add <link rel="manifest"> and PWA meta tags
+```
+
+**Definition of done:** On tablet Chrome → menu → "Add to Home Screen" → app icon appears →
+tap it → opens full-screen without browser chrome.
+
+---
+
+### F — MCP Deep Link Verification
+
+**Goal:** Confirm the Link pillar works end-to-end. External AI (Claude Desktop) calls
+`search_brain`, gets back notes with `/brain/note-id` deep links, user clicks → opens the note.
+
+**Verification steps:**
+1. Run `search_brain("calculus")` via Claude Desktop → check returned `deep_link` values
+2. Click a returned deep link → confirm it opens the correct note in the browser
+3. Verify `get_note(note_id)` returns full content
+4. Fix any `undefined` or wrong URLs in `backend/mcp_server.py`
+
+---
+
+### Demo Script
+
+Three-minute arc showing all three pillars:
+
+```
+0:00–0:40  ANALYSE
+  Drop a PDF about sorting algorithms
+  Watch Gemma 4 (on tablet NPU via LiteRT) generate the mastery guide
+  Show the Interactive Block — a live animated sort comparison — inside the editor
+
+0:40–1:20  STORE
+  The note is in the block editor — show mastery status, topics, deep-dive toggles
+  Show it works on the tablet browser (PWA installed on home screen)
+  Show it works offline — airplane mode on, note still loads
+
+1:20–2:00  LINK — Chat
+  Ask "compare merge sort and quicksort" in the AI tutor
+  SmartRouter routes to tablet LiteRT — show the routing log
+  Tutor answers citing the specific note with a deep link — click it → goes to note
+
+2:00–2:40  LINK — MCP
+  Switch to Claude Desktop
+  Type: search_brain("sorting algorithms")
+  Show the returned note with deep link
+  Click → opens Second Brain in browser at exactly that note
+
+2:40–3:00  CLOSE
+  Show the tablet running inference (htop or MediaPipe stats)
+  "Runs on any Android 12+ device with 4GB RAM — no server, no cloud required"
+```
 
 ---
 
@@ -401,6 +672,15 @@ CREATE TABLE chat_sessions (
 
 ---
 
+## Notion UX Phase — Special Insert
+
+> This phase was added after Phase 3 and before Phase 4 to close UX gaps between what we built
+> and what Notion provides as baseline. It upgrades Phase 1's foundation (trash, search, icons,
+> breadcrumbs, sidebar drag-reorder, properties panel) without adding new AI features.
+> Full plan and task tracker → [`NOTION_PHASE.md`](./NOTION_PHASE.md)
+
+---
+
 ## Phase 1 Plan — Foundation
 
 **Goal:** A working authenticated app with a Notion-style block editor that saves and
@@ -523,34 +803,89 @@ Controlled by `LLM_PROVIDER` in `backend/.env`. No code changes needed to switch
 
 ---
 
-## Phase 3 Plan — Context Protocol 🔧 IN PROGRESS
+## Phase 3 Plan — Context Protocol + MCP + Local LLM ✅ CODE COMPLETE
 
 **Goal:** The AI tutor knows the user's entire knowledge base and references their
-specific notes in responses.
+specific notes in responses. Any external AI (Claude Desktop, ChatGPT, Gemini) can
+query the Second Brain via MCP or REST.
 
-**Definition of done:** User asks "explain chain rule" → tutor responds with a personalized
-explanation that links to `/brain/[noteId]` and says "as you noted in your Derivatives guide..."
+**Hackathon target:** Kaggle "Gemma 4 Good" hackathon (deadline May 18, 2026)
+- **llama.cpp special prize** ($10K): Gemma 4 E2B/E4B on 4GB RAM constrained hardware
+- **Future of Education impact prize** ($10K): personal AI tutor with adaptive knowledge retrieval
 
-### Already scaffolded (code exists)
+**Definition of done — ALL MET:**
+1. ✅ User asks a question in the built-in chat → tutor responds citing their own notes with deep links
+2. ✅ Claude Desktop connects via MCP → `search_brain` tool returns relevant notes from Second Brain
+3. ✅ `LLM_PROVIDER=llamacpp` runs Gemma 4 E2B locally, fully replacing OpenRouter when desired
 
-- `supabase/migrations/004_vector_index.sql` — `note_index` table + HNSW index + `match_notes()` RPC + RLS — **needs to be run in Supabase SQL editor**
-- `backend/services/embedder.py` — `gemini-embedding-001` (768-dim) — **blocked on Gemini billing**
-- `backend/services/retriever.py` — semantic search via `match_notes()` Supabase RPC
-- `backend/routers/retrieval.py` — `POST /retrieval/index`, `POST /retrieval/retrieve`
+---
 
-### Still to build (next session)
+### LLM Provider Strategy
 
-1. **Local LLM** — replace OpenRouter with Ollama (`LLM_PROVIDER=local`); wire `services/llm.py`
-2. **Local embeddings** — `nomic-embed-text` via Ollama (or enable Gemini billing)
-3. **Run migration 004** in Supabase SQL editor
-4. Chat UI at `frontend/app/(brain)/brain/chat/page.tsx`
-5. `/api/chat` Next.js route — context-augmented system prompt injection
-6. `backend/prompts/tutor.py` — tutor system prompt with `{knowledge_context}` placeholder
-7. Context panel — sidebar showing which notes were retrieved
+| `LLM_PROVIDER` value | Model | When to use |
+|---|---|---|
+| `openrouter` | Nemotron 120B (primary) / Gemma 4 (fallback) | Cloud fallback — free tier |
+| `llamacpp` | Gemma 4 E2B Q4_K_M (local, port 8080) | Default — offline / hackathon demo |
+| `gemini` | `gemini-2.0-flash` | Future — when billing enabled |
 
-### New Files Still Needed
+| `EMBEDDER_PROVIDER` value | Model | Notes |
+|---|---|---|
+| `llamacpp` | `nomic-embed-text` v1.5 GGUF (port 8081) | Default — free, offline, batch support |
+| `gemini` | `gemini-embedding-001` (768-dim) | Future — when billing enabled |
+
+---
+
+### Hardware budget (4GB RAM, ~23GB disk)
+
+| Component | RAM | Disk |
+|---|---|---|
+| Gemma 4 E2B Q4_K_M + KV q8_0 | ~1.8 GB | ~1.2 GB |
+| nomic-embed-text v1.5 GGUF | ~0.4 GB | ~0.27 GB |
+| FastAPI + Next.js + system | ~0.5 GB | — |
+| **Total** | **~2.7 GB** ✅ | **~1.5 GB** ✅ |
+
+Generation server flags: `--flash-attn --cache-type-k q8_0 --cache-type-v q8_0` — reduces RAM ~40%.
+
+---
+
+### All built ✅
+
+| File | Description |
+|---|---|
+| `llama.sh` | `setup / start / stop / status / logs` — single entry point for llama.cpp stack |
+| `backend/services/embedder.py` | llama.cpp embedder with `embed()` + `embed_batch()` |
+| `backend/services/retriever.py` | Supabase RPC `match_notes()`, threshold 0.50, top 8 |
+| `backend/routers/chat.py` | Streaming SSE chat, retrieves context before answering |
+| `backend/routers/internal.py` | Key-authenticated internal API for MCP |
+| `backend/routers/retrieval.py` | `POST /retrieval/index`, `POST /retrieval/retrieve` |
+| `backend/mcp_server.py` | MCP server: `search_brain`, `get_note`, `list_notes` |
+| `backend/prompts/tutor.py` | Tutor system prompt with XML knowledge context |
+| `frontend/app/(brain)/brain/chat/page.tsx` | AI Tutor page |
+| `frontend/app/api/chat/route.ts` | Next.js SSE proxy |
+| `frontend/components/chat/ChatInterface.tsx` | Streaming chat UI |
+| `frontend/components/chat/MessageBubble.tsx` | Message rendering |
+| `frontend/components/chat/ContextPanel.tsx` | Retrieved notes sidebar |
+| `supabase/migrations/004_vector_index.sql` | `note_index` table + HNSW + `match_notes()` ✅ RUN |
+
+---
+
+### To run end-to-end
+
+```bash
+./llama.sh setup    # first time — builds llama.cpp, downloads models (~1.5 GB)
+./llama.sh start    # starts gen (8080) + embed (8081) servers
+# set LLM_PROVIDER=llamacpp in backend/.env
+# start backend + frontend
+# ingest a PDF → auto-indexed
+# open /brain/chat → tutor cites your notes
+```
+
+---
+
+### New Files
 
 ```
+backend/mcp_server.py                              ← MCP server (Claude Desktop integration)
 frontend/app/(brain)/brain/chat/page.tsx
 frontend/app/api/chat/route.ts
 frontend/components/chat/ChatInterface.tsx
@@ -559,16 +894,94 @@ frontend/components/chat/ContextPanel.tsx
 backend/prompts/tutor.py
 ```
 
+---
+
 ### Milestone
 
-Open chat, ask a question, receive a response citing two of your own notes with
-working deep links back into the editor.
+1. `LLM_PROVIDER=llamacpp` — ingest a PDF → Gemma 4 E2B generates mastery guide locally
+2. Open `/brain/chat` → ask a question → tutor answers citing 2+ of your own notes with deep links
+3. Claude Desktop → `search_brain("calculus chain rule")` → returns your notes with summaries
 
 ---
 
-## Phase 4 Plan — Polish & Expansion
+### ⚠️ Future Iteration Note (for hackathon writeup)
 
-**Goal:** Production-ready, full-featured.
+**Offline-first mode** is the natural next step: replace Supabase with a local PostgreSQL +
+pgvector instance (Docker or native). Combined with llama.cpp local inference and local embeddings,
+the entire Second Brain runs with zero internet dependency — suitable for classrooms with
+spotty internet, medical sites far from data centers, or privacy-critical environments.
+This aligns directly with the hackathon's "Global Resilience" and "Digital Equity" tracks.
+
+---
+
+## Phase 4 Plan — Native Android App (Play Store)
+
+**Goal:** Turn the existing LiteRT inference service into a full standalone Second Brain app —
+auth, notes, editor, AI chat, PDF ingestion — all on the tablet, no laptop required, published on Google Play.
+
+### What's already built
+
+| Component | File | Status |
+|---|---|---|
+| LiteRT inference (Gemma 4 E2B, CPU) | `android/app/.../LlmService.kt` | ✅ working |
+| Ktor HTTP server (port 8082) | `android/app/.../LlmService.kt` | ✅ working |
+| Foreground service + notification | `android/app/.../LlmService.kt` | ✅ working |
+| Supabase schema (notes, vectors, chunks) | `supabase/migrations/` | ✅ live |
+| Mastery guide prompt | `backend/prompts/mastery_guide.py` | ✅ Python — needs Kotlin port |
+| PDF ingestion logic | `backend/routers/ingest.py` | ✅ Python — needs Android port |
+| Chunk + embed pipeline | `backend/services/chunker.py` | ✅ Python — needs Android port |
+
+### What's missing (in build order)
+
+| # | Feature | Implementation |
+|---|---|---|
+| 1 | **Supabase Kotlin SDK** | Add `io.github.jan-tennert.supabase:postgrest-kt`, `gotrue-kt`, `realtime-kt` to `build.gradle.kts` |
+| 2 | **Auth screens** | Compose Login + Signup calling `supabase.auth.signInWith(Email)` |
+| 3 | **Notes list screen** | Compose LazyColumn, `supabase.from("notes").select()` filtered by user |
+| 4 | **Note editor** | WebView loading BlockNote bundled as static assets in APK — reuses all existing editor code |
+| 5 | **Chat screen** | Compose UI calling LiteRT directly (no HTTP hop needed — same process) |
+| 6 | **PDF ingestion** | Android file picker → `PdfRenderer` extracts text → Gemma generates note → saved to Supabase |
+| 7 | **On-device embeddings** | `all-MiniLM-L6-v2` converted to LiteRT format (~22 MB) — replaces laptop llama.cpp dependency |
+| 8 | **Semantic search** | Call Supabase `match_notes()` RPC from Android — same SQL, same vectors |
+| 9 | **Play Store release** | Signing keystore + `release` build variant + Play Console listing |
+
+### Key architecture decision: Note Editor
+
+Use a **WebView** loading BlockNote as bundled static HTML/JS assets inside the APK:
+- Build the editor as a standalone HTML page (BlockNote works without Next.js)
+- Serve it from Ktor on `localhost` — already running inside the app
+- WebView points to `http://localhost:8082/editor`
+- Supabase calls go from JS directly to Supabase cloud — no backend proxy needed
+- Zero extra infrastructure — reuses all existing editor code
+
+### New Android files needed
+
+```
+android/app/src/main/java/com/secondbrain/tablet/
+  auth/LoginActivity.kt          — Compose login/signup
+  notes/NotesListActivity.kt     — Compose notes list
+  notes/NoteEditorActivity.kt    — WebView wrapping BlockNote
+  chat/ChatActivity.kt           — Compose chat UI, calls LlmService directly
+  ingest/PdfIngestActivity.kt    — file picker + PdfRenderer + ingest flow
+  data/SupabaseClient.kt         — singleton Supabase client
+  data/NotesRepository.kt        — notes CRUD + search via Supabase
+  embeddings/EmbeddingEngine.kt  — LiteRT MiniLM for on-device embeddings
+
+android/app/src/main/assets/editor/
+  index.html                     — standalone BlockNote editor page
+  (bundled JS/CSS)
+```
+
+### Milestone
+
+One APK on Google Play: open it on any Android 12+ tablet with 4 GB RAM,
+log in with Supabase, ingest PDFs, write notes, chat with Gemma 4 — fully offline.
+
+---
+
+## Phase 5 Plan — Web App Polish & Expansion
+
+**Goal:** Production-ready web app, full-featured.
 
 ### Features (in implementation order)
 
@@ -582,31 +995,44 @@ working deep links back into the editor.
 5. Mastery tracking — per-section status, aggregate score, dashboard with progress rings
 6. Full-text search — PostgreSQL `tsvector` + GIN index across `content_text`
 7. Export — Markdown, HTML, PDF via `@react-pdf/renderer`
-8. Mobile-responsive UI — collapsible sidebar, touch-friendly block handles
-9. Note backlinks — "Referenced by N notes" panel in the editor sidebar
-10. Async indexing queue — Supabase Edge Functions for background embedding
-
-### New Files
-
-```
-frontend/components/blocks/PrerequisiteLink.tsx
-frontend/components/blocks/KnowledgeRef.tsx
-frontend/components/blocks/MasteryBadge.tsx
-frontend/components/graph/KnowledgeGraph.tsx
-frontend/app/(brain)/brain/graph/page.tsx
-frontend/app/(brain)/brain/search/page.tsx
-frontend/app/(brain)/brain/dashboard/page.tsx
-backend/routers/search.py
-backend/services/video_extractor.py
-backend/services/export_service.py
-supabase/migrations/004_full_text_search.sql
-supabase/migrations/005_backlinks.sql
-```
+8. Note backlinks — "Referenced by N notes" panel in the editor sidebar
+9. Async indexing queue — Supabase Edge Functions for background embedding
 
 ### Milestone
 
-Full production app: ingest any media format, AI tutor with personal context,
+Full production web app: ingest any media format, AI tutor with personal context,
 knowledge graph, mastery dashboard, full-text search, export to Markdown/PDF.
+
+---
+
+## Phase 5 Plan — Offline-First (Local PostgreSQL)
+
+**Goal:** Remove all cloud dependencies. The entire Second Brain runs on the local machine
+with zero internet — suitable for classrooms with spotty connectivity, privacy-critical
+environments, and the hackathon "Global Resilience" / "Digital Equity" tracks.
+
+**Current dependency to remove:** Supabase (hosted PostgreSQL + Auth + Storage)
+
+### What changes
+
+| Component | Current | Phase 5 target |
+|---|---|---|
+| Database | Supabase PostgreSQL (cloud) | Local PostgreSQL + pgvector (Docker or native) |
+| Auth | Supabase Auth (cloud JWT) | Local auth (e.g., NextAuth.js with local DB) |
+| Storage | Supabase Storage | Local filesystem or MinIO |
+| Embeddings | llama.cpp (already local) | No change |
+| LLM | llama.cpp (already local) | No change |
+
+### Migration steps (high level)
+
+1. `docker-compose.yml` — run PostgreSQL + pgvector locally
+2. Run all migrations against local DB (same SQL files)
+3. Replace `@supabase/ssr` / `@supabase/supabase-js` with direct DB calls + NextAuth.js
+4. Replace `services/database.py` Supabase client with `asyncpg` direct connection
+5. Update all API routes to use direct DB instead of Supabase client
+6. Remove `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, etc. from env
+
+### ⚠️ This is a large refactor — do after Phase 4 is complete.
 
 ---
 

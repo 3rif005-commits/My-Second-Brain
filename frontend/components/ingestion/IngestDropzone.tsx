@@ -11,7 +11,7 @@ interface IngestDropzoneProps {
   disabled?: boolean;
 }
 
-const ACCEPTED = ".pdf,.mp3,.mp4,.m4a,.wav";
+const ACCEPTED = ".pdf,.txt,.md,.rst,.csv,.pptx,.docx";
 
 export function IngestDropzone({ onSubmit, disabled }: IngestDropzoneProps) {
   const [url, setUrl] = useState("");
@@ -50,8 +50,8 @@ export function IngestDropzone({ onSubmit, disabled }: IngestDropzoneProps) {
         } ${disabled ? "opacity-50 pointer-events-none" : ""}`}
       >
         <span className="text-2xl">📎</span>
-        <p className="text-sm text-gray-600 font-medium">Drop a PDF, MP3, MP4 or click to browse</p>
-        <p className="text-xs text-gray-400">Supported: PDF · MP3 · MP4 · M4A · WAV</p>
+        <p className="text-sm text-gray-600 font-medium">Drop a file or click to browse</p>
+        <p className="text-xs text-gray-400">PDF · TXT · MD · PPTX · DOCX · CSV</p>
         <input
           ref={inputRef}
           type="file"
@@ -69,9 +69,9 @@ export function IngestDropzone({ onSubmit, disabled }: IngestDropzoneProps) {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleUrlSubmit()}
-          placeholder="https://youtube.com/watch?v=… or article URL"
+          placeholder="YouTube URL or article link"
           disabled={disabled}
-          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent disabled:opacity-50"
+          className="flex-1 px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent disabled:opacity-50"
         />
         <button
           onClick={handleUrlSubmit}

@@ -1,34 +1,35 @@
 # Second Brain — Project Status
 
 > Source of truth across all conversations. Read at session start, update at session end.
-> Last updated: 2026-04-17
-
----
-
-## How to Resume a Conversation
-
-```
-Read /home/ayoub/projects/second_brain/STATUS.md and
-/home/ayoub/projects/second_brain/PLAN.md, then continue
-from where we left off.
-```
+> Last updated: 2026-05-12
 
 ---
 
 ## Current Phase
 
-**Phase 3 — Context Protocol** `[~] SCAFFOLDED — blocked on Gemini billing for embeddings`
+**Phase 4 — Native Android App** `[🔧 IN PROGRESS]`
+
+Goal: standalone Play Store app — auth, notes, editor, chat, PDF ingestion — no laptop needed.
+Full plan → [`PLAN.md`](./PLAN.md) — Phase 4 section.
+
+Hackathon Sprint completed 2026-05-12. Tablet inference proven end-to-end:
+- LiteRT (CPU backend) running Gemma 4 E2B on Redmi Pad Pro ✅
+- `/health` + `/v1/chat/completions` tested from laptop ✅
+- SmartRouter routes to tablet (`10.119.192.59:8082`) ✅
 
 ---
 
 ## Phase Tracker
 
-| Phase | Name               | Status          | Started    | Completed  |
-|-------|--------------------|-----------------|------------|------------|
-| 1     | Foundation         | ✅ Complete     | 2026-04-15 | 2026-04-15 |
-| 2     | Ingestion Pipeline | ✅ Complete     | 2026-04-15 | 2026-04-17 |
-| 3     | Context Protocol   | 🔧 In progress  | 2026-04-17 | —          |
-| 4     | Polish & Expansion | Not started     | —          | —          |
+| Phase | Name                     | Status              | Started    | Completed  |
+|-------|--------------------------|---------------------|------------|------------|
+| 1     | Foundation               | ✅ Complete         | 2026-04-15 | 2026-04-15 |
+| 2     | Ingestion Pipeline       | ✅ Complete         | 2026-04-15 | 2026-04-17 |
+| 3     | Context Protocol         | ✅ Complete         | 2026-04-17 | 2026-05-08 |
+| H     | Hackathon Sprint         | ✅ Complete         | 2026-05-12 | 2026-05-12 |
+| 4     | Native Android App       | 🔧 In progress      | 2026-05-12 | —          |
+| 5     | Web App Polish           | Not started         | —          | —          |
+| 6     | Offline-First            | Not started         | —          | —          |
 
 ---
 
@@ -71,37 +72,183 @@ All verified end-to-end with Playwright (16/16 tests passing):
 - Callout color semantics: red=exam-critical, orange=watch-out, purple=insight, blue=overview
 - Hidden `<div data-type="metadata">` block for Phase 3 indexer
 
-### Model selector wire-up
-- `X-LLM-Model` header flows: ingest page → Next.js proxy (`route.ts`) → FastAPI (`ingest.py`) → `llm.py` `model_override` param
-- `ingest_auto`, `ingest_pdf`, `ingest_url` all accept `x_llm_model: str | None = Header(default=None)`
+---
 
-### Known limitations
-- YouTube URL returns 400 — trafilatura can't extract YT transcripts (Phase 4: yt-dlp + whisper)
-- Nemotron 120B cold-start on first request after model idle: ~3–5 min (acceptable, passes reliably once warm)
-- Gemini embeddings blocked until billing is enabled on Google AI key
+## Phase 3 — CODE COMPLETE ✅
+
+### What's built
+- `backend/routers/chat.py` — streaming SSE chat endpoint, retrieves top-K notes before answering
+- `backend/routers/internal.py` — internal API for MCP server (key-authenticated)
+- `backend/prompts/tutor.py` — tutor system prompt with `{knowledge_context}` XML injection
+- `backend/mcp_server.py` — MCP server: `search_brain`, `get_note`, `list_notes` tools
+- `backend/services/embedder.py` — llama.cpp embedder with **batch support** (`embed_batch()`)
+- `backend/services/retriever.py` — semantic search via Supabase RPC `match_notes`
+- `backend/routers/retrieval.py` — `POST /retrieval/index`, `POST /retrieval/retrieve`
+- `frontend/app/(brain)/brain/chat/page.tsx` — AI Tutor page
+- `frontend/app/api/chat/route.ts` — Next.js SSE proxy to FastAPI
+- `frontend/components/chat/ChatInterface.tsx` — streaming chat UI, suggested prompts, error handling
+- `frontend/components/chat/MessageBubble.tsx` — user/assistant message rendering
+- `frontend/components/chat/ContextPanel.tsx` — desktop sidebar showing retrieved notes
+- `llama.sh` — **single script to build, start, stop, check llama.cpp servers**
+- `supabase/migrations/004_vector_index.sql` — `note_index` table, HNSW index, `match_notes()` RPC ✅ RUN
+
+### llama.sh commands
+```bash
+./llama.sh setup    # clone + build llama.cpp + download both models (run once, ~1.5 GB)
+./llama.sh start    # start generation (port 8080) + embedding (port 8081) in background
+./llama.sh stop     # kill both servers
+./llama.sh status   # show running state + downloaded models
+./llama.sh logs     # tail live logs from both servers
+```
+
+### LLM provider switch
+```bash
+# .env for local llama.cpp (offline, hackathon demo)
+LLM_PROVIDER=llamacpp
+EMBEDDER_PROVIDER=llamacpp
+
+# .env for OpenRouter (cloud, no local setup needed)
+LLM_PROVIDER=openrouter
+EMBEDDER_PROVIDER=llamacpp   # still uses local embed server
+```
+
+### To run Phase 3 end-to-end
+1. `./llama.sh setup` — first time only (~10 min, downloads ~1.5 GB)
+2. `./llama.sh start` — starts both servers
+3. Set `LLM_PROVIDER=llamacpp` in `backend/.env`
+4. Start backend + frontend (see Running the App below)
+5. Ingest a PDF at `/brain/ingest` — auto-indexes into `note_index`
+6. Go to `/brain/chat` — ask anything — tutor answers citing your notes
+
+### Hackathon context
+Targeting **Kaggle "Gemma 4 Good"** (deadline May 18, 2026):
+- **llama.cpp special prize** ($10K): Gemma 4 E2B on 4GB RAM constrained hardware
+- **Future of Education impact prize** ($10K): personal AI tutor with adaptive retrieval
+
+### Hardware budget (4GB RAM, ~23GB disk)
+| Component | RAM | Disk |
+|---|---|---|
+| Gemma 4 E2B Q4_K_M (generation) | ~1.8 GB | ~1.2 GB |
+| nomic-embed-text GGUF (embeddings) | ~0.4 GB | ~0.27 GB |
+| FastAPI + Next.js + system | ~0.5 GB | — |
+| **Total** | **~2.7 GB** ✅ | **~1.5 GB** ✅ |
 
 ---
 
-## Phase 3 — SCAFFOLDED 🔧
+## Hackathon Sprint — Task Tracker
 
-### What's built (code exists, not yet live)
-- `supabase/migrations/004_vector_index.sql` — `note_index` table, `vector(768)` column, HNSW index, `match_notes()` RPC function, RLS policies
-- `backend/services/embedder.py` — calls `gemini-embedding-001` (768-dim) via google-genai SDK
-- `backend/services/retriever.py` — semantic search via Supabase RPC `match_notes`
-- `backend/routers/retrieval.py` — `POST /retrieval/index`, `POST /retrieval/retrieve`
-- `backend/main.py` — retrieval router registered
+> Target: Kaggle "Gemma 4 Good" — May 18, 2026
+> Prize targets: LiteRT $10K · Cactus $10K · llama.cpp $10K · Main Track
 
-### What's blocked
-- **Migration 004** not yet run in Supabase SQL editor (user needs to run it)
-- **Gemini billing** not enabled → `gemini-embedding-001` returns 429 quota error
-- Chat UI not built yet (next session)
+### A — SmartRouter (Cactus prize backbone)
 
-### Next session plan
-1. Replace OpenRouter with **local LLM (Ollama + Nemotron or Gemma 3)** — `LLM_PROVIDER=local`, wire `services/llm.py`
-2. Switch embeddings to a free local alternative (e.g., `nomic-embed-text` via Ollama) or enable Gemini billing
-3. Run migration 004 in Supabase SQL editor
-4. Build chat UI at `/brain/chat`
-5. Update PLAN.md phases to reflect local LLM direction
+| Task | Status |
+|------|--------|
+| `backend/services/router.py` — SmartRouter class, health-check tablet endpoint | ✅ |
+| `backend/core/config.py` — add `litert_url`, `tablet_url` fields | ✅ |
+| `backend/services/llm.py` — route through SmartRouter instead of raw `settings.llm_provider` | ✅ |
+| `backend/routers/chat.py` — use SmartRouter for generation | ✅ |
+| `backend/.env` — add `LITERT_URL=http://[tablet-ip]:8082` | ✅ |
+
+### B — Retrieval Quality (core product — broken without this)
+
+| Task | Status |
+|------|--------|
+| Migration `007_note_chunks.sql` — `note_chunks` table + `match_chunks()` RPC | ✅ |
+| `backend/services/chunker.py` — split `content_text` by section headers | ✅ |
+| `backend/routers/ingest.py` — chunk + embed each section on ingest | ✅ |
+| `backend/services/retriever.py` — raise `SIMILARITY_THRESHOLD` 0.50 → 0.70, use chunks | ✅ |
+
+### C — Disco Blocks (Analyse pillar — main visual differentiator)
+
+| Task | Status |
+|------|--------|
+| `frontend/components/blocks/InteractiveBlock.tsx` — sandboxed iframe custom block | ✅ |
+| `frontend/components/editor/BlockEditor.tsx` — register `InteractiveBlock` in schema | ✅ |
+| `backend/prompts/mastery_guide.py` — add `<div data-type="interactive">` generation | ✅ |
+| `frontend/components/editor/NoteEditorPage.tsx` — parse `data-type="interactive"` → block | ✅ |
+
+### D — LiteRT Android App (LiteRT prize)
+
+| Task | Status |
+|------|--------|
+| `android/` — minimal Kotlin app: MediaPipe LLM Inference + Ktor HTTP server | ✅ |
+| Exposes `/v1/chat/completions` on port 8082 (same API as llama.cpp) | ✅ |
+| Download Gemma 4 E2B in LiteRT `.task` format to tablet storage | ✅ `android/download_model.sh` |
+| Test: laptop SmartRouter calls tablet `:8082` → streams response | ⚠️ needs device |
+
+### E — PWA (Cactus prize — mobile installable)
+
+| Task | Status |
+|------|--------|
+| `frontend/public/manifest.json` — app name, icons, theme color | ✅ |
+| `frontend/app/layout.tsx` — add PWA meta tags | ✅ |
+| `frontend/next.config.ts` — PWA headers | ✅ |
+
+### F — MCP Polish (Link pillar)
+
+| Task | Status |
+|------|--------|
+| Verify `search_brain` returns correct `/brain/note-id` deep links | ✅ confirmed in code |
+| Test full flow: Claude Desktop → `search_brain` → click deep link → opens note | ⚠️ needs Claude Desktop running |
+
+### G — Demo
+
+| Task | Status |
+|------|--------|
+| Demo script: PDF ingest → Disco block → chat with citation → MCP deep link → tablet | ✅ `DEMO_SCRIPT.md` |
+| Record 3-minute video | ❌ needs device |
+| Submit on Kaggle | ❌ after video |
+
+---
+
+## Phase 4 — Native Android App 🔧
+
+> Goal: one APK on Play Store — open it, log in, ingest PDFs, write notes, chat with Gemma 4.
+> No laptop. No browser. Pure native Android.
+
+### What's already in the Android app
+
+| Component | Status |
+|---|---|
+| LiteRT inference (Gemma 4 E2B, CPU backend) | ✅ Working |
+| Ktor HTTP server on port 8082 | ✅ Working |
+| `/health` + `/v1/chat/completions` API | ✅ Tested from laptop |
+| Storage permission (MANAGE_EXTERNAL_STORAGE) | ✅ Fixed |
+| Model loads from `/sdcard/Download/gemma-4-E2B-it.litertlm` | ✅ Confirmed |
+
+### Task Tracker
+
+| # | Task | Status |
+|---|---|---|
+| 1 | Add Supabase Kotlin SDK to `build.gradle.kts` | ❌ |
+| 2 | `SupabaseClient.kt` — singleton with project URL + anon key | ❌ |
+| 3 | `LoginActivity.kt` — Compose login/signup with Supabase email auth | ❌ |
+| 4 | `NotesListActivity.kt` — Compose list, fetch `notes` table for current user | ❌ |
+| 5 | `NoteEditorActivity.kt` — WebView loading BlockNote as bundled HTML asset | ❌ |
+| 6 | `ChatActivity.kt` — Compose chat UI, calls LlmService directly (no HTTP) | ❌ |
+| 7 | `PdfIngestActivity.kt` — file picker → PdfRenderer → Gemma generates note → Supabase | ❌ |
+| 8 | `EmbeddingEngine.kt` — MiniLM in LiteRT format, replaces laptop llama.cpp | ❌ |
+| 9 | `NotesRepository.kt` — CRUD + `match_notes()` RPC for semantic search | ❌ |
+| 10 | `android/app/src/main/assets/editor/index.html` — standalone BlockNote page | ❌ |
+| 11 | Play Store release build — signing keystore + `release` variant | ❌ |
+| 12 | Play Console listing — screenshots, description, content rating | ❌ |
+
+### Architecture (standalone)
+
+```
+USER opens Second Brain app
+  ↓
+LoginActivity  →  Supabase Auth
+  ↓
+NotesListActivity  →  Supabase notes table
+  ↓
+NoteEditorActivity  →  WebView (BlockNote) ↔ Supabase directly
+  ↓
+ChatActivity  →  LlmService (in-process, no HTTP) ↔ Supabase match_notes() RPC
+  ↓
+PdfIngestActivity  →  PdfRenderer → Gemma → EmbeddingEngine → Supabase
+```
 
 ---
 
@@ -118,6 +265,39 @@ cd /home/ayoub/projects/second_brain/backend
 source .venv/bin/activate
 uvicorn main:app --reload
 # → http://localhost:8000
+
+# Terminal 3+4 — Local LLM (optional, needed for LLM_PROVIDER=llamacpp)
+./llama.sh start
+```
+
+## Running the MCP server (Claude Desktop)
+
+```bash
+# Install MCP dep (if not already)
+cd /home/ayoub/projects/second_brain/backend
+source .venv/bin/activate
+pip install mcp
+
+# Find your Supabase user ID (run after logging in to the app):
+# Open browser devtools → Application → Local Storage → supabase.auth.token → user.id
+
+# Add this to Claude Desktop config:
+# Linux:   ~/.config/claude/claude_desktop_config.json
+# Mac:     ~/Library/Application Support/Claude/claude_desktop_config.json
+
+# {
+#   "mcpServers": {
+#     "second-brain": {
+#       "command": "/home/ayoub/projects/second_brain/backend/.venv/bin/python",
+#       "args": ["/home/ayoub/projects/second_brain/backend/mcp_server.py"],
+#       "env": {
+#         "FASTAPI_URL": "http://localhost:8000",
+#         "INTERNAL_API_KEY": "changeme-internal-key",
+#         "SECOND_BRAIN_USER_ID": "your-supabase-user-uuid"
+#       }
+#     }
+#   }
+# }
 ```
 
 ## Running Tests
@@ -146,19 +326,25 @@ npx playwright test --project=ingest --grep "PDF"
 | Auth email | `aubrif005@gmail.com` / `SecondBrain2026!` |
 | Next.js version | 16.2.3 (Turbopack) |
 | BlockNote version | 0.48.0 |
-| LLM provider | OpenRouter (free tier) |
-| Primary model | `nvidia/nemotron-3-super-120b-a12b:free` — faster, better quality |
-| Fallback model | `google/gemma-4-26b-a4b-it:free` |
-| Model selector | `X-LLM-Model` header: frontend → proxy → FastAPI → llm.py `model_override` |
+| LLM provider (cloud) | OpenRouter — `nvidia/nemotron-3-super-120b-a12b:free` (primary) |
+| LLM provider (tablet) | LiteRT / MediaPipe — Gemma 4 E2B on Hexagon NPU, port 8082 |
+| LLM provider (cloud)  | OpenRouter — fallback when tablet offline |
+| LLM provider (local gen) | llama.cpp — Gemma 4 E2B, port 8080, laptop only (slow, llama.cpp prize demo) |
+| Embedder | llama.cpp — nomic-embed-text v1.5 on port 8081 (laptop CPU, always) |
+| Embedding dim | 768 (matches `vector(768)` in note_index) |
+| SmartRouter | `embed→llama.cpp laptop` / `generate→LiteRT tablet→OpenRouter` |
+| llama.sh | `setup / start / stop / status / logs` |
+| Chat route | `POST /chat` FastAPI → SSE stream to `/api/chat` Next.js proxy |
+| Retrieval | Supabase RPC `match_notes()` — cosine similarity, threshold 0.50, top 8 (needs fix → 0.70 + chunks) |
+| MCP tools | `search_brain`, `get_note`, `list_notes` |
 | JWT validation | `supabase.auth.get_user(token)` — works for both HS256 and ES256 |
 | pydantic-settings | Does NOT populate `os.environ` — always use `settings.field_name` |
 | Streaming | `stream=True` on OpenRouter — prevents free-tier timeout cutoffs |
 | Ingest HTML handoff | `sessionStorage["ingest-pending-{note_id}"]` — read in NoteEditorPage on mount |
-| Embeddings | `gemini-embedding-001` (768-dim) — blocked until Gemini billing enabled |
-| Retrieval | Supabase RPC `match_notes()` — no direct DB connection needed |
-| xl-ai server import | dynamic `import("@blocknote/xl-ai/server")` — CJS require() fails |
 | SSR fix | `BlockEditor` loaded via `dynamic(() => import(...), { ssr: false })` |
 | Middleware file | `proxy.ts` (Next.js 16 renamed from middleware.ts) |
+| KV cache quant | `--cache-type-k q8_0 --cache-type-v q8_0` — cuts ctx memory ~60% |
+| Flash attention | `--flash-attn` on generation server — ~40% memory reduction |
 
 ---
 
@@ -178,4 +364,67 @@ npx playwright test --project=ingest --grep "PDF"
 | 2026-04-17 | Streaming on OpenRouter                               | Non-streaming caused silent server-side timeouts             |
 | 2026-04-17 | JWT via supabase.auth.get_user() not local decode     | ES256 tokens can't be decoded with HS256 local secret        |
 | 2026-04-17 | Retrieval via Supabase RPC not direct asyncpg         | No DATABASE_URL password needed; Supabase handles auth       |
-| Next       | Replace OpenRouter with local Ollama LLM              | Free, no rate limits, fully offline, better for development  |
+| 2026-05-08 | llama.cpp over sentence-transformers for embeddings   | No PyTorch dependency, same model used for gen+embed, hackathon requirement |
+| 2026-05-08 | llama.sh script for llama.cpp lifecycle               | Single entry point: setup/start/stop/status/logs             |
+| 2026-05-08 | embed_batch() with array input                        | llama.cpp /v1/embeddings accepts array — one HTTP call for bulk indexing |
+| 2026-05-08 | KV cache quantization q8_0 + flash-attn               | Fits Gemma 4 E2B in ~1.8 GB RAM with 8192 ctx window        |
+| 2026-05-09 | Removed llamacpp from ingest model selector           | 19 min/PDF at ~3 tok/s is unusable for ingest; use OpenRouter for ingest, llamacpp for chat only |
+| 2026-05-12 | Tablet (Redmi Pad Pro) = primary inference via LiteRT | Hexagon NPU faster than Vulkan GPU; broader Android device compatibility; laptop too weak for generation |
+| 2026-05-12 | Dropped llama.cpp from tablet                         | Redundant with LiteRT; two runtimes for same job; LiteRT is the correct native Android path |
+| 2026-05-12 | Dropped Ollama entirely                               | Redundant with llama.cpp for our stack; no genuine need beyond prize |
+| 2026-05-12 | SmartRouter replaces LLM_PROVIDER env var             | Reliable fallback needed; tablet can go offline during demo |
+| 2026-05-12 | Deferred Unsloth fine-tuning                          | Base model + good prompt is sufficient; fine-tune only if output quality is insufficient after testing |
+
+---
+
+## AI Substrate — Phase 1 — CODE COMPLETE ✅
+
+> Spec: `docs/superpowers/specs/2026-05-17-ai-experience-redesign.md`
+> Plan: `docs/superpowers/plans/2026-05-17-ai-substrate-phase-1.md`
+> Branch: `worktree-ai-substrate-phase-1`
+> Completed: 2026-05-18
+
+### What's built (24 commits, Tasks 1-25)
+
+**Backend** — `backend/services/agent/`:
+- Agent Engine with skill activation, retrieval, tool calls, SSE streaming
+- Brain tools — 10 read+write tools (search, get, list, backlinks, create, update, set_mastery, move, link, delete)
+- Permission gate enforcing 3 tiers (External MCP / Internal API / Internal Local) + `local_only` flag
+- Model router with Local/API mode switching (OpenRouter / Anthropic / OpenAI)
+- Skill loader (markdown + YAML frontmatter) with keyword-overlap classifier
+- 3 bundled skills: `cite-everything`, `note-author`, `interactive-block-author`
+- `POST /agent` SSE endpoint, replaces old `POST /chat`
+
+**Database** — migration `009_ai_substrate.sql`:
+- `notes.local_only` + `notes.deleted_at`
+- `chat_sessions` renamed → `chat_threads` with `title`, `pinned`, `model_mode`, `archived_at`
+- New tables: `mcp_servers` (Phase 3 prep), `note_links`
+
+**Frontend** — `frontend/components/ai/`, `frontend/lib/markdown/`:
+- `Chat` component with streaming SSE, thread history, mode toggle
+- Markdown renderer with custom fences (`:::callout`, `:::interactive`, `:::note-ref`)
+- ThreadHistory, ModeToggle, ToolEvent, SkillBadge, MessageList
+- `/api/agent` SSE proxy, `/api/threads/*` CRUD routes
+- `LocalOnlyBadge` on note properties
+
+**Removed:**
+- Old `backend/routers/chat.py`, `backend/prompts/tutor.py`
+- Old `frontend/components/chat/`, `frontend/app/api/chat/`
+
+### Remaining manual steps
+
+1. Apply migration: `supabase/migrations/009_ai_substrate.sql` to the Supabase project (SQL editor).
+2. Configure `.env`: set `API_PROVIDER`, `OPENROUTER_API_KEY` (or `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`).
+3. Run end-to-end smoke test: `npx playwright test e2e/agent-chat.spec.ts` (requires both servers running).
+4. Android WebView validation: open `/brain/chat` on the tablet (via Phase 4 WebView or Chrome) and verify streaming works over LAN.
+
+### Test status
+
+- Backend: 41/41 unit tests passing (`pytest backend/tests/`)
+- Frontend: TypeScript compiles cleanly for all new files (pre-existing errors in `app/api/auth/login/route.ts` are unrelated)
+- E2E: written but deferred (requires live servers)
+
+### What's next
+
+- **Phase 2** (separate plan): side panel docking, ⌘K floating launcher, inline `/ai` in editor (BlockNote xl-ai), editor tools
+- **Phase 3** (separate plan): agentic ingest (replace `/brain/ingest`), MCP client, skills management UI

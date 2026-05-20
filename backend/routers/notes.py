@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from fastapi import APIRouter, Header, HTTPException, status
 from jose import jwt, JWTError
 from core.config import settings
@@ -29,7 +30,23 @@ async def list_notes(authorization: str = Header()):
         db.table("notes")
         .select("*")
         .eq("user_id", user_id)
+        .is_("deleted_at", "null")
         .order("updated_at", desc=True)
+        .execute()
+    )
+    return result.data
+
+
+@router.get("/trash", response_model=list[NoteResponse])
+async def list_trash(authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    db = get_supabase()
+    result = (
+        db.table("notes")
+        .select("*")
+        .eq("user_id", user_id)
+        .not_.is_("deleted_at", "null")
+        .order("deleted_at", desc=True)
         .execute()
     )
     return result.data
@@ -56,6 +73,7 @@ async def get_note(note_id: str, authorization: str = Header()):
         .select("*")
         .eq("id", note_id)
         .eq("user_id", user_id)
+        .is_("deleted_at", "null")
         .single()
         .execute()
     )
@@ -83,8 +101,35 @@ async def update_note(note_id: str, update: NoteUpdate, authorization: str = Hea
     return result.data[0]
 
 
+@router.patch("/{note_id}/restore", response_model=NoteResponse)
+async def restore_note(note_id: str, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    db = get_supabase()
+    result = (
+        db.table("notes")
+        .update({"deleted_at": None})
+        .eq("id", note_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return result.data[0]
+
+
 @router.delete("/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_note(note_id: str, authorization: str = Header()):
+    """Soft delete — moves note to Trash."""
+    user_id = get_user_id(authorization)
+    db = get_supabase()
+    db.table("notes").update(
+        {"deleted_at": datetime.now(timezone.utc).isoformat()}
+    ).eq("id", note_id).eq("user_id", user_id).execute()
+
+
+@router.delete("/{note_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
+async def permanent_delete_note(note_id: str, authorization: str = Header()):
+    """Hard delete — cannot be undone."""
     user_id = get_user_id(authorization)
     db = get_supabase()
     db.table("notes").delete().eq("id", note_id).eq("user_id", user_id).execute()

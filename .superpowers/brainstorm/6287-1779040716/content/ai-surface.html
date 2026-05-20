@@ -1,0 +1,119 @@
+<h2>Where does the AI live in the app?</h2>
+<p class="subtitle">You said "the user should be able to call it everywhere". Here are four ways "everywhere" can work. Pick the one that feels closest to what you want — we'll refine from there.</p>
+
+<div class="options">
+
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Always-on side panel</h3>
+      <p class="subtitle" style="margin-bottom:10px">Persistent chat docked to the right (like Cursor / Notion AI). You're always one glance away. The panel knows which note you're on.</p>
+      <div class="mockup" style="margin:8px 0 0 0">
+        <div class="mockup-body" style="padding:0">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;height:140px;font-size:11px">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px">
+              <div style="font-weight:600;color:#1e293b;margin-bottom:6px">📄 My Note</div>
+              <div style="height:8px;background:#e2e8f0;border-radius:3px;margin-bottom:4px"></div>
+              <div style="height:8px;background:#e2e8f0;border-radius:3px;width:80%;margin-bottom:4px"></div>
+              <div style="height:8px;background:#e2e8f0;border-radius:3px;width:60%"></div>
+            </div>
+            <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;padding:8px;display:flex;flex-direction:column">
+              <div style="font-weight:600;color:#4338ca;margin-bottom:6px">🧠 Chat</div>
+              <div style="height:8px;background:#c7d2fe;border-radius:3px;margin-bottom:3px;width:90%"></div>
+              <div style="height:8px;background:#c7d2fe;border-radius:3px;margin-bottom:6px;width:70%"></div>
+              <div style="height:8px;background:#a5b4fc;border-radius:3px;margin-bottom:6px;width:85%"></div>
+              <div style="margin-top:auto;height:18px;background:#fff;border:1px solid #c7d2fe;border-radius:4px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Floating launcher (⌘K spotlight)</h3>
+      <p class="subtitle" style="margin-bottom:10px">Hidden until you call it. Press <code>⌘K</code> anywhere → modal pops over the page, you ask, AI streams the answer, you close it. Great for quick questions without leaving your flow.</p>
+      <div class="mockup" style="margin:8px 0 0 0">
+        <div class="mockup-body" style="padding:0;position:relative;height:140px;background:#f8fafc">
+          <div style="padding:8px;font-size:11px;color:#64748b">
+            <div style="height:8px;background:#e2e8f0;border-radius:3px;margin-bottom:4px"></div>
+            <div style="height:8px;background:#e2e8f0;border-radius:3px;width:75%;margin-bottom:4px"></div>
+            <div style="height:8px;background:#e2e8f0;border-radius:3px;width:60%"></div>
+          </div>
+          <div style="position:absolute;left:14%;right:14%;top:25%;background:#fff;border:2px solid #6366f1;border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,.15);padding:10px;font-size:11px">
+            <div style="display:flex;align-items:center;gap:6px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;margin-bottom:6px">
+              <span style="color:#6366f1">⚡</span>
+              <span style="color:#94a3b8">Ask AI…</span>
+              <span style="margin-left:auto;font-size:9px;color:#94a3b8;background:#f1f5f9;padding:2px 5px;border-radius:3px">⌘K</span>
+            </div>
+            <div style="height:7px;background:#c7d2fe;border-radius:3px;margin-bottom:3px;width:80%"></div>
+            <div style="height:7px;background:#c7d2fe;border-radius:3px;width:55%"></div>
+            <span style="display:inline-block;width:1.5px;height:9px;background:#6366f1;margin-left:2px;vertical-align:middle"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Inline AI inside the editor</h3>
+      <p class="subtitle" style="margin-bottom:10px">Type <code>/ai</code> in any block → AI writes <em>into the note itself</em>, block by block, streaming. The note <em>is</em> the conversation. Selecting text + ⌘J asks AI about the selection.</p>
+      <div class="mockup" style="margin:8px 0 0 0">
+        <div class="mockup-body" style="padding:0;height:140px;background:#fff">
+          <div style="padding:10px;font-size:11px;color:#334155">
+            <div style="font-weight:700;font-size:13px;margin-bottom:6px">📄 Calculus — Chain Rule</div>
+            <div style="height:8px;background:#e2e8f0;border-radius:3px;margin-bottom:4px;width:90%"></div>
+            <div style="height:8px;background:#e2e8f0;border-radius:3px;width:70%;margin-bottom:8px"></div>
+            <div style="border-left:2px solid #6366f1;padding:4px 0 4px 8px;background:#eef2ff;border-radius:0 4px 4px 0">
+              <div style="color:#6366f1;font-size:10px;margin-bottom:3px">⚡ /ai give me a worked example</div>
+              <div style="height:7px;background:#c7d2fe;border-radius:3px;margin-bottom:3px"></div>
+              <div style="height:7px;background:#c7d2fe;border-radius:3px;width:80%"></div>
+              <span style="display:inline-block;width:1.5px;height:8px;background:#6366f1;margin-left:2px;vertical-align:middle"></span>
+            </div>
+            <div style="height:8px;background:#e2e8f0;border-radius:3px;margin-top:6px;width:75%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="d" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>All three — one shared conversation</h3>
+      <p class="subtitle" style="margin-bottom:10px">Side panel + ⌘K + inline <code>/ai</code> are all <em>doors</em> into the same persistent thread. Ask via ⌘K, follow up in the panel, drop the answer into the note inline. The thread remembers everything.</p>
+      <div class="mockup" style="margin:8px 0 0 0">
+        <div class="mockup-body" style="padding:0;height:140px;background:#fff;position:relative">
+          <div style="display:grid;grid-template-columns:2fr 1fr;height:100%;font-size:10px">
+            <div style="padding:8px;border-right:1px solid #e2e8f0">
+              <div style="font-weight:700;margin-bottom:4px">📄 Note</div>
+              <div style="height:6px;background:#e2e8f0;border-radius:2px;margin-bottom:3px;width:85%"></div>
+              <div style="border-left:2px solid #6366f1;padding:2px 0 2px 6px;background:#eef2ff;margin:4px 0">
+                <div style="color:#6366f1;font-size:9px">⚡ inline</div>
+                <div style="height:5px;background:#c7d2fe;border-radius:2px;width:75%"></div>
+              </div>
+              <div style="height:6px;background:#e2e8f0;border-radius:2px;width:70%"></div>
+            </div>
+            <div style="background:#f8fafc;padding:6px;display:flex;flex-direction:column">
+              <div style="font-weight:600;color:#4338ca;margin-bottom:4px">🧠 Thread</div>
+              <div style="height:5px;background:#c7d2fe;border-radius:2px;margin-bottom:2px"></div>
+              <div style="height:5px;background:#c7d2fe;border-radius:2px;margin-bottom:2px;width:70%"></div>
+              <div style="height:5px;background:#a5b4fc;border-radius:2px;margin-bottom:2px;width:60%"></div>
+              <div style="margin-top:auto;height:12px;background:#fff;border:1px solid #c7d2fe;border-radius:3px"></div>
+            </div>
+          </div>
+          <div style="position:absolute;left:25%;right:25%;top:8%;background:#fff;border:2px solid #6366f1;border-radius:6px;box-shadow:0 6px 14px rgba(0,0,0,.15);padding:5px 8px;font-size:9px">
+            <span style="color:#6366f1">⚡</span> <span style="color:#94a3b8">⌘K — Ask anything</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:24px;text-align:center">Click your favorite — then tell me in the terminal what you'd change. Mixing two of these is fine too.</p>

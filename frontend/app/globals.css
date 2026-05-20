@@ -14,12 +14,86 @@
   --sidebar-border: #e5e7eb;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f0f0f;
-    --foreground: #ededed;
-    --sidebar-bg: #111827;
-    --sidebar-border: #1f2937;
+.dark {
+  --background: #111827;
+  --foreground: #f9fafb;
+}
+
+/* @mention inline links */
+.mention-link {
+  color: #6366f1;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: 3px;
+  padding: 0 2px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.mention-link:hover {
+  background-color: rgba(99, 102, 241, 0.1);
+  text-decoration: underline;
+}
+
+@media print {
+  /* Hide all UI chrome */
+  .no-print { display: none !important; }
+
+  /* Reset page geometry so content isn't clipped */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Flatten the app shell flex layout */
+  .print-layout {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Main area takes full width */
+  .print-main {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    min-width: 0 !important;
+  }
+
+  /* The editor's own scroll wrapper must not clip */
+  .print-scroll {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  /* Note content: full width, readable margins */
+  .print-content {
+    max-width: 100% !important;
+    padding: 0 24px !important;
+  }
+
+  /* Force white background on editor panes */
+  .print-main * {
+    background-color: transparent !important;
+    color: #000 !important;
+  }
+
+  /* Title input: browsers hide inputs in print by default */
+  input[type="text"], input:not([type]) {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Page breaks */
+  p, h1, h2, h3, h4, li { page-break-inside: avoid; }
+
+  /* BlockNote internal scroll containers */
+  [data-bn-container], .bn-editor, .ProseMirror {
+    overflow: visible !important;
+    height: auto !important;
   }
 }
 
@@ -48,4 +122,9 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
+}
+
+/* Remove browser default outlines — components handle their own focus styles */
+:focus-visible {
+  outline: none;
 }

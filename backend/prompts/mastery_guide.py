@@ -158,6 +158,42 @@ Use <span data-color="X">text</span> to show relationships and contrasts.
   - Example: <span data-color="blue">training data</span> vs <span data-color="red">test data</span>
   Valid color values: gray, brown, orange, yellow, green, blue, purple, pink, red
 
+INTERACTIVE KNOWLEDGE CHECK (place this just before the metadata block):
+Generate ONE self-contained HTML/JS quiz block based on the most important concept from this note.
+The entire snippet must run inside a sandboxed iframe — no external resources, all CSS/JS inline.
+
+<div data-type="interactive" data-title="Knowledge Check">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,sans-serif;padding:16px;background:#f8fafc}
+    .q{font-weight:600;font-size:15px;margin-bottom:14px;color:#1e293b}
+    .opts button{display:block;width:100%;text-align:left;padding:9px 13px;margin:5px 0;
+      background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;
+      font-size:14px;transition:.15s}
+    .opts button:hover{border-color:#6366f1;background:#eef2ff}
+    .opts button.correct{background:#d1fae5;border-color:#10b981;color:#065f46;font-weight:600}
+    .opts button.wrong{background:#fee2e2;border-color:#ef4444;color:#7f1d1d}
+    #msg{margin-top:10px;font-size:13px;font-weight:500}
+  </style>
+  <div class="q">[Question about the most important concept in this note]</div>
+  <div class="opts">
+    <button onclick="check(this,true)">[Correct answer]</button>
+    <button onclick="check(this,false)">[Plausible wrong answer]</button>
+    <button onclick="check(this,false)">[Plausible wrong answer]</button>
+  </div>
+  <div id="msg"></div>
+  <script>
+    var done=false;
+    function check(btn,ok){
+      if(done)return;done=true;
+      btn.className=ok?'correct':'wrong';
+      var m=document.getElementById('msg');
+      m.textContent=ok?'✅ Correct!':'❌ Not quite — review the concept above.';
+      m.style.color=ok?'#065f46':'#991b1b';
+    }
+  </script>
+</div>
+
 NOTE METADATA BLOCK (at the very end of the document):
 <div data-type="metadata" style="display:none">
   <span data-key="topics">[comma-separated list of concepts covered]</span>
@@ -168,7 +204,7 @@ NOTE METADATA BLOCK (at the very end of the document):
 
 WHAT YOU DO NOT DO:
 - Reorganize the lecture structure
-- Produce flashcards, quizzes, or practice problems (unless asked)
+- Produce more than one interactive block per note
 - Force bullets everywhere — use them only for 2+ parallel items
 - Pack depth into prose — distribute it across toggles, quotes, callouts, tables, code
 - Apply color decoratively — always answer: "What relationship or contrast does this show?"

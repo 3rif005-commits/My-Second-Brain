@@ -1,0 +1,1 @@
+/home/ayoub/projects/second_brain/android/app/src/main/cpp/CMakeLists.txt

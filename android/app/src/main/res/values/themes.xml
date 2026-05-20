@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.SecondBrainTablet" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+        <item name="colorPrimary">#6366F1</item>
+        <item name="colorPrimaryVariant">#4F46E5</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+    </style>
+</resources>
