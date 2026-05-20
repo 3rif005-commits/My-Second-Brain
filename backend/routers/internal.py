@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from core.config import settings
 from services.database import get_supabase
 from services.embedder import embed
+from services.indexer import index_note
 from services.retriever import retrieve
 
 router = APIRouter(prefix="/internal", tags=["internal"])
@@ -25,6 +26,10 @@ class SearchRequest(BaseModel):
 class NoteRequest(BaseModel):
     note_id: str
     user_id: str
+
+
+class ReindexNoteRequest(BaseModel):
+    note_id: str
 
 
 @router.post("/search")
@@ -72,3 +77,44 @@ def internal_list_notes(user_id: str, x_internal_key: str = Header()):
         .execute()
     )
     return {"notes": result.data or []}
+
+
+@router.post("/reindex-note")
+def reindex_note(body: ReindexNoteRequest, authorization: str = Header()):
+    """Re-chunk and re-describe a single note. Auth: user JWT."""
+    from routers.ingest import get_user_id
+    user_id = get_user_id(authorization)
+    success = index_note(body.note_id, user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"reindexed": 1}
+
+
+@router.post("/reindex")
+def reindex_all(authorization: str = Header()):
+    """Re-chunk and re-describe all notes for the authenticated user."""
+    from routers.ingest import get_user_id
+    user_id = get_user_id(authorization)
+
+    db = get_supabase()
+    notes_res = (
+        db.table("notes")
+        .select("id")
+        .eq("user_id", user_id)
+        .is_("deleted_at", "null")
+        .execute()
+    )
+    note_ids = [r["id"] for r in (notes_res.data or [])]
+
+    reindexed = 0
+    failed = 0
+    for nid in note_ids:
+        try:
+            if index_note(nid, user_id):
+                reindexed += 1
+            else:
+                failed += 1
+        except Exception:
+            failed += 1
+
+    return {"reindexed": reindexed, "failed": failed}
