@@ -8,6 +8,7 @@ the frontend can navigate to the note immediately.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -22,7 +23,10 @@ from services.agent.engine import run_ingest_turn
 from services.agent.skills import SkillRegistry
 from services.database import get_supabase
 from services.file_extractor import extract_file
+from services.indexer import index_note
 from services.url_extractor import extract_url
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -115,6 +119,12 @@ async def agent_ingest(
 
         async for ev in run_ingest_turn(request, user_id=user_id, skill_registry=registry):
             yield ("data: " + json.dumps(ev) + "\n\n").encode()
+
+        # Index note content after agent has written it
+        try:
+            index_note(note_id, user_id)
+        except Exception:
+            logger.exception("post-ingest indexing failed for note %s", note_id)
 
         yield b"data: [DONE]\n\n"
 
