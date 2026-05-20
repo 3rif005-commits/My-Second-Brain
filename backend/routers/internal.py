@@ -1,13 +1,18 @@
 """Internal router — used by the MCP server to access retrieval without a user JWT."""
 
+import logging
+
 from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel
 
 from core.config import settings
+from routers.ingest import get_user_id
 from services.database import get_supabase
 from services.embedder import embed
 from services.indexer import index_note
 from services.retriever import retrieve
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -82,7 +87,6 @@ def internal_list_notes(user_id: str, x_internal_key: str = Header()):
 @router.post("/reindex-note")
 def reindex_note(body: ReindexNoteRequest, authorization: str = Header()):
     """Re-chunk and re-describe a single note. Auth: user JWT."""
-    from routers.ingest import get_user_id
     user_id = get_user_id(authorization)
     success = index_note(body.note_id, user_id)
     if not success:
@@ -93,7 +97,6 @@ def reindex_note(body: ReindexNoteRequest, authorization: str = Header()):
 @router.post("/reindex")
 def reindex_all(authorization: str = Header()):
     """Re-chunk and re-describe all notes for the authenticated user."""
-    from routers.ingest import get_user_id
     user_id = get_user_id(authorization)
 
     db = get_supabase()
@@ -115,6 +118,7 @@ def reindex_all(authorization: str = Header()):
             else:
                 failed += 1
         except Exception:
+            logger.exception("reindex failed for note %s", nid)
             failed += 1
 
     return {"reindexed": reindexed, "failed": failed}
