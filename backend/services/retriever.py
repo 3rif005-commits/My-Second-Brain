@@ -1,62 +1,107 @@
-"""Semantic retrieval — chunk-level cosine similarity via Supabase RPC.
+"""Semantic retrieval — two-pass cosine similarity via Supabase RPC.
 
-Queries note_chunks (fine-grained) instead of note_index (whole-note).
-Deduplicates by note_id, keeping the highest-similarity chunk per note,
-so the tutor always gets the most relevant excerpt — not a truncated blob.
+Pass 1: match notes by descriptor_embedding (notes must have been indexed).
+Pass 2: within the top notes, find the best matching blocks.
+
+Falls back to legacy match_chunks RPC for notes that haven't been re-indexed
+(no descriptor_embedding set).
 """
+from __future__ import annotations
 
 from services.database import get_supabase
 
-SIMILARITY_THRESHOLD = 0.50
-TOP_K_CHUNKS = 12   # fetch more chunks than notes needed — dedup reduces count
-TOP_K_NOTES  = 6    # max distinct notes returned to the tutor
+_TOP_NOTES    = 5
+_TOP_BLOCKS   = 15   # total across all top notes
+_LEGACY_THRESHOLD = 0.50
+_LEGACY_CHUNKS    = 12
 
 
 def retrieve(query_embedding: list[float], user_id: str) -> list[dict]:
-    vec_literal = "[" + ",".join(str(v) for v in query_embedding) + "]"
+    if not query_embedding:
+        return []
 
-    # Try chunk-level retrieval first
-    chunk_result = get_supabase().rpc(
+    vec = "[" + ",".join(str(v) for v in query_embedding) + "]"
+    db  = get_supabase()
+
+    # ── Pass 1: note descriptor search ───────────────────────────────────────
+    pass1 = db.rpc(
+        "match_note_descriptors",
+        {"query_embedding": vec, "match_user_id": user_id, "match_count": _TOP_NOTES},
+    )
+
+    note_rows = pass1.data or []
+
+    if not note_rows:
+        return _legacy_fallback(db, vec, user_id)
+
+    note_ids = [r["id"] for r in note_rows]
+    note_meta = {r["id"]: r for r in note_rows}
+
+    # ── Pass 2: block search within top notes ─────────────────────────────────
+    pass2 = db.rpc(
+        "match_blocks_in_notes",
+        {
+            "query_embedding": vec,
+            "match_user_id":   user_id,
+            "note_ids":        note_ids,
+            "match_count":     _TOP_BLOCKS,
+        },
+    )
+
+    block_rows = pass2.data or []
+
+    if not block_rows:
+        return _legacy_fallback(db, vec, user_id)
+
+    results = []
+    for row in block_rows:
+        nid      = str(row["note_id"])
+        block_id = row.get("block_id") or ""
+        meta     = note_meta.get(nid, {})
+        score    = max(0.0, 1.0 - float(row["dist"]))
+        deep_link = f"/brain/{nid}#{block_id}" if block_id else f"/brain/{nid}"
+        results.append({
+            "id":           nid,
+            "title":        meta.get("title", ""),
+            "deep_link":    deep_link,
+            "content_text": row.get("chunk_text", "")[:300],
+            "similarity":   score,
+        })
+
+    return results
+
+
+def _legacy_fallback(db, vec: str, user_id: str) -> list[dict]:
+    """Fall back to old single-pass chunk retrieval for un-indexed notes."""
+    res = db.rpc(
         "match_chunks",
         {
-            "query_embedding": vec_literal,
-            "match_user_id": user_id,
-            "match_threshold": SIMILARITY_THRESHOLD,
-            "match_count": TOP_K_CHUNKS,
+            "query_embedding": vec,
+            "match_user_id":   user_id,
+            "match_threshold": _LEGACY_THRESHOLD,
+            "match_count":     _LEGACY_CHUNKS,
         },
-    ).execute()
-
-    rows = chunk_result.data or []
+    )
+    rows = res.data or []
     rows = [r for r in rows if r.get("deleted_at") is None]
 
-    if rows:
-        # Deduplicate: keep best chunk per note
-        seen: dict[str, dict] = {}
-        for row in rows:
-            nid = str(row["note_id"])
-            if nid not in seen or row["similarity"] > seen[nid]["similarity"]:
-                seen[nid] = row
-        best = sorted(seen.values(), key=lambda r: r["similarity"], reverse=True)[:TOP_K_NOTES]
-        return [
-            {
-                "id":           str(r["note_id"]),
-                "title":        r.get("title", ""),
-                "content_text": r.get("chunk_text", ""),
-                "deep_link":    r.get("deep_link", f"/brain/{r['note_id']}"),
-                "similarity":   r.get("similarity", 0.0),
-            }
-            for r in best
-        ]
+    if not rows:
+        return []
 
-    # Fallback: whole-note retrieval for notes not yet chunked
-    note_result = get_supabase().rpc(
-        "match_notes",
+    seen: dict[str, dict] = {}
+    for row in rows:
+        nid = str(row["note_id"])
+        if nid not in seen or row["similarity"] > seen[nid]["similarity"]:
+            seen[nid] = row
+
+    best = sorted(seen.values(), key=lambda r: r["similarity"], reverse=True)[:6]
+    return [
         {
-            "query_embedding": vec_literal,
-            "match_user_id": user_id,
-            "match_threshold": SIMILARITY_THRESHOLD,
-            "match_count": TOP_K_NOTES,
-        },
-    ).execute()
-    note_rows = note_result.data or []
-    return [r for r in note_rows if r.get("deleted_at") is None]
+            "id":           str(r["note_id"]),
+            "title":        r.get("title", ""),
+            "content_text": r.get("chunk_text", ""),
+            "deep_link":    r.get("deep_link", f"/brain/{r['note_id']}"),
+            "similarity":   r.get("similarity", 0.0),
+        }
+        for r in best
+    ]
