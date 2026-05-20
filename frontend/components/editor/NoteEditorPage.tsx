@@ -86,6 +86,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
   const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reindexDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const key = `ingest-pending-${note.id}`;
@@ -158,6 +159,18 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
       });
       setSaving(false);
       setLastSaved(new Date());
+
+      // Debounce re-index: fire 30s after last block change
+      if (reindexDebounceRef.current) clearTimeout(reindexDebounceRef.current);
+      reindexDebounceRef.current = setTimeout(() => {
+        fetch("/api/internal/reindex-note", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ note_id: note.id }),
+        }).catch(() => {
+          // silent — reindex is best-effort
+        });
+      }, 30_000);
     },
     [note.id]
   );
