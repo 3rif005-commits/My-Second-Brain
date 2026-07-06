@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, useMemo } from "react";
-import { useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems } from "@blocknote/react";
+import { useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems, useBlockNoteEditor, useExtension } from "@blocknote/react";
+import type { DefaultReactSuggestionItem } from "@blocknote/react";
 import { BlockNoteView, darkDefaultTheme } from "@blocknote/mantine";
 import { AIExtension, AIMenuController } from "@blocknote/xl-ai";
 // @ts-ignore — ClientSideTransport + fetchViaProxy + getAISlashMenuItems exist in runtime bundle but omitted from index.d.ts
@@ -95,6 +96,43 @@ const appDarkTheme = {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyBlock = any;
+
+// Cmd+K with text selected inside the editor → open inline AI.
+// Cmd+K with no selection → falls through to BrainLayoutClient's bubble-phase
+// handler which opens the CommandK chat modal.
+//
+// Runs in capture phase so stopPropagation() prevents BrainLayoutClient from
+// seeing the event when we handle it here.
+function AIKeyboardHandler() {
+  const editor = useBlockNoteEditor();
+  // @ts-ignore — useExtension types require generic constraint satisfied by AIExtension
+  const aiExt = useExtension(AIExtension);
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== "k") return;
+
+      const sel = window.getSelection();
+      const selectedText = sel?.toString().trim() ?? "";
+      const insideEditor =
+        !!selectedText &&
+        !!editor.domElement &&
+        sel != null &&
+        editor.domElement.contains(sel.anchorNode);
+
+      if (!insideEditor) return; // let BrainLayoutClient handle it
+
+      e.preventDefault();
+      e.stopPropagation();
+      const pos = editor.getTextCursorPosition();
+      if (pos?.block) {
+        aiExt?.openAIMenuAtBlock(pos.block.id);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
+  }, [editor, aiExt]);
+  return null;
+}
 
 export interface BlockEditorHandle {
   exportMarkdown: (title: string) => Promise<void>;
@@ -236,7 +274,14 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         <BlockNoteView
           editor={editor}
           theme={resolvedTheme === "dark" ? appDarkTheme : "light"}
+          // Disable the built-in slash menu — we render our own custom
+          // SuggestionMenuController below. Without this, both menus are active
+          // and a mouse-click on our menu's item fails to apply the conversion.
+          slashMenu={false}
         >
+          {/* Intercepts Cmd/Ctrl+J to open the inline AI menu */}
+          <AIKeyboardHandler />
+
           {/* Slash menu — default items + Knowledge Check */}
           <SuggestionMenuController
             triggerCharacter="/"
@@ -256,7 +301,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                     aliases: ["quiz", "interactive", "disco"],
                     onItemClick: () => onAddInteractiveBlock({
                       title: "Knowledge Check",
-                      html: DEFAULT_QUIZ_HTML,
+                      html: DEFAULT_BLOCK_HTML,
                     }),
                   }]
                 : [];
@@ -290,13 +335,13 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 
               // BlockNote keys menu items by `title` — deduplicate to avoid React warnings
               const seenTitles = new Set<string>();
-              return notes.map((note) => {
+              return notes.map((note): DefaultReactSuggestionItem => {
                 const base = note.title || "Untitled";
                 const title = seenTitles.has(base) ? `${base} (${note.id.slice(0, 6)})` : base;
                 seenTitles.add(base);
                 return {
                   title,
-                  icon: note.icon || "📄",
+                  icon: <span>{note.icon || "📄"}</span>,
                   onItemClick: () => {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     (editor as any).insertInlineContent([
