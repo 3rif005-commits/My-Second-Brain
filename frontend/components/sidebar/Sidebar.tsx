@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { MessageSquare, Upload, Plus, LogOut, PanelLeftClose, Trash2, RotateCcw, ChevronDown, ChevronRight, Search, Star, Clock, Sun, Moon } from "lucide-react";
+import { MessageSquare, Upload, Plus, LogOut, PanelLeftClose, Trash2, RotateCcw, ChevronDown, ChevronRight, Search, Star, Clock, Sun, Moon, LayoutGrid } from "lucide-react";
 import { useTheme } from "@/app/providers";
 import { createClient } from "@/lib/supabase/client";
 import { useNotes } from "@/lib/hooks/useNotes";
@@ -143,6 +143,12 @@ export function Sidebar({
           icon={Upload}
           active={pathname === "/brain/ingest"}
           onClick={() => navigate("/brain/ingest")}
+        />
+        <NavItem
+          label="Workspaces"
+          icon={LayoutGrid}
+          active={pathname?.startsWith("/brain/workspaces") ?? false}
+          onClick={() => navigate("/brain/workspaces")}
         />
       </nav>
 

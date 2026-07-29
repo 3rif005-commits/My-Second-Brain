@@ -16,6 +16,7 @@ import { en as coreEn } from "@blocknote/core/locales";
 import { en as aiEn } from "@blocknote/xl-ai/locales";
 import { withMultiColumn, multiColumnDropCursor } from "@blocknote/xl-multi-column";
 import { useTheme } from "@/app/providers";
+import { MathBlockSpec, CheckpointBlockSpec } from "./customBlocks";
 
 // Inline @mention — links to another note in the brain
 const MentionSpec = createInlineContentSpec(
@@ -48,7 +49,12 @@ const MentionSpec = createInlineContentSpec(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const multiColSchema = withMultiColumn(
   (BlockNoteSchema as any).create({
-    blockSpecs: defaultBlockSpecs,
+    blockSpecs: {
+      ...defaultBlockSpecs,
+      // createReactBlockSpec returns a factory — must be invoked to get the BlockSpec
+      math: MathBlockSpec(),
+      checkpoint: CheckpointBlockSpec(),
+    },
     inlineContentSpecs: { ...defaultInlineContentSpecs, mention: MentionSpec },
   })
 );
@@ -136,6 +142,10 @@ function AIKeyboardHandler() {
 
 export interface BlockEditorHandle {
   exportMarkdown: (title: string) => Promise<void>;
+  /** Append blocks at the end of the document (workspace "send to note"). */
+  insertBlocksAtEnd: (blocks: AnyBlock[]) => void;
+  /** Scroll a block into view and flash-highlight it (source→note sync). */
+  scrollToBlock: (blockId: string) => void;
 }
 
 export interface InteractiveBlock { title: string; html: string }
@@ -161,6 +171,8 @@ interface BlockEditorProps {
   onInteractiveBlocks?: (blocks: InteractiveBlock[]) => void;
   /** Called when the user inserts a Knowledge Check via the slash menu. */
   onAddInteractiveBlock?: (block: InteractiveBlock) => void;
+  /** Called once after ingestHtml has been parsed and applied (workspace anchors). */
+  onBlocksApplied?: (blocks: AnyBlock[]) => void;
 }
 
 function getPlainText(blocks: AnyBlock[]): string {
@@ -180,7 +192,7 @@ function getPlainText(blocks: AnyBlock[]): string {
 }
 
 export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
-  function BlockEditorComponent({ noteId: _noteId, initialContent, onSave, ingestHtml, onInteractiveBlocks, onAddInteractiveBlock }, ref) {
+  function BlockEditorComponent({ noteId: _noteId, initialContent, onSave, ingestHtml, onInteractiveBlocks, onAddInteractiveBlock, onBlocksApplied }, ref) {
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const { resolvedTheme } = useTheme();
 
@@ -226,6 +238,23 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       },
+      insertBlocksAtEnd(blocks: AnyBlock[]) {
+        const doc = editor.document as AnyBlock[];
+        const last = doc[doc.length - 1];
+        if (last) {
+          editor.insertBlocks(blocks, last.id, "after");
+        } else {
+          editor.replaceBlocks(editor.document, blocks);
+        }
+      },
+      scrollToBlock(blockId: string) {
+        const el = editor.domElement?.querySelector(`[data-id="${blockId}"]`) as HTMLElement | null;
+        if (!el) return;
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.style.transition = "background-color 0.4s";
+        el.style.backgroundColor = "rgba(99,102,241,0.18)";
+        setTimeout(() => { el.style.backgroundColor = ""; }, 1400);
+      },
     }));
 
     const save = useCallback(() => {
@@ -265,6 +294,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         onSave(blocks as AnyBlock[], getPlainText(blocks as AnyBlock[]));
 
         if (interactiveData.length > 0) onInteractiveBlocks?.(interactiveData);
+        onBlocksApplied?.(blocks as AnyBlock[]);
       })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ingestHtml]);

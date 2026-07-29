@@ -23,29 +23,57 @@ def embed_batch(texts: list[str]) -> list[list[float]]:
 
 
 # ── llama.cpp ────────────────────────────────────────────────────────────────
+#
+# The 1800-char cap is a heuristic ("~450 tokens, fits in batch=512") that
+# holds for ordinary prose but not for token-dense text (citation lists,
+# tables of numbers/abbreviations) — those can exceed the server's physical
+# batch size even within 1800 chars, and llama.cpp rejects the whole request
+# when any single item in a batch overflows it. _embed_llamacpp_safe retries
+# with progressively smaller caps so one dense chunk can't take down a batch.
+
+_TRUNCATE_CAPS = (1800, 900, 400)
+
 
 def _embed_llamacpp(text: str) -> list[float]:
+    return _embed_llamacpp_safe(text)
+
+
+def _embed_llamacpp_safe(text: str) -> list[float]:
     import httpx
-    resp = httpx.post(
-        f"{settings.llamacpp_embed_url}/v1/embeddings",
-        json={"model": "nomic-embed-text", "input": text[:1800]},  # ~450 tokens, fits in batch=512
-        timeout=60,
-    )
-    resp.raise_for_status()
-    return resp.json()["data"][0]["embedding"]
+    last_error: Exception | None = None
+    for cap in _TRUNCATE_CAPS:
+        try:
+            resp = httpx.post(
+                f"{settings.llamacpp_embed_url}/v1/embeddings",
+                json={"model": "nomic-embed-text", "input": text[:cap]},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            return resp.json()["data"][0]["embedding"]
+        except httpx.HTTPStatusError as e:
+            last_error = e
+            continue
+    raise last_error  # type: ignore[misc]
 
 
 def _embed_llamacpp_batch(texts: list[str]) -> list[list[float]]:
-    """Single HTTP call for a list of texts — llama.cpp supports array input."""
+    """Single HTTP call for a list of texts — llama.cpp supports array input.
+
+    Falls back to sequential per-item embedding (with truncation retries) if
+    the batch call fails, so one token-dense text doesn't sink the whole batch.
+    """
     import httpx
-    resp = httpx.post(
-        f"{settings.llamacpp_embed_url}/v1/embeddings",
-        json={"model": "nomic-embed-text", "input": [t[:1800] for t in texts]},
-        timeout=120,
-    )
-    resp.raise_for_status()
-    items = sorted(resp.json()["data"], key=lambda x: x["index"])
-    return [item["embedding"] for item in items]
+    try:
+        resp = httpx.post(
+            f"{settings.llamacpp_embed_url}/v1/embeddings",
+            json={"model": "nomic-embed-text", "input": [t[:1800] for t in texts]},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        items = sorted(resp.json()["data"], key=lambda x: x["index"])
+        return [item["embedding"] for item in items]
+    except httpx.HTTPStatusError:
+        return [_embed_llamacpp_safe(t) for t in texts]
 
 
 # ── Gemini (future) ──────────────────────────────────────────────────────────

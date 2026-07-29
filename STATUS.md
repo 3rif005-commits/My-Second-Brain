@@ -428,3 +428,37 @@ npx playwright test --project=ingest --grep "PDF"
 
 - **Phase 2** (separate plan): side panel docking, ⌘K floating launcher, inline `/ai` in editor (BlockNote xl-ai), editor tools
 - **Phase 3** (separate plan): agentic ingest (replace `/brain/ingest`), MCP client, skills management UI
+
+---
+
+## Workspaces — CODE COMPLETE ✅ (2026-07-12)
+
+> Research: `docs/research/workspace-research.md` · Plan: `docs/plans/2026-07-12-workspaces.md`
+> Manual test checklist: `docs/workspace-manual-test-checklist.md`
+
+NotebookLM/Flexcil-style study areas: freeform canvas (React Flow, MIT) holding
+resource cards (PDF / YouTube / uploaded video / website) + note-page cards.
+Background processing per resource (extract → anchored chunks + embeddings →
+AI summary). **The summary IS the output note** — parsed into ordinary BlockNote
+blocks on first open, with `note_anchors` rows syncing sections ↔ timestamps/pages
+both directions in split view. Element-level PDF extraction (PyMuPDF bboxes:
+text/heading/image/table/formula), formula→LaTeX via vision provider (image
+fallback), frame/clip/audio capture (ffmpeg + yt-dlp), checkpoint deep-link
+blocks, workspace-scoped grounded chat with clickable anchored citations, and a
+provider-agnostic AI layer (`services/ai/`: Gemini/Anthropic/OpenAI/OpenAI-compatible
++ local Gemma, capability routing with request-time fallback — verified live:
+quota-dead Gemini falls through to OpenRouter).
+
+**New:** migration `012_workspaces.sql` (7 tables + RPC + storage bucket) ·
+`backend/services/workspace/` + `services/ai/` + `prompts/workspace_summary.py`
+(extends mastery_guide) · `routers/workspaces.py` · frontend `components/workspace/`,
+`/brain/workspaces`, `/brain/settings/ai-providers`, `math` + `checkpoint` custom
+blocks, `/api/ws/[...path]` proxy. Android parity tracked as ANDROID_PARITY.md #20.
+
+**Test status:** backend 126/126 (run with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 … -p asyncio`
+— ROS system plugins break collection otherwise) · `tsc --noEmit` + `next build` clean.
+
+**Remaining manual steps:** (1) run `012_workspaces.sql` in the Supabase SQL editor,
+(2) `sudo apt install ffmpeg`, (3) optional `pip install faster-whisper` in `.venv`,
+(4) live E2E per the checklist. Note: the `.env` Gemini key is quota-exhausted (429) —
+add a fresh key in Settings → AI Providers for formula-OCR / video-native paths.

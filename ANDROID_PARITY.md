@@ -251,6 +251,20 @@ Block types in the web app but **missing** from `editor.html`: toggle, callout, 
 - **Files:** `SearchDialog.kt`, `NotesRepository.kt`, `NotesLocalStore.kt`
 - [x] Done 2026-05-15
 
+### 20. Workspaces (canvas + resources + synced summaries + grounded chat)
+- **Web:** Full Workspace feature (2026-07): freeform React Flow canvas holding resource
+  cards (PDF/YouTube/video/website) + note-page cards; background resource processing;
+  AI summary that IS the output note with `note_anchors` sync (timestamp/page ↔ block);
+  element-level extraction (text/image/table/formula→LaTeX); split view; workspace-scoped
+  grounded chat with anchored citations; provider-agnostic AI layer (`ai_providers` table).
+  Backend: `backend/services/workspace/`, `backend/services/ai/`, `routers/workspaces.py`,
+  migration `012_workspaces.sql`. Frontend: `components/workspace/`, `/brain/workspaces`.
+- **Android:** Nothing.
+- **Android target:** Read-only first pass — list workspaces, open output notes (they are
+  ordinary notes, so the existing editor renders them; `checkpoint`/`math` blocks need
+  serializer support). Canvas, split view, and viewers deferred.
+- [ ] Not started
+
 ---
 
 ## Implementation Priority Order
