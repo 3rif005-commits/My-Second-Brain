@@ -29,5 +29,10 @@ class Settings(BaseSettings):
     api_model_anthropic: str = "claude-sonnet-4-6"
     api_model_openai: str = "gpt-4o-mini"
 
+    # Inline editor AI uses forced tool-calling (xl-ai applyDocumentOperations).
+    # Free models don't support tool_choice: required — use a model that does.
+    # Override via INLINE_MODEL in .env.
+    inline_model: str = "openai/gpt-4o-mini"
+
 
 settings = Settings()  # type: ignore[call-arg]
