@@ -7,10 +7,10 @@ from services.retriever import retrieve
 
 
 def _db_with_rpc_results(pass1_rows, pass2_rows):
-    """Build a mock supabase client whose .rpc() side_effect returns pass1 then pass2."""
+    """Build a mock supabase client whose .rpc().execute() side_effect returns pass1 then pass2."""
     db = MagicMock()
-    r1 = MagicMock(); r1.data = pass1_rows
-    r2 = MagicMock(); r2.data = pass2_rows
+    r1 = MagicMock(); r1.execute.return_value.data = pass1_rows
+    r2 = MagicMock(); r2.execute.return_value.data = pass2_rows
     db.rpc.side_effect = [r1, r2]
     return db
 
@@ -77,9 +77,9 @@ def test_two_pass_multiple_notes():
 def test_fallback_to_match_chunks_when_no_descriptors():
     """When pass1 returns nothing (no notes have descriptors yet), fall back."""
     db = MagicMock()
-    empty = MagicMock(); empty.data = []
+    empty = MagicMock(); empty.execute.return_value.data = []
     fallback_result = MagicMock()
-    fallback_result.data = [
+    fallback_result.execute.return_value.data = [
         {
             "note_id":    "note1",
             "title":      "Old Note",
@@ -101,7 +101,9 @@ def test_fallback_to_match_chunks_when_no_descriptors():
 
 def test_pass1_uses_correct_rpc():
     db = MagicMock()
-    db.rpc.side_effect = [MagicMock(data=[]), MagicMock(data=[])]
+    r1 = MagicMock(); r1.execute.return_value.data = []
+    r2 = MagicMock(); r2.execute.return_value.data = []
+    db.rpc.side_effect = [r1, r2]
 
     with patch("services.retriever.get_supabase", return_value=db):
         retrieve([0.1] * 768, "user-x")
@@ -112,7 +114,7 @@ def test_pass1_uses_correct_rpc():
 
 def test_empty_embedding_returns_empty():
     db = MagicMock()
-    db.rpc.return_value = MagicMock(data=[])
+    db.rpc.return_value = MagicMock()
     with patch("services.retriever.get_supabase", return_value=db):
         results = retrieve([], "user-x")
     assert results == []

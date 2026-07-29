@@ -27,7 +27,7 @@ def retrieve(query_embedding: list[float], user_id: str) -> list[dict]:
     pass1 = db.rpc(
         "match_note_descriptors",
         {"query_embedding": vec, "match_user_id": user_id, "match_count": _TOP_NOTES},
-    )
+    ).execute()
 
     note_rows = pass1.data or []
 
@@ -46,7 +46,7 @@ def retrieve(query_embedding: list[float], user_id: str) -> list[dict]:
             "note_ids":        note_ids,
             "match_count":     _TOP_BLOCKS,
         },
-    )
+    ).execute()
 
     block_rows = pass2.data or []
 
@@ -81,7 +81,7 @@ def _legacy_fallback(db, vec: str, user_id: str) -> list[dict]:
             "match_threshold": _LEGACY_THRESHOLD,
             "match_count":     _LEGACY_CHUNKS,
         },
-    )
+    ).execute()
     rows = res.data or []
     rows = [r for r in rows if r.get("deleted_at") is None]
 
@@ -94,12 +94,12 @@ def _legacy_fallback(db, vec: str, user_id: str) -> list[dict]:
         if nid not in seen or row["similarity"] > seen[nid]["similarity"]:
             seen[nid] = row
 
-    best = sorted(seen.values(), key=lambda r: r["similarity"], reverse=True)[:6]
+    best = sorted(seen.values(), key=lambda r: r["similarity"], reverse=True)[:_TOP_NOTES]
     return [
         {
             "id":           str(r["note_id"]),
             "title":        r.get("title", ""),
-            "content_text": r.get("chunk_text", ""),
+            "content_text": r.get("chunk_text", "")[:300],
             "deep_link":    r.get("deep_link", f"/brain/{r['note_id']}"),
             "similarity":   r.get("similarity", 0.0),
         }
