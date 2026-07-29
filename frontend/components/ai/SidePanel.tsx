@@ -59,6 +59,7 @@ export function SidePanel({ open, onToggle, width = 360, onWidthChange }: SidePa
           // Distinct background: light lavender in light mode, deep blue-black in dark
           "bg-[#eeeefc] dark:bg-[#0f0f1a]",
           "transition-transform duration-200 ease-in-out",
+          open ? "translate-x-0" : "translate-x-full",
         ].join(" ")}
         style={{ width }}
         aria-label="AI assistant panel"
