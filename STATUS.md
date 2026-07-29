@@ -1,16 +1,21 @@
 # Second Brain — Project Status
 
 > Source of truth across all conversations. Read at session start, update at session end.
-> Last updated: 2026-05-12
+> Last updated: 2026-07-29
 
 ---
 
 ## Current Phase
 
-**Phase 4 — Native Android App** `[🔧 IN PROGRESS]`
+**Phase 5 — Web App Polish (AI Substrate + Workspaces)** `[🔧 IN PROGRESS]`
 
-Goal: standalone Play Store app — auth, notes, editor, chat, PDF ingestion — no laptop needed.
-Full plan → [`PLAN.md`](./PLAN.md) — Phase 4 section.
+Since 2026-05-17, active work has been on the web app's AI layer rather than Android:
+AI Substrate Phase 1 (agent engine, skills, brain tools), the Workspaces feature
+(NotebookLM-style canvas), MCP client support (agent calling external MCP servers),
+and inline-editor AI fixes — all CODE COMPLETE, see their dated sections below.
+**Phase 4 (Native Android) is paused** — its task tracker is unchanged since
+2026-05-15 (ANDROID_PARITY.md #19); #20 (Workspaces parity) was added 2026-07-29
+but not started.
 
 Hackathon Sprint completed 2026-05-12. Tablet inference proven end-to-end:
 - LiteRT (CPU backend) running Gemma 4 E2B on Redmi Pad Pro ✅
@@ -27,8 +32,8 @@ Hackathon Sprint completed 2026-05-12. Tablet inference proven end-to-end:
 | 2     | Ingestion Pipeline       | ✅ Complete         | 2026-04-15 | 2026-04-17 |
 | 3     | Context Protocol         | ✅ Complete         | 2026-04-17 | 2026-05-08 |
 | H     | Hackathon Sprint         | ✅ Complete         | 2026-05-12 | 2026-05-12 |
-| 4     | Native Android App       | 🔧 In progress      | 2026-05-12 | —          |
-| 5     | Web App Polish           | Not started         | —          | —          |
+| 4     | Native Android App       | ⏸ Paused           | 2026-05-12 | —          |
+| 5     | Web App Polish           | 🔧 In progress      | 2026-05-17 | —          |
 | 6     | Offline-First            | Not started         | —          | —          |
 
 ---
@@ -426,8 +431,14 @@ npx playwright test --project=ingest --grep "PDF"
 
 ### What's next
 
-- **Phase 2** (separate plan): side panel docking, ⌘K floating launcher, inline `/ai` in editor (BlockNote xl-ai), editor tools
-- **Phase 3** (separate plan): agentic ingest (replace `/brain/ingest`), MCP client, skills management UI
+- ~~**Phase 2**: side panel docking, ⌘K floating launcher, inline `/ai` in editor (BlockNote xl-ai), editor tools~~ —
+  built (`components/ai/SidePanel.tsx`, `components/ai/CommandK.tsx`, xl-ai wired into `BlockEditor.tsx`).
+  Inline AI had two real bugs (`Cmd+J` colliding with Chrome's Downloads hotkey; forced
+  tool-calling failing on free models) fixed 2026-07-29 — see `INLINE_AI_DEBUG.md`.
+- ~~**Phase 3**: agentic ingest, MCP client, skills management UI~~ — all three exist
+  (`routers/agent_ingest.py`, MCP client section below, `/brain/settings/skills`).
+  Not independently re-verified this session beyond MCP client and the inline AI fix —
+  worth a live pass before calling Phase 3 fully closed.
 
 ---
 
@@ -458,7 +469,29 @@ blocks, `/api/ws/[...path]` proxy. Android parity tracked as ANDROID_PARITY.md #
 **Test status:** backend 126/126 (run with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 … -p asyncio`
 — ROS system plugins break collection otherwise) · `tsc --noEmit` + `next build` clean.
 
-**Remaining manual steps:** (1) run `012_workspaces.sql` in the Supabase SQL editor,
-(2) `sudo apt install ffmpeg`, (3) optional `pip install faster-whisper` in `.venv`,
-(4) live E2E per the checklist. Note: the `.env` Gemini key is quota-exhausted (429) —
-add a fresh key in Settings → AI Providers for formula-OCR / video-native paths.
+**Remaining manual steps:** run `012_workspaces.sql` in the Supabase SQL editor if not
+already applied. ffmpeg installed and full live E2E (including frame/clip/audio capture
+on both uploaded video and YouTube) completed 2026-07-29 — see the dated entry at the
+bottom of `docs/workspace-manual-test-checklist.md`. Note: the `.env` Gemini key is
+quota-exhausted (429) — add a fresh key in Settings → AI Providers for formula-OCR /
+video-native paths.
+
+---
+
+## MCP Client Integration — CODE COMPLETE ✅ (2026-07-29)
+
+The agent (not just the classic `mcp_server.py` standalone server — see "Running the
+MCP server" below) can now call tools **on external MCP servers as part of its own tool
+loop**, gated behind user-configured server entries.
+
+**New:** `backend/services/agent/mcp_client.py` (per-server tool discovery via
+`tools/list`, tool calls via `tools/call`, audit logging) · `routers/mcp_api.py` (CRUD
+for `mcp_servers` + audit-log read endpoints) · migration `010_mcp_servers.sql`.
+`services/agent/engine.py`'s tool loop now merges live MCP tool schemas (namespaced
+`mcp.<server>.<tool>`) alongside the built-in brain tools; `permissions.py` denies MCP
+tools at the external tier. Frontend: `/api/mcp-servers`, `/api/mcp-audit-log` proxy
+routes backing the existing `/brain/settings/mcp` UI.
+
+**Test status:** covered by the 126/126 backend suite (`test_mcp_client.py`,
+`test_permissions.py`). Not yet driven live end-to-end against a real external MCP
+server — worth doing before relying on this in a demo.
