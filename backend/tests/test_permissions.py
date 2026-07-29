@@ -88,3 +88,14 @@ def test_editor_insert_block_requires_internal():
     from services.agent.permissions import Allow, Deny, check
     assert isinstance(check("editor.insert_block", Tier.INTERNAL_API, {}, None), Allow)
     assert isinstance(check("editor.insert_block", Tier.EXTERNAL, {}, None), Deny)
+
+
+def test_mcp_tool_allowed_at_internal_tier():
+    assert _is_allowed(check("mcp.websearch.search", Tier.INTERNAL_API, {}, None))
+    assert _is_allowed(check("mcp.calendar.list_events", Tier.INTERNAL_LOCAL, {}, None))
+
+
+def test_mcp_tool_denied_at_external_tier():
+    decision = check("mcp.websearch.search", Tier.EXTERNAL, {}, None)
+    assert isinstance(decision, Deny)
+    assert "external" in decision.reason.lower()

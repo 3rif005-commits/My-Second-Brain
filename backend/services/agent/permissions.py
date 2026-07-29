@@ -71,6 +71,12 @@ def check(
         args: the tool's arguments (used for local_only and confirm checks)
         note_meta: when the tool targets a note, the note's row (or None)
     """
+    # MCP tools — allowed at internal tiers, denied externally
+    if tool.startswith("mcp."):
+        if tier == Tier.EXTERNAL:
+            return Deny(reason="MCP tools are not available in external tier")
+        return Allow()
+
     min_tier = _TOOL_MIN_TIER.get(tool)
     if min_tier is None:
         return Deny(reason=f"unknown tool: {tool}")
