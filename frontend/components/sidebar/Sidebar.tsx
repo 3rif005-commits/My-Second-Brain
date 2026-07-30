@@ -145,10 +145,10 @@ export function Sidebar({
           onClick={() => navigate("/brain/ingest")}
         />
         <NavItem
-          label="Workspaces"
+          label="Workspace"
           icon={LayoutGrid}
-          active={pathname?.startsWith("/brain/workspaces") ?? false}
-          onClick={() => navigate("/brain/workspaces")}
+          active={pathname?.startsWith("/brain/workspace") ?? false}
+          onClick={() => navigate("/brain/workspace")}
         />
       </nav>
 
