@@ -16,7 +16,7 @@ import { en as coreEn } from "@blocknote/core/locales";
 import { en as aiEn } from "@blocknote/xl-ai/locales";
 import { withMultiColumn, multiColumnDropCursor } from "@blocknote/xl-multi-column";
 import { useTheme } from "@/app/providers";
-import { MathBlockSpec, CheckpointBlockSpec } from "./customBlocks";
+import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec } from "./customBlocks";
 
 // Inline @mention — links to another note in the brain
 const MentionSpec = createInlineContentSpec(
@@ -54,6 +54,7 @@ const multiColSchema = withMultiColumn(
       // createReactBlockSpec returns a factory — must be invoked to get the BlockSpec
       math: MathBlockSpec(),
       checkpoint: CheckpointBlockSpec(),
+      callout: CalloutBlockSpec(),
     },
     inlineContentSpecs: { ...defaultInlineContentSpecs, mention: MentionSpec },
   })

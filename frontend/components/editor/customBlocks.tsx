@@ -88,6 +88,11 @@ export const MathBlockSpec = createReactBlockSpec(
   },
   {
     render: (props) => <MathBlockView block={props.block} editor={props.editor} />,
+    parse: (element: HTMLElement) => {
+      if (element.getAttribute("data-type") !== "math") return undefined;
+      element.removeAttribute("data-type");
+      return { latex: element.textContent?.trim() || "" };
+    },
   }
 );
 
@@ -155,6 +160,74 @@ export const CheckpointBlockSpec = createReactBlockSpec(
           {body}
         </a>
       );
+    },
+  }
+);
+
+export type CalloutType =
+  | "OVERVIEW" | "NOTE" | "TIP" | "IMPORTANT" | "WARNING"
+  | "CAUTION" | "FORMULA" | "ANALOGY" | "EXAM";
+
+export const CALLOUT_PALETTE: Record<CalloutType, { color: string; icon: string; label: string }> = {
+  OVERVIEW:  { color: "blue",   icon: "📋", label: "Overview" },
+  NOTE:      { color: "gray",   icon: "ℹ️", label: "Note" },
+  TIP:       { color: "green",  icon: "💡", label: "Tip" },
+  IMPORTANT: { color: "yellow", icon: "❗", label: "Important" },
+  WARNING:   { color: "orange", icon: "⚠️", label: "Warning" },
+  CAUTION:   { color: "red",    icon: "🛑", label: "Caution" },
+  FORMULA:   { color: "purple", icon: "📐", label: "Formula" },
+  ANALOGY:   { color: "brown",  icon: "💭", label: "Analogy" },
+  EXAM:      { color: "pink",   icon: "🎯", label: "Exam" },
+};
+
+const CALLOUT_COLOR_CLASSES: Record<string, string> = {
+  blue:   "bg-blue-50 border-blue-300 dark:bg-blue-900/20 dark:border-blue-700",
+  gray:   "bg-gray-50 border-gray-300 dark:bg-gray-800/40 dark:border-gray-600",
+  green:  "bg-green-50 border-green-300 dark:bg-green-900/20 dark:border-green-700",
+  yellow: "bg-yellow-50 border-yellow-300 dark:bg-yellow-900/20 dark:border-yellow-700",
+  orange: "bg-orange-50 border-orange-300 dark:bg-orange-900/20 dark:border-orange-700",
+  red:    "bg-red-50 border-red-300 dark:bg-red-900/20 dark:border-red-700",
+  purple: "bg-purple-50 border-purple-300 dark:bg-purple-900/20 dark:border-purple-700",
+  brown:  "bg-[#f5efe8] border-[#c9a876] dark:bg-[#3a2f22]/40 dark:border-[#7a6142]",
+  pink:   "bg-pink-50 border-pink-300 dark:bg-pink-900/20 dark:border-pink-700",
+};
+
+function CalloutBlockView({ block }: { block: any }) {
+  const rawType = block.props.calloutType as string;
+  const type: CalloutType = rawType in CALLOUT_PALETTE ? (rawType as CalloutType) : "NOTE";
+  const { color, icon, label } = CALLOUT_PALETTE[type];
+  return (
+    <div
+      className={`w-full my-1 px-3 py-2 rounded-lg border ${CALLOUT_COLOR_CLASSES[color]}`}
+      contentEditable={false}
+    >
+      <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 dark:text-gray-200">
+        <span>{icon}</span>
+        <span>{label}</span>
+      </div>
+    </div>
+  );
+}
+
+export const CalloutBlockSpec = createReactBlockSpec(
+  {
+    type: "callout",
+    propSchema: {
+      calloutType: { default: "NOTE" as CalloutType },
+    },
+    content: "none",
+  },
+  {
+    render: (props) => <CalloutBlockView block={props.block} />,
+    parse: (element: HTMLElement) => {
+      if (element.getAttribute("data-type") !== "callout") return undefined;
+      const raw = element.getAttribute("data-callout-type");
+      element.removeAttribute("data-callout-type");
+      element.removeAttribute("data-type");
+      if (!raw || !(raw in CALLOUT_PALETTE)) {
+        return { calloutType: "NOTE" };
+      }
+      return { calloutType: raw as CalloutType };
     },
   }
 );
