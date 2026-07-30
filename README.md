@@ -77,6 +77,17 @@ supabase/migrations/004_vector_index.sql   ← Phase 3 (pgvector)
 
 ### 3. Start
 
+**Quick way — one command for everything:**
+
+```bash
+./app.sh start   # backend + frontend + local llama.cpp servers (if set up), all in the background
+./app.sh status  # check what's running
+./app.sh logs    # tail backend + frontend logs
+./app.sh stop    # kill everything
+```
+
+**Manual way — one terminal per service:**
+
 ```bash
 # Terminal 1 — Backend
 cd backend
