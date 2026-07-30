@@ -384,12 +384,17 @@ def test_budget_handles_no_sources():
     assert split_budget([], 1_000) == []
 
 
-def test_total_prompt_stays_within_budget():
+def test_source_text_is_capped_by_the_total_budget():
+    # U+2588 appears in no template, so counting it measures exactly the source
+    # text that reached the prompt — not an incidental property of other strings.
     prompt = build_note_synthesis_prompt([
-        {"title": f"Source {i}", "kind": "pdf", "text": "x" * 50_000, "duration": None}
+        {"title": f"Source {i}", "kind": "pdf", "text": "█" * 50_000,
+         "duration": None}
         for i in range(3)
     ])
-    assert prompt.count("x") <= TOTAL_SOURCE_BUDGET
+    used = prompt.count("█")
+    assert used <= TOTAL_SOURCE_BUDGET
+    assert used > TOTAL_SOURCE_BUDGET - 10   # the budget is actually spent
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -537,7 +542,7 @@ source-indexed data-anchor attributes on every <h2>, now:"""
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd backend && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 venv/bin/python -m pytest tests/test_note_synthesis.py -p asyncio -q`
-Expected: PASS (12 tests)
+Expected: PASS (11 tests)
 
 - [ ] **Step 5: Delete the single-resource prompt and its tests**
 
@@ -940,6 +945,21 @@ def _write(note_id: str, user_id: str, patch: dict) -> None:
                .upsert(payload, on_conflict="note_id").execute())
 
 
+def _claim(note_id: str, user_id: str) -> bool:
+    """Claim the right to synthesize this note. `note_synthesis.note_id` is the
+    primary key, so this insert is the mutual-exclusion point: when two sibling
+    sources settle at the same moment in two background threads, exactly one
+    insert wins and the loser no-ops instead of paying for a second LLM call."""
+    try:
+        get_supabase().table("note_synthesis").insert({
+            "note_id": note_id, "user_id": user_id, "status": "running",
+            "source_ids": [], "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+        return True
+    except Exception:
+        return False
+
+
 def maybe_synthesize(note_id: str) -> bool:
     """The settle guard. Proceeds only if no source on this note is still
     pending, no synthesis exists yet, and the note has no user content — so
@@ -958,6 +978,8 @@ def maybe_synthesize(note_id: str) -> bool:
     notes = (db.table("notes").select("id,user_id,title,content")
              .eq("id", note_id).execute().data or [])
     if not notes or notes[0].get("content"):
+        return False
+    if not _claim(note_id, notes[0]["user_id"]):
         return False
     run_synthesis(note_id, "replace")
     return True
@@ -1017,8 +1039,16 @@ def run_synthesis(note_id: str, mode: str = "replace") -> None:
         video_urls: list[str] = []
         for s in sources:
             text = source_text_from_chunks(s["id"])
-            if not text and s["kind"] in ("youtube", "video") and s.get("source_url"):
-                video_urls.append(s["source_url"])
+            if not text:
+                if s["kind"] in ("youtube", "video") and s.get("source_url"):
+                    video_urls.append(s["source_url"])
+                else:
+                    # Never hand the model a blank source block: say the text is
+                    # missing rather than letting it guess at an empty section.
+                    logger.warning(f"note {note_id}: source {s['id']} "
+                                   f"({s['kind']}) contributed no text — "
+                                   f"chunks missing or extraction empty")
+                    text = "(No text could be extracted from this source.)"
             blocks.append({"title": s["title"], "kind": s["kind"], "text": text,
                            "duration": (s.get("meta") or {}).get("duration")})
 
