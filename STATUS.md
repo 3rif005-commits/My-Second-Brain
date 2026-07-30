@@ -1,7 +1,7 @@
 # Second Brain — Project Status
 
 > Source of truth across all conversations. Read at session start, update at session end.
-> Last updated: 2026-07-29
+> Last updated: 2026-07-30
 
 ---
 
@@ -11,11 +11,14 @@
 
 Since 2026-05-17, active work has been on the web app's AI layer rather than Android:
 AI Substrate Phase 1 (agent engine, skills, brain tools), the Workspaces feature
-(NotebookLM-style canvas), MCP client support (agent calling external MCP servers),
-and inline-editor AI fixes — all CODE COMPLETE, see their dated sections below.
-**Phase 4 (Native Android) is paused** — its task tracker is unchanged since
-2026-05-15 (ANDROID_PARITY.md #19); #20 (Workspaces parity) was added 2026-07-29
-but not started.
+(rebuilt 2026-07-30 as a compact single-note shell, replacing the original
+canvas UX), MCP client support (agent calling external MCP servers), and
+inline-editor AI fixes — all CODE COMPLETE, see their dated sections below.
+Workspaces' live browser pass is still outstanding, blocked on a manual
+migration step — see that section. **Phase 4 (Native Android) is paused** —
+its task tracker is unchanged since 2026-05-15 (ANDROID_PARITY.md #19); #20
+(Workspaces parity) was added 2026-07-29, rewritten 2026-07-30 for the new
+shell, still not started.
 
 Hackathon Sprint completed 2026-05-12. Tablet inference proven end-to-end:
 - LiteRT (CPU backend) running Gemma 4 E2B on Redmi Pad Pro ✅
@@ -442,39 +445,85 @@ npx playwright test --project=ingest --grep "PDF"
 
 ---
 
-## Workspaces — CODE COMPLETE ✅ (2026-07-12)
+## Workspaces — compact single-note shell — CODE COMPLETE, live pass pending (2026-07-30)
 
-> Research: `docs/research/workspace-research.md` · Plan: `docs/plans/2026-07-12-workspaces.md`
+> Design spec: `docs/superpowers/specs/2026-07-30-workspaces-compact-redesign-design.md`
 > Manual test checklist: `docs/workspace-manual-test-checklist.md`
 
-NotebookLM/Flexcil-style study areas: freeform canvas (React Flow, MIT) holding
-resource cards (PDF / YouTube / uploaded video / website) + note-page cards.
-Background processing per resource (extract → anchored chunks + embeddings →
-AI summary). **The summary IS the output note** — parsed into ordinary BlockNote
-blocks on first open, with `note_anchors` rows syncing sections ↔ timestamps/pages
-both directions in split view. Element-level PDF extraction (PyMuPDF bboxes:
-text/heading/image/table/formula), formula→LaTeX via vision provider (image
-fallback), frame/clip/audio capture (ffmpeg + yt-dlp), checkpoint deep-link
-blocks, workspace-scoped grounded chat with clickable anchored citations, and a
-provider-agnostic AI layer (`services/ai/`: Gemini/Anthropic/OpenAI/OpenAI-compatible
-+ local Gemma, capability routing with request-time fallback — verified live:
-quota-dead Gemini falls through to OpenRouter).
+The canvas-based Workspaces feature (freeform React Flow canvas, resource cards,
+one output note per resource) shipped 2026-07-12 and was **replaced, not
+extended**, on 2026-07-30: the UX was wrong for how the user actually works. A
+"workspace" is no longer a persistent, listable, named entity — it is the route
+`/brain/workspace/<noteId>`, a compact shell over **one ordinary note** plus the
+sources attached to it. `/brain/workspace` (no id) is the same shell in its
+empty state (drop zone + a recents strip to resume a session). One sidebar
+entry, "Workspace". No list page, no create dialog, no canvas.
 
-**New:** migration `012_workspaces.sql` (7 tables + RPC + storage bucket) ·
-`backend/services/workspace/` + `services/ai/` + `prompts/workspace_summary.py`
-(extends mastery_guide) · `routers/workspaces.py` · frontend `components/workspace/`,
-`/brain/workspaces`, `/brain/settings/ai-providers`, `math` + `checkpoint` custom
-blocks, `/api/ws/[...path]` proxy. Android parity tracked as ANDROID_PARITY.md #20.
+Sources (PDF/document/YouTube/video/website) attach directly to the note via
+`note_resources`; a **single AI synthesis** — never one summary per source —
+lands in `note_synthesis` and is applied into the note's ordinary BlockNote
+blocks. The trigger is a settle guard (`maybe_synthesize`, in
+`services/workspace/synthesis.py`): it fires exactly once, when the *last*
+attached source reaches `ready` and no draft exists yet, so dropping three
+sources at once produces exactly one synthesis across all three — not one per
+source. A defer flag on multi-source drops (`POST
+/notes/{id}/process-sources`) makes sure every source in a batch is *attached*
+before any of them starts *processing*, so a slow upload can't let the guard
+fire early on just the fast sources. Attaching a source later offers an
+explicit **"Re-synthesize (N sources)"** action (`replace` overwrites the
+note's blocks, `append` adds the new draft at the end; the client asks which
+only when the note has the user's own edits in it). Anchors are
+**source-indexed** (`data-anchor="2:p:14"` — source 2, page 14) so one note's
+section chips can point at several different sources, each with a stable
+accent color keyed to its `order_index`. Chat is a **drawer** over the note
+(never a third column), scoped to that note's sources via
+`match_note_source_chunks`, with per-source-colored citation chips.
 
-**Test status:** backend 126/126 (run with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 … -p asyncio`
-— ROS system plugins break collection otherwise) · `tsc --noEmit` + `next build` clean.
+Everything proven in the canvas era and unrelated to the UX problem was kept
+as-is: `services/workspace/{pdf_elements,youtube,video,website,media,storage}.py`
+(ffmpeg/yt-dlp frame/clip/audio capture), all of `services/ai/` (provider
+routing + fallback), element-level PDF extraction, formula→LaTeX, and every
+`components/workspace/viewers/*` component.
 
-**Remaining manual steps:** run `012_workspaces.sql` in the Supabase SQL editor if not
-already applied. ffmpeg installed and full live E2E (including frame/clip/audio capture
-on both uploaded video and YouTube) completed 2026-07-29 — see the dated entry at the
-bottom of `docs/workspace-manual-test-checklist.md`. Note: the `.env` Gemini key is
-quota-exhausted (429) — add a fresh key in Settings → AI Providers for formula-OCR /
-video-native paths.
+**Deleted:** the canvas (`WorkspaceCanvas.tsx`, `ResourceCard.tsx`,
+`NotePageCard.tsx`, `/brain/workspaces` + `/brain/workspaces/[workspaceId]`),
+the `@xyflow/react` dependency, the `workspaces` / `workspace_pages` /
+`workspace_resources` tables and their `pos_x`/`pos_y`/`width`/`height`/
+`z_index` canvas-layout columns, per-resource `summary_html` (there is now
+nowhere to store a per-resource summary — "one note per resource" cannot come
+back by accident), `routers/workspaces.py`, `prompts/workspace_summary.py`.
+
+**New:** migration `supabase/migrations/013_note_sources.sql` (clean-slate drop
+of the canvas tables + `note_resources`/`note_synthesis`, `resource_elements`/
+`resource_chunks` repointed at `note_id`, RPC renamed
+`match_note_source_chunks`) · `services/workspace/synthesis.py` · new
+`prompts/note_synthesis.py` (source-indexed anchors, "synthesize don't
+concatenate" instructions, per-source character budget split) ·
+`routers/note_sources.py` (replaces `routers/workspaces.py`) · frontend
+`WorkspaceShell.tsx`, `SourceRail.tsx`, `SourceViewer.tsx`, `NotePane.tsx`
+(absorbed `SplitView.tsx`), `DropZone.tsx`, `useSynthesis.ts`,
+`WorkspaceChat.tsx` re-scoped to `noteId`. Android parity tracked as
+ANDROID_PARITY.md #20 (rewritten for the new shell, still not started).
+
+**Test status:** backend **169 passed, 0 failures, 0 errors**
+(`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 … -p asyncio` — ROS system plugins break
+collection otherwise) · `npx tsc --noEmit` clean · `npm run build` clean with
+`/brain/workspace` and `/brain/workspace/[noteId]` in the route table. A final
+whole-branch review (1 Critical + 6 Important findings, all fixed — including
+a bug where `applied_at` was never cleared so every re-synthesis after the
+first was silently ignored by the client) plus one follow-up fix wave are both
+folded into the numbers above.
+
+**Not yet done — this is the actual gate before calling this shipped:**
+migration `013_note_sources.sql` has **not been applied yet**; it is a manual
+step the user runs by hand in the Supabase SQL editor (no `DATABASE_URL` on
+this machine). The **live browser pass and the Haiku UX review are both
+blocked on that migration** and have not run — nothing about on-screen
+behavior in this section has been verified live, only by the automated suites
+above and by code review. Run `docs/workspace-manual-test-checklist.md`
+top to bottom once the migration is applied, paying special attention to the
+multi-source-drop-produces-one-synthesis behavior and the re-synthesize
+regression check called out at the top of that file.
 
 ---
 

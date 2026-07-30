@@ -251,19 +251,42 @@ Block types in the web app but **missing** from `editor.html`: toggle, callout, 
 - **Files:** `SearchDialog.kt`, `NotesRepository.kt`, `NotesLocalStore.kt`
 - [x] Done 2026-05-15
 
-### 20. Workspaces (canvas + resources + synced summaries + grounded chat)
-- **Web:** Full Workspace feature (2026-07): freeform React Flow canvas holding resource
-  cards (PDF/YouTube/video/website) + note-page cards; background resource processing;
-  AI summary that IS the output note with `note_anchors` sync (timestamp/page ↔ block);
-  element-level extraction (text/image/table/formula→LaTeX); split view; workspace-scoped
-  grounded chat with anchored citations; provider-agnostic AI layer (`ai_providers` table).
-  Backend: `backend/services/workspace/`, `backend/services/ai/`, `routers/workspaces.py`,
-  migration `012_workspaces.sql`. Frontend: `components/workspace/`, `/brain/workspaces`.
+### 20. Workspace (compact single-note shell + sources + synthesis + grounded chat)
+- **Web:** Rebuilt 2026-07-30, replacing the original canvas UX (2026-07-12 –
+  2026-07-29) entirely — the canvas, per-source note cards, and the
+  `workspaces`/`workspace_pages`/`workspace_resources` tables are gone. A
+  "workspace" is no longer a persistent, listable, named entity; it is the
+  route `/brain/workspace/<noteId>`, a compact shell over **one ordinary
+  note** plus the sources attached to it (`note_resources`). Sources
+  (PDF/document/YouTube/video/website) feed a **single AI synthesis**
+  (`note_synthesis`) — never one summary per source — applied into the note's
+  ordinary BlockNote blocks, auto-triggered once by a settle guard when the
+  last attached source finishes, then explicitly re-run via a
+  "Re-synthesize (N sources)" action (replace or append). Anchors are
+  source-indexed so one note's section chips can sync to several different
+  sources, each with its own accent color. Layout: source rail (add/remove/
+  retry) + per-kind viewer on the left, the note on the right, chat as a
+  drawer over the note (not a third column). Element-level extraction
+  (text/image/table/formula→LaTeX), frame/clip/audio capture (ffmpeg/yt-dlp),
+  checkpoint deep-link blocks (`/brain/workspace/{noteId}?source=&t=|p=|s=`),
+  note-scoped grounded chat with per-source-colored anchored citations, and
+  the provider-agnostic AI layer (`ai_providers` table) are all unchanged in
+  substance from the canvas era, just re-scoped from workspace/resource to
+  note/source.
+  Backend: `backend/services/workspace/` (incl. new `synthesis.py`),
+  `backend/services/ai/`, `routers/note_sources.py`, migration
+  `013_note_sources.sql`. Frontend: `components/workspace/` (`WorkspaceShell`,
+  `SourceRail`, `SourceViewer`, `NotePane`, `DropZone`, `useSynthesis`,
+  `WorkspaceChat`), `/brain/workspace` + `/brain/workspace/[noteId]`.
 - **Android:** Nothing.
-- **Android target:** Read-only first pass — list workspaces, open output notes (they are
-  ordinary notes, so the existing editor renders them; `checkpoint`/`math` blocks need
-  serializer support). Canvas, split view, and viewers deferred.
-- [ ] Not started
+- **Android target:** Read-only first pass — list recent workspace sessions
+  (notes with sources attached), open the backing notes (they are ordinary
+  notes, so the existing editor renders them; `checkpoint`/`math` blocks need
+  serializer support — a checkpoint with no matching noteId already degrades
+  to a dead pill on web, which the Android serializer should mirror rather
+  than crash on). Source rail, per-kind viewers, capture, and chat drawer
+  deferred.
+- [ ] Not started — **no Android build in scope for this redesign.**
 
 ---
 

@@ -1,25 +1,40 @@
-# Workspaces — Manual Test Checklist
+# Workspace — Manual Test Checklist
 
-> Phase 4 deliverable (2026-07-12). Run through this once after the setup steps.
+> Compact single-note redesign (2026-07-30). Replaces the canvas-based Workspaces
+> checklist. Design spec: `docs/superpowers/specs/2026-07-30-workspaces-compact-redesign-design.md`.
 >
-> **2026-07-29: ffmpeg-dependent flows verified live** (uploaded-video import, frame/clip/audio
-> capture on both uploaded video and YouTube). See the dated entry at the bottom of this file.
+> **Status: the automated half is green, the live half has not run yet.**
+> Backend: `169 passed, 0 failures, 0 errors`. Frontend: `npx tsc --noEmit` clean,
+> `npm run build` clean with `/brain/workspace` and `/brain/workspace/[noteId]` in
+> the route table. **No one has driven this checklist in a real browser yet, and
+> the Haiku UX review has not run either** — both are blocked on the migration
+> step below (there is no `DATABASE_URL` on this machine, so the SQL can't be
+> applied programmatically). Nothing in this file should be read as "verified
+> live" until someone actually runs it and updates this header.
 
 ## 0. One-time setup (required before anything works)
 
-1. **Apply the migration** — no direct DB access exists from this machine, so run it
-   in the Supabase dashboard: SQL Editor → paste the full contents of
-   `supabase/migrations/012_workspaces.sql` → Run. (Same procedure as migration 009.)
-2. **Install ffmpeg** (frames / clips / audio extraction — everything else works without it):
+1. **Apply migration 013 — this is your manual step, not yet applied.**
+   No direct DB access exists from this machine, so run it in the Supabase
+   dashboard: SQL Editor → paste the full contents of
+   `supabase/migrations/013_note_sources.sql` → Run. It is destructive: it
+   `DROP`s `workspaces`, `workspace_pages`, `workspace_resources`,
+   `resource_elements`, `resource_chunks`, `note_anchors` and the
+   `match_workspace_chunks` function, then recreates the schema around
+   `note_resources` + `note_synthesis`. Do **not** run `012_workspaces.sql` —
+   that was the canvas-era migration and is superseded by 013.
+2. **Install ffmpeg** (frame / clip / audio extraction — everything else works
+   without it):
    ```bash
    sudo apt install ffmpeg
    ```
-3. *(Optional)* **faster-whisper** for local transcription of uploaded video files
-   (~1 GB models; without it, uploaded videos degrade to no-transcript):
+3. *(Optional)* **faster-whisper** for local transcription of uploaded video
+   files (~1 GB models; without it, uploaded videos degrade to no-transcript):
    ```bash
    cd backend && source .venv/bin/activate && pip install faster-whisper
    ```
-4. `yt-dlp` was already installed into `backend/.venv` (needed for YouTube frame/clip capture).
+4. `yt-dlp` should already be installed into `backend/.venv` (needed for
+   YouTube frame/clip/audio capture).
 
 ## 1. Start the app
 
@@ -28,136 +43,271 @@
 ./llama.sh start
 
 # Terminal 2 — backend
-cd backend && source .venv/bin/activate && uvicorn main:app --reload
+cd backend && source .venv/bin/activate && uvicorn main:app --reload --port 8000
 
 # Terminal 3 — frontend
 cd frontend && npm run dev
 ```
 
-Open http://localhost:3000 → log in.
+Open http://localhost:3000 → log in → sidebar → **Workspace**.
 
-## 2. Canvas + import (each source type)
+**Environment note:** the first request to `/brain/workspace` cold-compiles
+that route and can take **30–60 seconds** in dev mode. That is not a hang —
+wait it out before assuming something is broken.
 
-- [ ] Sidebar → **Workspaces** → **New workspace** → name it → canvas opens.
-- [ ] **Add source → Paste URL** → a Wikipedia article (e.g. `https://en.wikipedia.org/wiki/Gradient_descent`).
-      Card appears with status `queued → processing → ready` (poll updates by itself).
-- [ ] **Add source → Paste URL** → a captioned YouTube video
-      (e.g. `https://www.youtube.com/watch?v=aircAruvnKk`). Card shows the video title + thumbnail when ready.
-- [ ] **Add source → Upload file** → any PDF. Card gets a first-page thumbnail when ready.
-- [ ] **Add source → Upload file** → a small `.mp4`. (Without faster-whisper the summary
-      may be a stub — expected degradation.)
-- [ ] When each resource turns **ready**, a matching amber **note card** appears beside it.
-- [ ] Drag cards around, resize one (select → drag corner), pan/zoom the canvas,
-      reload the page → layout and viewport were persisted.
-- [ ] **Blank note page** from the Add menu → amber card appears; ✕ removes it (note survives in sidebar).
+## 2. Empty shell
 
-## 3. Split view + synced summary (the NotebookLM feel)
+- [ ] `/brain/workspace` renders a drop zone: "Drop your sources here", a
+      **Choose files** button and a **Paste a link** button. No workspace list,
+      no "create workspace" dialog — this route *is* the empty state.
+- [ ] If you have earlier sessions, a **"Pick up where you left off"** strip
+      appears below the drop zone, one pill per note with its title and source
+      count (e.g. "3 sources"). Click one → it opens
+      `/brain/workspace/<that noteId>` with its sources and note restored.
+- [ ] On a fresh account (no sessions yet) the strip is simply absent — that is
+      correct, not a bug.
 
-- [ ] **Double-click the YouTube card** → split view: player left, note right.
-      The note is pre-filled with the AI summary (overview callouts + deep-dive toggles).
-- [ ] A **Sections** chip bar sits above the note (one chip per summary section, labeled
-      with timestamps). Click a chip → the video seeks there AND the note scrolls there.
-- [ ] Play the video → as it crosses section timestamps, the matching note block
-      flash-highlights and scrolls into view. Toggle **Sync off** → it stops following.
-- [ ] Edit the summary (type, delete a block) → "Saving…" appears; close split view,
-      reopen → your edits persisted. The note is also in the sidebar like any note.
-- [ ] **Double-click the PDF card** → PDF left (selectable text), summary right;
-      chips are labeled `p. N`; scrolling the PDF highlights the matching section;
-      clicking a chip scrolls the PDF to that page.
+## 3. First drop → one note
 
-## 4. Element extraction / send to note
+- [ ] Drop a single PDF onto the drop zone (or click **Choose files**).
+- [ ] The URL rewrites to `/brain/workspace/<id>` and the shell appears: a
+      header bar, a left column (source rail over a viewer), a right column
+      (the note).
+- [ ] In the **Sources** rail, the PDF's row shows a status dot that starts
+      amber-pulsing (`queued`/`processing`) and settles to a solid colored dot
+      once `ready`. The row's title is the filename until the source finishes
+      processing.
+- [ ] Once `ready`, the note pane starts writing itself — the header's
+      right-hand status text reads "Writing the note…" while it runs, and the
+      draft lands in the note without you doing anything. (This is the D1
+      settle-guard: one source with nothing else pending triggers synthesis
+      immediately.)
+- [ ] The note title updates to whatever the synthesis draft suggested for a
+      single-source session (typically close to the source's own title).
 
-- [ ] In the PDF viewer, hover blocks → colored outlines (text=indigo, image=green,
-      table=blue, formula=purple). Click a **figure** → action bar → **→ Note** →
-      image block appended to the note.
-- [ ] Click a **table** → **→ Note** → an editable table lands in the note.
-- [ ] Click a **formula** → **LaTeX** → editable math block (KaTeX) lands in the note.
-      (Without a vision-capable provider it falls back to inserting the crop as an image —
-      the .env Gemini key is quota-exhausted, so either add a fresh key in
-      Settings → AI Providers or expect the image fallback.)
-- [ ] Select some PDF text with the mouse → floating bar → **→ Note** → paragraph appended.
-- [x] Video (YouTube or upload): **🖼 Frame** → image block. **🎬 Clip** (press once to
-      mark start, again to end) → video block. **🎧 Audio** → audio block.
-      *(These require ffmpeg; YouTube ones also require yt-dlp.)* Verified 2026-07-29,
-      both video kinds — see dated entry below.
-- [ ] Website viewer: click a paragraph/image → **→ Note** works the same.
+## 4. Three sources at once → exactly ONE synthesis
 
-## 5. Checkpoints + deep links
+This is the headline behavior to verify — it is the reason the feature was
+rebuilt.
 
-- [ ] In the video, click **📍 Checkpoint** → amber pill block appears in the note with the timestamp.
-- [ ] Close the split view, open the note from the **sidebar** (as a normal note) →
-      the checkpoint pill renders there too. Click it → the workspace opens in split
-      view with the video at that exact moment.
-- [ ] PDF `📍 p.N` button → same, but jumps to the page.
+- [ ] Start a **new** session (back arrow in the header, or `/brain/workspace`
+      directly).
+- [ ] Select **three sources at once** in one drop — e.g. drag a PDF, then
+      before it finishes drop a YouTube link and an article URL through
+      **Paste a link**, or better: select a PDF file and paste both URLs within
+      a few seconds of each other so several are in flight together.
+- [ ] Watch the rail: each source progresses `queued → processing → ready`
+      independently, at its own pace (PDFs are fast; a YouTube link with a
+      transcript is fast; a website with no transcript falls back to a slower
+      Gemini-native path if configured).
+- [ ] **Confirm exactly one synthesis pass happens for the whole session** —
+      the header shows "Writing the note…" once, not once per source, and the
+      note ends up with **one continuous draft**, not three separate blurbs
+      stacked end to end.
+- [ ] Read the resulting note: it should be **organized by concept**, not by
+      source. Concretely: it must **not** contain one `<h2>` per source (i.e.
+      you should not see three headings that are obviously just each source's
+      name/title in sequence with no synthesis between them). Shared material
+      should be stated once; where sources disagree or complement each other,
+      the draft should say so.
+- [ ] The note's title should read as a **topic title** for the whole session,
+      not the filename of whichever source happened to finish processing
+      first.
 
-## 6. Grounded chat with citations
+If you see one heading per source with no cross-referencing, or more than one
+"Writing the note…" cycle for a single batch of sources dropped together, that
+is a real regression — file it.
 
-- [ ] Canvas → **Chat** → ask something answered by one of your sources
-      ("what is gradient descent?").
-- [ ] The answer streams with numbered chips like [1]. Hover a chip → source title +
-      page/timestamp. Click it → split view opens at that exact spot.
-- [ ] Ask something NOT in the sources ("what's the capital of Peru?") → the assistant
-      says the sources don't cover it.
+## 5. Per-source viewers
 
-## 7. Failure modes (worth one look)
+- [ ] Click each source row in the rail — the right-hand pane stays the note,
+      the **left-hand viewer** (below the rail) swaps to match:
+  - **PDF/document**: page-by-page view with colored element outlines when you
+    hover (text = indigo/none-clickable, image = green, table = blue,
+    formula = purple). A persistent **📍 p.N** button sits bottom-right.
+  - **YouTube**: the embedded player with **🖼 Frame / 🎬 Clip / 🎧 Audio /
+    📍 Checkpoint** controls below it.
+  - **Video (uploaded)**: a plain `<video>` element with the same four
+    controls below it.
+  - **Website**: a readable, scrollable extraction of the page's sections,
+    with a link back to the original URL at the top.
+- [ ] Switching sources in the rail swaps the viewer without losing your place
+      in the note.
 
-- [ ] Import a YouTube video without captions → resource still turns ready if a
-      video-capable provider (fresh Gemini key) is configured; otherwise the note is a
-      stub and `meta.summary_error` explains why. **retry** on the card reprocesses.
-- [ ] Kill the backend mid-processing → card shows **failed** with an error → retry works.
+## 6. Capture (frame / clip / audio)
 
-## Automated checks already run (all green)
+Requires ffmpeg; YouTube capture also requires yt-dlp.
 
-- Backend: `126/126` pytest (`cd backend && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 venv/bin/python -m pytest tests/ -p asyncio`)
-  *(plugin autoload disabled because ROS Jazzy's system pytest plugins crash collection)*
-- Frontend: `npx tsc --noEmit` clean, `npm run build` clean (29/29 pages)
-- Live-verified without the DB: PDF element extraction (headings/images/formula bboxes),
-  Wikipedia extraction (157 sections), YouTube metadata + transcript (286 snippets,
-  time-anchored chunks), provider fallback (quota-dead Gemini → OpenRouter succeeded).
+- [ ] On an **uploaded video** source: click **🖼 Frame** → an image block
+      lands in the note captioned `Frame @ mm:ss`. Frame capture is
+      client-side and should be near-instant.
+- [ ] Click **🎬 Clip** once → the button becomes **⏹ End clip (from mm:ss)**
+      and turns red. Click it again at a later point → a video block lands in
+      the note. Click **🎧 Audio** the same way (press once to mark the start,
+      again to mark the end) → an audio block lands.
+- [ ] **The clip and audio buttons deliberately share one start marker** — if
+      you press Clip to mark a start point, then press Audio, you are ending
+      an *audio* capture from the point you marked with Clip (there is a
+      **cancel** button that appears once a start is marked, if you want to
+      abandon it instead). This is intentional, not a bug: don't file it.
+- [ ] Repeat frame/clip/audio on a **YouTube** source. These go through
+      `yt-dlp --download-sections` server-side and **can legitimately take
+      30–128 seconds** — the button reads "Capturing…"/"Extracting…" while it
+      runs. Don't assume a hang under ~2 minutes.
+- [ ] **Known environment quirk, not an app bug:** in an automated/sandboxed
+      browser session, Chrome's `<video>` element can occasionally wedge at
+      `readyState=0` even though the exact same signed URL serves correct
+      bytes over `curl`/`fetch`. A plain page reload clears it. If you hit
+      this, reload and retry rather than treating it as a regression.
 
-## 2026-07-29: ffmpeg-dependent flows (frame/clip/audio capture)
+## 7. Sync (sections ↔ source position)
 
-ffmpeg was installed (`sudo apt install ffmpeg`) and every capture path was driven live
-against the real backend + real Supabase storage, for both video kinds:
+- [ ] Once the note has at least one synthesized section, a **Sections** chip
+      row appears above the note — one pill per anchor, each with a small
+      colored dot (matching that source's rail color) and a label (`12:30`,
+      `p. 4`, `§7`).
+- [ ] Click a chip whose source isn't currently active → the viewer switches
+      to that source first, then seeks/scrolls to the right spot, and the note
+      scrolls to that chip's block.
+- [ ] With the sync toggle (the small link icon + "on"/"off" at the right of
+      the chip row) **on**, scrolling/playing the **active** source highlights
+      and scrolls to the matching note block as you cross anchors. Toggle it
+      **off** → this stops.
+- [ ] Sync only follows anchors belonging to whichever source is currently
+      active in the viewer — anchors for other sources don't fire until you
+      switch to them. That's by design.
 
-- **Uploaded-video import**: multipart upload → background processing → ffprobe metadata
-  (duration/width/height) correct → status `ready`. (Test file was a synthetic SMPTE
-  color-bars clip with a sine-wave audio track — Whisper's VAD correctly dropped the tone
-  as non-speech, producing an empty transcript and the expected "no extractable content"
-  summary stub. Not a bug — real videos with speech will transcribe normally.)
-- **Frame capture**: uploaded video and YouTube (via `yt-dlp --download-sections`) both
-  produced a real JPEG matching the video content at the requested timestamp.
-- **Clip extraction**: both video kinds produced a playable MP4 with real, correct-range
-  content (confirmed by playback and by content differing between adjacent captures).
-- **Audio extraction**: both video kinds produced a real MP3 — confirmed non-silent via
-  `ffmpeg -af volumedetect` (mean/max volume in the expected range, correct duration
-  matching the requested `[start, end]`).
-- **yt-dlp `--download-sections` fetches real content**, not a stub — confirmed by content
-  matching the on-screen frame and by audible, correctly-durationed audio.
+## 8. Checkpoints + deep links
 
-**Bug found and fixed**: `services/workspace/processor.py`'s terminal `_set_status(...,
-"ready")` write (and `_save_meta`) had no retry. This dev environment's Supabase
-connection intermittently drops pooled HTTP/2 connections after a request sits idle
-behind a slow ffmpeg/yt-dlp/whisper step (`httpcore.RemoteProtocolError: Server
-disconnected`) — when that happened on the *last* write of an otherwise fully-successful
-run, the resource was needlessly flipped to `failed`, forcing a full reprocess (re-running
-whisper transcription for nothing). Fixed with a small 3-attempt retry helper
-(`_with_retry`) around both status/meta writes. A wider fix (retrying the shared Supabase
-client transport itself) was considered and rejected as disproportionate — it would touch
-every DB/storage call in the app for a pre-existing, already-documented environment
-flakiness (see `project_backend_test_quirks` memory) rather than the specific workspace-
-processing regression this session could reproduce and verify.
+- [ ] In a video or YouTube source, click **📍 Checkpoint mm:ss** → an amber
+      pill block lands in the note. In a PDF, select some text → a floating
+      bar offers **📍 Checkpoint** for the current page; the persistent
+      **📍 p.N** button does the same without a selection. In a website,
+      click a section → the action bar's **📍** button inserts one for that
+      section.
+- [ ] Copy the note's URL with `?source=<id>&t=|p=|s=<value>` (or just note
+      that a checkpoint pill's link carries this), open it in a **new tab** →
+      the shell loads, selects that source, and seeks/scrolls to the right
+      spot once the viewer is ready.
+- [ ] Open a note from **before this redesign** that has an old-style
+      checkpoint block (from the canvas era) — it has no `noteId` to link to,
+      so it renders as a **dead grey pill** (no link, tooltip explains the
+      source is gone) instead of a broken link. That's the intended fallback,
+      not a bug.
 
-**Known non-bug, environment-specific**: on a couple of occasions the browser's `<video>`
-element got stuck at `readyState=0` indefinitely for a resource that had played fine
-moments earlier in the same session (frame/clip capture both worked on it). Direct `fetch()`
-and `curl` against the exact same signed URL (including a `Range` request) returned the
-correct bytes with correct `Content-Range`/CORS headers instantly, and the resource played
-fine again after a plain page reload — so this is a Chrome-automation-sandbox media-decoder
-hiccup (possibly a concurrent-`<video>`-element limit once a clip/audio preview block is
-already in the note), not an application bug. When it happened, audio capture was instead
-verified by calling the exact endpoint the UI button calls (`POST /resources/{id}/capture`)
-directly, which is indistinguishable from a real button click at the backend level.
+## 9. Chat citations across sources
 
-Full suite green after the fix: 126/126 backend pytest, `tsc --noEmit` clean, `npm run
-build` clean (29/29 pages).
+- [ ] Click the chat icon (message-square icon) in the header → a **drawer**
+      slides in from the right, over the note pane (it is never a third
+      column).
+- [ ] Ask a question that can only be answered by **combining two different
+      sources** in the session. The streamed answer should cite both, with
+      `[n]` chips.
+- [ ] Each citation chip carries a small colored dot matching its source's
+      rail color (a chip with no resolvable source shows no dot rather than
+      borrowing another source's color — that's intentional, not a missing
+      style).
+- [ ] Click a citation chip → the viewer switches to (or stays on) that
+      source and seeks to the cited spot.
+- [ ] Ask something none of your sources cover → the assistant should say the
+      sources don't cover it, not fabricate an answer.
+
+## 10. Re-synthesize
+
+- [ ] Remove a source (✕ on hover over its row, confirm in the dialog) →
+      **that source's section chips disappear** from the note immediately.
+      The note's own blocks/text are untouched — removing a source never
+      deletes what's in the note.
+- [ ] Once the set of ready sources no longer matches what the current draft
+      was built from, the header button changes from **"Re-synthesize"** to
+      **"Re-synthesize (N sources)"** (highlighted). This is the honest
+      indicator that a fresher draft is available.
+- [ ] **Regression check** — attach a fourth source to a session that already
+      has a first draft. Wait for it to reach `ready`. Click
+      **"Re-synthesize (4 sources)"**. Confirm the note **actually changes**
+      — new content from the fourth source should appear. (A bug where this
+      silently did nothing — the client kept polling but never applied the
+      new draft — was found and fixed; this step is here specifically to
+      catch a regression of it.)
+- [ ] With **no edits of your own** in the note (i.e. it's exactly what the
+      last synthesis wrote), clicking re-synthesize should **not** prompt you
+      — it silently replaces. **If the replace/append dialog pops up on an
+      untouched, freshly synthesized note, that is a real bug** — the
+      dirty-flag logic assumes the editor fires its change event synchronously
+      when a draft is applied, and this is the symptom if that assumption
+      ever breaks.
+- [ ] Now type something of your own into the note, then re-synthesize. A
+      dialog titled **"This note has your own edits in it"** should appear,
+      with buttons **"Keep my note, add at the end"** and **"Replace
+      everything"** (styled as the dangerous option). Click **"Replace
+      everything"** → the note's blocks are fully overwritten by the new
+      draft. Re-synthesize again with edits present, and this time dismiss the
+      dialog by clicking the backdrop (or press outside the box) → it should
+      behave like **"Keep my note, add at the end"** (the dialog's backdrop
+      click intentionally maps to the non-destructive choice, not the
+      destructive one).
+
+## 11. Failure paths
+
+- [ ] Paste a URL that will fail (a bad/unreachable link, or a YouTube link
+      you know has no captions and no video-capable provider configured) into
+      a session that also has at least one good source. The bad source shows
+      **failed** (red dot) in the rail with its error in a tooltip, and a
+      retry arrow. **The other, good source(s) must still synthesize** — one
+      bad source must never block the rest.
+- [ ] A source sitting at **`queued`** (e.g. because a multi-source drop's
+      batch-start call failed, or you're just watching it briefly before it
+      flips to `processing`) shows the same retry-arrow icon in the rail, with
+      a tooltip "Queued — click to start processing". Clicking it kicks off
+      processing.
+- [ ] Make **every** source in a session fail (e.g. all bad URLs). Confirm:
+      no synthesis ever fires, the note stays empty, and there is **no error
+      banner about synthesis** — because synthesis never ran, there's nothing
+      to report a failure about. Per-source errors are still visible in the
+      rail. If you see a "Couldn't write the note…" banner in this all-failed
+      case, that's a bug.
+- [ ] With no AI provider configured in Settings → AI Providers, drop a source
+      whose text is extractable (e.g. a website or a PDF) — synthesis will
+      fail; the failure banner reads something like *"Couldn't write the
+      note: All AI providers failed for job 'summarize_text': none
+      configured"* with a **Retry** link and a dismiss (✕). (Only the
+      video-native path — a YouTube/video source with no transcript and no
+      Gemini-class provider — produces the more specific "add a Gemini key in
+      Settings → AI Providers" message; the general no-provider case surfaces
+      the provider-chain error above instead.) Either way, sources stay
+      viewable and capture still works — only the note-writing step is
+      blocked.
+
+## 12. Editing freedom
+
+- [ ] After a draft lands, freely restructure it: reorder blocks, rewrite
+      paragraphs, delete a section, add your own headings/lists/tables.
+      Nothing about the note should feel special or locked — it's an ordinary
+      note.
+- [ ] Reload the page → your edits persisted (autosave). Navigate away to
+      `/brain` and back into this note via **"Open sources (N)"** in the
+      normal note toolbar → the workspace shell reopens with the same note and
+      sources.
+- [ ] Deleting a section you'd anchored to a source doesn't leave the app in a
+      broken state — its chip disappears the next time anchors are
+      recalculated (on the next apply), it isn't actively pruned on every
+      keystroke, so don't be surprised if a stray chip for a just-deleted
+      section lingers until the next synthesis or reload.
+
+## Automated checks (run before this checklist, still the gate for regressions)
+
+```bash
+# backend
+cd backend && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 venv/bin/python -m pytest tests/ -p asyncio
+# 169 passed, 0 failures, 0 errors as of 2026-07-30
+# (plugin autoload disabled because ROS Jazzy's system pytest plugins crash collection)
+
+# frontend
+cd frontend && npx tsc --noEmit && npm run build
+# both clean as of 2026-07-30; /brain/workspace and /brain/workspace/[noteId] appear
+# in the build's route table
+```
+
+**Neither of these substitutes for actually running this checklist in a
+browser.** The live pass and the Haiku UX review are still outstanding —
+update the header of this file once they've run.
