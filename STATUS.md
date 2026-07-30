@@ -537,10 +537,16 @@ back button, the dialog's dismissal wording, and an unpluralised label.
 **Still unexercised live:** file upload (PDF / markdown / video), frame / clip /
 audio capture, the multi-file deferred batch drop, and the append branch of
 re-synthesis. `docs/workspace-manual-test-checklist.md` marks these clearly and
-lists the known quirks — chief among them that BlockNote drops *nested*
-`<details>` toggles, so roughly half of every AI draft's Deep Dive content never
-reaches the note. That one is app-wide and pre-existing, not a redesign
-regression, and is worth its own fix.
+lists the known quirks.
+
+**Correction (same day):** an earlier revision of this section claimed BlockNote
+dropped nested `<details>` toggles and lost ~half of every AI draft. That was a
+measurement error, not a defect — the comparison read the editor's rendered
+`innerText`, which omits collapsed toggle content, and counted only top-level
+blocks. Re-measured against the saved block tree: 10,003 draft characters,
+10,003 in the note, all 27 toggle summaries present, nested two deep. Nothing
+is lost. Any future check of this must walk `children` and compare against
+`textContent`.
 
 ---
 

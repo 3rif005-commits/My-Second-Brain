@@ -349,13 +349,15 @@ are listed in the header.
 
 ## Known quirks — expected, do not file these as bugs
 
-- **Deep Dive content is thinner than the AI wrote it.** BlockNote's HTML→blocks
-  conversion keeps top-level `<details>` toggles but drops *nested* ones and
-  their bodies. Measured on a real draft: 24 `<summary>` elements in, 10 out,
-  ~6,000 characters lost. This is app-wide and pre-existing — `prompts/
-  mastery_guide.py` asks for nested toggles and the classic ingest flow uses the
-  same path — so it affects every AI-written note, not just workspaces. Worth
-  fixing separately; the prompt or the parser has to give.
+- **Collapsed Deep Dive toggles look like missing content, and are not.** A
+  nested `<details>` becomes a nested `toggleListItem` block that starts
+  collapsed, so the note *appears* to hold about half the draft until you expand
+  them. Verified on a real draft: 10,003 characters in the draft, 10,003 in the
+  saved note, all 27 toggle summaries present, nesting two levels deep. If you
+  are checking this yourself, compare the note's **saved block tree** (walk
+  `children` too) against the draft's `textContent` — reading the editor's
+  rendered `innerText` silently omits every collapsed toggle and will convince
+  you content was lost.
 - **Re-synthesis asks replace-vs-append after a page reload**, even on a note
   you haven't touched. Deliberate: once the page reloads, the client can no
   longer prove the content came from a draft rather than from you, so it asks
