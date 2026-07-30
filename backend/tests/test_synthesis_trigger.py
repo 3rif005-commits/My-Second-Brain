@@ -85,6 +85,27 @@ def test_no_fire_when_the_note_is_gone():
     run.assert_not_called()
 
 
+def test_the_guard_claims_the_row_before_it_fires():
+    db = _db([READY], [], NOTE)
+    with patch.object(synthesis, "get_supabase", return_value=db), \
+         patch.object(synthesis, "run_synthesis") as run:
+        assert synthesis.maybe_synthesize("n1") is True
+    claim = db.tables["note_synthesis"].insert.call_args[0][0]
+    assert claim["note_id"] == "n1"
+    assert claim["status"] == "running"
+    run.assert_called_once_with("n1", "replace")
+
+
+def test_losing_the_claim_race_does_not_fire_a_second_synthesis():
+    db = _db([READY], [], NOTE)
+    (db.tables["note_synthesis"].insert.return_value.execute
+     .side_effect) = Exception("duplicate key value violates unique constraint")
+    with patch.object(synthesis, "get_supabase", return_value=db), \
+         patch.object(synthesis, "run_synthesis") as run:
+        assert synthesis.maybe_synthesize("n1") is False
+    run.assert_not_called()
+
+
 # ── source text reassembly ───────────────────────────────────────────────────
 
 def test_source_text_is_reassembled_with_anchor_tags():
@@ -151,6 +172,17 @@ def test_run_synthesis_writes_ready_with_html_and_source_ids():
     assert writes[-1]["source_ids"] == ["s1", "s2"]
     assert writes[-1]["title_suggestion"] == "Backprop"
     assert "<h2" in writes[-1]["html"]
+
+
+def test_a_textless_non_video_source_is_declared_not_silently_blank():
+    db = _run_db(SRC_ROWS[:1])          # a pdf source
+    with patch.object(synthesis, "get_supabase", return_value=db), \
+         patch.object(synthesis, "source_text_from_chunks", return_value=""), \
+         patch.object(synthesis, "complete_with_fallback",
+                      return_value="<h1>T</h1>") as ai:
+        synthesis.run_synthesis("n1")
+    prompt = ai.call_args[0][2][0]["content"]
+    assert "No text could be extracted" in prompt
 
 
 def test_run_synthesis_strips_code_fences():

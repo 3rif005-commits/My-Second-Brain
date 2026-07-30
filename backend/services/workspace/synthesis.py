@@ -81,6 +81,21 @@ def _write(note_id: str, user_id: str, patch: dict) -> None:
                .upsert(payload, on_conflict="note_id").execute())
 
 
+def _claim(note_id: str, user_id: str) -> bool:
+    """Claim the right to synthesize this note. `note_synthesis.note_id` is the
+    primary key, so this insert is the mutual-exclusion point: when two sibling
+    sources settle at the same moment in two background threads, exactly one
+    insert wins and the loser no-ops instead of paying for a second LLM call."""
+    try:
+        get_supabase().table("note_synthesis").insert({
+            "note_id": note_id, "user_id": user_id, "status": "running",
+            "source_ids": [], "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+        return True
+    except Exception:
+        return False
+
+
 def maybe_synthesize(note_id: str) -> bool:
     """The settle guard. Proceeds only if no source on this note is still
     pending, no synthesis exists yet, and the note has no user content — so
@@ -99,6 +114,8 @@ def maybe_synthesize(note_id: str) -> bool:
     notes = (db.table("notes").select("id,user_id,title,content")
              .eq("id", note_id).execute().data or [])
     if not notes or notes[0].get("content"):
+        return False
+    if not _claim(note_id, notes[0]["user_id"]):
         return False
     run_synthesis(note_id, "replace")
     return True
@@ -158,8 +175,14 @@ def run_synthesis(note_id: str, mode: str = "replace") -> None:
         video_urls: list[str] = []
         for s in sources:
             text = source_text_from_chunks(s["id"])
-            if not text and s["kind"] in ("youtube", "video") and s.get("source_url"):
-                video_urls.append(s["source_url"])
+            if not text:
+                if s["kind"] in ("youtube", "video") and s.get("source_url"):
+                    video_urls.append(s["source_url"])
+                else:
+                    logger.warning(f"note {note_id}: source {s['id']} "
+                                   f"({s['kind']}) contributed no text — "
+                                   f"chunks missing or extraction empty")
+                    text = ("(No text could be extracted from this source.)")
             blocks.append({"title": s["title"], "kind": s["kind"], "text": text,
                            "duration": (s.get("meta") or {}).get("duration")})
 
