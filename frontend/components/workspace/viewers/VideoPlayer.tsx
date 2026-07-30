@@ -4,11 +4,11 @@
 // Frame capture is instant and client-side (same-origin canvas grab);
 // clips and audio segments go through the server ffmpeg pipeline.
 import { useEffect, useRef, useState } from "react";
-import { fmtTime, wsApi, type SendAction, type WsResource } from "@/lib/workspace";
+import { fmtTime, wsApi, type SendAction, type NoteSource } from "@/lib/workspace";
 import { useToast } from "@/app/providers";
 
 interface VideoPlayerProps {
-  resource: WsResource;
+  resource: NoteSource;
   onPosition: (seconds: number) => void;
   onAction: (action: SendAction) => void;
   seekRef: React.MutableRefObject<((value: number) => void) | null>;
@@ -23,7 +23,7 @@ export function VideoPlayer({ resource, onPosition, onAction, seekRef }: VideoPl
   const { showToast } = useToast();
 
   useEffect(() => {
-    wsApi.resourceFileUrl(resource.id).then((r) => setSrc(r.url)).catch(() => {});
+    wsApi.sourceFileUrl(resource.id).then((r) => setSrc(r.url)).catch(() => {});
   }, [resource.id]);
 
   useEffect(() => {

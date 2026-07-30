@@ -1,37 +1,33 @@
-// Workspace feature — shared types + thin API client over /api/ws proxy.
+// Workspace feature — shared types + thin API client over the /api/ws proxy.
+// One note, many sources: sources attach directly to a note and one AI
+// synthesis comes out. No workspaces, no pages, no canvas positions.
 
 export type ResourceKind = "pdf" | "document" | "youtube" | "video" | "website";
 export type ResourceStatus = "queued" | "processing" | "ready" | "failed";
 export type AnchorType = "time" | "page" | "section";
+export type SynthesisStatus = "none" | "queued" | "running" | "ready" | "failed";
 
-export interface WsResource {
+export interface NoteSource {
   id: string;
-  workspace_id: string;
+  note_id: string;
   kind: ResourceKind;
   title: string;
   source_url: string | null;
   storage_path: string | null;
+  mime_type?: string | null;
   status: ResourceStatus;
   error: string | null;
   meta: {
     pages?: number;
     page_sizes?: [number, number][];
     duration?: number;
-    thumbnail?: string;
     author?: string;
     has_transcript?: boolean;
-    summary_error?: string;
+    thumbnail_path?: string;
     [k: string]: unknown;
   };
-  note_id: string | null;
-  has_summary?: boolean;
-  summary_html?: string | null;
+  order_index: number;
   thumbnail_url?: string;
-  pos_x: number;
-  pos_y: number;
-  width: number;
-  height: number;
-  z_index: number;
   elements?: WsElement[];
 }
 
@@ -45,30 +41,6 @@ export interface WsElement {
   content: string | null;
   image_path: string | null;
   image_url?: string;
-}
-
-export interface WsPage {
-  id: string;
-  workspace_id: string;
-  note_id: string;
-  note_title: string;
-  note_snippet: string;
-  pos_x: number;
-  pos_y: number;
-  width: number;
-  height: number;
-  z_index: number;
-}
-
-export interface Workspace {
-  id: string;
-  name: string;
-  icon: string;
-  viewport: { x: number; y: number; zoom: number };
-  resources: WsResource[];
-  pages: WsPage[];
-  resource_count?: number;
-  updated_at?: string;
 }
 
 export interface NoteAnchor {
@@ -89,6 +61,23 @@ export interface Citation {
   anchor_start: number;
   anchor_end: number;
   snippet?: string;
+}
+
+export interface Synthesis {
+  status: SynthesisStatus;
+  html?: string | null;
+  source_ids: string[];
+  title_suggestion?: string | null;
+  error?: string | null;
+  applied_at?: string | null;
+}
+
+export interface RecentSession {
+  note_id: string;
+  title: string;
+  source_count: number;
+  kinds: ResourceKind[];
+  updated_at?: string;
 }
 
 export type SendAction =
@@ -115,86 +104,50 @@ async function j<T>(res: Response): Promise<T> {
 }
 
 export const wsApi = {
-  listWorkspaces: () => fetch("/api/ws/workspaces").then((r) => j<Workspace[]>(r)),
-  createWorkspace: (name: string) =>
-    fetch("/api/ws/workspaces", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    }).then((r) => j<Workspace>(r)),
-  getWorkspace: (id: string) =>
-    fetch(`/api/ws/workspaces/${id}`).then((r) => j<Workspace>(r)),
-  patchWorkspace: (id: string, patch: Record<string, unknown>) =>
-    fetch(`/api/ws/workspaces/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    }).then((r) => j(r)),
-  deleteWorkspace: (id: string) =>
-    fetch(`/api/ws/workspaces/${id}`, { method: "DELETE" }).then((r) => j(r)),
-
-  importUrl: (wsId: string, url: string, pos: { x: number; y: number }) => {
+  /** Attach a file or URL. Without noteId the backend creates the note first. */
+  addSource: (input: { file?: File; url?: string; noteId?: string | null }) => {
     const fd = new FormData();
-    fd.set("url", url);
-    fd.set("pos_x", String(pos.x));
-    fd.set("pos_y", String(pos.y));
-    return fetch(`/api/ws/workspaces/${wsId}/resources`, {
-      method: "POST", body: fd,
-    }).then((r) => j<WsResource>(r));
+    if (input.file) fd.set("file", input.file);
+    if (input.url) fd.set("url", input.url);
+    if (input.noteId) fd.set("note_id", input.noteId);
+    return fetch("/api/ws/sources", { method: "POST", body: fd })
+      .then((r) => j<{ note_id: string; source: NoteSource }>(r));
   },
-  importFile: (wsId: string, file: File, pos: { x: number; y: number }) => {
-    const fd = new FormData();
-    fd.set("file", file);
-    fd.set("pos_x", String(pos.x));
-    fd.set("pos_y", String(pos.y));
-    return fetch(`/api/ws/workspaces/${wsId}/resources`, {
-      method: "POST", body: fd,
-    }).then((r) => j<WsResource>(r));
-  },
-  resourceStatuses: (wsId: string) =>
-    fetch(`/api/ws/workspaces/${wsId}/resources`).then((r) =>
-      j<Pick<WsResource, "id" | "status" | "error" | "title" | "kind" | "note_id" | "meta">[]>(r)),
-  getResource: (rid: string) =>
-    fetch(`/api/ws/resources/${rid}`).then((r) => j<WsResource>(r)),
-  resourceFileUrl: (rid: string) =>
-    fetch(`/api/ws/resources/${rid}/file`).then((r) => j<{ url: string }>(r)),
-  patchResource: (rid: string, patch: Record<string, unknown>) =>
-    fetch(`/api/ws/resources/${rid}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    }).then((r) => j(r)),
-  deleteResource: (rid: string) =>
-    fetch(`/api/ws/resources/${rid}`, { method: "DELETE" }).then((r) => j(r)),
-  reprocessResource: (rid: string) =>
-    fetch(`/api/ws/resources/${rid}/reprocess`, { method: "POST" }).then((r) => j(r)),
-  capture: (rid: string, type: "frame" | "clip" | "audio", start: number, end?: number) =>
-    fetch(`/api/ws/resources/${rid}/capture`, {
+  listSources: (noteId: string) =>
+    fetch(`/api/ws/notes/${noteId}/sources`).then((r) => j<NoteSource[]>(r)),
+  getSource: (sid: string) =>
+    fetch(`/api/ws/sources/${sid}`).then((r) => j<NoteSource>(r)),
+  sourceFileUrl: (sid: string) =>
+    fetch(`/api/ws/sources/${sid}/file`).then((r) => j<{ url: string }>(r)),
+  deleteSource: (sid: string) =>
+    fetch(`/api/ws/sources/${sid}`, { method: "DELETE" })
+      .then((r) => j<{ ok: boolean; note_id: string }>(r)),
+  reprocessSource: (sid: string) =>
+    fetch(`/api/ws/sources/${sid}/reprocess`, { method: "POST" }).then((r) => j(r)),
+  capture: (sid: string, type: "frame" | "clip" | "audio", start: number, end?: number) =>
+    fetch(`/api/ws/sources/${sid}/capture`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type, start, end }),
     }).then((r) => j<{ path: string; url: string; mime: string }>(r)),
-  formulaLatex: (rid: string, elementId: string) =>
-    fetch(`/api/ws/resources/${rid}/formula-latex`, {
+  formulaLatex: (sid: string, elementId: string) =>
+    fetch(`/api/ws/sources/${sid}/formula-latex`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ element_id: elementId }),
     }).then((r) => j<{ latex: string }>(r)),
 
-  addPage: (wsId: string, body: { note_id?: string; title?: string; pos_x?: number; pos_y?: number }) =>
-    fetch(`/api/ws/workspaces/${wsId}/pages`, {
+  synthesize: (noteId: string, mode: "replace" | "append") =>
+    fetch(`/api/ws/notes/${noteId}/synthesize`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }).then((r) => j<WsPage>(r)),
-  patchPage: (pageId: string, patch: Record<string, unknown>) =>
-    fetch(`/api/ws/pages/${pageId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    }).then((r) => j(r)),
-  removePage: (pageId: string) =>
-    fetch(`/api/ws/pages/${pageId}`, { method: "DELETE" }).then((r) => j(r)),
+      body: JSON.stringify({ mode }),
+    }).then((r) => j<{ ok: boolean; status: string }>(r)),
+  getSynthesis: (noteId: string) =>
+    fetch(`/api/ws/notes/${noteId}/synthesis`).then((r) => j<Synthesis>(r)),
+  markSynthesisApplied: (noteId: string) =>
+    fetch(`/api/ws/notes/${noteId}/synthesis/applied`, { method: "POST" })
+      .then((r) => j(r)),
 
   getAnchors: (noteId: string) =>
     fetch(`/api/ws/notes/${noteId}/anchors`).then((r) => j<NoteAnchor[]>(r)),
@@ -204,7 +157,39 @@ export const wsApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(anchors),
     }).then((r) => j(r)),
+
+  recentSessions: () =>
+    fetch("/api/ws/sessions/recent").then((r) => j<RecentSession[]>(r)),
 };
+
+// ── display helpers ──────────────────────────────────────────────────────────
+
+/** Stable per-source accent, keyed off order_index. With 4 sources in play,
+ *  "which source is this from?" has to be answerable at a glance, and a colour
+ *  dot is cheaper than repeating titles in every chip. */
+export const SOURCE_COLORS = [
+  "#6366f1", // indigo
+  "#0ea5e9", // sky
+  "#10b981", // emerald
+  "#f59e0b", // amber
+  "#ec4899", // pink
+  "#8b5cf6", // violet
+];
+
+export function sourceColor(orderIndex: number): string {
+  const n = SOURCE_COLORS.length;
+  return SOURCE_COLORS[(((orderIndex ?? 0) % n) + n) % n];
+}
+
+/** Source-indexed anchor: "2:p:14" → { sourceIndex: 2, type: "page", value: 14 } */
+export function parseSourceAnchor(
+  v: string
+): { sourceIndex: number; type: AnchorType; value: number } | null {
+  const m = v.match(/^(\d+):([tps]):([\d.]+)$/);
+  if (!m) return null;
+  const type: AnchorType = m[2] === "t" ? "time" : m[2] === "p" ? "page" : "section";
+  return { sourceIndex: parseInt(m[1], 10), type, value: parseFloat(m[3]) };
+}
 
 export function youtubeVideoId(url: string): string | null {
   const patterns = [

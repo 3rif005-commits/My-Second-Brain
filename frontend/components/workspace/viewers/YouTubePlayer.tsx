@@ -4,7 +4,7 @@
 // Cross-origin video means frames/clips/audio are captured server-side
 // (yt-dlp section download + ffmpeg) via /capture.
 import { useEffect, useRef, useState } from "react";
-import { fmtTime, wsApi, youtubeVideoId, type SendAction, type WsResource } from "@/lib/workspace";
+import { fmtTime, wsApi, youtubeVideoId, type SendAction, type NoteSource } from "@/lib/workspace";
 import { useToast } from "@/app/providers";
 
 declare global {
@@ -32,7 +32,7 @@ function loadYouTubeApi(): Promise<void> {
 }
 
 interface YouTubePlayerProps {
-  resource: WsResource;
+  resource: NoteSource;
   onPosition: (seconds: number) => void;
   onAction: (action: SendAction) => void;
   seekRef: React.MutableRefObject<((value: number) => void) | null>;

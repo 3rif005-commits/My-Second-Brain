@@ -4,11 +4,11 @@
 // (trafilatura). Every section is a selectable element with one-click send.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink } from "lucide-react";
-import type { SendAction, WsElement, WsResource } from "@/lib/workspace";
+import type { SendAction, WsElement, NoteSource } from "@/lib/workspace";
 import { ActionBar, ActionButton } from "./ActionBar";
 
 interface WebsiteViewerProps {
-  resource: WsResource;
+  resource: NoteSource;
   onPosition: (sectionIndex: number) => void;
   onAction: (action: SendAction) => void;
   seekRef: React.MutableRefObject<((value: number) => void) | null>;

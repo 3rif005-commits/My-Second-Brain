@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
-import { wsApi, type SendAction, type WsElement, type WsResource } from "@/lib/workspace";
+import { wsApi, type SendAction, type WsElement, type NoteSource } from "@/lib/workspace";
 import { useToast } from "@/app/providers";
 import { ActionBar, ActionButton } from "./ActionBar";
 
@@ -21,7 +21,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 const PAGE_WIDTH = 680;
 
 interface PdfViewerProps {
-  resource: WsResource;
+  resource: NoteSource;
   onPosition: (page: number) => void;
   onAction: (action: SendAction) => void;
   /** Parent stores a seek function here: seekRef.current = (page) => …  */
@@ -48,7 +48,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
   const currentPage = useRef(1);
 
   useEffect(() => {
-    wsApi.resourceFileUrl(resource.id).then((r) => setFileUrl(r.url)).catch(() => {});
+    wsApi.sourceFileUrl(resource.id).then((r) => setFileUrl(r.url)).catch(() => {});
   }, [resource.id]);
 
   const pageSizes = useMemo(
