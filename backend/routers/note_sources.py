@@ -158,6 +158,7 @@ async def attach_source(
     file: UploadFile | None = File(default=None),
     url: str | None = Form(default=None),
     note_id: str | None = Form(default=None),
+    defer: bool = Form(default=False),
 ):
     """Attach a source. With no note_id, the note is created first — the first
     drop is one request, not create-then-attach."""
@@ -213,8 +214,12 @@ async def attach_source(
             raise HTTPException(status_code=502,
                                 detail={"error": f"Could not attach the source: {e}"})
 
-    background.add_task(process_resource, row["id"])
-    return {"note_id": note_id, "source": _source_public(row)}
+    # A multi-source drop attaches every source before any processing starts, so
+    # the settle guard cannot fire on the first one while the rest are still
+    # uploading. The client kicks the batch off with /process-sources.
+    if not defer:
+        background.add_task(process_resource, row["id"])
+    return {"note_id": note_id, "source": _source_public(row), "deferred": defer}
 
 
 @router.get("/notes/{note_id}/sources")
@@ -224,6 +229,20 @@ async def list_sources(note_id: str, authorization: str = Header()):
     rows = (get_supabase().table("note_resources").select("*")
             .eq("note_id", note_id).order("order_index").execute().data or [])
     return [_source_public(r) for r in rows]
+
+
+@router.post("/notes/{note_id}/process-sources")
+async def process_queued_sources(note_id: str, background: BackgroundTasks,
+                                 authorization: str = Header()):
+    """Start processing every source on this note that is still queued — the
+    second half of a deferred multi-source drop."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    rows = (get_supabase().table("note_resources").select("id")
+            .eq("note_id", note_id).eq("status", "queued").execute().data or [])
+    for r in rows:
+        background.add_task(process_resource, r["id"])
+    return {"ok": True, "queued": len(rows)}
 
 
 @router.delete("/sources/{source_id}")
@@ -332,6 +351,7 @@ async def synthesize(note_id: str, body: SynthesizeRequest,
                             detail={"error": "mode must be 'replace' or 'append'"})
     get_supabase().table("note_synthesis").upsert({
         "note_id": note_id, "user_id": user_id, "status": "queued", "error": None,
+        "applied_at": None,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }, on_conflict="note_id").execute()
     background.add_task(run_synthesis, note_id, body.mode)
@@ -350,7 +370,8 @@ async def get_synthesis(note_id: str, authorization: str = Header()):
     return {"status": r.get("status"), "html": r.get("html"),
             "source_ids": r.get("source_ids") or [],
             "title_suggestion": r.get("title_suggestion"),
-            "error": r.get("error"), "applied_at": r.get("applied_at")}
+            "error": r.get("error"), "applied_at": r.get("applied_at"),
+            "updated_at": r.get("updated_at")}
 
 
 @router.post("/notes/{note_id}/synthesis/applied")
@@ -372,16 +393,28 @@ async def put_anchors(note_id: str, body: list[AnchorRow],
     user_id = get_user_id(authorization)
     _own_note(note_id, user_id)
     db = get_supabase()
+    # Only anchors pointing at THIS note's own sources may be stored: a stale id
+    # would otherwise fail the insert after the delete has already committed and
+    # take every anchor with it, and an unvalidated id is a cross-user reference
+    # (this client uses the service role and bypasses RLS).
+    own = {str(r["id"]) for r in (db.table("note_resources").select("id")
+                                 .eq("note_id", note_id).eq("user_id", user_id)
+                                 .execute().data or [])}
+    rows = [a for a in body if str(a.resource_id) in own]
+    dropped = len(body) - len(rows)
+    if dropped:
+        logger.warning(f"note {note_id}: dropped {dropped} anchor(s) whose source "
+                       f"is not attached to this note")
     db.table("note_anchors").delete().eq("note_id", note_id).execute()
-    if body:
+    if rows:
         db.table("note_anchors").insert([
             {"note_id": note_id, "user_id": user_id,
              "resource_id": a.resource_id, "block_id": a.block_id,
              "anchor_type": a.anchor_type,
              "anchor_start": a.anchor_start, "anchor_end": a.anchor_end}
-            for a in body
+            for a in rows
         ]).execute()
-    return {"ok": True, "count": len(body)}
+    return {"ok": True, "count": len(rows), "dropped": dropped}
 
 
 @router.get("/notes/{note_id}/anchors")

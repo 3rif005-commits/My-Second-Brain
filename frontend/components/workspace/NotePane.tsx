@@ -314,9 +314,12 @@ export function NotePane({
   // ── render ────────────────────────────────────────────────────────────────
   const chips = useMemo(() => {
     const order = new Map(sources.map((s) => [s.id, s.order_index]));
-    return [...anchors].sort((a, b) =>
-      (order.get(a.resource_id) ?? 99) - (order.get(b.resource_id) ?? 99)
-      || a.anchor_start - b.anchor_start);
+    // A source that has been removed takes its chips with it — keeping them would
+    // mean a dead jump target wearing whichever colour order_index 0 happens to be.
+    return [...anchors]
+      .filter((a) => order.has(a.resource_id))
+      .sort((a, b) => (order.get(a.resource_id) ?? 99) - (order.get(b.resource_id) ?? 99)
+        || a.anchor_start - b.anchor_start);
   }, [anchors, sources]);
 
   return (

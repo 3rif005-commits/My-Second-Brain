@@ -13,6 +13,7 @@ mid-run re-decides via its normal replace/append path.
 from __future__ import annotations
 
 import logging
+import os
 import re
 from datetime import datetime, timezone
 
@@ -75,7 +76,11 @@ def ready_sources(note_id: str) -> list[dict]:
 
 
 def _write(note_id: str, user_id: str, patch: dict) -> None:
-    payload = {"note_id": note_id, "user_id": user_id, **patch,
+    # `applied_at` belongs to the draft that was applied, so any write that moves
+    # this row to a new draft must clear it — a PostgREST upsert only touches the
+    # columns it is given, and a stale timestamp makes the client ignore the new
+    # draft entirely.
+    payload = {"note_id": note_id, "user_id": user_id, "applied_at": None, **patch,
                "updated_at": datetime.now(timezone.utc).isoformat()}
     with_retry(lambda: get_supabase().table("note_synthesis")
                .upsert(payload, on_conflict="note_id").execute())
@@ -92,7 +97,8 @@ def _claim(note_id: str, user_id: str) -> bool:
             "source_ids": [], "updated_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
         return True
-    except Exception:
+    except Exception as e:
+        logger.info(f"note {note_id}: synthesis claim not taken ({e})")
         return False
 
 
@@ -129,6 +135,18 @@ def _title_suggestion(html: str) -> str | None:
     return title[:200] or None
 
 
+def _inherited_titles(note: dict, first_source: dict) -> set[str]:
+    """Titles the note could have been auto-assigned at attach time. The
+    processor renames a source once it learns the real video/page title, so the
+    source's CURRENT title is not enough to recognise an untouched note."""
+    titles = {first_source.get("title"), "YouTube video"}
+    if note.get("source_url"):
+        titles.add(note["source_url"])
+    if note.get("source_filename"):
+        titles.add(os.path.splitext(note["source_filename"])[0])
+    return {t for t in titles if t}
+
+
 def _complete(prompt: str, video_urls: list[str], has_text: bool,
               user_id: str) -> str:
     """Text path, or the Gemini-native video path when a source has no
@@ -151,7 +169,7 @@ def _complete(prompt: str, video_urls: list[str], has_text: bool,
 
 def run_synthesis(note_id: str, mode: str = "replace") -> None:
     db = get_supabase()
-    notes = (db.table("notes").select("id,user_id,title,content")
+    notes = (db.table("notes").select("id,user_id,title,content,source_url,source_filename")
              .eq("id", note_id).execute().data or [])
     if not notes:
         logger.warning(f"run_synthesis: note {note_id} not found")
@@ -166,8 +184,13 @@ def run_synthesis(note_id: str, mode: str = "replace") -> None:
            {"status": "running", "error": None, "source_ids": source_ids})
 
     if not sources:
-        _write(note_id, user_id, {"status": "failed", "source_ids": [],
-                                  "error": "No processed sources to synthesize."})
+        # Nothing extractable yet: leave no synthesis behind at all, so retrying
+        # a failed source can still auto-fire the first draft.
+        logger.info(f"note {note_id}: no ready sources, releasing the claim")
+        try:
+            db.table("note_synthesis").delete().eq("note_id", note_id).execute()
+        except Exception:
+            logger.warning(f"note {note_id}: could not release the synthesis claim")
         return
 
     try:
@@ -198,7 +221,7 @@ def run_synthesis(note_id: str, mode: str = "replace") -> None:
                                   "title_suggestion": suggestion})
         # A multi-source session should get a topic title instead of inheriting
         # source #1's filename — but never over a title the user typed.
-        if suggestion and note.get("title") == sources[0]["title"]:
+        if suggestion and note.get("title") in _inherited_titles(note, sources[0]):
             db.table("notes").update({"title": suggestion}).eq("id", note_id).execute()
     except Exception as e:
         logger.warning(f"note {note_id}: synthesis failed: {e}")

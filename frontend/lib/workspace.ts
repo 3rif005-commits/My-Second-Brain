@@ -70,6 +70,7 @@ export interface Synthesis {
   title_suggestion?: string | null;
   error?: string | null;
   applied_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface RecentSession {
@@ -105,16 +106,20 @@ async function j<T>(res: Response): Promise<T> {
 
 export const wsApi = {
   /** Attach a file or URL. Without noteId the backend creates the note first. */
-  addSource: (input: { file?: File; url?: string; noteId?: string | null }) => {
+  addSource: (input: { file?: File; url?: string; noteId?: string | null; defer?: boolean }) => {
     const fd = new FormData();
     if (input.file) fd.set("file", input.file);
     if (input.url) fd.set("url", input.url);
     if (input.noteId) fd.set("note_id", input.noteId);
+    if (input.defer) fd.set("defer", "true");
     return fetch("/api/ws/sources", { method: "POST", body: fd })
-      .then((r) => j<{ note_id: string; source: NoteSource }>(r));
+      .then((r) => j<{ note_id: string; source: NoteSource; deferred: boolean }>(r));
   },
   listSources: (noteId: string) =>
     fetch(`/api/ws/notes/${noteId}/sources`).then((r) => j<NoteSource[]>(r)),
+  processSources: (noteId: string) =>
+    fetch(`/api/ws/notes/${noteId}/process-sources`, { method: "POST" })
+      .then((r) => j<{ ok: boolean; queued: number }>(r)),
   getSource: (sid: string) =>
     fetch(`/api/ws/sources/${sid}`).then((r) => j<NoteSource>(r)),
   sourceFileUrl: (sid: string) =>

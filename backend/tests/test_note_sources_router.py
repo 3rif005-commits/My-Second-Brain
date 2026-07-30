@@ -123,6 +123,40 @@ def test_a_failed_attach_to_an_existing_note_leaves_that_note_alone(client):
     proc.assert_not_called()
 
 
+def test_defer_does_not_queue_processing(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    notes = _note_owned(tables)
+    srcs = tables.setdefault("note_resources", MagicMock())
+    srcs.select.return_value.eq.return_value.execute.return_value.data = []
+    srcs.insert.return_value.execute.return_value.data = [{
+        "id": "s1", "note_id": "n1", "kind": "website", "title": "x",
+        "status": "queued", "meta": {}, "order_index": 0}]
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("routers.note_sources.process_resource") as proc:
+        res = client.post("/sources", data={"url": "https://example.com",
+                                            "note_id": "n1", "defer": "true"},
+                          headers=AUTH)
+    assert res.status_code == 200
+    assert res.json()["deferred"] is True
+    proc.assert_not_called()
+
+
+def test_process_sources_queues_every_queued_source(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    srcs = tables.setdefault("note_resources", MagicMock())
+    (srcs.select.return_value.eq.return_value.eq.return_value
+     .execute.return_value.data) = [{"id": "s1"}, {"id": "s2"}]
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("routers.note_sources.process_resource") as proc:
+        res = client.post("/notes/n1/process-sources", headers=AUTH)
+    assert res.status_code == 200
+    assert res.json()["queued"] == 2
+    assert proc.call_count == 2
+
+
 def test_attach_rejects_unsupported_file(client):
     with patch("routers.note_sources.get_supabase", return_value=MagicMock()):
         res = client.post("/sources", files={
@@ -193,6 +227,17 @@ def test_synthesize_queues_a_background_run(client):
     run.assert_called_once_with("n1", "append")
 
 
+def test_synthesize_clears_a_previous_applied_at(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("routers.note_sources.run_synthesis"):
+        res = client.post("/notes/n1/synthesize", json={"mode": "replace"}, headers=AUTH)
+    assert res.status_code == 200
+    assert tables["note_synthesis"].upsert.call_args[0][0]["applied_at"] is None
+
+
 def test_synthesize_rejects_an_unknown_mode(client):
     tables: dict = {}
     db = _table_router(tables)
@@ -235,6 +280,9 @@ def test_put_anchors_replaces_rows(client):
     tables: dict = {}
     db = _table_router(tables)
     _note_owned(tables)
+    srcs = tables.setdefault("note_resources", MagicMock())
+    (srcs.select.return_value.eq.return_value.eq.return_value
+     .execute.return_value.data) = [{"id": "r1"}, {"id": "r2"}]
     anchors = tables.setdefault("note_anchors", MagicMock())
     body = [
         {"block_id": "b1", "resource_id": "r1", "anchor_type": "page",
@@ -250,6 +298,27 @@ def test_put_anchors_replaces_rows(client):
     inserted = anchors.insert.call_args[0][0]
     assert inserted[0]["user_id"] == "user-1"
     assert {r["resource_id"] for r in inserted} == {"r1", "r2"}   # multi-source
+
+
+def test_put_anchors_drops_rows_for_sources_not_on_this_note(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    srcs = tables.setdefault("note_resources", MagicMock())
+    (srcs.select.return_value.eq.return_value.eq.return_value
+     .execute.return_value.data) = [{"id": "r1"}]
+    anchors = tables.setdefault("note_anchors", MagicMock())
+    body = [
+        {"block_id": "b1", "resource_id": "r1", "anchor_type": "page",
+         "anchor_start": 4, "anchor_end": 4},
+        {"block_id": "b2", "resource_id": "r-elsewhere", "anchor_type": "page",
+         "anchor_start": 9, "anchor_end": 9},
+    ]
+    with patch("routers.note_sources.get_supabase", return_value=db):
+        res = client.put("/notes/n1/anchors", json=body, headers=AUTH)
+    assert res.json() == {"ok": True, "count": 1, "dropped": 1}
+    inserted = anchors.insert.call_args[0][0]
+    assert [r["resource_id"] for r in inserted] == ["r1"]
 
 
 def test_recent_sessions_groups_sources_by_note(client):

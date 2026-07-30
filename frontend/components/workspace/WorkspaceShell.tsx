@@ -122,16 +122,20 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     items: { file?: File; url?: string }[]
   ) => {
     setBusy(true);
+    const defer = items.length > 1;
     let landed = noteId;
     for (const item of items) {
       try {
-        const r = await wsApi.addSource({ ...item, noteId: landed });
+        const r = await wsApi.addSource({ ...item, noteId: landed, defer });
         landed = r.note_id;
       } catch (e) {
         showToast(e instanceof Error ? e.message
           : `Could not add ${item.file?.name ?? item.url ?? "source"}`);
       }
     }
+    // Deferred attaches are inert until this call, which is what makes a
+    // three-file drop produce one synthesis across all three.
+    if (defer && landed) await wsApi.processSources(landed).catch(() => {});
     setBusy(false);
     if (!noteId && landed) router.replace(`/brain/workspace/${landed}`);
     else await loadSources();

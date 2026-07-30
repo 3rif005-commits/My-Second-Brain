@@ -45,7 +45,14 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
   const readyIds = useMemo(
     () => sources.filter((s) => s.status === "ready").map((s) => s.id), [sources]);
   const pending = sources.some((s) => s.status === "queued" || s.status === "processing");
-  const running = synthesis?.status === "queued" || synthesis?.status === "running";
+  // A synthesis that has been "running" for this long lost its worker (a backend
+  // restart mid-LLM leaves the row behind); treat it as finished so the user can
+  // retry instead of staring at a spinner forever.
+  const STALE_RUN_MS = 5 * 60 * 1000;
+  const inFlight = synthesis?.status === "queued" || synthesis?.status === "running";
+  const staleRun = !!inFlight && !!synthesis?.updated_at
+    && Date.now() - Date.parse(synthesis.updated_at) > STALE_RUN_MS;
+  const running = !!inFlight && !staleRun;
   // A ready draft that nobody has applied yet. `applyRef.current` may still be
   // null on first render (the shell shows "Loading session…" until the note
   // arrives), and mutating a ref cannot re-run the apply effect — so keep
