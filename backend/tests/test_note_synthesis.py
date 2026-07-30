@@ -71,9 +71,14 @@ def test_budget_handles_no_sources():
     assert split_budget([], 1_000) == []
 
 
-def test_total_prompt_stays_within_budget():
+def test_source_text_is_capped_by_the_total_budget():
+    # U+2588 appears in no template, so counting it measures exactly the source
+    # text that reached the prompt — not an incidental property of other strings.
     prompt = build_note_synthesis_prompt([
-        {"title": f"Source {i}", "kind": "pdf", "text": "x" * 50_000, "duration": None}
+        {"title": f"Source {i}", "kind": "pdf", "text": "█" * 50_000,
+         "duration": None}
         for i in range(3)
     ])
-    assert prompt.count("x") <= TOTAL_SOURCE_BUDGET
+    used = prompt.count("█")
+    assert used <= TOTAL_SOURCE_BUDGET
+    assert used > TOTAL_SOURCE_BUDGET - 10   # the budget is actually spent, not silently dropped

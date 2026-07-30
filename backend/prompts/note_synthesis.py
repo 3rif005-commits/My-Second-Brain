@@ -110,19 +110,8 @@ def _source_block(index: int, source: dict, budget: int) -> str:
 
 def build_note_synthesis_prompt(sources: list[dict],
                                 total_budget: int = TOTAL_SOURCE_BUDGET) -> str:
-    lengths = [len((s.get("text") or "").strip()) for s in sources]
-    # Account for overhead from system prompt, extensions, and framing
-    # Calculate x's in non-source parts of the prompt
-    fixed_overhead_x = (MASTERY_SYSTEM_PROMPT.count('x') +
-                       SYNTHESIS_EXTENSION.count('x') +
-                       ANCHOR_EXTENSION.count('x'))
-    framing_overhead_x = sum(_kind_framing(s["kind"]).count('x') for s in sources)
-    # Additional overhead: "source-indexed" in the final text (1x)
-    other_overhead_x = 1
-    total_overhead = fixed_overhead_x + framing_overhead_x + other_overhead_x
-    # Reduce budget for source text to account for all overhead
-    effective_budget = max(0, total_budget - total_overhead)
-    budgets = split_budget(lengths, effective_budget)
+    budgets = split_budget([len((s.get("text") or "").strip()) for s in sources],
+                           total_budget)
     blocks = [_source_block(i, s, b)
               for i, (s, b) in enumerate(zip(sources, budgets), start=1)]
     return f"""{MASTERY_SYSTEM_PROMPT}
