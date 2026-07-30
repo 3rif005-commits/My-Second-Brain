@@ -445,7 +445,7 @@ npx playwright test --project=ingest --grep "PDF"
 
 ---
 
-## Workspaces — compact single-note shell — CODE COMPLETE, live pass pending (2026-07-30)
+## Workspaces — compact single-note shell — LIVE-VERIFIED, first pass (2026-07-30)
 
 > Design spec: `docs/superpowers/specs/2026-07-30-workspaces-compact-redesign-design.md`
 > Manual test checklist: `docs/workspace-manual-test-checklist.md`
@@ -514,16 +514,33 @@ a bug where `applied_at` was never cleared so every re-synthesis after the
 first was silently ignored by the client) plus one follow-up fix wave are both
 folded into the numbers above.
 
-**Not yet done — this is the actual gate before calling this shipped:**
-migration `013_note_sources.sql` has **not been applied yet**; it is a manual
-step the user runs by hand in the Supabase SQL editor (no `DATABASE_URL` on
-this machine). The **live browser pass and the Haiku UX review are both
-blocked on that migration** and have not run — nothing about on-screen
-behavior in this section has been verified live, only by the automated suites
-above and by code review. Run `docs/workspace-manual-test-checklist.md`
-top to bottom once the migration is applied, paying special attention to the
-multi-source-drop-produces-one-synthesis behavior and the re-synthesize
-regression check called out at the top of that file.
+**Live status (2026-07-30):** migration `013_note_sources.sql` is **applied**.
+It took three attempts — the first two silently rolled back, because the
+migration's opening `DROP FUNCTION ... (vector, ...)` fails with `type "vector"
+does not exist` when pgvector sits in the `extensions` schema and is not on the
+session `search_path`, and the whole thing is wrapped in `BEGIN … COMMIT`. The
+migration now sets `search_path`, drops the old RPC by catalogue lookup, and
+prints a proof-of-application result set, because the SQL editor reports success
+just as readily for a migration that did nothing.
+
+A first live browser pass ran the same day and verified: lazy note creation,
+background extraction, the settle-guard firing exactly one synthesis, auto-apply,
+the note title upgrading from `"YouTube video"` to a topic title, source-indexed
+section chips in per-source colours, grounded chat with cross-source citations,
+citation-click switching the active source, checkpoint insert and deep link,
+source removal taking its chips with it, and — the regression that mattered most
+— **re-synthesis actually rewriting the note**. Four defects were found and fixed
+in that pass (commit `0488ab8`): the replace/append dialog appearing on an
+untouched note, the app layout's floating sidebar toggle covering the shell's
+back button, the dialog's dismissal wording, and an unpluralised label.
+
+**Still unexercised live:** file upload (PDF / markdown / video), frame / clip /
+audio capture, the multi-file deferred batch drop, and the append branch of
+re-synthesis. `docs/workspace-manual-test-checklist.md` marks these clearly and
+lists the known quirks — chief among them that BlockNote drops *nested*
+`<details>` toggles, so roughly half of every AI draft's Deep Dive content never
+reaches the note. That one is app-wide and pre-existing, not a redesign
+regression, and is worth its own fix.
 
 ---
 

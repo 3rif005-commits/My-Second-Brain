@@ -3,14 +3,23 @@
 > Compact single-note redesign (2026-07-30). Replaces the canvas-based Workspaces
 > checklist. Design spec: `docs/superpowers/specs/2026-07-30-workspaces-compact-redesign-design.md`.
 >
-> **Status: the automated half is green, the live half has not run yet.**
+> **Status: migration 013 applied 2026-07-30; a first live pass ran the same day.**
 > Backend: `169 passed, 0 failures, 0 errors`. Frontend: `npx tsc --noEmit` clean,
 > `npm run build` clean with `/brain/workspace` and `/brain/workspace/[noteId]` in
-> the route table. **No one has driven this checklist in a real browser yet, and
-> the Haiku UX review has not run either** — both are blocked on the migration
-> step below (there is no `DATABASE_URL` on this machine, so the SQL can't be
-> applied programmatically). Nothing in this file should be read as "verified
-> live" until someone actually runs it and updates this header.
+> the route table.
+>
+> Driven end to end in Chrome on 2026-07-30 with a YouTube source and a Wikipedia
+> article: lazy note creation, background processing, the settle-guard synthesis,
+> auto-apply, the title upgrade, source-indexed section chips in two colours,
+> grounded chat with cross-source citations, citation-click source switching,
+> checkpoint insert + deep link, source removal taking its chips with it, and
+> re-synthesis actually rewriting the note. Four defects were found and fixed in
+> that pass (see "Known quirks" at the end).
+>
+> **Not yet exercised live:** file upload (PDF / markdown / video), frame / clip /
+> audio capture, the multi-file deferred batch drop, and the append branch of
+> re-synthesis. Those sections below are written but unverified — treat a failure
+> there as new information, not as a known-good regression.
 
 ## 0. One-time setup (required before anything works)
 
@@ -335,5 +344,40 @@ cd frontend && npx tsc --noEmit && npm run build
 ```
 
 **Neither of these substitutes for actually running this checklist in a
-browser.** The live pass and the Haiku UX review are still outstanding —
-update the header of this file once they've run.
+browser.** A first live pass ran on 2026-07-30; the sections it did not reach
+are listed in the header.
+
+## Known quirks — expected, do not file these as bugs
+
+- **Deep Dive content is thinner than the AI wrote it.** BlockNote's HTML→blocks
+  conversion keeps top-level `<details>` toggles but drops *nested* ones and
+  their bodies. Measured on a real draft: 24 `<summary>` elements in, 10 out,
+  ~6,000 characters lost. This is app-wide and pre-existing — `prompts/
+  mastery_guide.py` asks for nested toggles and the classic ingest flow uses the
+  same path — so it affects every AI-written note, not just workspaces. Worth
+  fixing separately; the prompt or the parser has to give.
+- **Re-synthesis asks replace-vs-append after a page reload**, even on a note
+  you haven't touched. Deliberate: once the page reloads, the client can no
+  longer prove the content came from a draft rather than from you, so it asks
+  rather than risk overwriting your writing. Within a single session it does not
+  ask.
+- **The synthesis can take 3–5 minutes**, and can fail with `Server
+  disconnected`. That is the free-tier OpenRouter model (Gemini is quota-dead
+  and 429s first, by design — the fallback chain is working). Hit Retry in the
+  banner; your existing note is left intact by a failed run.
+- **The checkpoint button's label shows a stale timestamp** (e.g. `0:00`) while
+  the value it inserts is the live playhead position. Pre-existing cosmetic
+  quirk in the video viewers.
+- **A source stuck at `queued`** has a retry arrow in the rail — that is the
+  escape hatch if the batch never started.
+
+## If you are driving this with browser automation
+
+Two things will waste your time otherwise:
+
+- The synthetic mouse click opens `PromptDialog` and it closes again before the
+  next call, and `type` does not reach the controlled input. Dispatch
+  `button.click()` directly and set the input through the native value setter
+  plus an `input` event.
+- **Never run `npm run build` while `next dev` is running** — they share the
+  `.next` directory and the build kills the dev server.
