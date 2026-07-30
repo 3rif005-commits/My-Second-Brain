@@ -1,65 +1,46 @@
-"""Resource processing pipeline — runs in the background after import.
+"""Source processing pipeline — runs in the background after a source attaches.
 
 process_resource(resource_id):
   queued → processing → ready | failed
 
 Steps (per kind): extract content → store selectable elements → anchored chunks
-+ embeddings (grounded chat) → AI summary (extended mastery-guide prompt) →
-create the output note + its canvas card.
++ embeddings (grounded chat AND the text synthesis reassembles) → meta → ready →
+maybe_synthesize(note_id).
+
+There is no per-source summary and no per-source output note: the note already
+exists (it is what the source attached to), and the AI draft is one synthesis
+across every source on that note (services/workspace/synthesis.py).
 
 Failure policy:
-  extraction failure          → status=failed (nothing usable)
-  embedding failure           → warn, continue (chat degraded)
-  summary failure             → status=ready + meta.summary_error (reprocess to retry)
+  extraction failure → status=failed (nothing usable)
+  embedding failure  → warn, continue; chunk rows still inserted unembedded so
+                       synthesis can still read the source text (chat degrades)
+  synthesis failure  → recorded on note_synthesis, never fails the source
 """
 from __future__ import annotations
 
 import logging
 import os
-import re
 import tempfile
-import time
 
 from services.database import get_supabase
 from services.embedder import embed_batch
 from services.workspace import storage
-from services.ai.client import complete
-from services.ai.router import complete_with_fallback, pick
-from prompts.workspace_summary import build_workspace_summary_prompt
+from services.workspace.dbretry import with_retry
+from services.workspace.synthesis import maybe_synthesize
 
 logger = logging.getLogger(__name__)
-
-_FENCE = re.compile(r"^```(?:html)?\s*|\s*```$", re.MULTILINE)
-
-
-def _strip_fences(html: str) -> str:
-    return _FENCE.sub("", html or "").strip()
-
-
-def _with_retry(fn, attempts: int = 3, backoff: float = 0.5):
-    """Retry on transient Supabase disconnects (pooled HTTP/2 connections that
-    go stale behind a slow ffmpeg/yt-dlp/whisper step get dropped server-side
-    and raise on the next reuse). Without this, a fully-successful capture or
-    transcription run can get its terminal status write lost and the resource
-    ends up mismarked `failed`, forcing a needless full reprocess."""
-    for attempt in range(attempts):
-        try:
-            return fn()
-        except Exception:
-            if attempt == attempts - 1:
-                raise
-            time.sleep(backoff * (attempt + 1))
 
 
 def _set_status(rid: str, status: str, error: str | None = None) -> None:
     patch: dict = {"status": status, "error": error}
-    _with_retry(lambda: get_supabase().table("workspace_resources")
-                .update(patch).eq("id", rid).execute())
+    with_retry(lambda: get_supabase().table("note_resources")
+               .update(patch).eq("id", rid).execute())
 
 
 def _save_meta(rid: str, meta: dict) -> None:
-    _with_retry(lambda: get_supabase().table("workspace_resources")
-                .update({"meta": meta}).eq("id", rid).execute())
+    with_retry(lambda: get_supabase().table("note_resources")
+               .update({"meta": meta}).eq("id", rid).execute())
 
 
 def _insert_elements(resource: dict, elements: list[dict]) -> None:
@@ -94,90 +75,35 @@ def _insert_chunks(resource: dict, chunks: list[dict]) -> None:
         return
     db = get_supabase()
     db.table("resource_chunks").delete().eq("resource_id", resource["id"]).execute()
+    embeddings: list | None = None
     try:
         embeddings = embed_batch([c["chunk_text"] for c in chunks])
     except Exception as e:
+        # Chat degrades for this source, but the chunk TEXT is what synthesis
+        # reassembles the source from — so the rows still go in, unembedded.
         logger.warning(f"resource {resource['id']}: embedding skipped: {e}")
-        return
-    rows = [
-        {
+    rows = []
+    for i, c in enumerate(chunks):
+        row = {
             "resource_id": resource["id"],
-            "workspace_id": resource["workspace_id"],
+            "note_id": resource["note_id"],
             "user_id": resource["user_id"],
             "chunk_index": c["chunk_index"],
             "chunk_text": c["chunk_text"],
             "anchor_type": c["anchor_type"],
             "anchor_start": c["anchor_start"],
             "anchor_end": c["anchor_end"],
-            "embedding": "[" + ",".join(str(v) for v in emb) + "]",
         }
-        for c, emb in zip(chunks, embeddings)
-    ]
+        if embeddings is not None:
+            row["embedding"] = "[" + ",".join(str(v) for v in embeddings[i]) + "]"
+        rows.append(row)
     for start in range(0, len(rows), 200):
         db.table("resource_chunks").insert(rows[start:start + 200]).execute()
 
 
-def _generate_summary(resource: dict, source_text: str, video_url: str | None = None) -> str:
-    """Returns BlockNote-compatible HTML with data-anchor attributes."""
-    kind = resource["kind"]
-    user_id = resource["user_id"]
-
-    if video_url and not source_text:
-        provider = pick("summarize_video", user_id)
-        if provider is None or "video_native" not in provider.capabilities:
-            raise RuntimeError("No transcript and no video-capable provider configured.")
-        prompt = build_workspace_summary_prompt(
-            "(Watch the attached video. Derive section timestamps yourself and use "
-            "them as t: anchors.)", resource["title"], kind)
-        return _strip_fences(complete(provider, [{
-            "role": "user",
-            "content": [{"type": "text", "text": prompt},
-                        {"type": "video_url", "url": video_url}],
-        }], max_tokens=8192))
-
-    prompt = build_workspace_summary_prompt(source_text, resource["title"], kind)
-    return _strip_fences(complete_with_fallback("summarize_text", user_id, [
-        {"role": "user", "content": prompt},
-    ], max_tokens=8192))
-
-
-_NOTE_SOURCE_TYPE = {"pdf": "pdf", "document": "text", "youtube": "video",
-                     "video": "video", "website": "url"}
-
-
-def _create_output_note(resource: dict, summary_html: str | None) -> str:
-    """Create the output note + its canvas card; returns note id."""
-    db = get_supabase()
-    plain = re.sub(r"<[^>]+>", " ", summary_html or "")[:10000]
-    note = db.table("notes").insert({
-        "user_id": resource["user_id"],
-        "title": resource["title"],
-        "content": [],
-        "content_text": plain,
-        "source_type": _NOTE_SOURCE_TYPE.get(resource["kind"], "text"),
-        "source_url": resource.get("source_url"),
-        "source_filename": os.path.basename(resource.get("storage_path") or "") or None,
-    }).execute().data[0]
-
-    db.table("workspace_resources").update({"note_id": note["id"]}).eq(
-        "id", resource["id"]).execute()
-
-    # note card sits to the right of the resource card
-    db.table("workspace_pages").upsert({
-        "workspace_id": resource["workspace_id"],
-        "user_id": resource["user_id"],
-        "note_id": note["id"],
-        "pos_x": (resource.get("pos_x") or 0) + (resource.get("width") or 280) + 60,
-        "pos_y": resource.get("pos_y") or 0,
-        "width": 320,
-        "height": 220,
-    }, on_conflict="workspace_id,note_id").execute()
-    return note["id"]
-
-
 def process_resource(resource_id: str) -> None:
     db = get_supabase()
-    rows = db.table("workspace_resources").select("*").eq("id", resource_id).execute().data
+    rows = db.table("note_resources").select("*").eq("id", resource_id).execute().data
     if not rows:
         logger.warning(f"process_resource: {resource_id} not found")
         return
@@ -231,7 +157,7 @@ def process_resource(resource_id: str) -> None:
             ometa = youtube.fetch_metadata(resource["source_url"])
             meta.update({k: v for k, v in ometa.items() if v})
             if ometa.get("title") and resource["title"].startswith("YouTube"):
-                db.table("workspace_resources").update(
+                db.table("note_resources").update(
                     {"title": ometa["title"]}).eq("id", resource_id).execute()
                 resource["title"] = ometa["title"]
             try:
@@ -267,8 +193,8 @@ def process_resource(resource_id: str) -> None:
             from services.workspace.website import extract_website, chunk_sections
             data = extract_website(resource["source_url"])
             meta.update({k: v for k, v in data["meta"].items() if v})
-            if data["title"] and resource["title"] in ("Untitled resource", resource["source_url"]):
-                db.table("workspace_resources").update(
+            if data["title"] and resource["title"] in ("Untitled source", resource["source_url"]):
+                db.table("note_resources").update(
                     {"title": data["title"]}).eq("id", resource_id).execute()
                 resource["title"] = data["title"]
             elements = [
@@ -286,29 +212,15 @@ def process_resource(resource_id: str) -> None:
             raise ValueError(f"Unknown resource kind: {resource['kind']}")
 
         _save_meta(resource_id, meta)
-
-        # ---- AI summary (the output note draft) ----
-        summary_html: str | None = None
-        try:
-            if source_text or video_url:
-                summary_html = _generate_summary(resource, source_text, video_url)
-                db.table("workspace_resources").update(
-                    {"summary_html": summary_html}).eq("id", resource_id).execute()
-            else:
-                meta["summary_error"] = ("No extractable content and no video-capable "
-                                         "provider — note starts blank.")
-                _save_meta(resource_id, meta)
-        except Exception as e:
-            logger.warning(f"resource {resource_id}: summary failed: {e}")
-            meta["summary_error"] = str(e)[:500]
-            _save_meta(resource_id, meta)
-
-        # ---- output note + canvas card ----
-        if not resource.get("note_id"):
-            _create_output_note(resource, summary_html)
-
         _set_status(resource_id, "ready")
-        logger.info(f"resource {resource_id} ready (kind={resource['kind']})")
+        logger.info(f"source {resource_id} ready (kind={resource['kind']})")
+
+        # One note per session: the last source to settle fires the single
+        # synthesis across every source on this note. Never fails the source.
+        try:
+            maybe_synthesize(resource.get("note_id"))
+        except Exception as e:
+            logger.warning(f"source {resource_id}: synthesis trigger failed: {e}")
 
     except Exception as e:
         logger.exception(f"resource {resource_id} processing failed")
