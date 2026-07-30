@@ -1,0 +1,43 @@
+{
+  "buildFiles": [
+    "/home/ayoub/projects/second_brain/android/app/src/main/cpp/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/home/ayoub/android-sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/home/ayoub/projects/second_brain/android/app/.cxx/Debug/2h2x86ab/arm64-v8a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/home/ayoub/android-sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/home/ayoub/projects/second_brain/android/app/.cxx/Debug/2h2x86ab/arm64-v8a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "llama_jni::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "arm64-v8a",
+      "artifactName": "llama_jni",
+      "output": "/home/ayoub/projects/second_brain/android/app/build/intermediates/cxx/Debug/2h2x86ab/obj/arm64-v8a/libllama_jni.so",
+      "runtimeFiles": [
+        "/home/ayoub/projects/second_brain/android/app/src/main/jniLibs/arm64-v8a/libllama.so",
+        "/home/ayoub/projects/second_brain/android/app/src/main/jniLibs/arm64-v8a/libggml.so",
+        "/home/ayoub/projects/second_brain/android/app/src/main/jniLibs/arm64-v8a/libggml-base.so",
+        "/home/ayoub/projects/second_brain/android/app/src/main/jniLibs/arm64-v8a/libggml-cpu.so"
+      ]
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "/home/ayoub/android-sdk/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/clang.lld",
+      "cppCompilerExecutable": "/home/ayoub/android-sdk/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++.lld"
+    }
+  },
+  "cFileExtensions": [],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

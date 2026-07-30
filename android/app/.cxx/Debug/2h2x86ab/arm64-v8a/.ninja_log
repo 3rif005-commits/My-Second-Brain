@@ -1,0 +1,6 @@
+# ninja log v5
+3	38	1779029298564017518	/home/ayoub/projects/second_brain/android/app/build/intermediates/cxx/Debug/2h2x86ab/obj/arm64-v8a/libllama_jni.so	adcd2cad90eca061
+35	1294	1779026412797057949	CMakeFiles/llama_jni.dir/llama_jni.cpp.o	d4bac1698b36256e
+6	1644	1779030185672566157	CMakeFiles/llama_jni.dir/llama_jni.cpp.o	d4bac1698b36256e
+1645	1690	1779030185730567465	/home/ayoub/projects/second_brain/android/app/build/intermediates/cxx/Debug/2h2x86ab/obj/arm64-v8a/libllama_jni.so	5965fc02fd34821
+6	49	1779032475696546672	/home/ayoub/projects/second_brain/android/app/build/intermediates/cxx/Debug/2h2x86ab/obj/arm64-v8a/libllama_jni.so	5965fc02fd34821

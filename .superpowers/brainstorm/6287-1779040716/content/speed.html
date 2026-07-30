@@ -1,0 +1,64 @@
+<h2>Where does the model run?</h2>
+<p class="subtitle">L4 (agent + tool-use) needs a model smart enough to call tools reliably. Gemma 4 E2B is borderline for that. Pick the speed-vs-offline tradeoff.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="cloud-first" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f0fdf4;padding:18px;display:flex;align-items:center;justify-content:center;font-size:34px">☁️</div>
+    <div class="card-body">
+      <h3>A · Cloud-primary</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:8px"><strong>Big model in the cloud, always.</strong> Claude / Nemotron / GPT-4 — fast tool-use, smart skills, low latency. Tablet only for true offline.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.6">
+        ⚡ First token: ~300ms<br/>
+        🧠 Reliable tool-use, multi-step agents<br/>
+        💸 Cost or rate limits<br/>
+        🌐 Needs internet (offline = fallback to tablet)
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="tablet-first" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fef3c7;padding:18px;display:flex;align-items:center;justify-content:center;font-size:34px">📱</div>
+    <div class="card-body">
+      <h3>B · Tablet-primary</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:8px"><strong>Gemma 4 E2B on NPU, always.</strong> Pure offline, private. Slower (8–15 tok/s) and tool-use is brittle on a small model — you'd have to constrain skills to single-step.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.6">
+        ⚡ First token: ~500ms (cold ~3s)<br/>
+        ⚠️ Tool-use brittle, multi-step unreliable<br/>
+        🔒 Fully offline, private<br/>
+        💚 Free
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="tiered" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#dbeafe;padding:18px;display:flex;align-items:center;justify-content:center;font-size:34px">🪜</div>
+    <div class="card-body">
+      <h3>C · Tiered routing per task</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:8px"><strong>Right model for the job.</strong> Quick rewrites &amp; simple Q&amp;A → tablet. Agent loops, multi-step skills, ingest → cloud. SmartRouter decides per call. Each tool/skill declares its tier.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.6">
+        ⚡ Fast common-case, smart hard-case<br/>
+        🧠 Tool-use only when needed<br/>
+        🛠️ Most complexity to maintain<br/>
+        🔌 Graceful when tablet OR cloud is down
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="adaptive" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#ede9fe;padding:18px;display:flex;align-items:center;justify-content:center;font-size:34px">⚡</div>
+    <div class="card-body">
+      <h3>D · Adaptive escalation</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:8px"><strong>Start fast, escalate if needed.</strong> Tablet streams first sentence instantly. If user follows up or asks for tools, escalate <em>silently</em> to cloud mid-stream. User never waits on a cold-start.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.6">
+        ⚡ Always instant first token<br/>
+        🧠 Cloud joins when the question gets hard<br/>
+        🤔 Hard to make seamless (model switch mid-stream)<br/>
+        ⚠️ Risk of identity inconsistency
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:20px;text-align:center;font-size:13px">My recommendation: <strong>C (tiered)</strong>. You already have a SmartRouter — extend it. Cloud handles agent/skill/ingest (rare, complex). Tablet handles inline rewrites and quick chat (frequent, simple). D is sexier but the mid-stream model switch is a UX trap.</p>

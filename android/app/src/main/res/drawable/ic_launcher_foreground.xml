@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Neural network / brain icon: 4 nodes + 5 connections, white on transparent.
+  Viewport 108×108 matches adaptive icon safe zone convention.
+  Nodes: top(54,26), left(24,72), right(84,72), center(54,66)
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Connecting lines -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M54,38 L30,62"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M54,38 L78,62"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M54,38 L54,56"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M30,66 L48,66"/>
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M60,66 L78,66"/>
+
+    <!-- Top node: center (54, 26), radius 12 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,26 A12,12 0 1 0 66,26 A12,12 0 1 0 42,26 Z"/>
+
+    <!-- Left node: center (24, 72), radius 10 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M14,72 A10,10 0 1 0 34,72 A10,10 0 1 0 14,72 Z"/>
+
+    <!-- Right node: center (84, 72), radius 10 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M74,72 A10,10 0 1 0 94,72 A10,10 0 1 0 74,72 Z"/>
+
+    <!-- Center node: center (54, 66), radius 10 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,66 A10,10 0 1 0 64,66 A10,10 0 1 0 44,66 Z"/>
+
+</vector>

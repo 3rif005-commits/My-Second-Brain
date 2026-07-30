@@ -1,0 +1,44 @@
+<h2>How do you customize the agent's behavior?</h2>
+<p class="subtitle">You said "give it rules" and "add skills the user can configure". Here are four shapes that can take. They differ in how much structure the user manages.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="persona" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f1f5f9;padding:18px;display:flex;align-items:center;justify-content:center;font-size:34px">📝</div>
+    <div class="card-body">
+      <h3>A · Single persona prompt</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:8px"><strong>One big textbox in Settings.</strong> "You are an exam-prep coach. Use Socratic method. Always cite notes." Applies to every AI call. Simple. Limited.</p>
+      <div style="font-size:11px;color:#64748b;font-family:ui-monospace,monospace;background:#f8fafc;padding:6px 8px;border-radius:4px">Settings → AI persona → [edit text]</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="presets" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fef3c7;padding:18px;display:flex;align-items:center;justify-content:center;font-size:34px">🎭</div>
+    <div class="card-body">
+      <h3>B · Named agent presets</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:8px"><strong>Multiple agents, each with its own prompt + tool subset + model.</strong> Switch with a dropdown. "Coach", "Brainstormer", "Citation Checker". Like Custom GPTs.</p>
+      <div style="font-size:11px;color:#64748b;font-family:ui-monospace,monospace;background:#f8fafc;padding:6px 8px;border-radius:4px">Agents → New → name, prompt, tools, model</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="skills" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#dbeafe;padding:18px;display:flex;align-items:center;justify-content:center;font-size:34px">🧩</div>
+    <div class="card-body">
+      <h3>C · Composable skills</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:8px"><strong>Library of small skill files</strong>, each: name + description + body. AI loads them <em>on demand</em> based on description match. Same shape as Claude Code skills. Shareable, version-controlled.</p>
+      <div style="font-size:11px;color:#64748b;font-family:ui-monospace,monospace;background:#f8fafc;padding:6px 8px;border-radius:4px">skills/study-plan.md ← name, when-to-use, body</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="agents-of-skills" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#ede9fe;padding:18px;display:flex;align-items:center;justify-content:center;font-size:34px">🪄</div>
+    <div class="card-body">
+      <h3>D · Agents made of skills</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:8px"><strong>Both layers.</strong> User defines named agents (B); each agent <em>composes</em> a set of skills (C); skills can be re-used across agents. Most flexible, most concepts to learn.</p>
+      <div style="font-size:11px;color:#64748b;font-family:ui-monospace,monospace;background:#f8fafc;padding:6px 8px;border-radius:4px">Coach = persona + [socratic, citations, mastery] skills</div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:20px;text-align:center;font-size:13px">My instinct: <strong>C (composable skills)</strong> matches what you already know from Claude Code, and gets 90% of D without the agent-management UI overhead. But it depends how many distinct "modes" you actually use.</p>

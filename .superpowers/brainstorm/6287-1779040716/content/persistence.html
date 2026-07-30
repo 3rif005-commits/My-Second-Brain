@@ -1,0 +1,88 @@
+<h2>How is the conversation organized?</h2>
+<p class="subtitle">You said "one shared conversation" — but that's ambiguous. Does that mean one literal thread for everything, or one thread per context? Pick the structure.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="global" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fff;padding:0;height:130px;border-bottom:1px solid #e2e8f0">
+      <div style="padding:10px;font-size:10px;color:#475569">
+        <div style="font-weight:700;font-size:11px;margin-bottom:6px">🧠 Conversation (forever)</div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <div style="background:#e0e7ff;padding:3px 6px;border-radius:3px">user: what's chain rule</div>
+          <div style="background:#f1f5f9;padding:3px 6px;border-radius:3px">ai: it's the …</div>
+          <div style="background:#e0e7ff;padding:3px 6px;border-radius:3px">user: now show python</div>
+          <div style="background:#f1f5f9;padding:3px 6px;border-radius:3px">ai: here you go …</div>
+          <div style="background:#e0e7ff;padding:3px 6px;border-radius:3px">user: summarise my notes</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Single global thread</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:6px"><strong>One conversation, forever.</strong> Every door appends to the same infinite scroll. AI remembers context across days, topics, notes.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.5">✅ Simple · feels like one ongoing relationship<br/>❌ Topics bleed · context window gets huge<br/>❌ Can't reset without losing memory</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="per-note" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fff;padding:0;height:130px;border-bottom:1px solid #e2e8f0">
+      <div style="padding:10px;font-size:10px;color:#475569">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="font-size:14px">📄</span><span style="font-weight:700">Calculus.md</span><span style="background:#6366f1;color:#fff;font-size:8px;padding:1px 5px;border-radius:8px">3 msgs</span></div>
+        <div style="background:#f8fafc;padding:6px;border-radius:4px;border-left:2px solid #6366f1">
+          <div style="font-size:9px;color:#64748b">thread for THIS note</div>
+          <div style="background:#e0e7ff;padding:2px 4px;border-radius:2px;margin-top:3px">user: explain section 2</div>
+          <div style="background:#f1f5f9;padding:2px 4px;border-radius:2px;margin-top:2px">ai: section 2 covers …</div>
+        </div>
+        <div style="font-size:9px;color:#94a3b8;margin-top:6px">opening another note → its own thread</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · One thread per note</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:6px"><strong>Each note has its own conversation.</strong> Open Calculus note → resume Calculus thread. Switch to Python note → fresh thread there. Cross-note knowledge still flows via retrieval.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.5">✅ Topics stay separated · clean context per note<br/>❌ "I want to ask without a note open" awkward<br/>❌ Can't carry insight between notes manually</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="named" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fff;padding:0;height:130px;border-bottom:1px solid #e2e8f0">
+      <div style="padding:10px;font-size:10px;color:#475569">
+        <div style="display:flex;gap:3px;margin-bottom:6px;flex-wrap:wrap">
+          <span style="background:#6366f1;color:#fff;padding:2px 6px;border-radius:8px;font-size:9px">🟣 Exam prep</span>
+          <span style="background:#f1f5f9;padding:2px 6px;border-radius:8px;font-size:9px">Vulkan research</span>
+          <span style="background:#f1f5f9;padding:2px 6px;border-radius:8px;font-size:9px">+ New</span>
+        </div>
+        <div style="background:#f8fafc;padding:5px;border-radius:4px">
+          <div style="background:#e0e7ff;padding:2px 4px;border-radius:2px;margin-bottom:2px">user: quiz me on chain rule</div>
+          <div style="background:#f1f5f9;padding:2px 4px;border-radius:2px">ai: Q1: differentiate …</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · Multiple named threads (user-managed)</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:6px"><strong>You name and switch threads.</strong> "Exam prep", "Vulkan research", "Book ideas". Pick the active one in a top dropdown. ⌘K, panel, and inline all write into whichever is active.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.5">✅ Total control · easy to start fresh<br/>❌ Manual upkeep — pick the right thread before asking<br/>❌ Inline /ai needs to ask "which thread?"</div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="hybrid" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fff;padding:0;height:130px;border-bottom:1px solid #e2e8f0">
+      <div style="padding:10px;font-size:10px;color:#475569">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="font-weight:700;font-size:9px;color:#94a3b8;letter-spacing:1px">NOTE THREADS</div>
+          <div style="background:#eef2ff;padding:2px 6px;border-radius:3px;border-left:2px solid #6366f1">📄 Calculus · 4 msgs</div>
+          <div style="padding:2px 6px;color:#94a3b8">📄 Vulkan · 12 msgs</div>
+          <div style="font-weight:700;font-size:9px;color:#94a3b8;letter-spacing:1px;margin-top:4px">AD-HOC</div>
+          <div style="padding:2px 6px;color:#475569">💬 Quick question · 2 msgs</div>
+          <div style="padding:2px 6px;color:#475569">💬 + New ad-hoc</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>D · Per-note + ad-hoc (hybrid) ⭐</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:6px"><strong>The smart default.</strong> Inside a note → that note's thread (auto-created). From ⌘K with no note → an ad-hoc thread (auto-named "Quick question · 5pm"). Both listed in the side panel's thread switcher.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.5">✅ No manual thread management for common case<br/>✅ Ad-hoc still possible<br/>✅ Threads listed → revisit any time<br/>⚠️ Slightly more model to learn</div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:20px;text-align:center;font-size:13px">My recommendation: <strong>D</strong>. It handles "inside a note" and "outside any note" without making you pick. Threads are addressable URLs (<code>/brain/chat/&lt;thread-id&gt;</code>) so you can link to a conversation.</p>

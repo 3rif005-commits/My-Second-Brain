@@ -1,0 +1,64 @@
+<h2>How deep should the AI reach into your brain?</h2>
+<p class="subtitle">Each level is a strict superset of the one above. Pick the <em>upper bound</em> — we can ship lower levels first and add the rest later.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="L1" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#f1f5f9;padding:18px;display:flex;align-items:center;justify-content:center;font-size:34px">👁️</div>
+    <div class="card-body">
+      <h3>L1 — Read &amp; cite</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:8px"><strong>What you have today, polished.</strong> AI reads your notes, answers questions, cites with deep links. Cannot modify anything.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.5">
+        ✅ search_brain<br/>
+        ✅ get_note<br/>
+        ❌ no writing<br/>
+        ❌ no creating
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="L2" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#fef3c7;padding:18px;display:flex;align-items:center;justify-content:center;font-size:34px">✍️</div>
+    <div class="card-body">
+      <h3>L2 — Read + write current note</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:8px"><strong>The inline <code>/ai</code> story.</strong> AI can insert blocks, rewrite a paragraph you selected, generate an interactive block. Bounded to the note you're <em>in</em>.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.5">
+        ✅ L1 +<br/>
+        ✅ insert_block / replace_block<br/>
+        ✅ generate interactive HTML<br/>
+        ❌ can't touch other notes
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="L3" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#dbeafe;padding:18px;display:flex;align-items:center;justify-content:center;font-size:34px">🧠</div>
+    <div class="card-body">
+      <h3>L3 — Full brain operator</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:8px"><strong>Co-author across the whole brain.</strong> AI can create new notes, organize collections, set mastery, link notes together. Multi-step: "summarize my AI notes into a new study plan".</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.5">
+        ✅ L2 +<br/>
+        ✅ create_note / move_note<br/>
+        ✅ set_mastery / link_notes<br/>
+        ✅ multi-step tool calls
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="L4" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#ede9fe;padding:18px;display:flex;align-items:center;justify-content:center;font-size:34px">🌐</div>
+    <div class="card-body">
+      <h3>L4 — L3 + external MCP servers</h3>
+      <p style="font-size:12px;color:#475569;margin-bottom:8px"><strong>Brain talks to the world.</strong> Internal AI plugs into other MCP servers you connect (web search, Gmail, Calendar, GitHub). External AI like Claude Desktop already talks to <em>your</em> brain via MCP — this makes it bidirectional.</p>
+      <div style="font-size:11px;color:#64748b;line-height:1.5">
+        ✅ L3 +<br/>
+        ✅ MCP client (call external tools)<br/>
+        ✅ web search / calendar / etc.<br/>
+        ✅ user-configurable connectors
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:24px;text-align:center">Tip: aim higher than you need today. We can phase the rollout — but the architecture has to support the ceiling from the start.</p>

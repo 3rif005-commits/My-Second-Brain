@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Note } from "@/lib/types/database";
 
-type NoteSummary = Pick<
+export type NoteSummary = Pick<
   Note,
-  "id" | "title" | "collection_id" | "topics" | "mastery_status" | "source_type" | "created_at" | "updated_at"
+  "id" | "title" | "icon" | "is_favorited" | "last_viewed_at" | "collection_id" | "topics" | "mastery_status" | "source_type" | "position" | "created_at" | "updated_at"
 >;
 
 export function useNotes() {
@@ -53,5 +53,39 @@ export function useNotes() {
     setNotes((prev) => prev.filter((n) => n.id !== noteId));
   }
 
-  return { notes, loading, error, createNote, deleteNote, refetch: fetchNotes };
+  async function toggleFavorite(noteId: string): Promise<void> {
+    const note = notes.find((n) => n.id === noteId);
+    if (!note) return;
+    const newValue = !note.is_favorited;
+    setNotes((prev) =>
+      prev.map((n) => (n.id === noteId ? { ...n, is_favorited: newValue } : n))
+    );
+    await fetch(`/api/notes/${noteId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_favorited: newValue }),
+    });
+  }
+
+  async function reorderNotes(reordered: NoteSummary[]): Promise<void> {
+    // Optimistic update — show new order immediately
+    setNotes((prev) => {
+      const reorderedIds = new Set(reordered.map((n) => n.id));
+      const unchanged = prev.filter((n) => !reorderedIds.has(n.id));
+      const updated = reordered.map((n, i) => ({ ...n, position: i + 1 }));
+      return [...updated, ...unchanged];
+    });
+    // Persist positions (fire-and-forget, errors are non-critical)
+    await Promise.all(
+      reordered.map((note, i) =>
+        fetch(`/api/notes/${note.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ position: i + 1 }),
+        })
+      )
+    );
+  }
+
+  return { notes, loading, error, createNote, deleteNote, toggleFavorite, reorderNotes, refetch: fetchNotes };
 }

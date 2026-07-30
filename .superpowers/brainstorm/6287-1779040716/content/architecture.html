@@ -1,0 +1,91 @@
+<h2>Proposed architecture — at a glance</h2>
+<p class="subtitle">Three UI doors feed one Agent Engine. The Engine has Skills + Tools, and routes to either local or cloud based on a single user toggle. Take a look and tell me if this overall shape feels right.</p>
+
+<div class="mockup" style="margin:18px 0 0 0">
+  <div class="mockup-header">Second Brain — AI Substrate</div>
+  <div class="mockup-body" style="padding:18px;background:#fafbff">
+
+    <!-- ROW 1: SURFACES -->
+    <div style="text-align:center;font-size:10px;color:#94a3b8;letter-spacing:1.2px;margin-bottom:8px">FRONTEND · SURFACES (THE THREE DOORS)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+      <div style="border:1.5px solid #c7d2fe;background:#eef2ff;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px">🗨️</div>
+        <div style="font-weight:700;font-size:12px;color:#3730a3;margin-top:4px">Side Panel</div>
+        <div style="font-size:10px;color:#64748b;margin-top:2px">Persistent chat · note-aware · markdown+fences</div>
+      </div>
+      <div style="border:1.5px solid #c7d2fe;background:#eef2ff;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px">⌘K</div>
+        <div style="font-weight:700;font-size:12px;color:#3730a3;margin-top:4px">Floating Launcher</div>
+        <div style="font-size:10px;color:#64748b;margin-top:2px">Quick ask · streams · closes after</div>
+      </div>
+      <div style="border:1.5px solid #c7d2fe;background:#eef2ff;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px">/ai</div>
+        <div style="font-weight:700;font-size:12px;color:#3730a3;margin-top:4px">Inline (editor)</div>
+        <div style="font-size:10px;color:#64748b;margin-top:2px">Writes blocks into the note · BlockNote streaming</div>
+      </div>
+    </div>
+
+    <!-- arrow -->
+    <div style="text-align:center;color:#94a3b8;font-size:18px;margin:0 0 6px 0">↓ one shared thread ↓</div>
+
+    <!-- ROW 2: AI ENGINE -->
+    <div style="text-align:center;font-size:10px;color:#94a3b8;letter-spacing:1.2px;margin-bottom:8px">BACKEND · AI ENGINE</div>
+    <div style="border:2px solid #6366f1;background:linear-gradient(180deg,#fff,#f5f3ff);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-weight:700;font-size:13px;color:#4338ca;text-align:center;margin-bottom:10px">Agent Loop · stream · tool-use · skill activation</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div style="background:#fff;border:1px dashed #c7d2fe;border-radius:6px;padding:8px">
+          <div style="font-weight:700;font-size:11px;color:#3730a3;margin-bottom:4px">🧩 Skills</div>
+          <div style="font-size:10px;color:#475569;line-height:1.5">name+desc match → load body into context. User-editable .md files.</div>
+        </div>
+        <div style="background:#fff;border:1px dashed #c7d2fe;border-radius:6px;padding:8px">
+          <div style="font-weight:700;font-size:11px;color:#3730a3;margin-bottom:4px">🛠️ Brain Tools</div>
+          <div style="font-size:10px;color:#475569;line-height:1.5">search · get · create · edit · link · set_mastery · insert_block</div>
+        </div>
+        <div style="background:#fff;border:1px dashed #c7d2fe;border-radius:6px;padding:8px">
+          <div style="font-weight:700;font-size:11px;color:#3730a3;margin-bottom:4px">🌐 MCP Client</div>
+          <div style="font-size:10px;color:#475569;line-height:1.5">user-added MCP servers (web, calendar, files…). Tools discovered &amp; merged.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- arrow -->
+    <div style="text-align:center;color:#94a3b8;font-size:18px;margin:0 0 6px 0">↓ user-toggled mode ↓</div>
+
+    <!-- ROW 3: MODEL BACKENDS -->
+    <div style="text-align:center;font-size:10px;color:#94a3b8;letter-spacing:1.2px;margin-bottom:8px">MODEL · TWO MODES, USER TOGGLES</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="border:1.5px solid #fbbf24;background:#fffbeb;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px">📱</div>
+        <div style="font-weight:700;font-size:12px;color:#92400e;margin-top:4px">Local</div>
+        <div style="font-size:10px;color:#78716c;margin-top:2px">Gemma 4 E2B on tablet NPU · offline · private</div>
+      </div>
+      <div style="border:1.5px solid #60a5fa;background:#eff6ff;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px">☁️</div>
+        <div style="font-weight:700;font-size:12px;color:#1e40af;margin-top:4px">API</div>
+        <div style="font-size:10px;color:#64748b;margin-top:2px">OpenRouter / Anthropic / OpenAI — your key, your choice</div>
+      </div>
+    </div>
+
+    <div style="text-align:center;font-size:10px;color:#64748b;margin-top:10px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:6px">
+      🔘 Toggle in status bar — switch mid-conversation. Same thread, different model.
+    </div>
+
+  </div>
+</div>
+
+<div class="options" style="margin-top:20px">
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>Shape looks right — drill into the details</h3>
+      <p>Next: skills format, conversation persistence, tool list, scope (web only or also Android), phasing.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="revise" onclick="toggleSelect(this)">
+    <div class="letter">✎</div>
+    <div class="content">
+      <h3>Something's off — tell me what</h3>
+      <p>Describe what's missing or wrong in the terminal and I'll redraw.</p>
+    </div>
+  </div>
+</div>

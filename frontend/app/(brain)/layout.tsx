@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Sidebar } from "@/components/sidebar/Sidebar";
+import { BrainLayoutClient } from "@/components/sidebar/BrainLayoutClient";
 
 export default async function BrainLayout({
   children,
@@ -23,10 +23,5 @@ export default async function BrainLayout({
     redirect("/login");
   }
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-white">
-      <Sidebar />
-      <main className="flex-1 overflow-hidden flex flex-col">{children}</main>
-    </div>
-  );
+  return <BrainLayoutClient>{children}</BrainLayoutClient>;
 }

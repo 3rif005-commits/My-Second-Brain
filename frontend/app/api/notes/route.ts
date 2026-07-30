@@ -15,8 +15,10 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("notes")
-    .select("id, title, collection_id, topics, mastery_status, source_type, created_at, updated_at")
+    .select("id, title, icon, is_favorited, last_viewed_at, collection_id, topics, mastery_status, source_type, position, created_at, updated_at")
     .eq("user_id", user.id)
+    .is("deleted_at", null)
+    .order("position", { ascending: true })
     .order("updated_at", { ascending: false });
 
   if (error) {
