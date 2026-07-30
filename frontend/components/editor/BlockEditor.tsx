@@ -17,6 +17,7 @@ import { en as aiEn } from "@blocknote/xl-ai/locales";
 import { withMultiColumn, multiColumnDropCursor } from "@blocknote/xl-multi-column";
 import { useTheme } from "@/app/providers";
 import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec } from "./customBlocks";
+import { extractCalloutChildren, attachCalloutChildren } from "./calloutChildren";
 
 // Inline @mention — links to another note in the brain
 const MentionSpec = createInlineContentSpec(
@@ -270,7 +271,12 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       },
       async insertHtmlAtEnd(html: string) {
         const doc = new window.DOMParser().parseFromString(html, "text/html");
-        const parsed = await editor.tryParseHTMLToBlocks(doc.body.innerHTML);
+        const { strippedHtml, calloutChildren } = await extractCalloutChildren(
+          doc.body.innerHTML,
+          (h) => editor.tryParseHTMLToBlocks(h)
+        );
+        const rawParsed = await editor.tryParseHTMLToBlocks(strippedHtml);
+        const parsed = attachCalloutChildren(rawParsed as AnyBlock[], calloutChildren);
         const before = (editor.document as AnyBlock[]).length;
         const last = (editor.document as AnyBlock[])[before - 1];
         if (last) editor.insertBlocks(parsed, last.id, "after");
