@@ -87,6 +87,42 @@ def test_attach_to_a_foreign_note_404s(client):
     assert res.status_code == 404
 
 
+def test_a_failed_attach_does_not_leave_an_empty_note_behind(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    notes = tables.setdefault("notes", MagicMock())
+    notes.insert.return_value.execute.return_value.data = [{"id": "n-new"}]
+    srcs = tables.setdefault("note_resources", MagicMock())
+    srcs.select.return_value.eq.return_value.execute.return_value.data = []
+    srcs.insert.return_value.execute.side_effect = Exception("insert failed")
+
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("routers.note_sources.process_resource") as proc:
+        res = client.post("/sources", data={"url": "https://example.com"}, headers=AUTH)
+
+    assert res.status_code == 502
+    notes.delete.return_value.eq.return_value.execute.assert_called_once()
+    proc.assert_not_called()
+
+
+def test_a_failed_attach_to_an_existing_note_leaves_that_note_alone(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    notes = _note_owned(tables)
+    srcs = tables.setdefault("note_resources", MagicMock())
+    srcs.select.return_value.eq.return_value.execute.return_value.data = []
+    srcs.insert.return_value.execute.side_effect = Exception("insert failed")
+
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("routers.note_sources.process_resource") as proc:
+        res = client.post("/sources", data={"url": "https://example.com",
+                                            "note_id": "n1"}, headers=AUTH)
+
+    assert res.status_code == 502
+    notes.delete.assert_not_called()
+    proc.assert_not_called()
+
+
 def test_attach_rejects_unsupported_file(client):
     with patch("routers.note_sources.get_supabase", return_value=MagicMock()):
         res = client.post("/sources", files={

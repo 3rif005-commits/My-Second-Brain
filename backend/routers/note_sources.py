@@ -109,6 +109,26 @@ def _source_public(r: dict) -> dict:
     return out
 
 
+def _discard_lazy_note(note_id: str, created: bool) -> None:
+    """A note created for this attach is meaningless if the attach failed —
+    drop it rather than leaving the user an empty, sourceless note they never
+    asked for and cannot find."""
+    if not created:
+        return
+    try:
+        get_supabase().table("notes").delete().eq("id", note_id).execute()
+    except Exception:
+        logger.warning(f"could not discard lazily-created note {note_id}")
+
+
+def _discard_orphan_upload(storage_path: str) -> None:
+    """Best-effort: an uploaded blob with no row pointing at it is unreachable."""
+    try:
+        storage.remove([storage_path])
+    except Exception:
+        logger.warning(f"could not remove orphaned upload {storage_path}")
+
+
 def _classify(file: UploadFile | None, url: str | None) -> tuple[str, str, str]:
     """→ (kind, title, ext). Raises 400 on an unsupported or empty input."""
     if file is not None and file.filename:
@@ -146,6 +166,7 @@ async def attach_source(
     url = url.strip() if url else None
     kind, title, ext = _classify(file, url)
 
+    created_note = False
     if note_id:
         _own_note(note_id, user_id)
     else:
@@ -155,6 +176,7 @@ async def attach_source(
             "source_url": url,
             "source_filename": (file.filename if file is not None else None),
         }).execute().data[0]["id"]
+        created_note = True
 
     attached = (db.table("note_resources").select("id")
                 .eq("note_id", note_id).execute().data or [])
@@ -167,17 +189,29 @@ async def attach_source(
         try:
             storage.upload(spath, data, file.content_type or "application/octet-stream")
         except Exception as e:
+            _discard_lazy_note(note_id, created_note)
             raise HTTPException(status_code=502, detail={"error": f"Upload failed: {e}"})
-        row = db.table("note_resources").insert({
-            "id": sid, "note_id": note_id, "user_id": user_id, "kind": kind,
-            "title": title, "storage_path": spath, "mime_type": file.content_type,
-            "order_index": order_index,
-        }).execute().data[0]
+        try:
+            row = db.table("note_resources").insert({
+                "id": sid, "note_id": note_id, "user_id": user_id, "kind": kind,
+                "title": title, "storage_path": spath, "mime_type": file.content_type,
+                "order_index": order_index,
+            }).execute().data[0]
+        except Exception as e:
+            _discard_orphan_upload(spath)
+            _discard_lazy_note(note_id, created_note)
+            raise HTTPException(status_code=502,
+                                detail={"error": f"Could not attach the source: {e}"})
     else:
-        row = db.table("note_resources").insert({
-            "note_id": note_id, "user_id": user_id, "kind": kind, "title": title,
-            "source_url": url, "order_index": order_index,
-        }).execute().data[0]
+        try:
+            row = db.table("note_resources").insert({
+                "note_id": note_id, "user_id": user_id, "kind": kind, "title": title,
+                "source_url": url, "order_index": order_index,
+            }).execute().data[0]
+        except Exception as e:
+            _discard_lazy_note(note_id, created_note)
+            raise HTTPException(status_code=502,
+                                detail={"error": f"Could not attach the source: {e}"})
 
     background.add_task(process_resource, row["id"])
     return {"note_id": note_id, "source": _source_public(row)}
