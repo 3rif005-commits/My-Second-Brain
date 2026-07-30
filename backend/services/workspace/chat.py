@@ -1,12 +1,14 @@
-"""Workspace-scoped grounded chat with anchored citations.
+"""Note-scoped grounded chat with anchored citations.
 
-run_workspace_chat(...) → AsyncIterator of SSE-ready event dicts (same grammar
-as the agent engine: context / text / citations / error / done).
+run_note_chat(...) → AsyncIterator of SSE-ready event dicts (same grammar as the
+agent engine: context / text / citations / error / done).
 
-Grounding: retrieve top-K resource_chunks for THIS workspace, number them
-[1]..[K] in a <sources> block, and require bracket citations. Only markers that
-map to retrieved chunks become citation chips client-side — unknown markers are
-ignored (anti-hallucination guard, same idea as the tutor's note-id rule).
+Grounding: retrieve top-K resource_chunks across ALL sources attached to THIS
+note, number them [1]..[K] in a <sources> block, and require bracket citations.
+Only markers that map to retrieved chunks become citation chips client-side —
+unknown markers are ignored (anti-hallucination guard, same idea as the tutor's
+note-id rule). The citation payload already carries resource_id + title, which
+is exactly what multi-source attribution needs.
 """
 from __future__ import annotations
 
@@ -22,9 +24,9 @@ logger = logging.getLogger(__name__)
 
 _TOP_K = 10
 
-SYSTEM_TEMPLATE = """You are the study assistant for one workspace in the user's
+SYSTEM_TEMPLATE = """You are the study assistant for one note in the user's
 Second Brain. Answer ONLY from the numbered sources below — they are excerpts
-from the resources the user imported into this workspace.
+from the sources the user attached to this note.
 
 Rules:
 - Every factual claim MUST end with a citation marker like [1] or [2][4],
@@ -48,13 +50,13 @@ def _anchor_label(c: dict) -> str:
     return f"section {int(c['anchor_start'])}"
 
 
-def retrieve_chunks(query: str, workspace_id: str, user_id: str) -> list[dict]:
+def retrieve_chunks(query: str, note_id: str, user_id: str) -> list[dict]:
     embedding = embed(query)
     vec = "[" + ",".join(str(v) for v in embedding) + "]"
-    res = get_supabase().rpc("match_workspace_chunks", {
+    res = get_supabase().rpc("match_note_source_chunks", {
         "query_embedding": vec,
         "match_user_id": user_id,
-        "target_workspace_id": workspace_id,
+        "target_note_id": note_id,
         "match_count": _TOP_K,
     }).execute()
     return res.data or []
@@ -83,8 +85,8 @@ def citations_payload(chunks: list[dict], titles: dict[str, str]) -> list[dict]:
     ]
 
 
-async def run_workspace_chat(
-    workspace_id: str,
+async def run_note_chat(
+    note_id: str,
     user_id: str,
     messages: list[dict],
 ) -> AsyncIterator[dict[str, Any]]:
@@ -94,10 +96,10 @@ async def run_workspace_chat(
             query = m.get("content") or ""
             break
 
-    # 1. retrieve workspace-scoped chunks
+    # 1. retrieve note-scoped chunks across every attached source
     chunks: list[dict] = []
     try:
-        chunks = retrieve_chunks(query, workspace_id, user_id)
+        chunks = retrieve_chunks(query, note_id, user_id)
     except Exception as e:
         yield {"type": "error", "content": f"retrieval failed: {e}"}
 
@@ -105,7 +107,7 @@ async def run_workspace_chat(
     if chunks:
         try:
             rids = list({str(c["resource_id"]) for c in chunks})
-            rows = (get_supabase().table("workspace_resources")
+            rows = (get_supabase().table("note_resources")
                     .select("id,title").in_("id", rids).execute().data or [])
             titles = {str(r["id"]): r["title"] for r in rows}
         except Exception:

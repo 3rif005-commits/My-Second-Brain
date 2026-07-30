@@ -5,7 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from services.workspace.chat import (
-    build_system_prompt, citations_payload, run_workspace_chat, _anchor_label,
+    build_system_prompt, citations_payload, run_note_chat, retrieve_chunks,
+    _anchor_label,
 )
 
 
@@ -48,7 +49,7 @@ def test_citations_payload_maps_n_to_anchors():
 
 
 @pytest.mark.asyncio
-async def test_run_workspace_chat_event_grammar():
+async def test_run_note_chat_event_grammar():
     async def fake_stream(provider, messages, max_tokens=2048):
         yield "Loss is minimized by gradient descent [1]."
 
@@ -64,7 +65,7 @@ async def test_run_workspace_chat_event_grammar():
          patch("services.workspace.chat.candidates",
                return_value=[MagicMock(provider="openai", label="OpenAI")]), \
          patch("services.workspace.chat.ai_stream", fake_stream):
-        events = [ev async for ev in run_workspace_chat("ws1", "u1", [
+        events = [ev async for ev in run_note_chat("n1", "u1", [
             {"role": "user", "content": "what minimizes loss?"},
         ])]
 
@@ -79,11 +80,11 @@ async def test_run_workspace_chat_event_grammar():
 
 
 @pytest.mark.asyncio
-async def test_run_workspace_chat_no_provider():
+async def test_run_note_chat_no_provider():
     with patch("services.workspace.chat.embed", return_value=[0.1] * 768), \
          patch("services.workspace.chat.retrieve_chunks", return_value=[]), \
          patch("services.workspace.chat.candidates", return_value=[]):
-        events = [ev async for ev in run_workspace_chat("ws1", "u1", [
+        events = [ev async for ev in run_note_chat("n1", "u1", [
             {"role": "user", "content": "hi"},
         ])]
     assert any(e["type"] == "error" for e in events)
@@ -91,7 +92,7 @@ async def test_run_workspace_chat_no_provider():
 
 
 @pytest.mark.asyncio
-async def test_run_workspace_chat_falls_back_to_next_provider():
+async def test_run_note_chat_falls_back_to_next_provider():
     """First provider 429s before yielding anything → second one answers."""
     calls = []
 
@@ -112,7 +113,7 @@ async def test_run_workspace_chat_falls_back_to_next_provider():
          patch("services.workspace.chat.get_supabase", return_value=MagicMock()), \
          patch("services.workspace.chat.candidates", return_value=[broken, working]), \
          patch("services.workspace.chat.ai_stream", make_stream()):
-        events = [ev async for ev in run_workspace_chat("ws1", "u1", [
+        events = [ev async for ev in run_note_chat("n1", "u1", [
             {"role": "user", "content": "q"},
         ])]
 
@@ -120,3 +121,36 @@ async def test_run_workspace_chat_falls_back_to_next_provider():
     texts = [e["content"] for e in events if e["type"] == "text"]
     assert texts == ["Answer [1]."]
     assert not any(e["type"] == "error" for e in events)
+
+
+def test_retrieval_is_note_scoped():
+    db = MagicMock()
+    db.rpc.return_value.execute.return_value.data = CHUNKS
+    with patch("services.workspace.chat.embed", return_value=[0.1] * 768), \
+         patch("services.workspace.chat.get_supabase", return_value=db):
+        out = retrieve_chunks("query", "n1", "u1")
+    assert out == CHUNKS
+    name, args = db.rpc.call_args[0]
+    assert name == "match_note_source_chunks"
+    assert args["target_note_id"] == "n1"
+    assert args["match_user_id"] == "u1"
+    assert "target_workspace_id" not in args
+
+
+@pytest.mark.asyncio
+async def test_titles_come_from_note_resources():
+    async def fake_stream(provider, messages, max_tokens=2048):
+        yield "Answer [1]."
+
+    db = MagicMock()
+    db.table.return_value.select.return_value.in_.return_value.execute.return_value.data = [
+        {"id": "r1", "title": "Lecture video"},
+    ]
+    with patch("services.workspace.chat.retrieve_chunks", return_value=CHUNKS), \
+         patch("services.workspace.chat.get_supabase", return_value=db), \
+         patch("services.workspace.chat.candidates",
+               return_value=[MagicMock(provider="openai", label="OpenAI")]), \
+         patch("services.workspace.chat.ai_stream", fake_stream):
+        _ = [ev async for ev in run_note_chat("n1", "u1", [
+            {"role": "user", "content": "q"}])]
+    db.table.assert_called_with("note_resources")
