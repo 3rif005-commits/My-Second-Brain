@@ -3,7 +3,7 @@
 // The source rail: every source attached to this note, one compact row each.
 // Add (file picker or pasted URL), select → viewer, retry a failed source,
 // remove. Rows are ~28px so five sources still leave the viewer usable.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileText, Globe, PlaySquare, Plus, RefreshCw, Video, X } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PromptDialog } from "@/components/ui/PromptDialog";
@@ -46,6 +46,16 @@ export function SourceRail({
   const [showUrl, setShowUrl] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<NoteSource | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const addMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showAdd) return;
+    function onDown(e: MouseEvent) {
+      if (!addMenuRef.current?.contains(e.target as Node)) setShowAdd(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [showAdd]);
 
   return (
     <div className="shrink-0 max-h-[38%] flex flex-col border-b border-gray-200 dark:border-gray-800">
@@ -53,7 +63,7 @@ export function SourceRail({
         <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
           Sources {sources.length > 0 && `(${sources.length})`}
         </span>
-        <div className="relative">
+        <div className="relative" ref={addMenuRef}>
           <button
             onClick={() => setShowAdd((v) => !v)}
             disabled={busy}
@@ -90,12 +100,21 @@ export function SourceRail({
         {sources.map((s) => (
           <div
             key={s.id}
+            role="button"
+            tabIndex={0}
+            aria-current={s.id === activeId}
             onClick={() => onSelect(s.id)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect(s.id);
+              }
+            }}
             className={`group flex items-center gap-1.5 h-7 px-2 rounded-md cursor-pointer transition-colors ${
               s.id === activeId
                 ? "bg-indigo-50 dark:bg-indigo-900/30"
                 : "hover:bg-gray-50 dark:hover:bg-gray-800"
-            }`}
+            } focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400`}
           >
             <StatusDot source={s} />
             <KindIcon kind={s.kind} />
