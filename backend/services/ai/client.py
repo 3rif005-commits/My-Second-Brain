@@ -160,12 +160,25 @@ def _openai_compatible_complete(url: str, headers: dict, model: str,
     non-streamed `message.content` field, but DO expose it as distinct
     `reasoning`/`reasoning_content` deltas when streamed, which we simply never
     collect. Non-reasoning models are unaffected either way.
+
+    Discarding those deltas keeps them out of the *content* we return, but the
+    model still spends `max_tokens` generating them — on a long, detailed
+    prompt (e.g. the mastery-guide synthesis prompt) a reasoning-heavy free
+    model can burn most of the budget planning and leave only a few hundred
+    tokens for the actual answer, truncating it right after the outline. For
+    OpenRouter specifically, ask it to skip reasoning generation entirely
+    instead of just hiding it after the fact — this is an OpenRouter-specific
+    field, so only send it when we know we're talking to OpenRouter.
     """
+    payload = {"model": model, "messages": _to_openai_messages(messages),
+               "max_tokens": max_tokens, "stream": True}
+    if "openrouter.ai" in url:
+        payload["reasoning"] = {"exclude": True}
+
     chunks: list[str] = []
     with httpx.stream(
         "POST", url, headers=headers,
-        json={"model": model, "messages": _to_openai_messages(messages),
-              "max_tokens": max_tokens, "stream": True},
+        json=payload,
         timeout=_TIMEOUT,
     ) as resp:
         resp.raise_for_status()
