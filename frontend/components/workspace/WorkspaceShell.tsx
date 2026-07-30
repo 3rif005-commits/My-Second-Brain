@@ -275,7 +275,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       onDrop={onDrop}
     >
       {/* header */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-200 dark:border-gray-800 shrink-0">
+      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-200 dark:border-gray-800 shrink-0 group-data-[sidebar=collapsed]/shell:pl-12">
         <button
           onClick={() => router.push("/brain/workspace")}
           title="New session"
@@ -318,7 +318,9 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
           }`}
         >
           <RefreshCw size={11} className={syn.running ? "animate-spin" : ""} />
-          {syn.stale ? `Re-synthesize (${syn.readyCount} sources)` : "Re-synthesize"}
+          {syn.stale
+            ? `Re-synthesize (${syn.readyCount} source${syn.readyCount === 1 ? "" : "s"})`
+            : "Re-synthesize"}
         </button>
         <button
           onClick={() => setChatOpen((v) => !v)}
@@ -404,10 +406,14 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
         </div>
       </div>
 
+      {/* ConfirmDialog fires onCancel for both its cancel button and a backdrop
+          click, so "add at the end" is also what a dismissal does. That is the
+          non-destructive branch, which is the important half; a true third
+          "do nothing" exit would need a variant of the shared dialog. */}
       <ConfirmDialog
         open={syn.askMode}
         title="This note has your own edits in it"
-        description="Replace everything with the new draft, or keep what you wrote and add the new draft at the end? Dismissing this keeps your note."
+        description="Replace everything with the new draft, or keep what you wrote and add the new draft at the end? Closing this leaves your note untouched."
         confirmLabel="Replace everything"
         cancelLabel="Keep my note, add at the end"
         danger

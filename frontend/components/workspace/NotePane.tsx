@@ -108,11 +108,12 @@ export function NotePane({
   const editorRef = useRef<BlockEditorHandle>(null);
   const pendingRef = useRef<{ anchors: (PendingAnchor | null)[]; sourceIds: string[] } | null>(null);
   const anchorsRef = useRef<NoteAnchor[]>([]);
-  const dirtyRef = useRef(false);
   const lastSyncedBlock = useRef<string | null>(null);
   const reindexDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentTextRef = useRef<string>(getPlainText(note.content ?? []));
-  const baselineTextRef = useRef<string | null>(null);
+  const userEditedRef = useRef(false);   // a real user keystroke since the last applied draft
+  const applyingRef = useRef(false);     // a programmatic apply is in flight
+  const appliedOnceRef = useRef(false);  // a draft has been applied in THIS session
 
   // ── anchors ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -180,44 +181,51 @@ export function NotePane({
     pendingRef.current = { anchors: list, sourceIds };
   }, []);
 
+  // Close the apply window on a later tick: BlockNote's change events for the
+  // apply can arrive after the apply callback returns.
+  const finishApply = useCallback(() => {
+    userEditedRef.current = false;
+    appliedOnceRef.current = true;
+    setTimeout(() => { applyingRef.current = false; }, 400);
+  }, []);
+
   useEffect(() => {
     applyRef.current = {
       apply: (html, sourceIds, mode) => {
         collect(html, sourceIds);
-        baselineTextRef.current = null;
+        applyingRef.current = true;
         if (mode === "append") {
           editorRef.current?.insertHtmlAtEnd(html).then((blocks) => {
             registerAnchors(blocks, "append");
-            baselineTextRef.current = currentTextRef.current;
-            dirtyRef.current = false;
+            finishApply();
             onApplied();
-          }).catch(() => {});
+          }).catch(() => { applyingRef.current = false; });
         } else {
           setIngestHtml(html);   // BlockEditor's proven replace path
         }
       },
       hasUserEdits: () => {
-        // Dirty beats text comparison: autosave is debounced ~2s, so the text
-        // snapshot lags the editor and must never be the only signal.
-        if (dirtyRef.current) return true;
-        const cur = normalize(currentTextRef.current);
-        if (!cur) return false;
-        if (baselineTextRef.current !== null
-            && normalize(baselineTextRef.current) === cur) return false;
-        return true;   // content we can't prove came from a draft → the user's
+        // Without a draft applied in this session we cannot prove where the
+        // note's content came from, so treat any content as the user's.
+        if (!appliedOnceRef.current) return normalize(currentTextRef.current).length > 0;
+        return userEditedRef.current;
       },
     };
     return () => { applyRef.current = null; };
-  }, [applyRef, collect, registerAnchors, onApplied]);
+  }, [applyRef, collect, registerAnchors, onApplied, finishApply]);
 
   const handleBlocksApplied = useCallback((blocks: AnyBlock[]) => {
     registerAnchors(blocks, "replace");
-    baselineTextRef.current = getPlainText(blocks);
-    dirtyRef.current = false;
+    finishApply();
     onApplied();
-  }, [registerAnchors, onApplied]);
+  }, [registerAnchors, onApplied, finishApply]);
 
-  const markDirty = useCallback(() => { dirtyRef.current = true; }, []);
+  const markDirty = useCallback(() => {
+    // BlockNote fires onChange for our own replaceBlocks/insertBlocks too, and
+    // may do so after the apply callback has run — so an apply window, not a
+    // post-hoc reset, is what keeps a programmatic change from looking like typing.
+    if (!applyingRef.current) userEditedRef.current = true;
+  }, []);
 
   // ── save ──────────────────────────────────────────────────────────────────
   const handleSave = useCallback(async (blocks: AnyBlock[], plainText: string) => {

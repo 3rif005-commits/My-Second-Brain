@@ -156,7 +156,8 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
 
         {/* Main area — shifts right on desktop when AI panel is open */}
         <main
-          className="print-main flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden"
+          className="print-main group/shell flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden"
+          data-sidebar={isOpen ? "open" : "collapsed"}
           style={{
             marginRight: isAiOpen && isDesktop ? aiPanelWidth : 0,
             transition: "margin-right 200ms ease-in-out",
