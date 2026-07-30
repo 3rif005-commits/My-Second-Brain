@@ -173,11 +173,13 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     return { sid, value: raw !== null ? parseFloat(raw) : null };
   }, [search]);
 
-  const deepLinkDone = useRef(false);
+  const deepLinkKey = deepLink ? `${deepLink.sid}:${deepLink.value ?? ""}` : null;
+  const handledDeepLink = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!deepLink || deepLinkDone.current) return;
+    if (!deepLink || !deepLinkKey || handledDeepLink.current === deepLinkKey) return;
     if (!sources.some((s) => s.id === deepLink.sid)) return;
-    deepLinkDone.current = true;
+    handledDeepLink.current = deepLinkKey;
     setActiveId(deepLink.sid);
     if (deepLink.value === null || Number.isNaN(deepLink.value)) return;
     const timer = setInterval(() => {
@@ -188,7 +190,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     }, 300);
     const stop = setTimeout(() => clearInterval(timer), 15000);
     return () => { clearInterval(timer); clearTimeout(stop); };
-  }, [deepLink, sources]);
+  }, [deepLink, deepLinkKey, sources]);
 
   const handleCitation = useCallback((c: Citation) => {
     setActiveId(c.resource_id);
@@ -365,12 +367,12 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       <ConfirmDialog
         open={syn.askMode}
         title="This note has your own edits in it"
-        description="Replace everything with the new draft, or add the new draft at the end and keep what you wrote?"
-        confirmLabel="Add at the end"
-        cancelLabel="Replace everything"
-        danger={false}
-        onConfirm={() => syn.chooseMode("append")}
-        onCancel={() => syn.chooseMode("replace")}
+        description="Replace everything with the new draft, or keep what you wrote and add the new draft at the end? Dismissing this keeps your note."
+        confirmLabel="Replace everything"
+        cancelLabel="Keep my note, add at the end"
+        danger
+        onConfirm={() => syn.chooseMode("replace")}
+        onCancel={() => syn.chooseMode("append")}
       />
     </div>
   );

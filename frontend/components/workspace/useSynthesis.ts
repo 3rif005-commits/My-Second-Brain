@@ -46,6 +46,13 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
     () => sources.filter((s) => s.status === "ready").map((s) => s.id), [sources]);
   const pending = sources.some((s) => s.status === "queued" || s.status === "processing");
   const running = synthesis?.status === "queued" || synthesis?.status === "running";
+  // A ready draft that nobody has applied yet. `applyRef.current` may still be
+  // null on first render (the shell shows "Loading session…" until the note
+  // arrives), and mutating a ref cannot re-run the apply effect — so keep
+  // polling until the draft actually lands, instead of stranding it.
+  const unapplied = synthesis?.status === "ready"
+    && !synthesis.applied_at
+    && appliedRef.current !== synthesis.html;
 
   const refresh = useCallback(() => {
     if (!noteId) return;
@@ -62,10 +69,10 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
   // Poll while a source is still processing (the settle guard fires on the last
   // one) or while a draft is being written.
   useEffect(() => {
-    if (!noteId || (!pending && !running)) return;
+    if (!noteId || (!pending && !running && !unapplied)) return;
     const timer = setInterval(refresh, 2500);
     return () => clearInterval(timer);
-  }, [noteId, pending, running, refresh]);
+  }, [noteId, pending, running, unapplied, refresh]);
 
   // Apply a ready, unapplied draft.
   useEffect(() => {
@@ -73,7 +80,7 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
     if (!noteId || !html || synthesis?.status !== "ready") return;
     if (synthesis.applied_at || appliedRef.current === html) return;
     const api = applyRef.current;
-    if (!api) return;   // NotePane not mounted yet; the effect re-runs when it is
+    if (!api) return;   // NotePane not mounted yet; the unapplied poll re-runs this
 
     // Never silently overwrite the user's own work: without an explicit choice,
     // an edited note gets the draft appended, not slammed on top.
