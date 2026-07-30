@@ -273,7 +273,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         const doc = new window.DOMParser().parseFromString(html, "text/html");
         const { strippedHtml, calloutChildren } = await extractCalloutChildren(
           doc.body.innerHTML,
-          (h) => editor.tryParseHTMLToBlocks(h)
+          async (h: string) => (await editor.tryParseHTMLToBlocks(h)) as AnyBlock[]
         );
         const rawParsed = await editor.tryParseHTMLToBlocks(strippedHtml);
         const parsed = attachCalloutChildren(rawParsed as AnyBlock[], calloutChildren);
@@ -324,7 +324,16 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         }));
         interactiveDivs.forEach((el) => el.remove());
 
-        const blocks = await editor.tryParseHTMLToBlocks(doc.body.innerHTML);
+        // Extract callout bodies before parsing — BlockNote's HTML→block
+        // conversion can't reconstruct a callout's children from nested markup
+        // (see insertHtmlAtEnd above for the same pattern), so without this every
+        // callout ingested via PDF/URL would land as an empty shell.
+        const { strippedHtml, calloutChildren } = await extractCalloutChildren(
+          doc.body.innerHTML,
+          async (h: string) => (await editor.tryParseHTMLToBlocks(h)) as AnyBlock[]
+        );
+        const rawBlocks = await editor.tryParseHTMLToBlocks(strippedHtml);
+        const blocks = attachCalloutChildren(rawBlocks as AnyBlock[], calloutChildren);
         editor.replaceBlocks(editor.document, blocks);
         if (saveTimer.current) clearTimeout(saveTimer.current);
         onSave(blocks as AnyBlock[], getPlainText(blocks as AnyBlock[]));
