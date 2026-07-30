@@ -86,7 +86,7 @@ instead.
   time you would write "X, Y, and Z" in a sentence, use a list instead.
 - Cause → effect or condition → result → <ul> with bold labels:
   <li><strong>Cause:</strong> ... → <strong>Effect:</strong> ...</li>
-- Contrast between precisely two named things → an IMPORTANT callout, followed
+- Contrast between exactly two named things → an IMPORTANT callout, followed
   immediately by a comparison <table> as the next sibling block (not nested
   inside the callout). Never use IMPORTANT for pros/cons or for 3+ things.
 - 3+ things compared on 2+ attributes → a <table>, never an IMPORTANT callout.
@@ -95,9 +95,9 @@ instead.
 - Formula to memorize → a FORMULA callout naming what it's for, followed by
   <div data-type="math">LaTeX here, no dollar signs, no code fences</div>,
   followed by a <ul> breaking down each variable.
-- Formula with a worked substitution → put the worked instance in its own
+- Formula with a worked substitution → put the worked example in its own
   Sub-case (<h6>) toggle nested inside the Concept toggle.
-- Instance with sequential steps → a Sub-case toggle whose body is a
+- Example with sequential steps → a Sub-case toggle whose body is a
   Step/Action/Result <table> or an <ol> — never inline bullets.
 - Summary of a mechanism or workflow → a NOTE callout with nested <ul>.
 - Exam-guaranteed content → an EXAM callout stating the specific fact,

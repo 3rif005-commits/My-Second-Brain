@@ -28,6 +28,20 @@ describe("CALLOUT_PALETTE", () => {
     const colors = types.map((t) => CALLOUT_PALETTE[t as keyof typeof CALLOUT_PALETTE].color);
     expect(new Set(colors).size).toBe(colors.length);
   });
+
+  it("only uses colors from BlockNote's actual default (non-'default') palette", () => {
+    // BlockNote's built-in color palette, minus "default" (reserved for
+    // "no special color" elsewhere in the editor, not used by callouts).
+    // Guards against a future edit introducing an invented color that
+    // happens to be unique but doesn't actually exist in BlockNote's theme.
+    const BLOCKNOTE_NON_DEFAULT_COLORS = [
+      "gray", "brown", "red", "orange", "yellow", "green", "blue", "purple", "pink",
+    ];
+    const colors = Object.values(CALLOUT_PALETTE).map((v) => v.color);
+    colors.forEach((color) => {
+      expect(BLOCKNOTE_NON_DEFAULT_COLORS).toContain(color);
+    });
+  });
 });
 
 describe("callout HTML parsing", () => {

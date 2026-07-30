@@ -90,6 +90,13 @@ export const MathBlockSpec = createReactBlockSpec(
     render: (props) => <MathBlockView block={props.block} editor={props.editor} />,
     parse: (element: HTMLElement) => {
       if (element.getAttribute("data-type") !== "math") return undefined;
+      // Same defensive pattern as CalloutBlockSpec below: BlockNote auto-maps
+      // `data-<kebab-prop>` attributes matching the propSchema onto the block's
+      // props AFTER parse() runs, which would silently override whatever parse()
+      // returns for any prop whose kebab name is present as a data attribute.
+      // `latex` here comes from textContent, not a `data-latex` attribute, so
+      // there's no live collision today — but removing `data-type` keeps this
+      // element's markup consistent and safe against a future propSchema change.
       element.removeAttribute("data-type");
       return { latex: element.textContent?.trim() || "" };
     },
@@ -222,6 +229,13 @@ export const CalloutBlockSpec = createReactBlockSpec(
     parse: (element: HTMLElement) => {
       if (element.getAttribute("data-type") !== "callout") return undefined;
       const raw = element.getAttribute("data-callout-type");
+      // BlockNote auto-maps `data-<kebab-prop>` attributes matching the
+      // propSchema (here, `data-callout-type` -> `calloutType`) onto the
+      // block's props AFTER this parse() function runs. If left in place,
+      // that auto-mapping would silently override whatever we return below
+      // with the raw, unvalidated `data-callout-type` value — defeating the
+      // unknown-calloutType-falls-back-to-NOTE behavior a few lines down.
+      // Removing it here makes our validated return value the final answer.
       element.removeAttribute("data-callout-type");
       element.removeAttribute("data-type");
       if (!raw || !(raw in CALLOUT_PALETTE)) {
