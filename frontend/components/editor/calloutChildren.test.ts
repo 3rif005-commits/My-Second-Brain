@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
 import { extractCalloutChildren, attachCalloutChildren } from "./calloutChildren";
+// @ts-ignore — @blocknote/core@0.48.0 ships an empty index.d.ts (upstream bug); runtime exports are fine
 import { BlockNoteSchema, defaultBlockSpecs, BlockNoteEditor } from "@blocknote/core";
 import { CalloutBlockSpec, MathBlockSpec } from "./customBlocks";
 

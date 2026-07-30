@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
-import { BlockNoteSchema, defaultBlockSpecs } from "@blocknote/core";
-import { BlockNoteEditor } from "@blocknote/core";
+// @ts-ignore — @blocknote/core@0.48.0 ships an empty index.d.ts (upstream bug); runtime exports are fine
+import { BlockNoteSchema, defaultBlockSpecs, BlockNoteEditor } from "@blocknote/core";
 import { CalloutBlockSpec, CALLOUT_PALETTE, MathBlockSpec } from "./customBlocks";
 
 function makeEditor() {
@@ -66,7 +66,7 @@ describe("callout HTML parsing", () => {
   it("does not match unrelated divs", async () => {
     const editor = makeEditor();
     const blocks = await editor.tryParseHTMLToBlocks('<div class="foo">hi</div>');
-    expect(blocks.some((b) => b.type === "callout")).toBe(false);
+    expect(blocks.some((b: any) => b.type === "callout")).toBe(false);
   });
 });
 
