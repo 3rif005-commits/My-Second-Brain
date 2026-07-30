@@ -103,6 +103,13 @@ def _openrouter_complete(system: str, user: str, model: str, request_id: str = "
             ],
             max_tokens=4096,
             stream=True,
+            # Reasoning-capable free-tier models (e.g. Nemotron) can emit their
+            # chain-of-thought as regular content instead of a separate
+            # reasoning delta, burning the whole max_tokens budget on planning
+            # text and never reaching the actual answer. Ask OpenRouter to
+            # drop reasoning generation entirely rather than relying on a
+            # delta-field split that isn't guaranteed for every model/endpoint.
+            extra_body={"reasoning": {"exclude": True}},
         )
         chunks: list[str] = []
         for chunk in stream:
