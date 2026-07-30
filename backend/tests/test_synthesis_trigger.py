@@ -208,18 +208,6 @@ def test_run_synthesis_records_failure_without_raising():
     assert "all providers failed" in writes[-1]["error"]
 
 
-def test_run_synthesis_with_no_ready_sources_releases_the_claim_cleanly():
-    # No sources means nothing extractable yet — the old behavior wrote a
-    # `failed` row, which permanently blocked auto-fire on retry. The claim is
-    # released instead, leaving no synthesis row behind at all.
-    db = _run_db([])
-    with patch.object(synthesis, "get_supabase", return_value=db), \
-         patch.object(synthesis, "complete_with_fallback") as ai:
-        synthesis.run_synthesis("n1")
-    ai.assert_not_called()
-    db.tables["note_synthesis"].delete.return_value.eq.return_value.execute.assert_called_once()
-
-
 def test_no_ready_sources_releases_the_claim_instead_of_failing():
     db = _run_db([])
     with patch.object(synthesis, "get_supabase", return_value=db), \
@@ -227,6 +215,10 @@ def test_no_ready_sources_releases_the_claim_instead_of_failing():
         synthesis.run_synthesis("n1")
     ai.assert_not_called()
     db.tables["note_synthesis"].delete.return_value.eq.return_value.execute.assert_called_once()
+    # The whole point: no `failed` row may be left behind, because its existence
+    # is what would block a later retry from auto-firing the first draft.
+    writes = [c.args[0] for c in db.tables["note_synthesis"].upsert.call_args_list]
+    assert not any(w.get("status") == "failed" for w in writes)
 
 
 def test_every_write_clears_a_stale_applied_at():

@@ -143,7 +143,7 @@ def _inherited_titles(note: dict, first_source: dict) -> set[str]:
     if note.get("source_url"):
         titles.add(note["source_url"])
     if note.get("source_filename"):
-        titles.add(os.path.splitext(note["source_filename"])[0])
+        titles.add(os.path.splitext(os.path.basename(note["source_filename"]))[0])
     return {t for t in titles if t}
 
 

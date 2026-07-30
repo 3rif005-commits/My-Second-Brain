@@ -133,9 +133,16 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
           : `Could not add ${item.file?.name ?? item.url ?? "source"}`);
       }
     }
-    // Deferred attaches are inert until this call, which is what makes a
-    // three-file drop produce one synthesis across all three.
-    if (defer && landed) await wsApi.processSources(landed).catch(() => {});
+    // Deferred attaches are inert until this call. If it fails, the sources are
+    // safely attached but idle, so say so and leave the rail's retry to restart them.
+    if (defer && landed) {
+      try {
+        await wsApi.processSources(landed);
+      } catch {
+        showToast("Sources attached, but processing didn’t start — use the retry "
+                  + "arrow on a source to begin.");
+      }
+    }
     setBusy(false);
     if (!noteId && landed) router.replace(`/brain/workspace/${landed}`);
     else await loadSources();

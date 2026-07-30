@@ -128,14 +128,15 @@ export function SourceRail({
             {s.status === "processing" && (
               <span className="text-[10px] text-amber-500 shrink-0">processing</span>
             )}
-            {s.status === "queued" && (
-              <span className="text-[10px] text-gray-400 shrink-0">queued</span>
-            )}
-            {s.status === "failed" && (
+            {(s.status === "queued" || s.status === "failed") && (
               <button
                 onClick={(e) => { e.stopPropagation(); onRetry(s); }}
-                title={s.error ?? "Retry"}
-                className="shrink-0 text-red-400 hover:text-red-600"
+                title={s.status === "failed"
+                  ? (s.error ?? "Retry")
+                  : "Queued — click to start processing"}
+                className={`shrink-0 ${s.status === "failed"
+                  ? "text-red-400 hover:text-red-600"
+                  : "text-gray-400 hover:text-indigo-500"}`}
               >
                 <RefreshCw size={11} />
               </button>
