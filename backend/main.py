@@ -5,7 +5,7 @@ import uuid
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
-from routers import notes, ingest, retrieval, internal, agent, agent_inline, agent_ingest, skills_api, mcp_api, workspaces
+from routers import notes, ingest, retrieval, internal, agent, agent_inline, agent_ingest, skills_api, mcp_api, note_sources
 
 # ── Logging ─────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -34,7 +34,7 @@ app.include_router(agent_ingest.router)
 app.include_router(internal.router)
 app.include_router(skills_api.router)
 app.include_router(mcp_api.router)
-app.include_router(workspaces.router)
+app.include_router(note_sources.router)
 
 
 @app.middleware("http")

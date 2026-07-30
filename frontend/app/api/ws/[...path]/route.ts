@@ -4,10 +4,9 @@
 import { createClient } from "@/lib/supabase/server";
 
 const ALLOWED_PREFIXES = [
-  "workspaces",
-  "resources",
-  "pages",
-  "notes", // only /notes/{id}/anchors is exposed by the backend router here
+  "sources",
+  "notes",   // /notes/{id}/{sources,synthesis,synthesize,anchors,chat}
+  "sessions",
   "ai-providers",
 ];
 
