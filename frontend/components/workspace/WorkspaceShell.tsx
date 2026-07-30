@@ -181,6 +181,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     if (!deepLink || !deepLinkKey || handledDeepLink.current === deepLinkKey) return;
     if (!sources.some((s) => s.id === deepLink.sid)) return;
     handledDeepLink.current = deepLinkKey;
+    if (deepLink.sid !== activeId) seekRef.current = null;
     setActiveId(deepLink.sid);
     if (deepLink.value === null || Number.isNaN(deepLink.value)) return;
     const timer = setInterval(() => {
@@ -191,12 +192,31 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     }, 300);
     const stop = setTimeout(() => clearInterval(timer), 15000);
     return () => { clearInterval(timer); clearTimeout(stop); };
-  }, [deepLink, deepLinkKey, sources]);
+  }, [deepLink, deepLinkKey, sources, activeId]);
+
+  // Switching sources swaps the viewer, and the outgoing viewer's seek function
+  // is still in the ref at that instant — so a naive setActiveId-then-seek either
+  // seeks the pane that is unmounting or is lost. Clear the ref at the switch and
+  // wait for the incoming viewer to register its own.
+  const seekWhenReady = useCallback((value: number) => {
+    if (seekRef.current) { seekRef.current(value); return; }
+    const timer = setInterval(() => {
+      if (seekRef.current) { seekRef.current(value); clearInterval(timer); }
+    }, 200);
+    setTimeout(() => clearInterval(timer), 8000);
+  }, []);
+
+  const selectAndSeek = useCallback((sourceId: string, value: number) => {
+    if (sourceId !== activeId) {
+      seekRef.current = null;
+      setActiveId(sourceId);
+    }
+    seekWhenReady(value);
+  }, [activeId, seekWhenReady]);
 
   const handleCitation = useCallback((c: Citation) => {
-    setActiveId(c.resource_id);
-    seekRef.current?.(c.anchor_start);
-  }, []);
+    selectAndSeek(c.resource_id, c.anchor_start);
+  }, [selectAndSeek]);
 
   // ── title ─────────────────────────────────────────────────────────────────
   async function saveTitle() {
@@ -356,7 +376,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
             sources={sources}
             activeSourceId={activeId}
             onSelectSource={setActiveId}
-            seekRef={seekRef}
+            onSeek={seekWhenReady}
             actionSinkRef={actionSinkRef}
             positionSinkRef={positionSinkRef}
             applyRef={applyRef}

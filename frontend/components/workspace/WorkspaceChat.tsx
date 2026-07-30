@@ -37,6 +37,7 @@ function CitedText({ content, citations, colorIndex, onCitation }: {
         if (!m) return <span key={i}>{part}</span>;
         const c = byN.get(Number(m[1]));
         if (!c) return null; // hallucinated marker — never rendered
+        const idx = colorIndex.get(c.resource_id);
         return (
           <button
             key={i}
@@ -44,8 +45,12 @@ function CitedText({ content, citations, colorIndex, onCitation }: {
             title={`${c.title} — ${anchorLabel(c.anchor_type, c.anchor_start)}\n${c.snippet ?? ""}`}
             className="inline-flex items-center gap-0.5 align-baseline mx-0.5 px-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 text-[10px] font-semibold hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors cursor-pointer"
           >
-            <span className="w-1 h-1 rounded-full"
-                  style={{ backgroundColor: sourceColor(colorIndex.get(c.resource_id) ?? 0) }} />
+            {/* No dot rather than a wrong dot: a citation whose source is gone
+                must not borrow the first source's colour. */}
+            {idx !== undefined && (
+              <span className="w-1 h-1 rounded-full"
+                    style={{ backgroundColor: sourceColor(idx) }} />
+            )}
             {m[1]}
           </button>
         );
