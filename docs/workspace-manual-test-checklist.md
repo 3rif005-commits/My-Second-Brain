@@ -23,6 +23,10 @@
    `match_workspace_chunks` function, then recreates the schema around
    `note_resources` + `note_synthesis`. Do **not** run `012_workspaces.sql` —
    that was the canvas-era migration and is superseded by 013.
+   **Before you get there:** a free-tier Supabase project auto-pauses after
+   inactivity, so landing on a "Project is paused" screen when you open the
+   dashboard is expected, not a fault — resuming is one non-destructive click
+   (data and backups are kept), then the SQL editor is reachable as normal.
 2. **Install ffmpeg** (frame / clip / audio extraction — everything else works
    without it):
    ```bash
@@ -113,6 +117,22 @@ rebuilt.
 - [ ] The note's title should read as a **topic title** for the whole session,
       not the filename of whichever source happened to finish processing
       first.
+- [ ] **Regression check — YouTube-first title upgrade.** Order matters for
+      this one: this time, attach the **YouTube link first**, before the PDF
+      and the article, so the note is created from the YouTube source and
+      starts out titled **"YouTube video"**. When the draft lands, the note's
+      title must change to a topic title drawn from the draft's `<h1>` —
+      something like "How backpropagation works" — and must **not** stay
+      "YouTube video", and must **not** become the video's own channel/video
+      title either. Why this is here: the background processor renames the
+      *source* once it learns the real video title, but the *note* keeps its
+      placeholder — so the title-upgrade code has to recognize every title the
+      note could have inherited, not just the source's current one. A note
+      still reading "YouTube video" after the draft lands means this check
+      regressed. One boundary to also check: if you rename the note yourself
+      (click the title, type something, blur) *before* the draft lands, your
+      title must win — the suggestion is only ever applied to an untouched,
+      auto-assigned title.
 
 If you see one heading per source with no cross-referencing, or more than one
 "Writing the note…" cycle for a single batch of sources dropped together, that
@@ -277,6 +297,12 @@ Requires ffmpeg; YouTube capture also requires yt-dlp.
       the provider-chain error above instead.) Either way, sources stay
       viewable and capture still works — only the note-writing step is
       blocked.
+- [ ] **Environment gotcha, not necessarily an app bug:** if you see a sudden
+      wave of backend 5xx responses or PostgREST connection errors partway
+      through a session (after everything was working a minute earlier), check
+      the Supabase dashboard before debugging it as application code — a
+      free-tier project can pause itself mid-session, and that looks exactly
+      like a backend outage from the browser.
 
 ## 12. Editing freedom
 
