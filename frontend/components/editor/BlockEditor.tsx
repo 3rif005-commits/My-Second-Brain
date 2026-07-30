@@ -146,6 +146,10 @@ export interface BlockEditorHandle {
   insertBlocksAtEnd: (blocks: AnyBlock[]) => void;
   /** Scroll a block into view and flash-highlight it (source→note sync). */
   scrollToBlock: (blockId: string) => void;
+  /** Parse HTML and append it at the end; returns the blocks that landed.
+   *  Used by workspace synthesis in "append" mode (the `ingestHtml` prop is
+   *  the replace path and rewrites the whole document). */
+  insertHtmlAtEnd: (html: string) => Promise<AnyBlock[]>;
 }
 
 export interface InteractiveBlock { title: string; html: string }
@@ -254,6 +258,19 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         el.style.transition = "background-color 0.4s";
         el.style.backgroundColor = "rgba(99,102,241,0.18)";
         setTimeout(() => { el.style.backgroundColor = ""; }, 1400);
+      },
+      async insertHtmlAtEnd(html: string) {
+        const doc = new window.DOMParser().parseFromString(html, "text/html");
+        const parsed = await editor.tryParseHTMLToBlocks(doc.body.innerHTML);
+        const before = (editor.document as AnyBlock[]).length;
+        const last = (editor.document as AnyBlock[])[before - 1];
+        if (last) editor.insertBlocks(parsed, last.id, "after");
+        else editor.replaceBlocks(editor.document, parsed);
+        const now = editor.document as AnyBlock[];
+        const added = last ? now.slice(before) : now;
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        onSave?.(now, getPlainText(now));
+        return added;
       },
     }));
 
