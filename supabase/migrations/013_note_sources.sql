@@ -17,9 +17,30 @@
 
 BEGIN;
 
+-- pgvector lives in the `extensions` schema on Supabase. Without this, every
+-- reference to `vector` below (including the DROP of the old RPC) fails with
+-- `type "vector" does not exist`, which aborts the whole transaction at the
+-- first statement — the migration then silently applies NOTHING.
+SET LOCAL search_path = public, extensions;
+
 -- ---- drop the canvas model ----
 
-DROP FUNCTION IF EXISTS match_workspace_chunks(vector, uuid, uuid, int);
+-- Dropped by catalogue lookup rather than by signature, so this cannot fail on
+-- how `vector` happens to be spelled or resolved in this session.
+DO $drop_old_rpc$
+DECLARE fn regprocedure;
+BEGIN
+  FOR fn IN
+    SELECT p.oid::regprocedure
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'match_workspace_chunks'
+  LOOP
+    EXECUTE 'DROP FUNCTION ' || fn || ' CASCADE';
+  END LOOP;
+END
+$drop_old_rpc$;
+
 DROP TABLE IF EXISTS note_anchors       CASCADE;
 DROP TABLE IF EXISTS resource_chunks    CASCADE;
 DROP TABLE IF EXISTS resource_elements  CASCADE;
@@ -179,3 +200,29 @@ CREATE POLICY note_anchors_owner_all ON note_anchors
   USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 
 COMMIT;
+
+
+-- ---- proof it applied ----
+-- The SQL editor reports "Success. No rows returned" for a migration that did
+-- nothing as readily as for one that worked, so print the result instead of
+-- trusting the banner. Expect exactly four rows — note_resources, note_synthesis,
+-- resource_chunks (with a note_id column), match_note_source_chunks — and zero
+-- rows for anything named workspace*.
+
+SELECT 'table: ' || table_name AS applied
+FROM information_schema.tables
+WHERE table_schema = 'public' AND table_name IN ('note_resources', 'note_synthesis')
+UNION ALL
+SELECT 'resource_chunks.note_id exists'
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'resource_chunks' AND column_name = 'note_id'
+UNION ALL
+SELECT 'rpc: ' || p.proname
+FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public' AND p.proname = 'match_note_source_chunks'
+UNION ALL
+SELECT 'STILL PRESENT (should be gone): ' || table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name IN ('workspaces', 'workspace_pages', 'workspace_resources')
+ORDER BY 1;
