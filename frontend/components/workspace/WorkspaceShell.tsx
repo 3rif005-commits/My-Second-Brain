@@ -15,6 +15,7 @@ import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
 import { SourceRail } from "./SourceRail";
 import { SourceViewer } from "./SourceViewer";
 import { useSynthesis } from "./useSynthesis";
+import { WorkspaceChat } from "./WorkspaceChat";
 
 const SPLIT_KEY = "workspace:splitPct";
 
@@ -211,6 +212,8 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   }
 
   const activeSource = sources.find((s) => s.id === activeId) ?? null;
+  const colorIndex = useMemo(
+    () => new Map(sources.map((s) => [s.id, s.order_index])), [sources]);
 
   // ── empty shell ───────────────────────────────────────────────────────────
   if (!noteId || !note) {
@@ -360,7 +363,14 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
             onApplied={() => {}}
             onSavingChange={setSaving}
           />
-          {/* Task 11 mounts the WorkspaceChat drawer here (chatOpen / handleCitation). */}
+          {chatOpen && (
+            <WorkspaceChat
+              noteId={note.id}
+              colorIndex={colorIndex}
+              onCitation={handleCitation}
+              onClose={() => setChatOpen(false)}
+            />
+          )}
         </div>
       </div>
 

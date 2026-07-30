@@ -1,10 +1,12 @@
 "use client";
 
-// Grounded workspace chat — answers only from this workspace's resources,
-// every claim carries a [n] citation that opens the source at the exact spot.
+// Grounded chat over one note's sources — answers only from what's attached to
+// this note, every claim carrying a [n] citation that opens the right source at
+// the exact spot. Rendered as a drawer over the note pane: a third column in a
+// compact layout leaves nothing readable.
 import { useCallback, useRef, useState } from "react";
 import { Send, X } from "lucide-react";
-import { anchorLabel, type Citation } from "@/lib/workspace";
+import { anchorLabel, sourceColor, type Citation } from "@/lib/workspace";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -13,15 +15,17 @@ interface ChatMessage {
 }
 
 interface WorkspaceChatProps {
-  workspaceId: string;
+  noteId: string;
+  colorIndex: Map<string, number>;   // resource_id → order_index, for the dots
   onCitation: (citation: Citation) => void;
   onClose: () => void;
 }
 
 /** Render assistant text with [n] markers replaced by clickable chips. */
-function CitedText({ content, citations, onCitation }: {
+function CitedText({ content, citations, colorIndex, onCitation }: {
   content: string;
   citations: Citation[];
+  colorIndex: Map<string, number>;
   onCitation: (c: Citation) => void;
 }) {
   const byN = new Map(citations.map((c) => [c.n, c]));
@@ -38,8 +42,10 @@ function CitedText({ content, citations, onCitation }: {
             key={i}
             onClick={() => onCitation(c)}
             title={`${c.title} — ${anchorLabel(c.anchor_type, c.anchor_start)}\n${c.snippet ?? ""}`}
-            className="inline-flex items-center align-baseline mx-0.5 px-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 text-[10px] font-semibold hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-0.5 align-baseline mx-0.5 px-1.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 text-[10px] font-semibold hover:bg-indigo-200 dark:hover:bg-indigo-800 transition-colors cursor-pointer"
           >
+            <span className="w-1 h-1 rounded-full"
+                  style={{ backgroundColor: sourceColor(colorIndex.get(c.resource_id) ?? 0) }} />
             {m[1]}
           </button>
         );
@@ -48,7 +54,7 @@ function CitedText({ content, citations, onCitation }: {
   );
 }
 
-export function WorkspaceChat({ workspaceId, onCitation, onClose }: WorkspaceChatProps) {
+export function WorkspaceChat({ noteId, colorIndex, onCitation, onClose }: WorkspaceChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -63,7 +69,7 @@ export function WorkspaceChat({ workspaceId, onCitation, onClose }: WorkspaceCha
     setStreaming(true);
 
     try {
-      const res = await fetch(`/api/ws/workspaces/${workspaceId}/chat`, {
+      const res = await fetch(`/api/ws/notes/${noteId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -120,13 +126,13 @@ export function WorkspaceChat({ workspaceId, onCitation, onClose }: WorkspaceCha
     } finally {
       setStreaming(false);
     }
-  }, [input, messages, streaming, workspaceId]);
+  }, [input, messages, streaming, noteId]);
 
   return (
-    <div className="w-96 max-w-full h-full flex flex-col border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+    <div className="absolute inset-y-0 right-0 z-30 w-[380px] max-w-full flex flex-col border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-2xl">
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 shrink-0">
         <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-          Workspace chat
+          Ask your sources
         </span>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
           <X size={16} />
@@ -136,9 +142,9 @@ export function WorkspaceChat({ workspaceId, onCitation, onClose }: WorkspaceCha
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4">
         {messages.length === 0 && (
           <p className="text-xs text-gray-400 leading-relaxed">
-            Ask anything about the resources in this workspace. Answers are grounded
-            in your sources — every claim carries a clickable citation that opens the
-            source at the exact page or timestamp.
+            Ask anything about the sources attached to this note. Answers are
+            grounded in them — every claim carries a clickable citation that opens
+            the right source at the exact page or timestamp.
           </p>
         )}
         {messages.map((m, i) =>
@@ -152,6 +158,7 @@ export function WorkspaceChat({ workspaceId, onCitation, onClose }: WorkspaceCha
                 <CitedText
                   content={m.content}
                   citations={m.citations ?? []}
+                  colorIndex={colorIndex}
                   onCitation={onCitation}
                 />
               ) : (
