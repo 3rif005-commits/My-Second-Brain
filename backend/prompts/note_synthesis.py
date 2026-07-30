@@ -31,10 +31,10 @@ SYNTHESIZE ACROSS THE SOURCES — do not concatenate them:
 
 ANCHOR_EXTENSION = """
 SOURCE-INDEXED SYNC ANCHORS (mandatory for this note):
-This note is displayed beside its sources and kept in sync with them. Every <h2>
-section header MUST carry a data-anchor attribute of the form:
+This note is displayed beside its sources and kept in sync with them. Every
+<h3> Section header MUST carry a data-anchor attribute of the form:
 
-    <h2 data-importance="4" data-anchor="SOURCE:TYPE:VALUE">...</h2>
+    <h3 data-anchor="SOURCE:TYPE:VALUE">...</h3>
 
 - SOURCE is the 1-based index of the source the section is anchored to — the n
   from the "=== SOURCE n ===" block the material came from.
@@ -50,8 +50,7 @@ Worked examples: data-anchor="1:p:14"   data-anchor="2:t:754"   data-anchor="3:s
 
 Anchors must be monotonically non-decreasing WITHIN one source; across sources
 they may jump freely (you are organizing by concept, not by source).
-Do not put data-anchor on any element other than <h2>.
-Skip the interactive knowledge-check block for synthesized notes.
+Do not put data-anchor on any element other than <h3>.
 """
 
 _NO_TEXT_BODY = ("(No transcript could be extracted for this source. The video "
@@ -127,4 +126,4 @@ SOURCE MATERIAL — {len(sources)} source(s) attached to this note:
 ---
 
 Generate the synthesized mastery guide HTML, with one <h1> topic title and
-source-indexed data-anchor attributes on every <h2>, now:"""
+source-indexed data-anchor attributes on every <h3>, now:"""

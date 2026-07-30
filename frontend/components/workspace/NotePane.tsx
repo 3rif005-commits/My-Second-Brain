@@ -15,6 +15,7 @@ import {
   anchorLabel, parseSourceAnchor, sourceColor, wsApi,
   type AnchorType, type NoteAnchor, type NoteSource, type SendAction,
 } from "@/lib/workspace";
+import { findLevelHeadings } from "./anchorHeadings";
 
 const BlockEditor = dynamic(
   () => import("@/components/editor/BlockEditor").then((m) => m.BlockEditor),
@@ -131,21 +132,20 @@ export function NotePane({
     const pending = pendingRef.current;
     pendingRef.current = null;
     if (!pending || pending.anchors.length === 0) return;
-    const headings = blocks.filter(
-      (b: AnyBlock) => b.type === "heading" && (b.props?.level ?? 1) === 2);
+    const headings = findLevelHeadings(blocks, 3);
     if (headings.length !== pending.anchors.length) {
-      // The positional zip only holds while parsed level-2 headings line up 1:1
-      // with the draft's <h2>s. Say so loudly rather than pinning anchors to the
+      // The positional zip only holds while parsed level-3 headings line up 1:1
+      // with the draft's <h3>s. Say so loudly rather than pinning anchors to the
       // wrong sections.
       console.warn(
-        `[workspace] anchor/heading mismatch: ${pending.anchors.length} <h2> in the draft ` +
-        `vs ${headings.length} level-2 heading blocks — anchoring the first ` +
+        `[workspace] anchor/heading mismatch: ${pending.anchors.length} <h3> in the draft ` +
+        `vs ${headings.length} level-3 heading blocks — anchoring the first ` +
         `${Math.min(headings.length, pending.anchors.length)} only`);
     }
     const rows: NoteAnchor[] = [];
     headings.forEach((h: AnyBlock, i: number) => {
       const p = pending.anchors[i];
-      if (!p) return;                          // that <h2> carried no anchor
+      if (!p) return;                          // that <h3> carried no anchor
       const rid = pending.sourceIds[p.sourceIndex - 1];
       if (!rid) return;                        // model invented a source index
       rows.push({
@@ -170,11 +170,11 @@ export function NotePane({
   // ── synthesis apply API (used by useSynthesis) ─────────────────────────────
   const collect = useCallback((html: string, sourceIds: string[]) => {
     // Read anchors in document order BEFORE BlockNote parsing strips unknown
-    // attributes. One entry per <h2> — null where that heading carried none —
+    // attributes. One entry per <h3> — null where that heading carried none —
     // so the zip against parsed heading blocks stays aligned.
     const doc = new window.DOMParser().parseFromString(html, "text/html");
     const list: (PendingAnchor | null)[] = [];
-    doc.querySelectorAll("h2").forEach((h) => {
+    doc.querySelectorAll("h3").forEach((h) => {
       const raw = h.getAttribute("data-anchor");
       list.push(raw ? parseSourceAnchor(raw) : null);
     });

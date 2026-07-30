@@ -71,6 +71,13 @@ def test_budget_handles_no_sources():
     assert split_budget([], 1_000) == []
 
 
+def test_anchor_instruction_targets_h3_not_h2():
+    prompt = build_note_synthesis_prompt(SOURCES)
+    assert '<h3 data-anchor="SOURCE:TYPE:VALUE">' in prompt
+    assert "data-importance" not in prompt  # old broken attribute, must be gone
+    assert 'Do not put data-anchor on any element other than <h3>' in prompt
+
+
 def test_source_text_is_capped_by_the_total_budget():
     # U+2588 appears in no template, so counting it measures exactly the source
     # text that reached the prompt — not an incidental property of other strings.
