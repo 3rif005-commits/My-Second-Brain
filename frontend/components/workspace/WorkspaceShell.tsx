@@ -375,8 +375,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
             note={note}
             sources={sources}
             activeSourceId={activeId}
-            onSelectSource={setActiveId}
-            onSeek={seekWhenReady}
+            onJump={selectAndSeek}
             actionSinkRef={actionSinkRef}
             positionSinkRef={positionSinkRef}
             applyRef={applyRef}

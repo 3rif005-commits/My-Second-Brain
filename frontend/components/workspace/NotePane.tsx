@@ -48,9 +48,10 @@ interface NotePaneProps {
   note: NoteData;
   sources: NoteSource[];
   activeSourceId: string | null;
-  onSelectSource: (id: string) => void;
-  /** Seek the source viewer, waiting for it if a source switch is in flight. */
-  onSeek: (value: number) => void;
+  /** Switch the viewer to a source (if needed) and seek it once it is ready.
+   *  The shell owns the ordering — clearing the outgoing viewer's seek function
+   *  and setting the active source have to happen together. */
+  onJump: (sourceId: string, value: number) => void;
   /** NotePane publishes its send-to-note sink here so the viewer can push blocks. */
   actionSinkRef: React.MutableRefObject<((a: SendAction) => void) | null>;
   /** NotePane publishes its forward-sync handler here (source position → block). */
@@ -98,7 +99,7 @@ function markdownTableToBlock(md: string): AnyBlock | null {
 }
 
 export function NotePane({
-  note, sources, activeSourceId, onSelectSource, onSeek, actionSinkRef,
+  note, sources, activeSourceId, onJump, actionSinkRef,
   positionSinkRef, applyRef, onApplied, onSavingChange,
 }: NotePaneProps) {
   const [anchors, setAnchors] = useState<NoteAnchor[]>([]);
@@ -264,11 +265,10 @@ export function NotePane({
 
   // ── reverse sync: section chip → switch source, seek, scroll the note ─────
   const jumpToAnchor = useCallback((a: NoteAnchor) => {
-    if (a.resource_id !== activeSourceId) onSelectSource(a.resource_id);
-    onSeek(a.anchor_start);
+    onJump(a.resource_id, a.anchor_start);
     editorRef.current?.scrollToBlock(a.block_id);
     lastSyncedBlock.current = a.block_id;
-  }, [activeSourceId, onSelectSource, onSeek]);
+  }, [onJump]);
 
   // ── send-to-note bus ──────────────────────────────────────────────────────
   const handleAction = useCallback((action: SendAction) => {
