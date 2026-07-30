@@ -92,10 +92,10 @@ export const MathBlockSpec = createReactBlockSpec(
 );
 
 function checkpointHref(p: {
-  workspaceId: string; resourceId: string; anchorType: string; value: string;
+  noteId: string; resourceId: string; anchorType: string; value: string;
 }): string {
   const key = p.anchorType === "time" ? "t" : p.anchorType === "page" ? "p" : "s";
-  return `/brain/workspaces/${p.workspaceId}?resource=${p.resourceId}&${key}=${p.value}`;
+  return `/brain/workspace/${p.noteId}?source=${p.resourceId}&${key}=${p.value}`;
 }
 
 function fmtAnchor(anchorType: string, value: string): string {
@@ -112,6 +112,10 @@ export const CheckpointBlockSpec = createReactBlockSpec(
   {
     type: "checkpoint",
     propSchema: {
+      noteId: { default: "" },
+      // Deprecated: kept in the schema so checkpoint blocks written before the
+      // workspaces redesign still parse instead of breaking their note. Such a
+      // block has no noteId and renders as a dead pill below.
       workspaceId: { default: "" },
       resourceId: { default: "" },
       anchorType: { default: "time" }, // time | page | section
@@ -123,15 +127,32 @@ export const CheckpointBlockSpec = createReactBlockSpec(
   {
     render: ({ block }) => {
       const p = block.props;
+      const body = (
+        <>
+          <span>{p.anchorType === "time" ? "⏱" : "📍"}</span>
+          <span>{p.label || "Checkpoint"}</span>
+          <span className="opacity-70">{fmtAnchor(p.anchorType, p.value)}</span>
+        </>
+      );
+      // A checkpoint left behind by the old canvas model has nowhere to link to.
+      if (!p.noteId || !p.resourceId) {
+        return (
+          <span
+            title="This checkpoint's source is no longer available"
+            className="inline-flex items-center gap-1.5 my-0.5 px-2.5 py-1 rounded-full border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-400 text-xs font-medium"
+            contentEditable={false}
+          >
+            {body}
+          </span>
+        );
+      }
       return (
         <a
           href={checkpointHref(p)}
           className="inline-flex items-center gap-1.5 my-0.5 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-xs font-medium no-underline hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors cursor-pointer"
           contentEditable={false}
         >
-          <span>{p.anchorType === "time" ? "⏱" : "📍"}</span>
-          <span>{p.label || "Checkpoint"}</span>
-          <span className="opacity-70">{fmtAnchor(p.anchorType, p.value)}</span>
+          {body}
         </a>
       );
     },

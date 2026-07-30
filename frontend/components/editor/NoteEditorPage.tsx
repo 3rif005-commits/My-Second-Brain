@@ -4,9 +4,10 @@ import React, { Component, useState, useCallback, useEffect, useRef } from "reac
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Link, Check } from "lucide-react";
+import { ChevronRight, Link, Check, Layers } from "lucide-react";
 import type { Note } from "@/lib/types/database";
 import { Button } from "@/components/ui/button";
+import { wsApi } from "@/lib/workspace";
 import { NoteProperties } from "./NoteProperties";
 import { BacklinksPanel } from "./BacklinksPanel";
 import { InteractiveBlockCard } from "./InteractiveBlockCard";
@@ -83,10 +84,20 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [sourceCount, setSourceCount] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
   const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reindexDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // A note with sources attached can be reopened in the workspace shell — the
+  // other half of "how do I get back to a session?" (the first half is the
+  // recents strip in the empty shell).
+  useEffect(() => {
+    wsApi.listSources(note.id)
+      .then((rows) => setSourceCount(rows.length))
+      .catch(() => setSourceCount(0));
+  }, [note.id]);
 
   useEffect(() => {
     const key = `ingest-pending-${note.id}`;
@@ -233,6 +244,16 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
                 ? "Applying…"
                 : ""}
             </span>
+            {sourceCount > 0 && (
+              <button
+                onClick={() => router.push(`/brain/workspace/${note.id}`)}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                title="Open this note beside its sources"
+              >
+                <Layers size={12} />
+                Open sources ({sourceCount})
+              </button>
+            )}
           </div>
 
           {/* Right: options menu */}
