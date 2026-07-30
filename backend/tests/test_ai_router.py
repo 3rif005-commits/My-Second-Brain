@@ -93,6 +93,44 @@ def test_complete_with_fallback_skips_failing_provider():
     assert mock_complete.call_args[0][0] is good
 
 
+def test_complete_with_fallback_skips_response_that_fails_validation():
+    from services.ai import router as router_mod
+
+    good = _openai()
+    with patch.object(router_mod, "candidates", return_value=[_gemini(), good]), \
+         patch("services.ai.client.complete",
+               side_effect=["<p>just reasoning, no real output</p>", "<h1>ok</h1>"]) as mock_complete:
+        out = router_mod.complete_with_fallback(
+            "chat", "u", [{"role": "user", "content": "hi"}],
+            validate=lambda html: "<h1" in html)
+    assert out == "<h1>ok</h1>"
+    assert mock_complete.call_count == 2
+    assert mock_complete.call_args[0][0] is good
+
+
+def test_complete_with_fallback_raises_when_all_responses_fail_validation():
+    from services.ai import router as router_mod
+    with patch.object(router_mod, "candidates", return_value=[_gemini()]), \
+         patch("services.ai.client.complete", return_value="not a real answer"):
+        try:
+            router_mod.complete_with_fallback(
+                "chat", "u", [], validate=lambda html: "<h1" in html)
+            assert False, "should have raised"
+        except RuntimeError as e:
+            assert "All AI providers failed" in str(e)
+            assert "failed validation" in str(e)
+
+
+def test_complete_with_fallback_without_validate_accepts_anything():
+    """Backward compatibility: existing callers that don't pass `validate`
+    keep today's behavior — any non-exception response is accepted."""
+    from services.ai import router as router_mod
+    with patch.object(router_mod, "candidates", return_value=[_gemini()]), \
+         patch("services.ai.client.complete", return_value="whatever"):
+        out = router_mod.complete_with_fallback("chat", "u", [])
+    assert out == "whatever"
+
+
 def test_complete_with_fallback_raises_when_all_fail():
     from services.ai import router as router_mod
     with patch.object(router_mod, "candidates", return_value=[_gemini()]), \

@@ -289,6 +289,34 @@ def test_transcript_less_video_uses_the_video_native_provider():
     assert parts[1] == {"type": "video_url", "url": "https://youtu.be/abc12345678"}
 
 
+def test_looks_like_a_mastery_guide_rejects_a_reasoning_dump_with_no_h1():
+    reasoning = "We need to identify the major conceptual themes first. Let's parse the transcript..."
+    assert synthesis._looks_like_a_mastery_guide(reasoning) is False
+
+
+def test_looks_like_a_mastery_guide_rejects_a_stub_with_only_a_title_and_outline():
+    stub = ("<h1>Neural Networks</h1><p><strong>Source:</strong> x</p>"
+            "<p><strong>Topic:</strong> y</p><ul><li>Chapter 1</li><li>Chapter 2</li></ul>")
+    assert synthesis._looks_like_a_mastery_guide(stub) is False
+
+
+def test_looks_like_a_mastery_guide_accepts_real_chapter_content():
+    guide = ("<h1>Neural Networks</h1><ul><li>Chapter 1</li></ul>"
+             "<h2 data-text-color=\"orange\">Chapter 1</h2>"
+             + "<p>filler content so the guide clears the minimum length floor.</p>" * 10)
+    assert synthesis._looks_like_a_mastery_guide(guide) is True
+
+
+def test_run_synthesis_passes_the_mastery_guide_validator_to_the_fallback_chain():
+    db = _run_db(SRC_ROWS[:1])
+    with patch.object(synthesis, "get_supabase", return_value=db), \
+         patch.object(synthesis, "source_text_from_chunks", return_value="text"), \
+         patch.object(synthesis, "complete_with_fallback",
+                      return_value="<h1>T</h1><h2>C</h2>" + "x" * 500) as ai:
+        synthesis.run_synthesis("n1")
+    assert ai.call_args.kwargs["validate"] is synthesis._looks_like_a_mastery_guide
+
+
 def test_textless_source_without_a_video_provider_fails_with_a_clear_message():
     src = [{"id": "s1", "note_id": "n1", "user_id": "u1", "kind": "youtube",
             "title": "Lecture", "source_url": "https://youtu.be/abc12345678",

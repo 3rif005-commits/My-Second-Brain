@@ -127,6 +127,19 @@ def maybe_synthesize(note_id: str) -> bool:
     return True
 
 
+def _looks_like_a_mastery_guide(html: str) -> bool:
+    """Reject the two observed failure modes for a reasoning-prone free model:
+    a chain-of-thought dump that never reaches HTML at all (no <h1>), and a
+    response that starts correctly but stops right after the outline (an
+    <h1> with no chapter <h2> ever written). A real guide has both, plus
+    enough length to hold actual chapter content."""
+    if not html or not _H1.search(html):
+        return False
+    if "<h2" not in html.lower():
+        return False
+    return len(html) >= 500
+
+
 def _title_suggestion(html: str) -> str | None:
     m = _H1.search(html or "")
     if not m:
@@ -164,7 +177,7 @@ def _complete(prompt: str, video_urls: list[str], has_text: bool,
                 "configured — add a Gemini key in Settings → AI Providers.")
     return _strip_fences(complete_with_fallback(
         "summarize_text", user_id, [{"role": "user", "content": prompt}],
-        max_tokens=8192))
+        max_tokens=8192, validate=_looks_like_a_mastery_guide))
 
 
 def run_synthesis(note_id: str, mode: str = "replace") -> None:

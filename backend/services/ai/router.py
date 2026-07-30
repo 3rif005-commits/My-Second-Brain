@@ -12,6 +12,8 @@ Job types and their preference chains:
 """
 from __future__ import annotations
 
+from typing import Callable
+
 from services.ai.providers import Provider, list_providers
 
 _JOB_CHAINS: dict[str, list[str]] = {
@@ -52,16 +54,31 @@ def pick(job: str, user_id: str, providers: list[Provider] | None = None) -> Pro
 
 
 def complete_with_fallback(job: str, user_id: str, messages: list[dict],
-                           max_tokens: int = 4096) -> str:
-    """Run a completion, falling through the candidate chain on failure."""
+                           max_tokens: int = 4096,
+                           validate: Callable[[str], bool] | None = None) -> str:
+    """Run a completion, falling through the candidate chain on failure.
+
+    A provider can return HTTP 200 with content that's useless for the job
+    (e.g. a reasoning-heavy free model emitting its chain-of-thought instead
+    of the requested output) — that's not an exception, so without `validate`
+    it's accepted as success and the chain never gets a chance to try the
+    next, likely more reliable, candidate. Pass a job-specific sanity check
+    to treat a malformed response the same as a failure.
+    """
     from services.ai.client import complete
 
     errors: list[str] = []
     for p in candidates(job, user_id):
         try:
-            return complete(p, messages, max_tokens=max_tokens)
+            result = complete(p, messages, max_tokens=max_tokens)
         except Exception as e:  # quota, network, bad key — try the next one
             errors.append(f"{p.label or p.provider}: {str(e)[:120]}")
+            continue
+        if validate is not None and not validate(result):
+            errors.append(f"{p.label or p.provider}: response failed validation "
+                          "(looks incomplete or malformed)")
+            continue
+        return result
     raise RuntimeError(
         "All AI providers failed for job "
         f"'{job}': {' | '.join(errors) if errors else 'none configured'}"
