@@ -150,6 +150,9 @@ export interface BlockEditorHandle {
    *  Used by workspace synthesis in "append" mode (the `ingestHtml` prop is
    *  the replace path and rewrites the whole document). */
   insertHtmlAtEnd: (html: string) => Promise<AnyBlock[]>;
+  /** Ids of the top-level blocks currently in the document. Used to prune
+   *  anchors whose block the user has since deleted. */
+  blockIds: () => string[];
 }
 
 export interface InteractiveBlock { title: string; html: string }
@@ -177,6 +180,9 @@ interface BlockEditorProps {
   onAddInteractiveBlock?: (block: InteractiveBlock) => void;
   /** Called once after ingestHtml has been parsed and applied (workspace anchors). */
   onBlocksApplied?: (blocks: AnyBlock[]) => void;
+  /** Fires on every editor change, before the debounced save — lets a consumer
+   *  know the document is dirty while autosave is still pending. */
+  onDirty?: () => void;
 }
 
 function getPlainText(blocks: AnyBlock[]): string {
@@ -196,9 +202,11 @@ function getPlainText(blocks: AnyBlock[]): string {
 }
 
 export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
-  function BlockEditorComponent({ noteId: _noteId, initialContent, onSave, ingestHtml, onInteractiveBlocks, onAddInteractiveBlock, onBlocksApplied }, ref) {
+  function BlockEditorComponent({ noteId: _noteId, initialContent, onSave, ingestHtml, onInteractiveBlocks, onAddInteractiveBlock, onBlocksApplied, onDirty }, ref) {
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const { resolvedTheme } = useTheme();
+    const onDirtyRef = useRef(onDirty);
+    onDirtyRef.current = onDirty;
 
     const inlineTransport = useMemo(
       () =>
@@ -272,6 +280,9 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         onSave?.(now, getPlainText(now));
         return added;
       },
+      blockIds() {
+        return (editor.document as AnyBlock[]).map((b) => b.id);
+      },
     }));
 
     const save = useCallback(() => {
@@ -283,6 +294,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     // 2-second debounced auto-save on every content change
     useEffect(() => {
       const unsubscribe = editor.onChange(() => {
+        onDirtyRef.current?.();
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(save, 2000);
       });

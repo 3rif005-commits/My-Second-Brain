@@ -104,7 +104,9 @@ export function NotePane({
   const [ingestHtml, setIngestHtml] = useState<string | undefined>();
   const [syncOn, setSyncOn] = useState(true);
   const editorRef = useRef<BlockEditorHandle>(null);
-  const pendingRef = useRef<{ anchors: PendingAnchor[]; sourceIds: string[] } | null>(null);
+  const pendingRef = useRef<{ anchors: (PendingAnchor | null)[]; sourceIds: string[] } | null>(null);
+  const anchorsRef = useRef<NoteAnchor[]>([]);
+  const dirtyRef = useRef(false);
   const lastSyncedBlock = useRef<string | null>(null);
   const reindexDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentTextRef = useRef<string>(getPlainText(note.content ?? []));
@@ -114,7 +116,7 @@ export function NotePane({
   useEffect(() => {
     let cancelled = false;
     wsApi.getAnchors(note.id)
-      .then((a) => { if (!cancelled) setAnchors(a); })
+      .then((a) => { if (!cancelled) { anchorsRef.current = a; setAnchors(a); } })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [note.id]);
@@ -128,31 +130,50 @@ export function NotePane({
     if (!pending || pending.anchors.length === 0) return;
     const headings = blocks.filter(
       (b: AnyBlock) => b.type === "heading" && (b.props?.level ?? 1) === 2);
+    if (headings.length !== pending.anchors.length) {
+      // The positional zip only holds while parsed level-2 headings line up 1:1
+      // with the draft's <h2>s. Say so loudly rather than pinning anchors to the
+      // wrong sections.
+      console.warn(
+        `[workspace] anchor/heading mismatch: ${pending.anchors.length} <h2> in the draft ` +
+        `vs ${headings.length} level-2 heading blocks — anchoring the first ` +
+        `${Math.min(headings.length, pending.anchors.length)} only`);
+    }
     const rows: NoteAnchor[] = [];
     headings.forEach((h: AnyBlock, i: number) => {
       const p = pending.anchors[i];
-      if (!p) return;
+      if (!p) return;                          // that <h2> carried no anchor
       const rid = pending.sourceIds[p.sourceIndex - 1];
-      if (!rid) return;   // model invented a source index — drop it
+      if (!rid) return;                        // model invented a source index
       rows.push({
         block_id: h.id, resource_id: rid, anchor_type: p.type,
         anchor_start: p.value, anchor_end: p.value,
       });
     });
     if (rows.length === 0) return;
-    const merged = mode === "append" ? [...anchors, ...rows] : rows;
-    wsApi.putAnchors(note.id, merged).then(() => setAnchors(merged)).catch(() => {});
-  }, [anchors, note.id]);
+    // Read through the ref, not state: two appends can land before React
+    // re-renders, and PUT replaces every row, so a stale list would erase the
+    // earlier one. Drop anchors whose block the user has since deleted.
+    const live = new Set(editorRef.current?.blockIds() ?? []);
+    const kept = mode === "append"
+      ? anchorsRef.current.filter((a) => live.has(a.block_id))
+      : [];
+    const merged = [...kept, ...rows];
+    anchorsRef.current = merged;
+    setAnchors(merged);
+    wsApi.putAnchors(note.id, merged).catch(() => {});
+  }, [note.id]);
 
   // ── synthesis apply API (used by useSynthesis) ─────────────────────────────
   const collect = useCallback((html: string, sourceIds: string[]) => {
-    // Read data-anchor values in document order BEFORE BlockNote parsing strips
-    // unknown attributes; they get zipped with the heading blocks afterwards.
+    // Read anchors in document order BEFORE BlockNote parsing strips unknown
+    // attributes. One entry per <h2> — null where that heading carried none —
+    // so the zip against parsed heading blocks stays aligned.
     const doc = new window.DOMParser().parseFromString(html, "text/html");
-    const list: PendingAnchor[] = [];
-    doc.querySelectorAll("h2[data-anchor]").forEach((h) => {
-      const parsed = parseSourceAnchor(h.getAttribute("data-anchor") || "");
-      if (parsed) list.push(parsed);
+    const list: (PendingAnchor | null)[] = [];
+    doc.querySelectorAll("h2").forEach((h) => {
+      const raw = h.getAttribute("data-anchor");
+      list.push(raw ? parseSourceAnchor(raw) : null);
     });
     pendingRef.current = { anchors: list, sourceIds };
   }, []);
@@ -166,6 +187,7 @@ export function NotePane({
           editorRef.current?.insertHtmlAtEnd(html).then((blocks) => {
             registerAnchors(blocks, "append");
             baselineTextRef.current = currentTextRef.current;
+            dirtyRef.current = false;
             onApplied();
           }).catch(() => {});
         } else {
@@ -173,11 +195,14 @@ export function NotePane({
         }
       },
       hasUserEdits: () => {
+        // Dirty beats text comparison: autosave is debounced ~2s, so the text
+        // snapshot lags the editor and must never be the only signal.
+        if (dirtyRef.current) return true;
         const cur = normalize(currentTextRef.current);
         if (!cur) return false;
         if (baselineTextRef.current !== null
             && normalize(baselineTextRef.current) === cur) return false;
-        return true;   // content we can't prove came from a draft → treat as the user's
+        return true;   // content we can't prove came from a draft → the user's
       },
     };
     return () => { applyRef.current = null; };
@@ -186,8 +211,11 @@ export function NotePane({
   const handleBlocksApplied = useCallback((blocks: AnyBlock[]) => {
     registerAnchors(blocks, "replace");
     baselineTextRef.current = getPlainText(blocks);
+    dirtyRef.current = false;
     onApplied();
   }, [registerAnchors, onApplied]);
+
+  const markDirty = useCallback(() => { dirtyRef.current = true; }, []);
 
   // ── save ──────────────────────────────────────────────────────────────────
   const handleSave = useCallback(async (blocks: AnyBlock[], plainText: string) => {
@@ -338,6 +366,7 @@ export function NotePane({
             onSave={handleSave}
             ingestHtml={ingestHtml}
             onBlocksApplied={handleBlocksApplied}
+            onDirty={markDirty}
           />
         </div>
       </div>
