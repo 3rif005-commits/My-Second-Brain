@@ -32,6 +32,16 @@ from services.workspace.synthesis import maybe_synthesize
 logger = logging.getLogger(__name__)
 
 
+def _pg_safe(text: str | None) -> str | None:
+    """Postgres text columns reject a literal NUL byte outright (error
+    22P05, "\\u0000 cannot be converted to text") — a known artifact of
+    PDF text extraction on malformed/binary-embedded content streams.
+    Strip it before any extracted text reaches an insert."""
+    if text is None:
+        return None
+    return text.replace("\x00", "")
+
+
 def _set_status(rid: str, status: str, error: str | None = None) -> None:
     patch: dict = {"status": status, "error": error}
     with_retry(lambda: get_supabase().table("note_resources")
@@ -63,7 +73,7 @@ def _insert_elements(resource: dict, elements: list[dict]) -> None:
             "element_type": el["element_type"],
             "order_index": el.get("order_index", i),
             "bbox": el.get("bbox"),
-            "content": el.get("content"),
+            "content": _pg_safe(el.get("content")),
             "image_path": image_path,
         })
     for start in range(0, len(rows), 200):
@@ -89,7 +99,7 @@ def _insert_chunks(resource: dict, chunks: list[dict]) -> None:
             "note_id": resource["note_id"],
             "user_id": resource["user_id"],
             "chunk_index": c["chunk_index"],
-            "chunk_text": c["chunk_text"],
+            "chunk_text": _pg_safe(c["chunk_text"]),
             "anchor_type": c["anchor_type"],
             "anchor_start": c["anchor_start"],
             "anchor_end": c["anchor_end"],
