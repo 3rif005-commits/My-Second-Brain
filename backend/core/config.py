@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     internal_api_key: str = "changeme-internal-key"   # MCP server ↔ FastAPI auth
     frontend_url: str = "http://localhost:3000"
     database_url: str = ""
+    # Gates the notes-row exclusion sweep and the database query engine.
+    # Default False: migration 014 (db_row_props) does not exist yet, so an
+    # unconditional exclusion clause would break every notes surface today.
+    # Milestone 2 flips this to True once the migration is applied.
+    database_rows_enabled: bool = False
 
     # AI substrate — Phase 1
     api_provider: str = "openrouter"        # "openrouter" | "anthropic" | "openai"

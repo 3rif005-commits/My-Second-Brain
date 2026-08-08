@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { NoteInsert } from "@/lib/types/database";
+import { excludedDatabaseRowIds } from "@/lib/database/notesExclusion";
 
 // GET /api/notes — list all notes for the authenticated user
 export async function GET() {
@@ -13,11 +14,18 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("notes")
     .select("id, title, icon, is_favorited, last_viewed_at, collection_id, topics, mastery_status, source_type, position, created_at, updated_at")
     .eq("user_id", user.id)
-    .is("deleted_at", null)
+    .is("deleted_at", null);
+
+  const excludedIds = await excludedDatabaseRowIds(supabase, user.id);
+  if (excludedIds && excludedIds.length > 0) {
+    query = query.not("id", "in", `(${excludedIds.join(",")})`);
+  }
+
+  const { data, error } = await query
     .order("position", { ascending: true })
     .order("updated_at", { ascending: false });
 

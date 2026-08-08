@@ -2,10 +2,12 @@ import logging
 import sys
 import time
 import uuid
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 from routers import notes, ingest, retrieval, internal, agent, agent_inline, agent_ingest, skills_api, mcp_api, note_sources
+from services.db.connection import close_pool
 
 # ── Logging ─────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -15,7 +17,16 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-app = FastAPI(title="Second Brain API", version="0.2.0", redirect_slashes=False)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    # Safe no-op if the database query engine's pool was never created
+    # (database_rows_enabled defaults False, so this is normally the case).
+    await close_pool()
+
+
+app = FastAPI(title="Second Brain API", version="0.2.0", redirect_slashes=False, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
