@@ -567,3 +567,52 @@ routes backing the existing `/brain/settings/mcp` UI.
 **Test status:** covered by the 126/126 backend suite (`test_mcp_client.py`,
 `test_permissions.py`). Not yet driven live end-to-end against a real external MCP
 server — worth doing before relying on this in a demo.
+
+---
+
+## Notion Databases — PLANNED, not started (2026-08-08)
+
+Full-parity clone of Notion's **database** system, native on our stack (no Notion API).
+This is the half `NOTION_PHASE.md` deliberately left out — that phase cloned the
+page/editor UX, this one clones databases.
+
+**Deliverables written this session (no code yet):**
+- `docs/research/notion-databases-research.md` — 7,497-line sourced feature inventory,
+  186 catalogued unknowns
+- `docs/superpowers/specs/2026-08-08-notion-databases-design.md` — the design
+- `docs/plans/2026-08-08-notion-databases.md` — 15 milestones, 5 migration gates
+
+**Scope decision: build everything.** All 25 property types, all 11 view types
+(incl. Chart, Form, Map, Feed, Dashboard), filters/sorts/grouping, the 20 aggregations,
+relations, rollups, the 88-function formula language, sub-items, dependencies, templates,
+buttons, automations, inline databases, CSV I/O, AI integration.
+
+**Load-bearing decisions** (full rationale in the spec):
+- **A row IS a note.** Property values live in a narrow companion `db_row_props` keyed by
+  `note_id`, so rows inherit the editor, embeddings, RAG, backlinks, trash and share links.
+- **JSONB, not dynamic physical tables** — deliberately against the OSS prior art, because
+  we cannot run runtime DDL (no DB owner access), RLS-per-table would be unauditable, the
+  1,600-attnum ceiling is a *usage* risk for a single power user, and cross-database query
+  is the whole product. Scale envelope 50k rows/source, measured in Milestone 0.
+- **`notes.topics` / `mastery_status` / `source_type` / `source_url` stay put** and become
+  *column-backed* properties of a virtual "All Notes" data source — **zero backfill**, and
+  M2 ships a table view over the entire existing brain.
+- **Backend-only formula engine** (Pratt parser, one AST, three visitors), results
+  materialised into a separate `computed` JSONB so formulas filter and sort in SQL.
+- **`DATABASE_URL` is now required at runtime** (Supabase pooler) for the query compiler.
+
+**Corrections to prior assumptions found by research:** current Notion API version is
+`2026-03-11` (not `2025-09-03`); a **Views API** shipped 2026-03-19 that publishes the full
+view-config schema; there are **11 view types**, not 7; `last_visited_time` does not exist.
+
+**Two pre-existing bugs found while building the migration harness** (not caused by this
+work, not yet fixed):
+1. `005_notion_phase.sql` uses `CREATE POLICY IF NOT EXISTS` — **invalid in every Postgres
+   version**. `anon_read_public_notes` was therefore never created, so public share links
+   are probably broken for signed-out visitors. Check:
+   `SELECT policyname FROM pg_policies WHERE tablename='notes';`
+2. `010_mcp_servers.sql` collides with `009_ai_substrate.sql` — the migration set is **not
+   replayable from 001 in order**.
+
+**Next step:** Milestone 0 (local Postgres harness + storage benchmark). No migration has
+been written or applied yet; G1 is the first gate.
