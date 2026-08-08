@@ -77,6 +77,7 @@ HOT_NUMBER = "numPri04"
 
 RNG_SEED = 42
 ITERATIONS_PER_SHAPE = 40  # timed executions per (table, query-shape) pair
+WARMUP_ITERATIONS = 5  # untimed executions before the timed loop, per shape
 
 
 def physical_column(key: str) -> str:
@@ -259,10 +260,17 @@ def physical_count_query() -> str:
 
 
 async def time_prepared(
-    conn: asyncpg.Connection, sql: str, arg_fn, iterations: int
+    conn: asyncpg.Connection, sql: str, arg_fn, iterations: int, warmup: int = WARMUP_ITERATIONS
 ) -> list[float]:
-    """Prepare once, execute `iterations` times with varying params, return ms timings."""
+    """Prepare once, run `warmup` untimed executions (so asyncpg/Postgres has
+    switched from the custom-plan path to the generic plan before we start
+    timing — asyncpg re-plans a prepared statement's first ~5 executions),
+    then execute `iterations` more times with varying params and return ms
+    timings for those.
+    """
     stmt = await conn.prepare(sql)
+    for _ in range(warmup):
+        await stmt.fetch(*arg_fn())
     timings = []
     for _ in range(iterations):
         args = arg_fn()
@@ -314,9 +322,18 @@ async def benchmark_table(
     return results
 
 
-async def explain_snippet(conn: asyncpg.Connection, sql: str, args: list) -> str:
-    rows = await conn.fetch(f"EXPLAIN {sql}", *args)
-    return "\n".join(r[0] for r in rows[:5])
+async def explain_snippet(conn: asyncpg.Connection, sql: str, args: list, max_lines: int = 40) -> str:
+    """EXPLAIN (ANALYZE, BUFFERS) — actually executes the query and reports
+    real timings/buffer hits, not just planner cost estimates, so the plan
+    choice (seq scan vs index scan) and its actual cost are both evidence,
+    not inference."""
+    rows = await conn.fetch(f"EXPLAIN (ANALYZE, BUFFERS) {sql}", *args)
+    lines = [r[0] for r in rows]
+    return "\n".join(lines[:max_lines])
+
+
+async def table_size_bytes(conn: asyncpg.Connection, table_name: str) -> int:
+    return await conn.fetchval("SELECT pg_total_relation_size($1::regclass)", table_name)
 
 
 # --------------------------------------------------------------------------
@@ -344,6 +361,18 @@ async def run(row_counts: list[int]) -> dict:
         schema="pg_catalog",
         format="binary",
     )
+    # Force the generic (parameter-independent) query plan from the very
+    # first execution of every prepared statement, instead of relying on
+    # Postgres's default plan_cache_mode=auto 5-execution custom->generic
+    # transition. Investigation (see docs/research/storage-benchmark-results.md
+    # "Plan-caching investigation") confirmed this query's generic plan is
+    # stable and value-independent (verified via EXPLAIN EXECUTE against the
+    # live cached statement for every hot-select option), so forcing it here
+    # removes any dependency on warm-up iteration count or RNG draw order for
+    # correctness, and matches what a real pooled connection converges to
+    # after its first few real requests (this app's asyncpg pool reuses
+    # prepared statements across requests, same as this benchmark).
+    await conn.execute("SET plan_cache_mode = force_generic_plan;")
 
     all_results = {}
     try:
@@ -358,30 +387,38 @@ async def run(row_counts: list[int]) -> dict:
             await load_data(conn, n_rows, rng)
             print(f"  load took {time.perf_counter() - t0:.1f}s")
 
+            layouts = [
+                ("jsonb_unindexed", "bench_jsonb_unindexed",
+                 jsonb_order_query("bench_jsonb_unindexed"), jsonb_count_query("bench_jsonb_unindexed")),
+                ("jsonb_indexed", "bench_jsonb_indexed",
+                 jsonb_order_query("bench_jsonb_indexed"), jsonb_count_query("bench_jsonb_indexed")),
+                ("physical", "bench_physical", physical_order_query(), physical_count_query()),
+            ]
+
             row_result = {}
-            for label, order_sql, count_sql in [
-                ("jsonb_unindexed", jsonb_order_query("bench_jsonb_unindexed"),
-                 jsonb_count_query("bench_jsonb_unindexed")),
-                ("jsonb_indexed", jsonb_order_query("bench_jsonb_indexed"),
-                 jsonb_count_query("bench_jsonb_indexed")),
-                ("physical", physical_order_query(), physical_count_query()),
-            ]:
+            for label, _table_name, order_sql, count_sql in layouts:
                 print(f"  timing {label}...")
                 row_result[label] = await benchmark_table(conn, label, order_sql, count_sql, rng)
 
-            # Capture one EXPLAIN per layout for the indexed order query, to
-            # confirm the planner actually used the expression/physical index.
+            # Capture EXPLAIN (ANALYZE, BUFFERS) for ALL THREE query shapes per
+            # layout — not just order_offset0 — so the root-cause narrative in
+            # the results doc (why order_offset10000 and count are slow on
+            # JSONB) is backed by real captured plans, not an ad hoc/inferred
+            # claim. Also measure actual on-disk heap+index size per layout via
+            # pg_total_relation_size, for the same reason.
             plans = {}
-            sample_args = [rng.choice(SELECT_OPTIONS[HOT_SELECT]), 0]
-            plans["jsonb_unindexed"] = await explain_snippet(
-                conn, jsonb_order_query("bench_jsonb_unindexed"), sample_args
-            )
-            plans["jsonb_indexed"] = await explain_snippet(
-                conn, jsonb_order_query("bench_jsonb_indexed"), sample_args
-            )
-            plans["physical"] = await explain_snippet(conn, physical_order_query(), sample_args)
+            sizes = {}
+            sample_select = rng.choice(SELECT_OPTIONS[HOT_SELECT])
+            for label, table_name, order_sql, count_sql in layouts:
+                print(f"  capturing EXPLAIN for {label}...")
+                plans[label] = {
+                    "offset0": await explain_snippet(conn, order_sql, [sample_select, 0]),
+                    "offset10000": await explain_snippet(conn, order_sql, [sample_select, 10_000]),
+                    "count": await explain_snippet(conn, count_sql, [sample_select]),
+                }
+                sizes[label] = await table_size_bytes(conn, table_name)
 
-            all_results[n_rows] = {"timings": row_result, "plans": plans}
+            all_results[n_rows] = {"timings": row_result, "plans": plans, "sizes": sizes}
     finally:
         await conn.close()
 
@@ -404,7 +441,19 @@ def print_report(results: dict) -> str:
         "```sql\nWHERE <select-property> = ?  ORDER BY <number-property>  LIMIT 50 [OFFSET n]\n```\n"
     )
     lines.append(f"Hot properties: `{HOT_SELECT}` (select, equality filter), `{HOT_NUMBER}` (number, sort key).\n")
-    lines.append(f"20 properties per row, {ITERATIONS_PER_SHAPE} timed iterations per (table, shape) with randomized filter values, prepared statement reused across iterations.\n")
+    lines.append(
+        f"20 properties per row, {WARMUP_ITERATIONS} untimed warm-up executions + "
+        f"{ITERATIONS_PER_SHAPE} timed iterations per (table, shape) with randomized filter "
+        "values, prepared statement reused across iterations.\n"
+    )
+    lines.append(
+        f"**Precision caveat**: n={ITERATIONS_PER_SHAPE} samples per shape is on the low side "
+        "for a fully stable p95 estimate (p95 is the 38th-highest of 40 samples, so it moves "
+        "in ~2.5-percentile-point jumps). Treat p95 values as indicative to within roughly "
+        "±1 sample's worth of noise, not exact to two decimal places; the qualitative "
+        "conclusions (which layout/shape is an order of magnitude slower, and whether the "
+        "gate is cleared or missed by a wide margin) are not sensitive to this.\n"
+    )
 
     decision_gate_ms = 200.0
     verdict_rows = []
@@ -422,9 +471,17 @@ def print_report(results: dict) -> str:
                 if label == "jsonb_indexed" and shape_name in ("order_offset0", "order_offset10000"):
                     verdict_rows.append((n_rows, shape_name, s["p95"]))
 
-        lines.append("\n### EXPLAIN (order query, sample args)\n")
-        for label, plan in data["plans"].items():
-            lines.append(f"**{label}**\n```\n{plan}\n```\n")
+        lines.append("\n### Table sizes (`pg_total_relation_size`, heap + indexes + TOAST)\n")
+        lines.append("| Layout | Size |")
+        lines.append("|---|---:|")
+        for label, size_bytes in data["sizes"].items():
+            lines.append(f"| {label} | {size_bytes / (1024 * 1024):.1f} MB |")
+
+        lines.append("\n### EXPLAIN (ANALYZE, BUFFERS) — real captured plans, all 3 shapes\n")
+        for label, shape_plans in data["plans"].items():
+            lines.append(f"**{label}**\n")
+            for shape_name, plan in shape_plans.items():
+                lines.append(f"*{shape_name}*\n```\n{plan}\n```\n")
 
     # Decision gate: jsonb_indexed @ 50k rows, both offsets.
     lines.append("\n## Decision gate\n")
