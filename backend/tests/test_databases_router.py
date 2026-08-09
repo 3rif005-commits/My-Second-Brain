@@ -294,10 +294,278 @@ async def test_all_notes_lists_the_users_notes_excludes_others_and_trashed(
     assert str(trashed["id"]) not in ids
     assert str(others["id"]) not in ids
 
+    # Values are spec §3.3's discriminated wrapper, same shape as an
+    # ordinary data source's db_row_props.properties entries (task-5
+    # review finding 2) — not bare scalars.
     mine_row = next(r for r in rows if r["id"] == str(mine["id"]))
-    assert mine_row["properties"]["mastery_status"] == "learning"
-    assert mine_row["properties"]["topics"] == ["rust", "async"]
-    assert mine_row["properties"]["title"] == "Mine"
+    assert mine_row["properties"]["mastery_status"] == {"type": "status", "status": "learning"}
+    assert mine_row["properties"]["topics"] == {
+        "type": "multi_select", "multi_select": ["rust", "async"]
+    }
+    assert mine_row["properties"]["title"] == {"type": "title", "title": "Mine"}
+
+
+# ---------------------------------------------------------------------------
+# Listing rows for an ordinary (non-virtual) data source — task-5 review
+# finding 5: this path had zero test coverage, and depends on the jsonb
+# codec registered in services/db/connection.py's _init_connection, so it's
+# worth actually exercising rather than trusting by inspection.
+# ---------------------------------------------------------------------------
+
+async def test_list_rows_for_an_ordinary_data_source_round_trips_jsonb(
+    client, db_conn, test_user
+):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Status", "type": "status"}
+        )
+    ).json()
+
+    note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Row 1') RETURNING id", test_user
+    )
+    value = {prop["key"]: {"type": "status", "status": "in_progress"}}
+    await db_conn.execute(
+        """
+        INSERT INTO db_row_props (note_id, data_source_id, user_id, properties)
+        VALUES ($1, $2, $3, $4)
+        """,
+        note["id"], ds_id, test_user, value,
+    )
+
+    res = await client.get(f"/db/data-sources/{ds_id}/rows")
+    assert res.status_code == 200
+    rows = res.json()["rows"]
+    assert len(rows) == 1
+    assert rows[0]["id"] == str(note["id"])
+    assert rows[0]["properties"] == value  # round-tripped through the jsonb codec intact
+
+
+async def test_list_rows_404s_for_an_unknown_data_source(client):
+    res = await client.get(f"/db/data-sources/{uuid.uuid4()}/rows")
+    assert res.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Writing a row's property value (task-5 review finding 1) — blocking for
+# the frontend's own planned test cases ("TableView renders 8 property
+# types read-only, then editable"; "optimistic edit rolls back and toasts
+# on a 500"), neither buildable without a way to write a cell.
+# ---------------------------------------------------------------------------
+
+async def test_update_row_property_writes_a_single_key_and_leaves_others_untouched(
+    client, db_conn, test_user
+):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+
+    prop_a = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Status", "type": "status"}
+        )
+    ).json()
+    prop_b = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Notes", "type": "rich_text"}
+        )
+    ).json()
+
+    note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Row 1') RETURNING id", test_user
+    )
+    initial = {
+        prop_a["key"]: {"type": "status", "status": "not_started"},
+        prop_b["key"]: {"type": "rich_text", "rich_text": "hello"},
+    }
+    await db_conn.execute(
+        """
+        INSERT INTO db_row_props (note_id, data_source_id, user_id, properties)
+        VALUES ($1, $2, $3, $4)
+        """,
+        note["id"], ds_id, test_user, initial,
+    )
+
+    res = await client.patch(
+        f"/db/data-sources/{ds_id}/rows/{note['id']}",
+        json={"property_key": prop_a["key"], "value": {"type": "status", "status": "done"}},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["id"] == str(note["id"])
+    assert body["properties"][prop_a["key"]] == {"type": "status", "status": "done"}
+    assert body["properties"][prop_b["key"]] == {"type": "rich_text", "rich_text": "hello"}
+
+    row_after = await db_conn.fetchrow(
+        "SELECT properties FROM db_row_props WHERE note_id = $1", note["id"]
+    )
+    # The other property's value is byte-identical -- the write only ever
+    # touches its own key (jsonb_set's third argument is the target path).
+    assert row_after["properties"][prop_b["key"]] == initial[prop_b["key"]]
+    assert row_after["properties"][prop_a["key"]] == {"type": "status", "status": "done"}
+
+
+async def test_update_row_property_404s_for_unknown_property(client, db_conn, test_user):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Row 1') RETURNING id", test_user
+    )
+    await db_conn.execute(
+        "INSERT INTO db_row_props (note_id, data_source_id, user_id) VALUES ($1, $2, $3)",
+        note["id"], ds_id, test_user,
+    )
+    res = await client.patch(
+        f"/db/data-sources/{ds_id}/rows/{note['id']}",
+        json={"property_key": "doesNotEx", "value": {"type": "status", "status": "x"}},
+    )
+    assert res.status_code == 404
+
+
+async def test_update_row_property_404s_for_an_unknown_row(client):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Status", "type": "status"}
+        )
+    ).json()
+
+    res = await client.patch(
+        f"/db/data-sources/{ds_id}/rows/{uuid.uuid4()}",
+        json={"property_key": prop["key"], "value": {"type": "status", "status": "x"}},
+    )
+    assert res.status_code == 404
+
+
+async def test_update_row_property_404s_for_another_users_row(client, db_conn, test_user):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Status", "type": "status"}
+        )
+    ).json()
+    note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Row 1') RETURNING id", test_user
+    )
+    await db_conn.execute(
+        "INSERT INTO db_row_props (note_id, data_source_id, user_id, properties) "
+        "VALUES ($1, $2, $3, '{}')",
+        note["id"], ds_id, test_user,
+    )
+
+    other_user = str(uuid.uuid4())
+    await db_conn.execute(
+        "INSERT INTO auth.users (id, email) VALUES ($1, $2)", other_user, f"{other_user}@t.local"
+    )
+    app.dependency_overrides[get_user_id] = lambda: other_user
+
+    res = await client.patch(
+        f"/db/data-sources/{ds_id}/rows/{note['id']}",
+        json={"property_key": prop["key"], "value": {"type": "status", "status": "x"}},
+    )
+    assert res.status_code == 404
+
+
+async def test_update_row_property_404s_when_row_belongs_to_a_different_data_source(
+    client, db_conn, test_user
+):
+    created1 = await _create_database(client, "DB1")
+    created2 = await _create_database(client, "DB2")
+    ds1_id = created1["data_source"]["id"]
+    ds2_id = created2["data_source"]["id"]
+
+    # Same name/type on both, so the mixup is caught even when the property
+    # *shape* matches -- only the (data_source_id, key) pair actually differs.
+    prop2 = (
+        await client.post(
+            f"/db/data-sources/{ds2_id}/properties", json={"name": "Status", "type": "status"}
+        )
+    ).json()
+
+    note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Row 1') RETURNING id", test_user
+    )
+    await db_conn.execute(
+        "INSERT INTO db_row_props (note_id, data_source_id, user_id, properties) "
+        "VALUES ($1, $2, $3, '{}')",
+        note["id"], ds1_id, test_user,
+    )
+
+    # prop2's key only exists under ds2 -- but the row lives under ds1.
+    res = await client.patch(
+        f"/db/data-sources/{ds1_id}/rows/{note['id']}",
+        json={"property_key": prop2["key"], "value": {"type": "status", "status": "x"}},
+    )
+    assert res.status_code == 404
+
+
+async def test_update_row_property_is_not_implemented_for_all_notes(client):
+    res = await client.patch(
+        f"/db/data-sources/{ALL_NOTES_ID}/rows/{uuid.uuid4()}",
+        json={"property_key": "topics", "value": {"type": "multi_select", "multi_select": []}},
+    )
+    assert res.status_code == 501
+
+
+# ---------------------------------------------------------------------------
+# View updates (task-5 review finding 1: "there's also no view-update
+# endpoint" -- column width/visibility/sort persistence has nowhere to go).
+# ---------------------------------------------------------------------------
+
+async def test_update_view_partially_updates_only_provided_fields(client):
+    created = await _create_database(client)
+    view_id = created["views"][0]["id"]
+
+    res = await client.patch(f"/db/views/{view_id}", json={"name": "My View"})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["name"] == "My View"
+    assert body["type"] == "table"  # untouched
+    assert body["is_locked"] is False  # untouched
+
+
+async def test_update_view_can_persist_filter_sorts_and_config(client):
+    created = await _create_database(client)
+    view_id = created["views"][0]["id"]
+
+    res = await client.patch(
+        f"/db/views/{view_id}",
+        json={
+            "filter": {
+                "type": "condition", "property": "a7Kd9x", "operator": "is_empty", "value": None,
+            },
+            "sorts": [{"property": "a7Kd9x", "direction": "asc"}],
+            "config": {"frozen_column_index": 1},
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["filter"]["property"] == "a7Kd9x"
+    assert body["sorts"] == [{"property": "a7Kd9x", "direction": "asc"}]
+    assert body["config"] == {"frozen_column_index": 1}
+
+
+async def test_update_view_404s_for_unknown_view(client):
+    res = await client.patch(f"/db/views/{uuid.uuid4()}", json={"name": "X"})
+    assert res.status_code == 404
+
+
+async def test_update_view_404s_for_another_users_view(client, db_conn):
+    created = await _create_database(client)
+    view_id = created["views"][0]["id"]
+
+    other_user = str(uuid.uuid4())
+    await db_conn.execute(
+        "INSERT INTO auth.users (id, email) VALUES ($1, $2)", other_user, f"{other_user}@t.local"
+    )
+    app.dependency_overrides[get_user_id] = lambda: other_user
+
+    res = await client.patch(f"/db/views/{view_id}", json={"name": "X"})
+    assert res.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -328,15 +596,35 @@ def _extract_sql_statements(path: Path) -> list[str]:
     return statements
 
 
+# A real scope predicate, not just a mention: `user_id = $3` (or similar).
+# INSERTs don't have a WHERE predicate at all — their tenancy guarantee is
+# that they write user_id as a column value, so those are checked
+# separately (a plain "is the word present" substring check, which is
+# exactly right for a column list: `INSERT INTO t (user_id, ...) VALUES
+# (...)`). A loose "user_id" substring check on every statement would also
+# pass on a comment or a column-list mention with no actual WHERE
+# predicate, which is what this is tightening (task-5 review, minor
+# finding 1).
+_SCOPE_PREDICATE_RE = re.compile(r"user_id\s*=\s*\$\d+")
+
+
+def _assert_has_scope_predicate(stmt: str) -> None:
+    first_word = stmt.strip().split(None, 1)[0].upper()
+    if first_word == "INSERT":
+        assert re.search(r"\buser_id\b", stmt), f"INSERT never mentions user_id:\n{stmt}"
+        return
+    assert _SCOPE_PREDICATE_RE.search(stmt), f"query missing a real user_id = $N predicate:\n{stmt}"
+
+
 def test_every_query_in_databases_router_has_a_user_id_scope_predicate():
     statements = _extract_sql_statements(_ROUTER_PATH)
     assert len(statements) >= 8, "expected to find the router's SQL statements"
     for stmt in statements:
-        assert "user_id" in stmt, f"query missing the user_id scope predicate:\n{stmt}"
+        _assert_has_scope_predicate(stmt)
 
 
 def test_every_query_in_views_service_has_a_user_id_scope_predicate():
     statements = _extract_sql_statements(_VIEWS_PATH)
     assert len(statements) >= 2, "expected to find the views service's SQL statements"
     for stmt in statements:
-        assert "user_id" in stmt, f"query missing the user_id scope predicate:\n{stmt}"
+        _assert_has_scope_predicate(stmt)

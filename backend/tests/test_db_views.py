@@ -107,13 +107,31 @@ def test_strip_handles_depth_up_to_the_spec_sanity_cap():
         node = {"type": "group", "op": "and", "children": [node]}
     new_filter, _, _ = strip_property_key(node, [], {}, key)
 
-    def _all_children_empty(n):
-        if n["type"] == "group":
-            assert n["children"] == [] or all(_all_children_empty(c) for c in n["children"])
     # The innermost condition is gone; walking back out just leaves nested
     # empty groups, never a leftover reference to the deleted key.
     import json
     assert key not in json.dumps(new_filter)
+
+
+def test_strip_nulls_group_by_when_it_directly_matches():
+    # spec §10: the sweep covers "filter, sorts, config.properties[] and
+    # group_by" — group_by is documented as `object | null`, i.e. a
+    # dict-valued field, not a list element like the other three.
+    config = {
+        "group_by": {"property": "a7Kd9x", "direction": "asc"},
+        "properties": [{"property": "p2Lm4q", "visible": True}],
+    }
+    _, _, new_config = strip_property_key(None, [], config, "a7Kd9x")
+    assert new_config == {
+        "group_by": None,
+        "properties": [{"property": "p2Lm4q", "visible": True}],
+    }
+
+
+def test_strip_leaves_group_by_untouched_when_it_does_not_match():
+    config = {"group_by": {"property": "p2Lm4q", "direction": "asc"}}
+    _, _, new_config = strip_property_key(None, [], config, "a7Kd9x")
+    assert new_config == config
 
 
 # ---------------------------------------------------------------------------

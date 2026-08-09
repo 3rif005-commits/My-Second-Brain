@@ -33,8 +33,11 @@ from models.database import (
     PropertyCreate,
     PropertyRename,
     PropertyResponse,
+    RowPropertyUpdate,
+    RowResponse,
     RowsResponse,
     ViewResponse,
+    ViewUpdate,
 )
 from routers.notes import get_user_id
 from services.db.connection import get_conn
@@ -65,6 +68,16 @@ def _jsonify(value: Any) -> Any:
     if isinstance(value, uuid_lib.UUID):
         return str(value)
     return value
+
+
+def _wrap_column_value(prop_type: str, raw: Any) -> dict[str, Any]:
+    """Apply spec §3.3's discriminated-value wrapper
+    (`{"type": <type>, <type>: <value>}`) to a raw `notes` column value, so
+    an All Notes row has the same per-property value *shape* as an
+    ordinary data source's `db_row_props.properties` entry — task-5 review
+    finding 2: the frontend must not need a virtual-source branch for cell
+    value shape, only for whether writes are possible at all."""
+    return {"type": prop_type, prop_type: raw}
 
 
 def _row(record: asyncpg.Record) -> dict[str, Any]:
@@ -287,10 +300,18 @@ async def list_rows(
     plain "list everything" query for both the virtual and ordinary case.
     """
     if data_source_id == ALL_NOTES_ID:
+        # Column list is built from COLUMN_BACKED itself (task-5 review
+        # finding 3) rather than duplicated as a hardcoded literal list —
+        # those two lists silently drifting apart would KeyError below
+        # (r[prop.column]) with nothing catching it if COLUMN_BACKED ever
+        # grows a new entry. Safe to interpolate: every name in
+        # COLUMN_BACKED is a fixed, already-validated Python literal (see
+        # services/db/properties/columns.py's own module-level guard), not
+        # request-influenced.
+        _all_notes_columns = ", ".join(prop.column for prop in COLUMN_BACKED.values())
         note_rows = await conn.fetch(
-            """
-            SELECT id, title, icon, topics, mastery_status, source_type,
-                   source_url, is_favorited, created_at, updated_at
+            f"""
+            SELECT id, {_all_notes_columns}
             FROM notes
             WHERE user_id = $1 AND deleted_at IS NULL
             ORDER BY updated_at DESC
@@ -301,7 +322,8 @@ async def list_rows(
             {
                 "id": str(r["id"]),
                 "properties": {
-                    prop.column: _jsonify(r[prop.column]) for prop in COLUMN_BACKED.values()
+                    prop.column: _wrap_column_value(prop.type, _jsonify(r[prop.column]))
+                    for prop in COLUMN_BACKED.values()
                 },
             }
             for r in note_rows
@@ -330,6 +352,89 @@ async def list_rows(
     )
     rows = [{"id": str(r["note_id"]), "properties": r["properties"]} for r in row_rows]
     return RowsResponse(rows=rows)
+
+
+@router.patch("/data-sources/{data_source_id}/rows/{note_id}", response_model=RowResponse)
+async def update_row_property(
+    data_source_id: str,
+    note_id: str,
+    body: RowPropertyUpdate,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RowResponse:
+    """Write a single property's value on a single row (task-5 review
+    finding 1 — the milestone's own frontend test cases, "TableView
+    renders 8 property types read-only, then editable" and "optimistic
+    edit rolls back and toasts on a 500", aren't buildable without this).
+
+    Ordinary data sources only: this endpoint writes into `db_row_props.
+    properties`, a JSONB column keyed by minted property keys.
+    `body.value` is the full spec §3.3 wrapper (e.g. `{"type": "status",
+    "status": "done"}`), matching what `GET .../rows` returns and what's
+    actually stored — never a bare scalar.
+
+    All Notes (the virtual source, `data_source_id == "all-notes"`) is
+    deliberately NOT handled here: each column-backed property has a
+    genuinely different write-side coercion (an array for `topics`, an
+    enum-constrained scalar for `mastery_status` with a `notes` CHECK
+    constraint, a `rich_text`-typed wrapper for `icon` despite the column
+    being a plain string, `created_at`/`updated_at` being read-only
+    computed timestamps that should reject writes rather than silently
+    accept them) rather than one generic JSONB merge. Building that
+    correctly for all 9 columns is real, separate scope; shipping it
+    rushed risks a wrong-coercion bug that's worse than not having the
+    endpoint yet. Deferred, not forgotten — flagged again in the task-5
+    report.
+    """
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_501_NOT_IMPLEMENTED,
+            "row writes on the All Notes virtual source are not yet implemented",
+        )
+
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    note_id = _parse_uuid_or_404(note_id, "row")
+
+    ds_row = await conn.fetchrow(
+        """
+        SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2
+        """,
+        data_source_id,
+        user_id,
+    )
+    if ds_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    prop_row = await conn.fetchrow(
+        """
+        SELECT storage FROM db_properties
+        WHERE data_source_id = $1 AND user_id = $2 AND key = $3
+        """,
+        data_source_id,
+        user_id,
+        body.property_key,
+    )
+    if prop_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "property not found")
+    if prop_row["storage"] != "jsonb":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "property is not JSONB-backed")
+
+    row = await conn.fetchrow(
+        """
+        UPDATE db_row_props
+        SET properties = jsonb_set(properties, $1, $2, true), updated_at = now()
+        WHERE note_id = $3 AND data_source_id = $4 AND user_id = $5
+        RETURNING note_id, properties
+        """,
+        [body.property_key],
+        body.value,
+        note_id,
+        data_source_id,
+        user_id,
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "row not found")
+    return RowResponse(id=str(row["note_id"]), properties=row["properties"])
 
 
 @router.post(
@@ -451,3 +556,61 @@ async def delete_property(
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "property not found")
         await sweep_property_from_views(conn, user_id, str(row["data_source_id"]), row["key"])
+
+
+# `ViewUpdate`'s own declared field names — never request-supplied, so
+# building a SET clause from them (below) isn't a SQL-injection surface,
+# the same reasoning as the column allow-list in
+# services/db/properties/columns.py.
+_VIEW_UPDATABLE_FIELDS = ("name", "icon", "config", "filter", "sorts", "is_locked", "position")
+
+
+@router.patch("/views/{view_id}", response_model=ViewResponse)
+async def update_view(
+    view_id: str,
+    body: ViewUpdate,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> ViewResponse:
+    """Partial update (task-5 review finding 1: column width/visibility/
+    sort persistence "has nowhere to go" without this). Only fields
+    actually present in the request body are touched
+    (`model_dump(exclude_unset=True)`), so `{"filter": null}` clears the
+    filter but omitting `filter` leaves it alone.
+
+    `view_id`/`user_id` are always bound to the fixed placeholders `$1`/
+    `$2`, regardless of how many optional fields are being set — so the
+    WHERE clause's scope predicate is always the same literal text (see
+    `tests/test_databases_router.py`'s guard test, which greps for exactly
+    that), even though the SET clause's shape varies.
+    """
+    view_id = _parse_uuid_or_404(view_id, "view")
+    updates = {
+        field: value
+        for field, value in body.model_dump(exclude_unset=True).items()
+        if field in _VIEW_UPDATABLE_FIELDS
+    }
+
+    if not updates:
+        row = await conn.fetchrow(
+            """
+            SELECT * FROM db_views WHERE id = $1 AND user_id = $2
+            """,
+            view_id,
+            user_id,
+        )
+    else:
+        set_sql = ", ".join(f"{field} = ${i + 3}" for i, field in enumerate(updates))
+        row = await conn.fetchrow(
+            f"""
+            UPDATE db_views SET {set_sql}
+            WHERE id = $1 AND user_id = $2
+            RETURNING *
+            """,
+            view_id,
+            user_id,
+            *updates.values(),
+        )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "view not found")
+    return ViewResponse(**_row(row))

@@ -28,9 +28,18 @@ def _strip_key(node: Any, key: str) -> Any:
     """Recursively remove any object that references `key`
     (`{"property": key, ...}`) from `node`, wherever nested.
 
-    Handles a filter group's `children`, a `sorts` array, and `config.
-    properties[]` uniformly: all three are "a list of objects that may
-    carry a `property` field", so one generic list/dict walk covers them.
+    Handles two shapes, per spec §10 ("filter, sorts, config.properties[]
+    and group_by"):
+
+    - **List membership** (a filter group's `children`, a `sorts` array,
+      `config.properties[]`): a matching element is dropped from the list
+      entirely.
+    - **Dict-valued field** (`config.group_by`, documented in spec §10 as
+      `object | null`): a matching value is replaced with `None` rather
+      than the key being removed — consistent with how a matching *root*
+      filter becomes `None` in `strip_property_key` below, and simpler for
+      a reader to reason about than "the key vanished".
+
     Recursion terminates naturally on scalars; arbitrary nesting is
     supported (spec §8.1 sanity-caps filter depth at 10, but this walk
     doesn't need to know that cap to be correct).
@@ -43,7 +52,13 @@ def _strip_key(node: Any, key: str) -> Any:
             kept.append(_strip_key(item, key))
         return kept
     if isinstance(node, dict):
-        return {k: _strip_key(v, key) for k, v in node.items()}
+        result = {}
+        for k, v in node.items():
+            if isinstance(v, dict) and v.get("property") == key:
+                result[k] = None  # e.g. config.group_by directly matching
+            else:
+                result[k] = _strip_key(v, key)
+        return result
     return node
 
 

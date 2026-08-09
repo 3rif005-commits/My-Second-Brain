@@ -101,6 +101,25 @@ class ViewResponse(BaseModel):
     position: int = 0
 
 
+class ViewUpdate(BaseModel):
+    """Partial update for `PATCH /db/views/{view_id}`. Only fields present
+    in the request body are touched (`model_dump(exclude_unset=True)` in
+    the router) — sending `filter: null` explicitly clears it, but
+    omitting `filter` leaves it alone. No validation of `config`/`filter`/
+    `sorts` shape here: Milestone 2 has no filter/sort UI or compiler yet
+    (Milestone 3), so this is deliberately a JSONB pass-through — shape
+    enforcement is future work, not a regression from not having it now.
+    """
+
+    name: str | None = None
+    icon: str | None = None
+    config: dict[str, Any] | None = None
+    filter: dict[str, Any] | None = None
+    sorts: list[Any] | None = None
+    is_locked: bool | None = None
+    position: int | None = None
+
+
 class DatabaseDetailResponse(BaseModel):
     """The shape returned by `POST /db/databases` and `GET
     /db/databases/{database_id}` for both real and virtual databases."""
@@ -119,7 +138,29 @@ class RowsResponse(BaseModel):
     `COLUMN_BACKED[name].column` (a `notes` column name) for the virtual
     "All Notes" source — so a generic renderer can always do
     `row["properties"][property.key]` regardless of which kind of
-    database it's looking at.
+    database it's looking at. Every value, for both kinds of source, is
+    spec §3.3's discriminated wrapper (`{"type": "status", "status":
+    "learning"}`), not a bare scalar — so a cell renderer never needs a
+    virtual-source branch for the *value* shape either, only for whether
+    writes are possible at all (`DataSourceResponse.is_virtual`).
     """
 
     rows: list[dict[str, Any]]
+
+
+class RowResponse(BaseModel):
+    """A single row, same `properties` shape as one entry of
+    `RowsResponse.rows` — returned by `PATCH .../rows/{note_id}`."""
+
+    id: str
+    properties: dict[str, Any]
+
+
+class RowPropertyUpdate(BaseModel):
+    """`PATCH /db/data-sources/{data_source_id}/rows/{note_id}` body: write
+    one property's value. `value` is the full spec §3.3 wrapper (e.g.
+    `{"type": "status", "status": "done"}`), matching what's stored and
+    what `RowsResponse`/`RowResponse` return — not a bare scalar."""
+
+    property_key: str
+    value: Any = None
