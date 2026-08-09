@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { applyNotesExclusion, excludedDatabaseRowIds } from "@/lib/database/notesExclusion";
+import { notesTableName } from "@/lib/database/notesExclusion";
 
 export async function GET(req: Request) {
   const supabase = await createClient();
@@ -18,18 +18,15 @@ export async function GET(req: Request) {
   if (!q) return NextResponse.json([]);
 
   const baseQuery = supabase
-    .from("notes")
+    .from(notesTableName())
     .select("id, title, icon, topics, mastery_status, updated_at")
     .eq("user_id", user.id)
     .is("deleted_at", null)
     .limit(10);
 
-  const excludedIds = await excludedDatabaseRowIds(supabase, user.id);
-  const base = applyNotesExclusion(baseQuery, excludedIds);
-
   // Short queries don't tokenise well — fall back to ilike
   if (q.length < 3) {
-    const { data, error } = await base
+    const { data, error } = await baseQuery
       .or(`title.ilike.%${q}%,content_text.ilike.%${q}%`)
       .order("updated_at", { ascending: false });
 
@@ -38,7 +35,7 @@ export async function GET(req: Request) {
   }
 
   // Full-text search: websearch_to_tsquery handles multi-word, phrases ("…"), negation (-word)
-  const { data, error } = await base
+  const { data, error } = await baseQuery
     .textSearch("fts", q, { type: "websearch", config: "english" })
     .order("updated_at", { ascending: false });
 
@@ -46,7 +43,7 @@ export async function GET(req: Request) {
 
   // If FTS returns nothing, fall back to ilike so partial-word queries still work
   if (!data || data.length === 0) {
-    const { data: fallback } = await base
+    const { data: fallback } = await baseQuery
       .or(`title.ilike.%${q}%,content_text.ilike.%${q}%`)
       .order("updated_at", { ascending: false });
     return NextResponse.json(fallback ?? []);

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { applyNotesExclusion, excludedDatabaseRowIds } from "@/lib/database/notesExclusion";
+import { notesTableName } from "@/lib/database/notesExclusion";
 
 export async function GET() {
   const supabase = await createClient();
@@ -13,14 +13,12 @@ export async function GET() {
   }
 
   const baseQuery = supabase
-    .from("notes")
+    .from(notesTableName())
     .select("id, title, deleted_at")
     .eq("user_id", user.id)
     .not("deleted_at", "is", null);
 
-  const excludedIds = await excludedDatabaseRowIds(supabase, user.id);
-
-  const { data, error } = await applyNotesExclusion(baseQuery, excludedIds).order("deleted_at", { ascending: false });
+  const { data, error } = await baseQuery.order("deleted_at", { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

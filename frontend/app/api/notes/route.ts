@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { NoteInsert } from "@/lib/types/database";
-import { applyNotesExclusion, excludedDatabaseRowIds } from "@/lib/database/notesExclusion";
+import { notesTableName } from "@/lib/database/notesExclusion";
 
 // GET /api/notes — list all notes for the authenticated user
 export async function GET() {
@@ -15,14 +15,12 @@ export async function GET() {
   }
 
   const baseQuery = supabase
-    .from("notes")
+    .from(notesTableName())
     .select("id, title, icon, is_favorited, last_viewed_at, collection_id, topics, mastery_status, source_type, position, created_at, updated_at")
     .eq("user_id", user.id)
     .is("deleted_at", null);
 
-  const excludedIds = await excludedDatabaseRowIds(supabase, user.id);
-
-  const { data, error } = await applyNotesExclusion(baseQuery, excludedIds)
+  const { data, error } = await baseQuery
     .order("position", { ascending: true })
     .order("updated_at", { ascending: false });
 
