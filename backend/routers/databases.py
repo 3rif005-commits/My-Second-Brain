@@ -186,8 +186,12 @@ async def create_database(
     conn: asyncpg.Connection = Depends(get_conn),
 ) -> DatabaseDetailResponse:
     """One database + one (ordinary, `system_kind=NULL`) data source + one
-    default table view, all in one transaction — spec §3.1: "The UI
-    initially creates exactly one data source per database.\""""
+    default table view + one default "Title" property, all in one
+    transaction — spec §3.1: "The UI initially creates exactly one data
+    source per database." The Title property matches Notion's own
+    behaviour (every database starts with a title column) and means a
+    freshly created database is immediately usable rather than inert with
+    zero columns."""
     async with conn.transaction():
         db_row = await conn.fetchrow(
             """
@@ -219,10 +223,22 @@ async def create_database(
             user_id,
             "Default view",
         )
+        # A fresh data source has no existing keys, so a single mint (no
+        # collision-retry loop, unlike create_property below) is safe here.
+        prop_row = await conn.fetchrow(
+            """
+            INSERT INTO db_properties (data_source_id, user_id, key, name, type, storage, position)
+            VALUES ($1, $2, $3, 'Title', 'title', 'jsonb', 0)
+            RETURNING *
+            """,
+            ds_row["id"],
+            user_id,
+            mint_key(),
+        )
     return DatabaseDetailResponse(
         database=DatabaseResponse(**_row(db_row)),
         data_source=DataSourceResponse(**_row(ds_row), is_virtual=False),
-        properties=[],
+        properties=[PropertyResponse(**_row(prop_row))],
         views=[ViewResponse(**_row(view_row))],
     )
 
@@ -406,10 +422,18 @@ async def create_row(
             """,
             user_id,
         )
+        # Review round 2, minor finding: without an explicit position, every
+        # created row defaults to 0 (migration 014), so list_rows's
+        # `ORDER BY position` is an unbroken tie among them and rows can
+        # visibly reshuffle between GETs once 2+ exist. Append to the end.
         row = await conn.fetchrow(
             """
-            INSERT INTO db_row_props (note_id, data_source_id, user_id)
-            VALUES ($1, $2, $3)
+            INSERT INTO db_row_props (note_id, data_source_id, user_id, position)
+            VALUES ($1, $2, $3,
+                    COALESCE(
+                        (SELECT MAX(position) + 1 FROM db_row_props
+                         WHERE data_source_id = $2 AND user_id = $3),
+                        0))
             RETURNING note_id, properties
             """,
             note_row["id"],

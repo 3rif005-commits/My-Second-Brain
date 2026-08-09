@@ -57,7 +57,13 @@ async def test_create_database_creates_exactly_one_data_source_and_one_default_t
     assert body["database"]["title"] == "Reading List"
     assert body["data_source"]["system_kind"] is None
     assert body["data_source"]["is_virtual"] is False
-    assert body["properties"] == []
+    # A fresh database ships with a default "Title" property (product
+    # decision after the review: a database with zero columns is inert) --
+    # not an empty list.
+    assert len(body["properties"]) == 1
+    assert body["properties"][0]["name"] == "Title"
+    assert body["properties"][0]["type"] == "title"
+    assert re.fullmatch(r"[0-9A-Za-z]{8}", body["properties"][0]["key"])
     assert len(body["views"]) == 1
     assert body["views"][0]["type"] == "table"
 
@@ -68,8 +74,12 @@ async def test_create_database_creates_exactly_one_data_source_and_one_default_t
     view_count = await db_conn.fetchval(
         "SELECT count(*) FROM db_views WHERE data_source_id = $1", body["data_source"]["id"]
     )
+    prop_count = await db_conn.fetchval(
+        "SELECT count(*) FROM db_properties WHERE data_source_id = $1", body["data_source"]["id"]
+    )
     assert ds_count == 1
     assert view_count == 1
+    assert prop_count == 1
 
 
 async def test_get_database_round_trips_a_created_database(client):
@@ -376,6 +386,29 @@ async def test_create_row_creates_a_note_and_a_row_props_in_one_transaction(
     assert row is not None
     assert str(row["data_source_id"]) == ds_id
     assert row["properties"] == {}
+
+
+async def test_create_row_appends_stable_position_not_a_tie_at_zero(client, db_conn):
+    # Without an explicit position, every created row defaulted to 0 --
+    # list_rows's ORDER BY position was then an unbroken tie among them,
+    # so rows could visibly reshuffle between GETs once 2+ existed.
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+
+    first = (await client.post(f"/db/data-sources/{ds_id}/rows")).json()
+    second = (await client.post(f"/db/data-sources/{ds_id}/rows")).json()
+    third = (await client.post(f"/db/data-sources/{ds_id}/rows")).json()
+
+    positions = await db_conn.fetch(
+        "SELECT note_id, position FROM db_row_props WHERE data_source_id = $1 ORDER BY position",
+        ds_id,
+    )
+    ordered_ids = [str(r["note_id"]) for r in positions]
+    assert ordered_ids == [first["id"], second["id"], third["id"]]
+    # Strictly increasing, not all tied at the column default of 0.
+    values = [r["position"] for r in positions]
+    assert values == sorted(values)
+    assert len(set(values)) == 3
 
 
 async def test_create_row_400s_for_the_all_notes_virtual_source(client):
