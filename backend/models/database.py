@@ -104,11 +104,17 @@ class ViewResponse(BaseModel):
 class ViewUpdate(BaseModel):
     """Partial update for `PATCH /db/views/{view_id}`. Only fields present
     in the request body are touched (`model_dump(exclude_unset=True)` in
-    the router) — sending `filter: null` explicitly clears it, but
-    omitting `filter` leaves it alone. No validation of `config`/`filter`/
-    `sorts` shape here: Milestone 2 has no filter/sort UI or compiler yet
-    (Milestone 3), so this is deliberately a JSONB pass-through — shape
-    enforcement is future work, not a regression from not having it now.
+    the router). Migration 014's `db_views` has two nullable columns
+    (`icon`, `filter`) and five `NOT NULL` ones (`name`, `config`, `sorts`,
+    `is_locked`, `position`) — sending `null` explicitly for `icon` or
+    `filter` clears them, but sending `null` for any of the five `NOT
+    NULL` fields is a no-op for that field (the router drops it before it
+    ever reaches the database) rather than a `NotNullViolationError` 500;
+    the rest of the same request's fields still apply. No validation of
+    `config`/`filter`/`sorts` shape here: Milestone 2 has no filter/sort
+    UI or compiler yet (Milestone 3), so this is deliberately a JSONB
+    pass-through — shape enforcement is future work, not a regression from
+    not having it now.
     """
 
     name: str | None = None
@@ -160,7 +166,18 @@ class RowPropertyUpdate(BaseModel):
     """`PATCH /db/data-sources/{data_source_id}/rows/{note_id}` body: write
     one property's value. `value` is the full spec §3.3 wrapper (e.g.
     `{"type": "status", "status": "done"}`), matching what's stored and
-    what `RowsResponse`/`RowResponse` return — not a bare scalar."""
+    what `RowsResponse`/`RowResponse` return — not a bare scalar.
+
+    `value` is required (no default): a request that omits it is a 422 at
+    this layer, not a `NotNullViolationError` 500 once it reaches
+    `jsonb_set` (review finding 1, fix round 2 — `db_row_props.properties`
+    is `NOT NULL`, and `jsonb_set(properties, path, NULL, true)` sets the
+    *entire column* to SQL NULL, not just the targeted key). An explicit
+    top-level `null` (`{"property_key": "...", "value": null}`) is still
+    legal and is handled by the router as "clear/unset this property"
+    (`properties - key`), which is a different operation from a wrapper
+    whose *inner* value is null (e.g. `{"type": "number", "number":
+    null}`, a normal dict — routed through `jsonb_set` unchanged)."""
 
     property_key: str
-    value: Any = None
+    value: Any

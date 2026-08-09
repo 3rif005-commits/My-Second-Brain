@@ -354,6 +354,71 @@ async def list_rows(
     return RowsResponse(rows=rows)
 
 
+@router.post(
+    "/data-sources/{data_source_id}/rows",
+    response_model=RowResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_row(
+    data_source_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RowResponse:
+    """Create a new row on an ordinary (non-virtual) data source (review
+    finding 3, fix round 2: without this, `update_row_property` above was
+    unreachable end-to-end — there was no way to get a row into existence
+    in the first place, so ordinary databases had zero rows, permanently).
+
+    A database row *is* a note (spec Q2) — `db_row_props.note_id` is a FK
+    to `notes.id` — so this creates the underlying `notes` row first, then
+    the `db_row_props` companion row referencing it, in one transaction:
+    both succeed or neither does, the same pattern as `create_database`.
+
+    Minimal version: an untitled note with empty `properties` (`{}`, the
+    column default — spec §3.3: "Absent key ≡ empty," so an empty
+    properties object is a fully valid row, not a placeholder state).
+    Per-property default values (spec §5's `PropertyType.default()`) are
+    Milestone 3+ scope — not needed to unblock "a row exists to edit."
+    """
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "rows on the All Notes virtual source are notes themselves — create a note directly",
+        )
+
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    ds_row = await conn.fetchrow(
+        """
+        SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2
+        """,
+        data_source_id,
+        user_id,
+    )
+    if ds_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    async with conn.transaction():
+        note_row = await conn.fetchrow(
+            """
+            INSERT INTO notes (user_id, title)
+            VALUES ($1, 'Untitled')
+            RETURNING id
+            """,
+            user_id,
+        )
+        row = await conn.fetchrow(
+            """
+            INSERT INTO db_row_props (note_id, data_source_id, user_id)
+            VALUES ($1, $2, $3)
+            RETURNING note_id, properties
+            """,
+            note_row["id"],
+            data_source_id,
+            user_id,
+        )
+    return RowResponse(id=str(row["note_id"]), properties=row["properties"])
+
+
 @router.patch("/data-sources/{data_source_id}/rows/{note_id}", response_model=RowResponse)
 async def update_row_property(
     data_source_id: str,
@@ -419,19 +484,41 @@ async def update_row_property(
     if prop_row["storage"] != "jsonb":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "property is not JSONB-backed")
 
-    row = await conn.fetchrow(
-        """
-        UPDATE db_row_props
-        SET properties = jsonb_set(properties, $1, $2, true), updated_at = now()
-        WHERE note_id = $3 AND data_source_id = $4 AND user_id = $5
-        RETURNING note_id, properties
-        """,
-        [body.property_key],
-        body.value,
-        note_id,
-        data_source_id,
-        user_id,
-    )
+    if body.value is None:
+        # A top-level `null` means "clear/unset this property", not "set
+        # its value to SQL NULL" — `db_row_props.properties` is NOT NULL
+        # (migration 014), and `jsonb_set(properties, path, NULL, true)`
+        # would set the *entire column* to NULL, not just this key
+        # (review finding 1, fix round 2 — verified end-to-end against
+        # the harness as a real NotNullViolationError, not a theoretical
+        # concern). `properties - key` drops just the one key; spec §3.3:
+        # "Absent key ≡ empty."
+        row = await conn.fetchrow(
+            """
+            UPDATE db_row_props
+            SET properties = properties - $1, updated_at = now()
+            WHERE note_id = $2 AND data_source_id = $3 AND user_id = $4
+            RETURNING note_id, properties
+            """,
+            body.property_key,
+            note_id,
+            data_source_id,
+            user_id,
+        )
+    else:
+        row = await conn.fetchrow(
+            """
+            UPDATE db_row_props
+            SET properties = jsonb_set(properties, $1, $2, true), updated_at = now()
+            WHERE note_id = $3 AND data_source_id = $4 AND user_id = $5
+            RETURNING note_id, properties
+            """,
+            [body.property_key],
+            body.value,
+            note_id,
+            data_source_id,
+            user_id,
+        )
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "row not found")
     return RowResponse(id=str(row["note_id"]), properties=row["properties"])
@@ -564,6 +651,14 @@ async def delete_property(
 # services/db/properties/columns.py.
 _VIEW_UPDATABLE_FIELDS = ("name", "icon", "config", "filter", "sorts", "is_locked", "position")
 
+# Migration 014's `db_views`: `icon` and `filter` are the only nullable
+# columns among _VIEW_UPDATABLE_FIELDS — the other five (`name`, `config`,
+# `sorts`, `is_locked`, `position`) are NOT NULL. Sending an explicit
+# `null` for one of those five must not reach the database (review
+# finding 2, fix round 2 — verified end-to-end as a real
+# NotNullViolationError, not a theoretical concern).
+_VIEW_NULLABLE_FIELDS = frozenset({"icon", "filter"})
+
 
 @router.patch("/views/{view_id}", response_model=ViewResponse)
 async def update_view(
@@ -575,8 +670,12 @@ async def update_view(
     """Partial update (task-5 review finding 1: column width/visibility/
     sort persistence "has nowhere to go" without this). Only fields
     actually present in the request body are touched
-    (`model_dump(exclude_unset=True)`), so `{"filter": null}` clears the
-    filter but omitting `filter` leaves it alone.
+    (`model_dump(exclude_unset=True)`): `{"filter": null}` or
+    `{"icon": null}` clears them (the only two nullable columns among the
+    updatable fields), but an explicit `null` for any of the other five
+    fields (`name`/`config`/`sorts`/`is_locked`/`position`, all `NOT
+    NULL`) is dropped — a no-op for that one field, not a write — while
+    the rest of the same request's fields still apply.
 
     `view_id`/`user_id` are always bound to the fixed placeholders `$1`/
     `$2`, regardless of how many optional fields are being set — so the
@@ -589,6 +688,7 @@ async def update_view(
         field: value
         for field, value in body.model_dump(exclude_unset=True).items()
         if field in _VIEW_UPDATABLE_FIELDS
+        and (value is not None or field in _VIEW_NULLABLE_FIELDS)
     }
 
     if not updates:

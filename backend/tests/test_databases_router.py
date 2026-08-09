@@ -350,6 +350,64 @@ async def test_list_rows_404s_for_an_unknown_data_source(client):
 
 
 # ---------------------------------------------------------------------------
+# Creating a row (fix round 2, review finding 3) — without this, an ordinary
+# data source has zero rows, permanently, and the PATCH endpoint below is
+# unreachable end-to-end.
+# ---------------------------------------------------------------------------
+
+async def test_create_row_creates_a_note_and_a_row_props_in_one_transaction(
+    client, db_conn
+):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+
+    res = await client.post(f"/db/data-sources/{ds_id}/rows")
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["properties"] == {}
+
+    note = await db_conn.fetchrow("SELECT id, title FROM notes WHERE id = $1", body["id"])
+    assert note is not None
+    assert note["title"] == "Untitled"
+
+    row = await db_conn.fetchrow(
+        "SELECT data_source_id, properties FROM db_row_props WHERE note_id = $1", body["id"]
+    )
+    assert row is not None
+    assert str(row["data_source_id"]) == ds_id
+    assert row["properties"] == {}
+
+
+async def test_create_row_400s_for_the_all_notes_virtual_source(client):
+    res = await client.post(f"/db/data-sources/{ALL_NOTES_ID}/rows")
+    assert res.status_code == 400
+
+
+async def test_create_row_404s_for_unknown_data_source(client):
+    res = await client.post(f"/db/data-sources/{uuid.uuid4()}/rows")
+    assert res.status_code == 404
+
+
+async def test_create_row_404s_for_another_users_data_source(client, db_conn):
+    # migration 001's on_auth_user_created trigger already inserts a
+    # matching `profiles` row for every `auth.users` insert (see the
+    # `test_user` fixture's own docstring) -- no separate insert needed.
+    other_user = str(uuid.uuid4())
+    await db_conn.execute(
+        "INSERT INTO auth.users (id, email) VALUES ($1, $2)", other_user, f"{other_user}@t.local"
+    )
+    db_row = await db_conn.fetchrow(
+        "INSERT INTO db_databases (user_id, title) VALUES ($1, 'Other') RETURNING id", other_user
+    )
+    ds_row = await db_conn.fetchrow(
+        "INSERT INTO db_data_sources (database_id, user_id) VALUES ($1, $2) RETURNING id",
+        db_row["id"], other_user,
+    )
+    res = await client.post(f"/db/data-sources/{ds_row['id']}/rows")
+    assert res.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # Writing a row's property value (task-5 review finding 1) — blocking for
 # the frontend's own planned test cases ("TableView renders 8 property
 # types read-only, then editable"; "optimistic edit rolls back and toasts
@@ -511,6 +569,68 @@ async def test_update_row_property_is_not_implemented_for_all_notes(client):
     assert res.status_code == 501
 
 
+async def test_update_row_property_with_explicit_null_clears_the_key(
+    client, db_conn, test_user
+):
+    # Review finding 1, fix round 2: `jsonb_set(properties, path, NULL, true)`
+    # would set the *entire* NOT NULL `properties` column to SQL NULL, not
+    # just this key -- a real NotNullViolationError verified against the
+    # harness. An explicit top-level `null` must instead drop just the key
+    # (`properties - key`), spec §3.3: "Absent key ≡ empty."
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Status", "type": "status"}
+        )
+    ).json()
+
+    note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Row 1') RETURNING id", test_user
+    )
+    await db_conn.execute(
+        """
+        INSERT INTO db_row_props (note_id, data_source_id, user_id, properties)
+        VALUES ($1, $2, $3, $4)
+        """,
+        note["id"], ds_id, test_user, {prop["key"]: {"type": "status", "status": "done"}},
+    )
+
+    res = await client.patch(
+        f"/db/data-sources/{ds_id}/rows/{note['id']}",
+        json={"property_key": prop["key"], "value": None},
+    )
+    assert res.status_code == 200, res.text
+    assert prop["key"] not in res.json()["properties"]
+
+    row_after = await db_conn.fetchrow(
+        "SELECT properties FROM db_row_props WHERE note_id = $1", note["id"]
+    )
+    # The column itself is still NOT NULL -- only the one key is gone.
+    assert row_after["properties"] is not None
+    assert prop["key"] not in row_after["properties"]
+
+
+async def test_update_row_property_requires_a_value_field(client, db_conn, test_user):
+    # Review finding 1, fix round 2: `value` has no default (was `Any = None`,
+    # now required) -- an omitted `value` is a 422 at the Pydantic layer, not
+    # a NotNullViolationError 500 once it reaches `jsonb_set`.
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Row 1') RETURNING id", test_user
+    )
+    await db_conn.execute(
+        "INSERT INTO db_row_props (note_id, data_source_id, user_id) VALUES ($1, $2, $3)",
+        note["id"], ds_id, test_user,
+    )
+    res = await client.patch(
+        f"/db/data-sources/{ds_id}/rows/{note['id']}",
+        json={"property_key": "doesNotMatter"},
+    )
+    assert res.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # View updates (task-5 review finding 1: "there's also no view-update
 # endpoint" -- column width/visibility/sort persistence has nowhere to go).
@@ -547,6 +667,29 @@ async def test_update_view_can_persist_filter_sorts_and_config(client):
     assert body["filter"]["property"] == "a7Kd9x"
     assert body["sorts"] == [{"property": "a7Kd9x", "direction": "asc"}]
     assert body["config"] == {"frozen_column_index": 1}
+
+
+async def test_update_view_drops_explicit_null_for_a_non_nullable_field_without_crashing(
+    client,
+):
+    # Review finding 2, fix round 2: 5 of the 7 updatable fields (name,
+    # config, sorts, is_locked, position) are NOT NULL columns. An explicit
+    # `null` for one of them used to reach the database as a real
+    # NotNullViolationError 500 -- verified against the harness. It must
+    # instead be a no-op for that one field, with the rest of the same
+    # request still applying, and only `icon`/`filter` may actually clear.
+    created = await _create_database(client)
+    view_id = created["views"][0]["id"]
+    original_name = created["views"][0]["name"]
+
+    res = await client.patch(
+        f"/db/views/{view_id}",
+        json={"name": None, "icon": "📊"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["name"] == original_name  # untouched, not nulled
+    assert body["icon"] == "📊"  # the nullable field still applied
 
 
 async def test_update_view_404s_for_unknown_view(client):
