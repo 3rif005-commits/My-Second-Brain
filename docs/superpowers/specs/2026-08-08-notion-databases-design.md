@@ -274,8 +274,10 @@ class PropertyType(Protocol):
     def coerce_write(self, raw) -> Any          # validation on write
 ```
 
-Adding a property type is one file plus its registration — the 25 types are 25
-implementations of one interface, not 25 special cases scattered through the compiler.
+Adding a property type is one file plus its registration — the 24 real, addressable
+types (research §F.1, items 1-24; item 25, AI autofill, is explicitly not a property
+type — a configuration layer on an existing property, never a schema entry) are 24
+implementations of one interface, not 24 special cases scattered through the compiler.
 
 Per-property universal options (`description`, per-view `visible`/`width`/`wrap`,
 `date_format`, `time_format`) live in the **view** config, not the property, matching
@@ -557,7 +559,7 @@ app/(brain)/brain/db/[databaseId]/page.tsx
       CalendarView · TimelineView   ← dependency arrows, date shifting
       ChartView · MapView · FormView · DashboardView
     RowPeek                         ← side/centre peek, full NoteEditorPage inside
-components/database/cells/*.tsx     ← one editor per property type (25)
+components/database/cells/*.tsx     ← one editor per property type (24)
 components/database/DatabaseBlock.tsx  ← inline DB (BlockNote block)
 ```
 

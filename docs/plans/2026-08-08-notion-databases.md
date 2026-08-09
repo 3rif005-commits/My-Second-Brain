@@ -103,7 +103,7 @@ frontend/components/database/
   FilterBuilder.tsx  SortBuilder.tsx  GroupBuilder.tsx  PropertyMenu.tsx
   views/  TableView · BoardView · GalleryView · ListView · FeedView
           CalendarView · TimelineView · ChartView · MapView · FormView · DashboardView
-  cells/  one editor per property type (25 files)
+  cells/  one editor per property type (24 files)
   DatabaseBlock.tsx
 frontend/lib/database/  types.ts  useDatabaseView.ts  filterAst.ts
 ```
@@ -123,7 +123,7 @@ frontend/lib/database/  types.ts  useDatabaseView.ts  filterAst.ts
 | 2 | Migration 014 + database/data-source/property CRUD + **"All Notes" virtual source** | **Table view over the entire existing brain** | G1 |
 | 3 | Filter→SQL compiler + sorts + pagination | Filter and sort any view | — |
 | 4 | Grouping, sub-grouping, the 20 aggregations | Board-ready querying, calculations row | — |
-| 5 | Remaining property types + cell editors | All 25 types editable | — |
+| 5 | Remaining property types + cell editors | All 24 types editable | — |
 | 6 | Board · Gallery · List · Feed views | Four more view surfaces | — |
 | 7 | Relations, two-way pairs, sub-items, dependencies | Linked databases, hierarchy | G2 |
 | 8 | Formula engine + rollups + materialisation | Formulas filterable/sortable in SQL | G3 |
@@ -251,7 +251,7 @@ cat docs/research/storage-benchmark-results.md
 
 **Test cases**
 - `mint_key()` returns 8 chars from `[0-9A-Za-z]`; 10 000 calls yield 10 000 distinct keys.
-- `REGISTRY` contains all 25 type keys; every entry satisfies the `PropertyType` protocol.
+- `REGISTRY` contains all 24 type keys; every entry satisfies the `PropertyType` protocol.
 - `COLUMN_BACKED` contains only names that exist as real `notes` columns (asserted against a hardcoded list of the 25 known columns).
 - Every existing notes query excludes rows belonging to a data source.
 

@@ -25,14 +25,13 @@ def test_column_backed_identifiers_are_safe():
 
 
 # --- Additional coverage for base.py / columns.py, not given verbatim by the brief ---
-# The design spec (§5) and plan prose describe "25 types", but research
-# §F.1 ("Complete property type inventory") enumerates exactly 24 real,
-# addressable property types (items 1-24) and explicitly resolves its own
-# item 25 -- AI autofill -- as NOT a property type ("a modifier on an
+# Research §F.1 ("Complete property type inventory") enumerates exactly 24
+# real, addressable property types (items 1-24) and explicitly resolves its
+# own item 25 -- AI autofill -- as NOT a property type ("a modifier on an
 # existing property", never a schema entry: research §F.1 line 360, and
-# again at line 81). REGISTRY therefore holds the 24 real type keys; the
-# "25" in the prose docs is not achievable without inventing a type that
-# the research explicitly says does not exist. Flagged in the task report.
+# again at line 81). REGISTRY holds those 24 real type keys; the design
+# spec and plan originally said "25" and were corrected to 24 to match
+# (confirmed by the user during Milestone 1 review — see task-2-report.md).
 REAL_TYPE_KEYS = {
     "title", "rich_text", "number", "select", "multi_select", "status",
     "date", "people", "files", "checkbox", "url", "email", "phone_number",

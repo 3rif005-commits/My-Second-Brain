@@ -64,6 +64,11 @@ ENGINE_STATE_COLUMNS: frozenset[str] = frozenset({
     "collection_id",
 })
 
-assert not (
-    {prop.column for prop in COLUMN_BACKED.values()} & ENGINE_STATE_COLUMNS
-), "COLUMN_BACKED must never expose an engine-state column"
+_overlap = {prop.column for prop in COLUMN_BACKED.values()} & ENGINE_STATE_COLUMNS
+if _overlap:
+    # Not an `assert`: this guard is load-bearing against a column-injection
+    # class of bug (spec §6) and must not be strippable by `python -O`.
+    raise RuntimeError(
+        f"COLUMN_BACKED must never expose an engine-state column, found: {sorted(_overlap)}"
+    )
+del _overlap

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { excludedDatabaseRowIds } from "@/lib/database/notesExclusion";
+import { applyNotesExclusion, excludedDatabaseRowIds } from "@/lib/database/notesExclusion";
 
 export async function GET(req: Request) {
   const supabase = await createClient();
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 
   if (!q) return NextResponse.json([]);
 
-  let base = supabase
+  const baseQuery = supabase
     .from("notes")
     .select("id, title, icon, topics, mastery_status, updated_at")
     .eq("user_id", user.id)
@@ -25,9 +25,7 @@ export async function GET(req: Request) {
     .limit(10);
 
   const excludedIds = await excludedDatabaseRowIds(supabase, user.id);
-  if (excludedIds && excludedIds.length > 0) {
-    base = base.not("id", "in", `(${excludedIds.join(",")})`);
-  }
+  const base = applyNotesExclusion(baseQuery, excludedIds);
 
   // Short queries don't tokenise well — fall back to ilike
   if (q.length < 3) {

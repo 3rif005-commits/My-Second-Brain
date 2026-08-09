@@ -18,13 +18,14 @@ type-specific descriptors (40 number formats, status groups, relation
 traversal, formula evaluation, ...) without changing this module's public
 shape: `PropertyType`, `REGISTRY`, `SqlFragment`, `SqlContext`, `Operator`.
 
-Note on "25 types": the design spec's prose (§5, §1) and the plan describe
-"25 types". Research §F.1 ("Complete property type inventory") enumerates
+Note on "24, not 25": earlier drafts of the design spec and plan said "25
+types". Research §F.1 ("Complete property type inventory") enumerates
 exactly 24 real, addressable property types (items 1-24) and explicitly
 resolves its own item 25 -- AI autofill -- as **not** a property type: "a
 configuration layer applied to an existing property," never a schema
-entry. REGISTRY therefore holds 24 keys. See task-2-report.md for the full
-note; this is flagged for the user, not silently reconciled.
+entry. REGISTRY holds those 24 keys; the spec and plan prose were corrected
+to match (confirmed by the user during Milestone 1 review — see
+task-2-report.md).
 """
 from __future__ import annotations
 
