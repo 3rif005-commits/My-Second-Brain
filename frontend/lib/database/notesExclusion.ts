@@ -25,6 +25,30 @@ function databaseRowsEnabled(): boolean {
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
+ * ⚠️ PLACEHOLDER IMPLEMENTATION — DOES NOT SCALE. MUST BE REPLACED BEFORE
+ * `DATABASE_ROWS_ENABLED` IS FLIPPED ON IN MILESTONE 2.
+ *
+ * (Milestone 0/1 final code review, finding 5.)
+ *
+ * This fetches *every* `db_row_props.note_id` for the user and the caller
+ * inlines them into a PostgREST `.not("id","in","(...)")` filter. That is
+ * an O(all database rows) extra round-trip on **every** notes-list request,
+ * and the resulting URL grows by ~37 bytes per row — it stops working long
+ * before the plan's own 50,000-row scale envelope (spec §4.3), and is
+ * already wasteful past a few hundred rows.
+ *
+ * The correct fix is a **server-side anti-join** — the
+ * `NOT EXISTS (SELECT 1 FROM db_row_props p WHERE p.note_id = notes.id)`
+ * this module's header describes — exposed either as a Postgres view that
+ * the notes routes select from, or as an RPC. That cannot be built in
+ * Milestone 1: `db_row_props` does not exist until Milestone 2's migration
+ * `014_databases_core.sql` is applied, so there is nothing to define a view
+ * or an anti-join against yet.
+ *
+ * Until then this code is **inert**: `DATABASE_ROWS_ENABLED` is off by
+ * default, so the query below never runs. Milestone 2 must replace this
+ * function (not just flip the flag) as part of landing migration 014.
+ *
  * Returns the note ids to exclude from a notes query for `userId`, or
  * `null` when there is nothing to exclude — either because the sweep is
  * inert (flag off, the default) or because the user has no database rows

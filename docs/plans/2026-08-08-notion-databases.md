@@ -146,7 +146,7 @@ Each milestone is independently shippable and independently testable.
 - Create: `scripts/pgtest/supabase_shim.sql`, `scripts/pgtest/up.sh`, `scripts/pgtest/apply.sh`, `scripts/bench/storage_bench.py`, `docs/research/storage-benchmark-results.md`
 
 **Test cases**
-- `up.sh` starts `pgvector/pgvector:pg16`, applies the shim, and applies migrations 001–013 with **12 of 13 succeeding** (005 fails on the pre-existing `CREATE POLICY IF NOT EXISTS` bug — this is the expected, documented result, not a harness failure).
+- `up.sh` starts `pgvector/pgvector:pg16`, applies the shim, and applies migrations 001–013 with **11 of 13 succeeding** — two fail on the pre-existing, out-of-scope bugs listed above, and `apply.sh` treats both as expected (it exits 0): **005** (`CREATE POLICY IF NOT EXISTS`, a clause Postgres has in no version) and **010** (duplicate `CREATE TABLE mcp_servers`, already created by 009). Any *other* failure is a real one and exits non-zero.
 - Benchmark reports p50/p95 for: filtered `ORDER BY … LIMIT 50` at offset 0 and offset 10 000, and a filtered `COUNT(*)`, at 10k and 50k rows, with and without expression indexes.
 
 - [ ] **Step 1: Write the Supabase shim**
@@ -204,10 +204,10 @@ docker exec sb-pgtest psql -U postgres -q -v ON_ERROR_STOP=1 -f /tmp/supabase_sh
 echo "ready on localhost:55432"
 ```
 
-- [ ] **Step 3: Run it and confirm the expected 12/13**
+- [ ] **Step 3: Run it and confirm the expected 11/13**
 
 Run: `./scripts/pgtest/up.sh && ./scripts/pgtest/apply.sh 001 013`
-Expected: `OK` for all but `005_notion_phase`, which fails with `syntax error at or near "NOT"`.
+Expected: `OK` for all but the two pre-existing bugs above — `005_notion_phase` (`syntax error at or near "NOT"`) and `010_mcp_servers` (`relation "mcp_servers" already exists`). Both are in `apply.sh`'s `KNOWN_FAILURES` map, so the script prints `11 OK, 2 expected failure(s)` and **exits 0**; a non-zero exit means something genuinely broke.
 
 - [ ] **Step 4: Write the benchmark**
 

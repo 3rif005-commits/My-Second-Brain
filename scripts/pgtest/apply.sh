@@ -5,16 +5,21 @@
 # Usage: apply.sh <start_num> <end_num>
 #   e.g. apply.sh 001 013
 #
-# Migration 005_notion_phase.sql is documented to fail with a pre-existing
-# `CREATE POLICY IF NOT EXISTS` syntax bug (Postgres has no such clause).
-# That specific, expected failure does not fail this script; any other
-# migration failing does.
+# Two migrations are documented to fail for pre-existing bugs that are out of
+# scope for the Notion-databases plan (see its "Pre-existing bugs found while
+# building the harness" section). Those specific, expected failures do not
+# fail this script; any other migration failing does. `apply.sh 001 013` is
+# therefore expected to print 11 OK, 2 expected FAILED, and exit 0.
 set -uo pipefail
 
 if [[ $# -ne 2 ]]; then
   echo "Usage: $0 <start_num> <end_num>  (e.g. $0 001 013)" >&2
   exit 1
 fi
+
+# Resolve paths relative to the repo root (this script lives in
+# scripts/pgtest/), so the script works from any working directory.
+cd "$(dirname "${BASH_SOURCE[0]}")/../.." || exit 1
 
 start="$1"
 end="$2"
@@ -23,11 +28,18 @@ end10=$((10#$end))
 
 MIGRATIONS_DIR="supabase/migrations"
 CONTAINER="sb-pgtest"
-KNOWN_FAILURE_NUM="005"
+
+# migration number → why its failure is expected. Anything not listed here
+# that fails is a real failure and exits non-zero.
+declare -A KNOWN_FAILURES=(
+  ["005"]="pre-existing 'CREATE POLICY IF NOT EXISTS' syntax bug — Postgres supports that clause in no version"
+  ["010"]="pre-existing duplicate 'CREATE TABLE mcp_servers' — 009 already creates it (with IF NOT EXISTS), 010 without; the set is not replayable from 001"
+)
 
 overall_exit=0
 applied=0
 ok_count=0
+expected_failure_count=0
 
 shopt -s nullglob
 for f in "$MIGRATIONS_DIR"/[0-9][0-9][0-9]_*.sql; do
@@ -47,9 +59,10 @@ for f in "$MIGRATIONS_DIR"/[0-9][0-9][0-9]_*.sql; do
   if [[ $status -eq 0 ]]; then
     echo "OK      $base"
     ok_count=$((ok_count + 1))
-  elif [[ "$num" == "$KNOWN_FAILURE_NUM" ]]; then
-    echo "FAILED  $base  (expected — pre-existing 'CREATE POLICY IF NOT EXISTS' bug, not a harness failure)"
+  elif [[ -n "${KNOWN_FAILURES[$num]:-}" ]]; then
+    echo "FAILED  $base  (expected — ${KNOWN_FAILURES[$num]}; not a harness failure)"
     echo "$err_output" | sed 's/^/        /'
+    expected_failure_count=$((expected_failure_count + 1))
   else
     echo "FAILED  $base"
     echo "$err_output" | sed 's/^/        /'
@@ -58,7 +71,7 @@ for f in "$MIGRATIONS_DIR"/[0-9][0-9][0-9]_*.sql; do
 done
 
 echo
-echo "Applied $applied migration(s), $ok_count OK."
+echo "Applied $applied migration(s), $ok_count OK, $expected_failure_count expected failure(s)."
 
 if [[ $overall_exit -ne 0 ]]; then
   echo "One or more migrations failed unexpectedly (see FAILED lines above)." >&2

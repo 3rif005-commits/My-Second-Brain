@@ -10,6 +10,11 @@ Hot properties: `selStat1` (select, equality filter), `numPri04` (number, sort k
 
 20 properties per row, 5 untimed warm-up executions + 40 timed iterations per (table, shape) with randomized filter values, prepared statement reused across iterations.
 
+**Schema caveat — the measured table is a proxy, not `db_row_props`** (added by the Milestone 0/1 final code review, finding 6; not re-measured). The benchmarked JSONB table is `(id UUID PRIMARY KEY, properties JSONB)`. Production's `db_row_props` (spec §3.2) additionally carries `data_source_id`, `user_id`, `computed` and `position`, and the real view-load query is not this query: it also **joins `notes`** (a row *is* a note — decision Q2), filters `deleted_at IS NULL`, and carries the mandatory `_scope()` tenancy predicate on `data_source_id`/`user_id` that the query builder — not RLS — enforces. The benchmarked expression indexes correspondingly do **not** lead with `data_source_id`, which production's indexes would have to, changing both their selectivity and the plans available. Consequences:
+
+- The GO verdict's margin should be read as **optimistic**, not conservative: 89.71ms of a 200ms gate is already ~45% of budget consumed by a query strictly simpler than the real one — a wider join and extra predicates consume more of the remainder, and the wider heap tuple costs more per page.
+- **Milestone 2 must re-measure against the real schema** (migration `014` + the `notes` join + `_scope()`) before the storage decision (spec §4) is treated as fully closed. The right moment is Gate G1's local pre-verification, when `014` first exists as SQL and the harness can build the real tables.
+
 **Precision caveat**: n=40 samples per shape is on the low side for a fully stable p95 estimate (p95 is the 38th-highest of 40 samples, so it moves in ~2.5-percentile-point jumps). Treat p95 values as indicative to within roughly ±1 sample's worth of noise, not exact to two decimal places; the qualitative conclusions (which layout/shape is an order of magnitude slower, and whether the gate is cleared or missed by a wide margin) are not sensitive to this.
 
 
