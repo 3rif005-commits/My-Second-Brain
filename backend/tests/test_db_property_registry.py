@@ -1,10 +1,15 @@
 import re
+from pathlib import Path
 
 import pytest
 from pydantic import BaseModel
 
-from services.db.properties.base import PropertyType, REGISTRY
-from services.db.properties.columns import COLUMN_BACKED, ENGINE_STATE_COLUMNS
+from services.db.properties.base import PropertyType, REGISTRY, SqlContext
+from services.db.properties.columns import (
+    COLUMN_BACKED,
+    ENGINE_STATE_COLUMNS,
+    NEVER_COLUMN_BACKED,
+)
 
 NOTES_COLUMNS = {
     "id","user_id","collection_id","title","content","content_text","source_type",
@@ -72,6 +77,148 @@ def test_column_backed_never_touches_engine_state_columns():
     assert not (used_columns & ENGINE_STATE_COLUMNS)
 
 
+# --------------------------------------------------------------------------
+# Final-review finding 1: the emitted SQL must be able to use the expression
+# indexes Milestone 0's benchmark validated.
+#
+# The benchmark's GO verdict (p95 89.71ms @ 50k rows) was measured against
+# B-tree expression indexes built on the **two-hop** extraction of the actual
+# scalar value out of the §3.3 discriminated wrapper object. An emitted
+# fragment that extracts the wrapper object itself (`properties -> 'key'`)
+# can never match those indexes and silently falls onto the unindexed path
+# (measured p95 ~450ms — the NO-GO number).
+# --------------------------------------------------------------------------
+
+BENCH_PATH = Path(__file__).resolve().parents[2] / "scripts" / "bench" / "storage_bench.py"
+
+
+def _bench_index_expression(index_name: str) -> str:
+    """The exact indexed expression text from storage_bench.py's DDL."""
+    src = BENCH_PATH.read_text()
+    match = re.search(
+        rf"CREATE INDEX {index_name}\s*\n\s*ON bench_jsonb_indexed\s*\((.*?)\);",
+        src,
+        re.S,
+    )
+    assert match, f"could not find {index_name}'s DDL in {BENCH_PATH}"
+    return match.group(1)
+
+
+def _canonical(expr: str) -> str:
+    """Normalise a SQL expression for comparison: property key → KEY, table
+    alias dropped, whitespace and (semantically redundant here) parentheses
+    stripped. Both sides of every assertion go through this, so the
+    comparison is about the *shape* of the extraction, not formatting."""
+    out = re.sub(r"'\{HOT_[A-Z]+\}'", "KEY", expr)  # bench's f-string placeholder
+    out = re.sub(r"'[0-9A-Za-z]{8}'", "KEY", out)  # a real 8-char minted key
+    out = re.sub(r"\b[a-z_]+\.properties\b", "properties", out)  # table alias
+    out = re.sub(r"\s+", "", out)
+    return out.replace("(", "").replace(")", "")
+
+
+def test_select_extract_matches_the_benchmarked_index_expression():
+    frag = REGISTRY["select"].sql_extract(SqlContext(key="selStat1", alias="p"))
+    assert _canonical(frag.sql) == _canonical(
+        _bench_index_expression("bench_jsonb_indexed_hotsel")
+    )
+
+
+def test_number_extract_matches_the_benchmarked_index_expression():
+    frag = REGISTRY["number"].sql_extract(SqlContext(key="numPri04", alias="p"))
+    assert _canonical(frag.sql) == _canonical(
+        _bench_index_expression("bench_jsonb_indexed_hotnum")
+    )
+
+
+def test_number_order_uses_the_same_indexable_expression():
+    order = REGISTRY["number"].sql_order(SqlContext(key="numPri04", alias="p"), "asc")
+    extract = REGISTRY["number"].sql_extract(SqlContext(key="numPri04", alias="p"))
+    assert order.sql.startswith(extract.sql)
+    assert order.sql.endswith("ASC NULLS LAST")
+
+
+@pytest.mark.parametrize("key", sorted(REAL_TYPE_KEYS))
+def test_no_type_extracts_the_bare_wrapper_object(key):
+    """`properties -> 'key'` alone is the §3.3 wrapper (`{"type": ...,
+    "<type>": ...}`), not a value: unindexable, and orders by jsonb key
+    collation rather than by the value."""
+    frag = REGISTRY[key].sql_extract(SqlContext(key="a1b2c3d4", alias="p"))
+    assert not re.fullmatch(r"[a-z_]+\.properties\s*->\s*'a1b2c3d4'", frag.sql.strip())
+    assert "'a1b2c3d4'" in frag.sql  # the key is still reached
+
+
+def test_date_sorts_on_start_not_the_whole_date_object():
+    """A `date` value is `{start, end, time_zone}`; jsonb key order puts
+    `end` before `start`, so ordering by the object sorts by end date."""
+    frag = REGISTRY["date"].sql_order(SqlContext(key="dtDue002", alias="p"), "asc")
+    assert "'start'" in frag.sql
+
+
+def test_multi_select_orders_by_first_option_not_array_length():
+    """jsonb array comparison is by length first, contradicting spec §5.1
+    ("first option in option order, then count")."""
+    frag = REGISTRY["multi_select"].sql_order(SqlContext(key="msTags01", alias="p"), "asc")
+    assert "->> 0" in frag.sql
+
+
+def test_filter_and_sort_values_never_interpolate_user_input():
+    """The property key is server-minted base62 (`mint_key`), validated at
+    emit time; nothing else may reach the SQL text."""
+    with pytest.raises(ValueError):
+        REGISTRY["number"].sql_extract(SqlContext(key="a'; DROP TABLE notes;--"))
+
+
+# --------------------------------------------------------------------------
+# Final-review finding 2: SqlContext must carry a storage discriminator, and
+# column-backed properties must emit a column reference, not a JSONB path
+# (`notes` has no `properties` column).
+# --------------------------------------------------------------------------
+
+def test_column_storage_emits_a_direct_column_reference():
+    ctx = SqlContext(key="mastery_status", alias="notes", storage="column")
+    assert REGISTRY["status"].sql_extract(ctx).sql == "notes.mastery_status"
+    assert REGISTRY["status"].sql_order(ctx, "asc").sql == "notes.mastery_status ASC NULLS LAST"
+
+
+def test_jsonb_storage_is_the_default_and_still_uses_a_jsonb_path():
+    frag = REGISTRY["status"].sql_extract(SqlContext(key="a1b2c3d4", alias="p"))
+    assert frag.sql.startswith("p.properties ->")
+
+
+def test_column_storage_rejects_anything_not_in_the_allow_list():
+    for column in ("content", "user_id", "notes; DROP TABLE notes"):
+        with pytest.raises(ValueError):
+            REGISTRY["rich_text"].sql_extract(
+                SqlContext(key=column, alias="notes", storage="column")
+            )
+
+
+@pytest.mark.parametrize("name", sorted(COLUMN_BACKED))
+def test_every_column_backed_property_emits_valid_sql(name):
+    prop = COLUMN_BACKED[name]
+    ctx = SqlContext(key=prop.column, alias="notes", storage="column")
+    assert REGISTRY[prop.type].sql_extract(ctx).sql == f"notes.{prop.column}"
+
+
+# --------------------------------------------------------------------------
+# Final-review finding 3: COLUMN_BACKED type tags must be real REGISTRY keys
+# — M2's CRUD/view layer resolves them with `REGISTRY[COLUMN_BACKED[n].type]`.
+# --------------------------------------------------------------------------
+
+def test_column_backed_types_are_registry_keys():
+    for name, prop in COLUMN_BACKED.items():
+        assert prop.type in REGISTRY, f"{name}: {prop.type!r} is not a REGISTRY key"
+
+
+def test_topics_is_a_multi_select_stored_in_a_native_array_column():
+    topics = COLUMN_BACKED["topics"]
+    assert topics.type == "multi_select"
+    assert topics.native_array is True
+    assert all(
+        prop.native_array is False for name, prop in COLUMN_BACKED.items() if name != "topics"
+    )
+
+
 def test_engine_state_columns_match_spec():
     # Spec §6: "What stays hardcoded: content, content_text, fts,
     # descriptor_embedding, local_only, is_public, position, collection_id."
@@ -79,3 +226,12 @@ def test_engine_state_columns_match_spec():
         "content", "content_text", "fts", "descriptor_embedding",
         "local_only", "is_public", "position", "collection_id",
     }
+
+
+def test_never_column_backed_covers_identity_and_tenancy_columns():
+    # Final review, minor finding: the load-bearing guard was a deny-list of
+    # spec §6's "engine state" names only, so a hypothetical
+    # ColumnProp("user_id", ...) — the tenancy column — would have passed it.
+    assert ENGINE_STATE_COLUMNS <= NEVER_COLUMN_BACKED
+    assert {"id", "user_id", "deleted_at"} <= NEVER_COLUMN_BACKED
+    assert not ({prop.column for prop in COLUMN_BACKED.values()} & NEVER_COLUMN_BACKED)

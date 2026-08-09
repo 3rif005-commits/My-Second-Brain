@@ -11,9 +11,9 @@ implementations of one interface, not 24 special cases scattered through
 the compiler.
 
 This module ships every key from Milestone 1 onward as a deliberately
-minimal, generic descriptor (JSONB storage, an empty/not-empty filter pair,
-count-only aggregations) so the registry is complete and satisfies the
-protocol immediately. Milestone 5 replaces individual entries with richer,
+minimal, generic descriptor (both storage backends — JSONB and §6's
+column-backed — an empty/not-empty filter pair, count-only aggregations)
+so the registry is complete and satisfies the protocol immediately. Milestone 5 replaces individual entries with richer,
 type-specific descriptors (40 number formats, status groups, relation
 traversal, formula evaluation, ...) without changing this module's public
 shape: `PropertyType`, `REGISTRY`, `SqlFragment`, `SqlContext`, `Operator`.
@@ -29,10 +29,13 @@ task-2-report.md).
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
+
+from .columns import COLUMN_BACKED_NAMES
 
 
 @dataclass(frozen=True)
@@ -42,8 +45,21 @@ class SqlFragment:
     `sql` uses asyncpg-style positional placeholders (`$1`, `$2`, ...)
     numbered relative to `params`; the query compiler (Milestone 3) is
     responsible for renumbering them into the final, assembled query. No
-    property-type implementation ever interpolates a value directly into
-    `sql` — values always travel through `params`.
+    property-type implementation ever interpolates a **value** into `sql` —
+    values always travel through `params`.
+
+    The one thing that is written into `sql` literally is the property's
+    *identity*: its `db_properties.key` (8-char base62, server-minted by
+    `keys.mint_key`, validated again by `_jsonb_key` on the way out) or its
+    allow-listed `notes` column name. Both are schema, not data. The key
+    must be a literal rather than a parameter for a load-bearing reason:
+    Postgres can only match a B-tree **expression index** when the indexed
+    expression appears verbatim in the query, and a `properties -> $1` hop
+    is not verbatim once the plan cache switches from custom to generic
+    plans (which asyncpg's pooled prepared statements reach after five
+    executions — see `docs/research/storage-benchmark-results.md`,
+    "Plan-caching investigation"). A parameterised key silently loses the
+    index that Milestone 0's GO verdict depends on.
     """
 
     sql: str
@@ -54,16 +70,120 @@ class SqlFragment:
 class SqlContext:
     """Everything a property-type descriptor needs to emit SQL for itself.
 
-    `key` is the property's opaque JSONB key (`db_properties.key`) for
-    `storage='jsonb'` properties, or the column name for `storage='column'`
-    properties. `alias` is the SQL table alias for the row source: `notes`
-    for the built-in "All Notes" virtual source (§6), `p` (or similar) for
+    `key` is the property's opaque JSONB key (`db_properties.key`) when
+    `storage="jsonb"`, or the `notes` column name (`db_properties.
+    column_name`, §6) when `storage="column"`.
+
+    `storage` mirrors `db_properties.storage` and decides which of the two
+    backends a descriptor emits for: a JSONB path into
+    `db_row_props.properties`, or a direct column reference. It is not
+    inferable from `key` alone, which is why it lives here — the "All
+    Notes" virtual source (§6) has no `db_row_props` rows at all, so
+    emitting a JSONB path for it would reference a `notes.properties`
+    column that does not exist.
+
+    `alias` is the SQL table alias for the row source: `notes` for the
+    built-in "All Notes" virtual source (§6), `p` (or similar) for
     `db_row_props` otherwise. The query compiler (Milestone 3) constructs
     this; property types only ever read it.
     """
 
     key: str
     alias: str = "notes"
+    storage: Literal["jsonb", "column"] = "jsonb"
+
+
+# `keys.mint_key` mints 8 base62 characters; the bound is loose so a test or
+# a future key scheme can't trip it, but the character class is strict —
+# with no quote, backslash or whitespace possible, the literal below cannot
+# escape its string context.
+_JSONB_KEY_RE = re.compile(r"[0-9A-Za-z]{1,32}")
+
+
+def _jsonb_key(key: str) -> str:
+    if not _JSONB_KEY_RE.fullmatch(key):
+        raise ValueError(
+            f"property key must be base62 (see keys.mint_key), got: {key!r}"
+        )
+    return key
+
+
+def _column_reference(ctx: SqlContext) -> str:
+    """`alias.column` for a `storage='column'` property.
+
+    The column name is checked against the fixed Python allow-list in
+    `columns.py` — never against the request and never against the database
+    catalogue (spec §6). This is the entire defence against column
+    injection, so it is a hard failure, not a fallback.
+    """
+    if ctx.key not in COLUMN_BACKED_NAMES:
+        raise ValueError(
+            f"{ctx.key!r} is not an allow-listed column-backed property "
+            f"(services/db/properties/columns.py: COLUMN_BACKED)"
+        )
+    return f"{ctx.alias}.{ctx.key}"
+
+
+@dataclass(frozen=True)
+class _ValueShape:
+    """How to reach a type's **actual value** inside its §3.3 wrapper.
+
+    `properties -> 'key'` yields the discriminated wrapper object
+    (`{"type": "number", "number": 42}`), which is the wrong thing to
+    filter or sort on twice over: it can't use the expression indexes
+    Milestone 0 validated (they are built on the extracted scalar), and
+    ordering it uses jsonb's key-ordering collation rather than the value's
+    own ordering.
+
+    `hop` is the SQL appended after `properties -> '<key>'`, `cast` the
+    cast applied to the result, and `order_hop` an override used only by
+    `ORDER BY` where sorting needs a different projection than reading.
+    """
+
+    hop: str
+    cast: str = ""
+    order_hop: str | None = None
+
+
+def _text_shape(type_key: str) -> _ValueShape:
+    """Default: the value is a scalar stored under its own type name, read
+    as text. Correct for title/rich_text/select/status/url/email/phone,
+    and for ISO-8601 timestamps, which sort chronologically as text (and,
+    unlike `::timestamptz`, stay immutable enough to be indexed)."""
+    return _ValueShape(f"->> '{type_key}'")
+
+
+# Types whose value is not a plain string under its own type name. Milestone
+# 5 replaces the generic descriptor with real per-type descriptors; these
+# shapes exist now so the SQL Milestone 1 ships is index-compatible and not
+# actively wrong, not because they are the final word.
+_ARRAY_VALUED = ("multi_select", "people", "files", "relation")
+
+_VALUE_SHAPES: dict[str, _ValueShape] = {
+    # `::double precision` (not `::numeric`) is deliberate: it is the exact
+    # cast Milestone 0's validated expression index was built on
+    # (scripts/bench/storage_bench.py, bench_jsonb_indexed_hotnum). The
+    # migration that adds the production index and this expression must
+    # keep matching, or the index goes unused.
+    "number": _ValueShape("->> 'number'", cast="::double precision"),
+    "checkbox": _ValueShape("->> 'checkbox'", cast="::boolean"),
+    # A date value is an object: {"start", "end", "time_zone"}. Ordering the
+    # object would order by jsonb key collation, which places `end` before
+    # `start` — i.e. it would silently sort by end date. Always project
+    # `start`. (Spec §5.1's end-date and time-zone handling: Milestone 5.)
+    "date": _ValueShape("-> 'date' ->> 'start'"),
+    **{
+        # Arrays of option ids. jsonb array comparison orders by length
+        # first, which contradicts spec §5.1 ("by the first option in the
+        # property's option order, then by count"), so sorting projects the
+        # first element instead. TODO(M5): rank that element by the
+        # property's configured *option order* rather than by its id — that
+        # needs `db_properties.config`, which the generic descriptor here
+        # has no access to.
+        key: _ValueShape(f"-> '{key}'", order_hop=f"-> '{key}' ->> 0")
+        for key in _ARRAY_VALUED
+    },
+}
 
 
 class Operator(BaseModel):
@@ -106,8 +226,9 @@ class _GenericProperty:
     its dedicated, richer descriptor lands in Milestone 5 (spec §5 lists
     `scalar.py`, `choice.py`, `temporal.py`, `people.py`, `files.py`,
     `computed.py` as the eventual homes). It provides just enough
-    behaviour to satisfy the protocol: JSONB extraction/ordering by key,
-    an empty/not-empty operator pair, and count-only aggregations.
+    behaviour to satisfy the protocol: extraction/ordering of the actual
+    value (from either storage backend), an empty/not-empty operator pair,
+    and count-only aggregations.
     """
 
     key: str
@@ -119,13 +240,22 @@ class _GenericProperty:
     def is_empty(self, value: Any) -> bool:
         return value is None or value == "" or value == [] or value == {}
 
+    def _value_sql(self, ctx: SqlContext, *, for_order: bool) -> str:
+        if ctx.storage == "column":
+            return _column_reference(ctx)
+
+        shape = _VALUE_SHAPES.get(self.key) or _text_shape(self.key)
+        hop = shape.order_hop if (for_order and shape.order_hop) else shape.hop
+        expr = f"{ctx.alias}.properties -> '{_jsonb_key(ctx.key)}' {hop}"
+        return f"({expr}){shape.cast}" if shape.cast else expr
+
     def sql_extract(self, ctx: SqlContext) -> SqlFragment:
-        return SqlFragment(f"{ctx.alias}.properties -> $1", (ctx.key,))
+        return SqlFragment(self._value_sql(ctx, for_order=False))
 
     def sql_order(self, ctx: SqlContext, direction: str) -> SqlFragment:
         # Decided unknown (spec §5.1): empties always sort to the bottom.
         order = "ASC NULLS LAST" if direction == "asc" else "DESC NULLS FIRST"
-        return SqlFragment(f"({ctx.alias}.properties -> $1) {order}", (ctx.key,))
+        return SqlFragment(f"{self._value_sql(ctx, for_order=True)} {order}")
 
     def operators(self) -> dict[str, Operator]:
         return {
