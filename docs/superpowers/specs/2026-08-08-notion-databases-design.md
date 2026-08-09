@@ -57,9 +57,14 @@ The eleven architectural questions, answered. Rationale follows in the numbered 
 
 ## 3. Data model
 
-Seven new tables. All follow existing conventions: `BEGIN`/`COMMIT`, `IF NOT EXISTS`,
-`user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE`, RLS
-`FOR ALL TO authenticated`, and a proof `SELECT` at the end of each migration.
+Eight new tables across the whole feature, landing over four gated migrations: five in
+`014_databases_core.sql` (`db_databases`, `db_data_sources`, `db_properties`,
+`db_row_props`, `db_views`), one in `015_relations.sql` (`db_relation_links`), and two in
+`017_templates_automations.sql` (`db_row_templates`, `db_automations`) — see the plan's
+Migration Gates table. `018_forms.sql` adds a further table for form-submission rate
+limiting, outside this original architecture count. All follow existing conventions:
+`BEGIN`/`COMMIT`, `IF NOT EXISTS`, `user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE
+CASCADE`, RLS `FOR ALL TO authenticated`, and a proof `SELECT` at the end of each migration.
 
 ```
 db_databases        container (Notion's post-2025-09-03 "database")
@@ -466,10 +471,11 @@ Enforcement is therefore structural: a single `QueryBuilder._scope()` appends
 query. It is not optional and not a parameter. A test asserts that every compiled query in
 the suite contains the scope predicate, so omitting it fails CI rather than leaking data.
 
-RLS policies are still created on all seven tables — the Next.js routes reach them through
-PostgREST with the user's JWT, and defence in depth is free. Following Supabase's published
-guidance, policies use `(SELECT auth.uid())` rather than bare `auth.uid()` so the planner
-hoists it to an InitPlan instead of re-evaluating per row.
+RLS policies are still created on every one of these tables — nine in total once
+`018_forms.sql` lands (§3) — because the Next.js routes reach them through PostgREST with
+the user's JWT, and defence in depth is free. Following Supabase's published guidance,
+policies use `(SELECT auth.uid())` rather than bare `auth.uid()` so the planner hoists it to
+an InitPlan instead of re-evaluating per row.
 
 ---
 

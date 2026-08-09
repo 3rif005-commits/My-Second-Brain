@@ -37,7 +37,7 @@ Work stops at each gate until the user confirms the migration is applied. Each g
 
 | Gate | Migration | Blocks | Proof query |
 |---|---|---|---|
-| **G1** | `014_databases_core.sql` — 7 tables, indexes, RLS | M2 onward | `SELECT count(*) FROM db_databases;` |
+| **G1** | `014_databases_core.sql` — 5 tables, indexes, RLS | M2 onward | `SELECT count(*) FROM db_databases;` |
 | **G2** | `015_relations.sql` — `db_relation_links`, sub-item/dependency system properties | M7 onward | `SELECT count(*) FROM db_relation_links;` |
 | **G3** | `016_computed.sql` — `computed` column, expression indexes for hot properties | M8 onward | `SELECT count(*) FROM db_row_props WHERE computed <> '{}';` |
 | **G4** | `017_templates_automations.sql` — `db_row_templates`, `db_automations` | M12 onward | `SELECT count(*) FROM db_automations;` |
@@ -395,7 +395,7 @@ cd ../frontend && npx tsc --noEmit && npm run test
 
 - [ ] **Step 1: Write migration 014**
 
-Full DDL per spec §3.2 — 7 tables, indexes, RLS with `(SELECT auth.uid())`, ending with:
+Full DDL per spec §3.2 — 5 tables, indexes, RLS with `(SELECT auth.uid())`, ending with:
 
 ```sql
 SELECT 'migration 014 applied' AS status,
@@ -406,7 +406,7 @@ SELECT 'migration 014 applied' AS status,
 - [ ] **Step 2: Verify it locally BEFORE handing it over**
 
 Run: `./scripts/pgtest/up.sh && ./scripts/pgtest/apply.sh 001 014`
-Expected: `014` applies cleanly and the proof row reports `db_tables_created = 7`.
+Expected: `014` applies cleanly and the proof row reports `db_tables_created = 5`.
 
 - [ ] **Step 3: 🚦 GATE G1 — hand the migration to the user**
 
