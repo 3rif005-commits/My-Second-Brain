@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
-from routers import notes, ingest, retrieval, internal, agent, agent_inline, agent_ingest, skills_api, mcp_api, note_sources
+from routers import notes, ingest, retrieval, internal, agent, agent_inline, agent_ingest, skills_api, mcp_api, note_sources, databases
 from services.db.connection import close_pool
 
 # ── Logging ─────────────────────────────────────────────────────────────────
@@ -46,6 +46,7 @@ app.include_router(internal.router)
 app.include_router(skills_api.router)
 app.include_router(mcp_api.router)
 app.include_router(note_sources.router)
+app.include_router(databases.router)
 
 
 @app.middleware("http")

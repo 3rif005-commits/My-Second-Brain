@@ -8,12 +8,35 @@ False), nothing in this process calls `get_pool()`, so the missing
 `DATABASE_URL` in this environment is harmless.
 """
 import asyncio
+import json
+from typing import AsyncIterator
 
 import asyncpg
 from core.config import settings
 
 _pool: asyncpg.Pool | None = None
 _pool_lock: asyncio.Lock | None = None
+
+
+async def _init_connection(conn: asyncpg.Connection) -> None:
+    """Per-physical-connection setup: decode/encode `jsonb` as Python
+    dict/list rather than asyncpg's default (raw text). Every table this
+    milestone touches (`db_databases.description`, `db_properties.config`,
+    `db_row_props.properties`/`computed`, `db_views.config`/`filter`/
+    `sorts`) is jsonb, so every caller of `get_pool()`/`get_conn()` needs
+    this codec active — set once here rather than per query.
+
+    Registered as the pool's `init` callback (see `get_pool` below), so it
+    fires for every new physical connection the pool opens. Tests that
+    connect directly to the local pgtest harness (bypassing the pool) must
+    call this explicitly to get the same behaviour — see
+    `tests/conftest.py`'s `db_conn` fixture.
+    """
+    await conn.set_type_codec(
+        "jsonb", encoder=json.dumps, decoder=json.loads,
+        schema="pg_catalog", format="text",
+    )
+
 
 # Port 6543 is Supabase's Supavisor pooler in **transaction mode**: a
 # different backend connection can serve each statement. asyncpg's named
@@ -68,8 +91,21 @@ async def get_pool() -> asyncpg.Pool:
                 max_size=10,
                 statement_cache_size=_STATEMENT_CACHE_SIZE,
                 command_timeout=_COMMAND_TIMEOUT_SECONDS,
+                init=_init_connection,
             )
     return _pool
+
+
+async def get_conn() -> AsyncIterator[asyncpg.Connection]:
+    """FastAPI dependency: acquire a pool connection for the lifetime of one
+    request. `routers/databases.py` depends on this rather than calling
+    `get_pool()` directly so tests can override it (`app.dependency_
+    overrides[get_conn]`) with a single, transaction-wrapped connection to
+    the local pgtest harness — see `tests/conftest.py`.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        yield conn
 
 
 async def close_pool() -> None:
