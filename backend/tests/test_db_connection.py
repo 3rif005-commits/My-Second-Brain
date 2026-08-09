@@ -16,11 +16,17 @@ from services.db import connection
 
 @pytest.fixture(autouse=True)
 def _reset_pool():
-    """Each test starts and ends with a clean module-level `_pool`, so
-    tests can't leak state into each other via the module global."""
+    """Each test starts and ends with a clean module-level `_pool` and
+    `_pool_lock`. The lock also needs resetting, not just the pool: an
+    `asyncio.Lock` binds to whichever event loop first contends it, and
+    pytest-asyncio gives each test its own loop, so a stale lock from a
+    prior test would raise `RuntimeError: <Lock> is bound to a different
+    event loop` the next time a test drives real contention on it."""
     connection._pool = None
+    connection._pool_lock = None
     yield
     connection._pool = None
+    connection._pool_lock = None
 
 
 async def test_get_pool_raises_when_database_url_is_empty(monkeypatch):
