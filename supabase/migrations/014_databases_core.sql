@@ -179,4 +179,4 @@ COMMIT;
 
 SELECT 'migration 014 applied' AS status,
        (SELECT count(*) FROM information_schema.tables
-        WHERE table_name LIKE 'db\_%') AS db_tables_created;
+        WHERE table_schema = 'public' AND table_name LIKE 'db\_%') AS db_tables_created;
