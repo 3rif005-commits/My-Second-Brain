@@ -247,20 +247,7 @@ class _GenericProperty:
         shape = _VALUE_SHAPES.get(self.key) or _text_shape(self.key)
         hop = shape.order_hop if (for_order and shape.order_hop) else shape.hop
         expr = f"{ctx.alias}.properties -> '{_jsonb_key(ctx.key)}' {hop}"
-        if not shape.cast:
-            return expr
-        if shape.cast == "::double precision":
-            # Spec §8.2 / research §K.7: an unconditional cast fails the
-            # whole query on a single non-numeric legacy value. M3 is the
-            # first milestone to run numeric >/< comparisons across every
-            # row of a data source, so a bad value would 500 the entire
-            # filtered list, not just one row's read — guard it so a
-            # malformed value yields NULL instead.
-            return (
-                f"(CASE WHEN {expr} ~ '^-?[0-9]+(\\.[0-9]+)?$' "
-                f"THEN ({expr})::double precision ELSE NULL END)"
-            )
-        return f"({expr}){shape.cast}"
+        return f"({expr}){shape.cast}" if shape.cast else expr
 
     def sql_extract(self, ctx: SqlContext) -> SqlFragment:
         return SqlFragment(self._value_sql(ctx, for_order=False))
