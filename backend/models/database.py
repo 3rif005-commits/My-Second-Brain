@@ -162,6 +162,80 @@ class RowResponse(BaseModel):
     properties: dict[str, Any]
 
 
+class QueryRequest(BaseModel):
+    """`POST /db/data-sources/{data_source_id}/query` body (task-15, wiring up Milestone
+    3's filter/sort compiler and Milestone 4's grouping to an HTTP endpoint for the first
+    time). `filter`/`sorts`/`group_by`/`sub_group_by` are deliberately permissive
+    dict/list-of-dict shapes here, not the `services.db.query.ast`/`grouping` types
+    themselves — the router parses them (`ast.parse_filter`, `SortSpec(**s)`,
+    `GroupBySpec(**group_by)`) so a malformed filter/group surfaces as the compiler's own
+    `FilterValidationError` -> HTTP 400 (spec §8.2's "unknown key -> 400, never dropped"),
+    not as a generic 422 from Pydantic validating a nested discriminated union at this
+    layer instead.
+
+    `group_by`/`sub_group_by` are raw `grouping.GroupBySpec`-shaped dicts (`property_key`
+    required, `mode`/`start_day_of_week`/`range_start`/`range_end`/`range_size`/
+    `hide_empty_groups` all optional — see `services/db/query/grouping.py`)."""
+
+    filter: dict[str, Any] | None = None
+    sorts: list[dict[str, Any]] = []
+    page_size: int = 50
+    offset: int = 0
+    group_by: dict[str, Any] | None = None
+    sub_group_by: dict[str, Any] | None = None
+
+
+class GroupResult(BaseModel):
+    """One entry of `QueryResponse.groups` — the JSON-serializable mirror of
+    `services.db.query.grouping.Group`, with `row_count` precomputed (`len(rows)`) so the
+    frontend never needs to count client-side. `label` is *not* always `Group.label`
+    verbatim: for a `select`/`status` group, the router resolves it against the property's
+    `db_properties.config.options` list (task-15-brief.md's "group labels are opaque ids"
+    fix — see `routers/databases.py`'s `_resolve_group_label`), falling back to
+    `Group.label` (itself the raw stored option id) when no configured option matches.
+
+    `subgroups` is `None` whenever no `sub_group_by` was requested, and — same as
+    `grouping.Group` — always `None` on a subgroup itself (sub-grouping is exactly two
+    levels, never three)."""
+
+    key: str
+    label: str
+    row_count: int
+    rows: list[dict[str, Any]]
+    subgroups: list["GroupResult"] | None = None
+
+
+GroupResult.model_rebuild()
+
+
+class QueryResponse(BaseModel):
+    """`POST .../query`'s response. Exactly one of `rows`/`groups` is ever populated —
+    mirroring the request's own `group_by`/no-`group_by` branch — and the route serializes
+    with `response_model_exclude_none=True` so the *other* field is omitted from the JSON
+    entirely rather than sent as an explicit `null`: `body.group_by is None` ->
+    `{"rows": [...]}` (byte-identical shape to `RowsResponse`, spec's own "this endpoint is
+    a superset of list_rows, not a replacement"); `body.group_by` set -> `{"groups":
+    [...]}`."""
+
+    rows: list[dict[str, Any]] | None = None
+    groups: list[GroupResult] | None = None
+
+
+class ViewCreate(BaseModel):
+    """`POST /db/data-sources/{data_source_id}/views` body — the first way to create a
+    non-default view (`create_database` mints exactly one table view; every other view
+    type M6's frontend needs, Board/Gallery/List/Feed, has had nowhere to come from until
+    now). `type` is deliberately unvalidated beyond "non-empty string" (Pydantic's own
+    `str` requirement) — no closed enum here, same reasoning as `PropertyCreate.type`
+    accepting an unknown-but-syntactically-valid type elsewhere in this file: the frontend
+    is what actually renders a type-specific component, and a future milestone (Timeline,
+    Chart, ...) shouldn't have to come back and extend a closed set."""
+
+    name: str = "New view"
+    type: str
+    icon: str | None = None
+
+
 class RowPropertyUpdate(BaseModel):
     """`PATCH /db/data-sources/{data_source_id}/rows/{note_id}` body: write
     one property's value. `value` is the full spec §3.3 wrapper (e.g.

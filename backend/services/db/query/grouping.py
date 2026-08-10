@@ -43,6 +43,13 @@ class GroupBySpec:
     range_start: float | None = None
     range_end: float | None = None
     range_size: float | None = None  # required with range_start/range_end for number bucketing
+    # task-15-brief.md §1.7: additive, HTTP-endpoint-only flag -- every grouping family
+    # above still builds its full, structurally-defined bucket set exactly as before
+    # (checkbox's fixed True/False, a range spec's every bucket, the implicit no-value
+    # group, ...); this only trims the *returned* list at the very end of group_rows, so
+    # hide_empty_groups=False (the default) is byte-identical to Milestone 4's original
+    # behaviour and every existing test above keeps passing unmodified.
+    hide_empty_groups: bool = False
 
 
 @dataclass(frozen=True)
@@ -290,6 +297,8 @@ def group_rows(rows: list[dict], lookup: PropertyLookup, spec: GroupBySpec) -> l
     # hide_empty_groups" reasoning task-13-brief.md states explicitly for
     # checkbox's fixed groups, applied consistently to this implicit group.
     groups.append(Group(key=_NO_VALUE_KEY, label=_NO_VALUE_LABEL, rows=empty_rows))
+    if spec.hide_empty_groups:
+        groups = [g for g in groups if g.rows]
     return groups
 
 

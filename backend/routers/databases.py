@@ -24,18 +24,23 @@ from typing import Any
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import ValidationError
 
 from models.database import (
     DatabaseCreate,
     DatabaseDetailResponse,
     DatabaseResponse,
     DataSourceResponse,
+    GroupResult,
     PropertyCreate,
     PropertyRename,
     PropertyResponse,
+    QueryRequest,
+    QueryResponse,
     RowPropertyUpdate,
     RowResponse,
     RowsResponse,
+    ViewCreate,
     ViewResponse,
     ViewUpdate,
 )
@@ -44,6 +49,10 @@ from services.db.connection import get_conn
 from services.db.keys import mint_key
 from services.db.properties.base import REGISTRY
 from services.db.properties.columns import COLUMN_BACKED
+from services.db.query import ast
+from services.db.query import grouping
+from services.db.query.builder import QueryBuilder
+from services.db.query.compiler import PropertyLookup
 from services.db.views import sweep_property_from_views
 
 router = APIRouter(prefix="/db", tags=["databases"])
@@ -87,6 +96,30 @@ def _wrap_column_value(prop_type: str, raw: Any) -> dict[str, Any]:
     finding 2: the frontend must not need a virtual-source branch for cell
     value shape, only for whether writes are possible at all."""
     return {"type": prop_type, prop_type: raw}
+
+
+def _decode_all_notes_row(record: asyncpg.Record) -> dict[str, Any]:
+    """Shapes one `notes` row -- a bare `SELECT id, <COLUMN_BACKED cols> ...` record
+    (`list_rows`) or a `QueryBuilder`-produced `n.id, <cols>` record (`query_rows` below,
+    task-15) -- into the wire shape both endpoints promise: spec §3.3's discriminated
+    wrapper per property, keyed by each COLUMN_BACKED property's `notes` column name.
+    Extracted here (task-15-brief.md §1.4) so the two callers stay byte-identical rather
+    than duplicating and silently drifting."""
+    return {
+        "id": str(record["id"]),
+        "properties": {
+            prop.column: _wrap_column_value(prop.type, _jsonify(record[prop.column]))
+            for prop in COLUMN_BACKED.values()
+        },
+    }
+
+
+def _decode_ordinary_row(record: asyncpg.Record) -> dict[str, Any]:
+    """Same purpose as `_decode_all_notes_row`, for an ordinary data source's
+    `db_row_props` record (`note_id`, `properties`). The JSONB is already spec
+    §3.3-shaped by construction (every write path enforces the wrapper -- see
+    `update_row_property`), so this is a straight field rename, not a re-shaping."""
+    return {"id": str(record["note_id"]), "properties": record["properties"]}
 
 
 def _row(record: asyncpg.Record) -> dict[str, Any]:
@@ -345,16 +378,7 @@ async def list_rows(
             user_id,
             _ROWS_LIMIT,
         )
-        rows = [
-            {
-                "id": str(r["id"]),
-                "properties": {
-                    prop.column: _wrap_column_value(prop.type, _jsonify(r[prop.column]))
-                    for prop in COLUMN_BACKED.values()
-                },
-            }
-            for r in note_rows
-        ]
+        rows = [_decode_all_notes_row(r) for r in note_rows]
         return RowsResponse(rows=rows)
 
     data_source_id = _parse_uuid_or_404(data_source_id, "data source")
@@ -379,8 +403,195 @@ async def list_rows(
         user_id,
         _ROWS_LIMIT,
     )
-    rows = [{"id": str(r["note_id"]), "properties": r["properties"]} for r in row_rows]
+    rows = [_decode_ordinary_row(r) for r in row_rows]
     return RowsResponse(rows=rows)
+
+
+def _resolve_group_label(
+    key: str, default_label: str, prop_type: str, config: dict[str, Any]
+) -> str:
+    """Milestone 4's `grouping.py` has no config access (it only ever sees already-fetched
+    rows + a `PropertyLookup`), so a select/status `Group`'s key AND label are both the
+    raw stored option id (`_group_by_values`'s `_bucket(buckets, value, value, row)`) --
+    the "group labels are opaque ids" gap the M4+M5 combined review flagged as a Minor
+    (task-15-brief.md §1.6). Resolved here, the one place in this endpoint with both the
+    grouped rows AND `db_properties.config`'s real option list: look up `key` against
+    `config["options"]` by id, use that option's `name` if found. Falls back to
+    `default_label` (== the raw id, from grouping.py) for every other property type, an
+    unconfigured property (`config` has no "options" key or an empty one), or a
+    stale/deleted option id no longer in the list -- including the implicit
+    "__no_value__" bucket, which never matches any real option id and so always falls
+    through here by construction, not via a special case."""
+    if prop_type not in ("select", "status"):
+        return default_label
+    for option in config.get("options", []):
+        if option.get("id") == key:
+            return option.get("name", default_label)
+    return default_label
+
+
+def _group_to_result(
+    group: grouping.Group,
+    prop_type: str,
+    config: dict[str, Any],
+    sub_lookup: PropertyLookup | None,
+    sub_config: dict[str, Any],
+) -> GroupResult:
+    """`grouping.Group` -> the JSON-serializable `GroupResult` (models/database.py),
+    resolving this group's label and -- one level down, per task-15-brief.md §1.6 -- every
+    subgroup's label too. Never recurses past that: `sub_group()` itself only ever
+    produces two levels (a subgroup's own `.subgroups` is always `None`), so a subgroup is
+    built inline here rather than through a second call to this function."""
+    subgroups = None
+    if group.subgroups is not None:
+        assert sub_lookup is not None  # sub_group_by was set whenever subgroups exist
+        subgroups = [
+            GroupResult(
+                key=sg.key,
+                label=_resolve_group_label(sg.key, sg.label, sub_lookup.type, sub_config),
+                row_count=len(sg.rows),
+                rows=sg.rows,
+                subgroups=None,
+            )
+            for sg in group.subgroups
+        ]
+    return GroupResult(
+        key=group.key,
+        label=_resolve_group_label(group.key, group.label, prop_type, config),
+        row_count=len(group.rows),
+        rows=group.rows,
+        subgroups=subgroups,
+    )
+
+
+@router.post(
+    "/data-sources/{data_source_id}/query",
+    response_model=QueryResponse,
+    response_model_exclude_none=True,
+)
+async def query_rows(
+    data_source_id: str,
+    body: QueryRequest,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> QueryResponse:
+    """Milestone 6 (task-15): the filtered/sorted/grouped superset of `list_rows` above --
+    wires Milestone 3's filter/sort compiler (`services.db.query.compiler`/`builder`) and
+    Milestone 4's grouping (`services.db.query.grouping`) into an HTTP endpoint for the
+    first time (neither ever had a live caller before this). `list_rows` stays unmodified
+    for any caller that doesn't need filtering/sorting/grouping.
+
+    Same two-mode split as `list_rows`/`QueryBuilder` throughout: All Notes
+    (`data_source_id == ALL_NOTES_ID`, properties built from `COLUMN_BACKED`) or an
+    ordinary data source (properties from `db_properties`). Every row this endpoint can
+    possibly return passes through `QueryBuilder.build()`, which always splices in
+    `_scope()`'s mandatory `user_id`/`data_source_id`/`deleted_at` predicate (spec §8.3) --
+    there is no code path here that queries `db_row_props`/`notes` directly.
+    """
+    all_notes = data_source_id == ALL_NOTES_ID
+    configs: dict[str, dict[str, Any]] = {}
+
+    if all_notes:
+        properties = {
+            prop.column: PropertyLookup(type=prop.type, storage="column", key=prop.column)
+            for prop in COLUMN_BACKED.values()
+        }
+    else:
+        data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+        ds_row = await conn.fetchrow(
+            """
+            SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2
+            """,
+            data_source_id,
+            user_id,
+        )
+        if ds_row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+        prop_rows = await conn.fetch(
+            """
+            SELECT key, type, storage, config FROM db_properties
+            WHERE data_source_id = $1 AND user_id = $2
+            """,
+            data_source_id,
+            user_id,
+        )
+        properties = {
+            r["key"]: PropertyLookup(type=r["type"], storage=r["storage"], key=r["key"])
+            for r in prop_rows
+        }
+        # Group-label resolution (below) needs each property's configured option list
+        # too -- task-15-brief.md §1's own `SELECT key, type, storage` doesn't carry it,
+        # so this widens that one query rather than issuing a second round-trip per group.
+        configs = {r["key"]: (r["config"] or {}) for r in prop_rows}
+
+    try:
+        filter_node = ast.parse_filter(body.filter)
+        sorts = [ast.SortSpec(**s) for s in body.sorts]
+        pagination = ast.Pagination(page_size=body.page_size, offset=body.offset)
+        builder = QueryBuilder(
+            user_id=user_id,
+            data_source_id=None if all_notes else data_source_id,
+            properties=properties,
+        )
+        frag = builder.build(filter_node, sorts, pagination)
+    except (ast.FilterValidationError, ValidationError) as exc:
+        # spec §8.2 layer 2's "unknown key -> HTTP 400, never a silently dropped clause",
+        # now reachable over HTTP for the first time -- both parse-time shape errors
+        # (parse_filter/SortSpec/Pagination) and compile-time unknown-property-key errors
+        # (raised deep inside builder.build() -> compile_filter/compile_sorts) are the
+        # *same* FilterValidationError class (operators.py imports it from ast.py rather
+        # than defining its own), so one except clause here genuinely covers both.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    records = await conn.fetch(frag.sql, *frag.params)
+    decode = _decode_all_notes_row if all_notes else _decode_ordinary_row
+    rows = [decode(r) for r in records]
+
+    if body.group_by is None:
+        return QueryResponse(rows=rows)
+
+    group_key = body.group_by.get("property_key")
+    group_lookup = properties.get(group_key) if group_key is not None else None
+    if group_lookup is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown property key: {group_key!r}")
+    try:
+        group_spec = grouping.GroupBySpec(**body.group_by)
+        groups = grouping.group_rows(rows, group_lookup, group_spec)
+    except TypeError as exc:
+        # GroupBySpec is a plain dataclass (grouping.py), not Pydantic -- an
+        # unexpected/missing keyword raises TypeError, not ValidationError. Same "bad
+        # input -> 400, not 500" standard as every other malformed-request path here.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except (ValueError, NotImplementedError) as exc:
+        # group_rows's own "fail loud" contract for a non-groupable type or an
+        # unsupported/missing mode (grouping.py's docstring) -- surfaced as a 400, not
+        # left to bubble up as a 500.
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    sub_lookup: PropertyLookup | None = None
+    sub_config: dict[str, Any] = {}
+    if body.sub_group_by is not None:
+        sub_key = body.sub_group_by.get("property_key")
+        sub_lookup = properties.get(sub_key) if sub_key is not None else None
+        if sub_lookup is None:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown property key: {sub_key!r}")
+        sub_config = configs.get(sub_key, {})
+        try:
+            sub_spec = grouping.GroupBySpec(**body.sub_group_by)
+            groups = grouping.sub_group(groups, sub_lookup, sub_spec)
+        except TypeError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        except (ValueError, NotImplementedError) as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    group_config = configs.get(group_key, {})
+    return QueryResponse(
+        groups=[
+            _group_to_result(g, group_lookup.type, group_config, sub_lookup, sub_config)
+            for g in groups
+        ]
+    )
 
 
 @router.post(
@@ -700,6 +911,66 @@ async def delete_property(
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "property not found")
         await sweep_property_from_views(conn, user_id, str(row["data_source_id"]), row["key"])
+
+
+@router.post(
+    "/data-sources/{data_source_id}/views",
+    response_model=ViewResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_view(
+    data_source_id: str,
+    body: ViewCreate,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> ViewResponse:
+    """The first way to create a non-default view (task-15): `create_database` mints
+    exactly one table view per data source, and there was previously no other path to a
+    second one -- every M6 view type (Board/Gallery/List/Feed) was unreachable through the
+    UI regardless of how good its frontend component was.
+
+    All Notes cannot have views created on it -- it's virtual, no `db_views` row is
+    possible (spec §6) -- same 400 pattern `create_property` already uses for the same
+    reason on the same virtual source. `type` is deliberately unvalidated beyond being a
+    non-empty string (`ViewCreate`'s own Pydantic `str` requirement) -- see
+    `models/database.py`'s `ViewCreate` docstring for why no closed enum lives here.
+    """
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "cannot add views to the built-in All Notes source",
+        )
+
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    ds_row = await conn.fetchrow(
+        """
+        SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2
+        """,
+        data_source_id,
+        user_id,
+    )
+    if ds_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    # Position default: same COALESCE(MAX(position)+1, 0) pattern create_property already
+    # uses for db_properties, copied rather than reinvented (task-15-brief.md §2).
+    row = await conn.fetchrow(
+        """
+        INSERT INTO db_views (data_source_id, user_id, name, type, icon, position)
+        VALUES ($1, $2, $3, $4, $5,
+                COALESCE(
+                    (SELECT MAX(position) + 1 FROM db_views
+                     WHERE data_source_id = $1 AND user_id = $2),
+                    0))
+        RETURNING *
+        """,
+        data_source_id,
+        user_id,
+        body.name,
+        body.type,
+        body.icon,
+    )
+    return ViewResponse(**_row(row))
 
 
 # `ViewUpdate`'s own declared field names — never request-supplied, so

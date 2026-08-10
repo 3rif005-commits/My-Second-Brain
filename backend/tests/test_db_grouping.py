@@ -8,7 +8,7 @@ import pytest
 
 from services.db.query.aggregations import aggregate
 from services.db.query.compiler import PropertyLookup
-from services.db.query.grouping import GroupBySpec, group_rows, sub_group
+from services.db.query.grouping import _NO_VALUE_KEY, GroupBySpec, group_rows, sub_group
 
 _ABSENT = object()
 
@@ -323,6 +323,26 @@ def test_empty_group_present_even_with_zero_empty_rows():
     no_value = [g for g in groups if g.key not in ("a", "b")]
     assert len(no_value) == 1
     assert no_value[0].rows == []
+
+
+def test_hide_empty_groups_false_keeps_the_full_structural_set_default():
+    # checkbox always has both fixed groups (true/false) regardless of data -- a good
+    # case for "structurally defined" since one bucket can be empty with zero configuration.
+    lookup = _lookup("k1", "checkbox")
+    rows = _rows("k1", "checkbox", [True])
+    groups = group_rows(rows, lookup, GroupBySpec(property_key="k1"))
+    by_key = {g.key: g for g in groups}
+    assert "false" in by_key and by_key["false"].rows == []
+
+
+def test_hide_empty_groups_true_omits_every_zero_row_group():
+    lookup = _lookup("k1", "checkbox")
+    rows = _rows("k1", "checkbox", [True])
+    groups = group_rows(rows, lookup, GroupBySpec(property_key="k1", hide_empty_groups=True))
+    by_key = {g.key: g for g in groups}
+    assert "false" not in by_key  # the empty checkbox bucket is gone
+    assert _NO_VALUE_KEY not in by_key  # the empty implicit no-value bucket is gone too
+    assert "true" in by_key and by_key["true"].rows  # the non-empty bucket survives
 
 
 # --- sub-grouping: exactly two levels, every row accounted for once --------
