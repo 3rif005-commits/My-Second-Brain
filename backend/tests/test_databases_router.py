@@ -360,6 +360,58 @@ async def test_list_rows_404s_for_an_unknown_data_source(client):
 
 
 # ---------------------------------------------------------------------------
+# list_rows has a hard cap (task-10 review finding 1) — neither branch had
+# any LIMIT, so a user with hundreds/thousands of notes would fetch every
+# matching row unconditionally on the one page Milestone 2 ships
+# (/brain/db/all-notes). No pagination UI yet (Milestone 3+ scope) — just a
+# sane cap on the query. The router's private `_ROWS_LIMIT` constant is
+# monkeypatched down to a small number so the test doesn't need to actually
+# insert hundreds of rows.
+# ---------------------------------------------------------------------------
+
+async def test_list_rows_caps_all_notes_at_the_hard_limit(
+    client, db_conn, test_user, monkeypatch
+):
+    import routers.databases as databases_module
+
+    monkeypatch.setattr(databases_module, "_ROWS_LIMIT", 3, raising=False)
+
+    for i in range(5):
+        await db_conn.execute(
+            "INSERT INTO notes (user_id, title) VALUES ($1, $2)", test_user, f"Note {i}"
+        )
+
+    res = await client.get(f"/db/data-sources/{ALL_NOTES_ID}/rows")
+    assert res.status_code == 200
+    assert len(res.json()["rows"]) == 3
+
+
+async def test_list_rows_caps_an_ordinary_data_source_at_the_hard_limit(
+    client, db_conn, test_user, monkeypatch
+):
+    import routers.databases as databases_module
+
+    monkeypatch.setattr(databases_module, "_ROWS_LIMIT", 3, raising=False)
+
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+
+    for i in range(5):
+        note = await db_conn.fetchrow(
+            "INSERT INTO notes (user_id, title) VALUES ($1, $2) RETURNING id",
+            test_user, f"Row {i}",
+        )
+        await db_conn.execute(
+            "INSERT INTO db_row_props (note_id, data_source_id, user_id) VALUES ($1, $2, $3)",
+            note["id"], ds_id, test_user,
+        )
+
+    res = await client.get(f"/db/data-sources/{ds_id}/rows")
+    assert res.status_code == 200
+    assert len(res.json()["rows"]) == 3
+
+
+# ---------------------------------------------------------------------------
 # Creating a row (fix round 2, review finding 3) — without this, an ordinary
 # data source has zero rows, permanently, and the PATCH endpoint below is
 # unreachable end-to-end.
@@ -642,6 +694,74 @@ async def test_update_row_property_with_explicit_null_clears_the_key(
     # The column itself is still NOT NULL -- only the one key is gone.
     assert row_after["properties"] is not None
     assert prop["key"] not in row_after["properties"]
+
+
+async def test_update_row_property_rejects_a_wrapper_whose_type_tag_mismatches_the_property(
+    client, db_conn, test_user
+):
+    # task-10 review finding 2: `RowPropertyUpdate.value` is `Any` with no
+    # shape validation, so a `status`-typed property could be PATCHed with a
+    # `number` wrapper and get written into db_row_props.properties
+    # verbatim — silently violating spec §3.3's invariant that every stored
+    # value is a discriminated wrapper matching its property's declared
+    # type, which Milestone 3's filter/sort compiler will assume holds.
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Status", "type": "status"}
+        )
+    ).json()
+
+    note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Row 1') RETURNING id", test_user
+    )
+    await db_conn.execute(
+        "INSERT INTO db_row_props (note_id, data_source_id, user_id) VALUES ($1, $2, $3)",
+        note["id"], ds_id, test_user,
+    )
+
+    res = await client.patch(
+        f"/db/data-sources/{ds_id}/rows/{note['id']}",
+        json={"property_key": prop["key"], "value": {"type": "number", "number": 42}},
+    )
+    assert res.status_code == 400
+
+    row_after = await db_conn.fetchrow(
+        "SELECT properties FROM db_row_props WHERE note_id = $1", note["id"]
+    )
+    assert prop["key"] not in row_after["properties"]  # rejected, never written
+
+
+async def test_update_row_property_rejects_a_bare_scalar_value(client, db_conn, test_user):
+    # Same invariant as above, but for a value that isn't even wrapped in a
+    # dict at all (e.g. `{"property_key": "...", "value": "done"}`).
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Status", "type": "status"}
+        )
+    ).json()
+
+    note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Row 1') RETURNING id", test_user
+    )
+    await db_conn.execute(
+        "INSERT INTO db_row_props (note_id, data_source_id, user_id) VALUES ($1, $2, $3)",
+        note["id"], ds_id, test_user,
+    )
+
+    res = await client.patch(
+        f"/db/data-sources/{ds_id}/rows/{note['id']}",
+        json={"property_key": prop["key"], "value": "done"},
+    )
+    assert res.status_code == 400
+
+    row_after = await db_conn.fetchrow(
+        "SELECT properties FROM db_row_props WHERE note_id = $1", note["id"]
+    )
+    assert prop["key"] not in row_after["properties"]  # rejected, never written
 
 
 async def test_update_row_property_requires_a_value_field(client, db_conn, test_user):

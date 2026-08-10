@@ -58,6 +58,15 @@ ALL_NOTES_ID = "all-notes"
 # 500.
 _KEY_MINT_ATTEMPTS = 5
 
+# task-10 review finding 1: list_rows had no LIMIT anywhere in the pipeline,
+# so a user with hundreds/thousands of notes fetched every matching row
+# unconditionally on the one page Milestone 2 ships (/brain/db/all-notes).
+# 500 is generous for a personal single-user knowledge base and keeps the
+# query and the JSON payload bounded. Real pagination (cursor/offset, query
+# params, "load more" UI) is explicitly Milestone 3+ scope — this is just a
+# hard cap, not a feature.
+_ROWS_LIMIT = 500
+
 
 def _jsonify(value: Any) -> Any:
     """Coerce a raw `notes`-column value to a JSON-safe primitive for the
@@ -331,8 +340,10 @@ async def list_rows(
             FROM notes
             WHERE user_id = $1 AND deleted_at IS NULL
             ORDER BY updated_at DESC
+            LIMIT $2
             """,
             user_id,
+            _ROWS_LIMIT,
         )
         rows = [
             {
@@ -362,9 +373,11 @@ async def list_rows(
         SELECT note_id, properties FROM db_row_props
         WHERE data_source_id = $1 AND user_id = $2
         ORDER BY position
+        LIMIT $3
         """,
         data_source_id,
         user_id,
+        _ROWS_LIMIT,
     )
     rows = [{"id": str(r["note_id"]), "properties": r["properties"]} for r in row_rows]
     return RowsResponse(rows=rows)
@@ -496,7 +509,7 @@ async def update_row_property(
 
     prop_row = await conn.fetchrow(
         """
-        SELECT storage FROM db_properties
+        SELECT storage, type FROM db_properties
         WHERE data_source_id = $1 AND user_id = $2 AND key = $3
         """,
         data_source_id,
@@ -507,6 +520,26 @@ async def update_row_property(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "property not found")
     if prop_row["storage"] != "jsonb":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "property is not JSONB-backed")
+
+    # task-10 review finding 2: `body.value` is `Any` at the Pydantic layer
+    # (models/database.py) with no shape validation, so nothing stopped a
+    # `status`-typed property being PATCHed with a `number` wrapper — or a
+    # bare, unwrapped scalar — and written into db_row_props.properties
+    # verbatim. Spec §3.3 promises every stored value is a discriminated
+    # wrapper (`{"type": <type>, <type>: <value>}`) matching its property's
+    # declared type; Milestone 3's filter/sort compiler will assume that
+    # invariant holds. The `None` branch above (clear-property) is exempt —
+    # a clear has no type to check. Deliberately shallow: this only checks
+    # the wrapper's `type` tag, not that the inner value is well-formed for
+    # that type (e.g. a `number` wrapper's value actually being numeric) —
+    # that's `coerce_write`/Milestone 5 scope.
+    if body.value is not None:
+        if not isinstance(body.value, dict) or body.value.get("type") != prop_row["type"]:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"value must be a {prop_row['type']!r} wrapper, e.g. "
+                f'{{"type": "{prop_row["type"]}", ...}}',
+            )
 
     if body.value is None:
         # A top-level `null` means "clear/unset this property", not "set
