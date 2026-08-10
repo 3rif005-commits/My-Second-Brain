@@ -8,7 +8,7 @@ Research: docs/research/notion-databases-research.md §F.1 item 8 (Date,
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -58,9 +58,16 @@ def _parse_iso(raw: Any, field_name: str) -> datetime:
         raise ValueError(f"date {field_name} must be an ISO-8601 string, got: {raw!r}")
     normalised = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
     try:
-        return datetime.fromisoformat(normalised)
+        parsed = datetime.fromisoformat(normalised)
     except ValueError as exc:
         raise ValueError(f"date {field_name} must be ISO-8601, got: {raw!r}") from exc
+    # A bare date/datetime string with no offset (e.g. "2026-08-10") parses
+    # naive. `start` and `end` must compare as the same kind of datetime —
+    # Python raises TypeError comparing naive to aware, which callers of
+    # coerce_write wouldn't catch as the ValueError this function otherwise
+    # promises (query/operators.py's `_coerce_date` hit the identical
+    # trap first; same fix, mirrored here).
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
 @dataclass(frozen=True)

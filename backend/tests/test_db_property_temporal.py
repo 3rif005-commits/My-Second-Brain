@@ -88,6 +88,23 @@ def test_date_coerce_write_rejects_malformed_end():
         Date().coerce_write({"start": "2026-08-10", "end": "not-a-date"})
 
 
+def test_date_coerce_write_accepts_mixed_naive_and_aware_start_and_end():
+    # A bare date-only `start` (naive once parsed) alongside a `end` that
+    # carries an explicit UTC offset (aware) — exactly what a date-only
+    # picker for `start` plus a full timestamp for `end` would produce.
+    # Regression: this used to raise a bare TypeError ("can't compare
+    # offset-naive and offset-aware datetimes") instead of the ValueError
+    # coerce_write promises on bad input, because the naive value was never
+    # normalised to UTC before the start<=end comparison.
+    value = {"start": "2026-08-10", "end": "2026-08-11T00:00:00+05:00"}
+    assert Date().coerce_write(value) == value
+
+
+def test_date_coerce_write_rejects_inverted_range_with_mixed_awareness():
+    with pytest.raises(ValueError):
+        Date().coerce_write({"start": "2026-08-12", "end": "2026-08-10T00:00:00+05:00"})
+
+
 def test_date_coerce_write_rejects_bad_timezone():
     with pytest.raises(ValueError):
         Date().coerce_write({"start": "2026-08-10", "time_zone": "Mars/Phobos"})
