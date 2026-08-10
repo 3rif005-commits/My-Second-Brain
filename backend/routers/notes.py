@@ -1,7 +1,5 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Header, HTTPException, status
-from jose import jwt, JWTError
-from core.config import settings
 from models.note import NoteCreate, NoteUpdate, NoteResponse
 from services.database import get_supabase
 
@@ -9,17 +7,32 @@ router = APIRouter(prefix="/notes", tags=["notes"])
 
 
 def get_user_id(authorization: str = Header()) -> str:
+    """Verify the Supabase JWT via Supabase's own auth API rather than
+    decoding it locally. Local decoding needs to know the token's signing
+    algorithm in advance; Supabase's newer "JWT Signing Keys" projects sign
+    with an asymmetric algorithm (e.g. ES256) instead of the legacy shared
+    HS256 secret, so a hardcoded `algorithms=["HS256"]` allow-list rejects
+    every token from a migrated project with `jose.JWTError: 'The specified
+    alg value is not allowed'`. Remote verification is algorithm-agnostic —
+    Supabase's own server does the check — matching the pattern
+    `routers/ingest.py`'s `get_user_id` already uses.
+    """
     token = authorization.removeprefix("Bearer ").strip()
     try:
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            audience="authenticated",
+        response = get_supabase().auth.get_user(token)
+        if not response.user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={"error": "Invalid or expired token.", "error_code": "AUTH_INVALID"},
+            )
+        return response.user.id
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": f"Token validation failed: {e}", "error_code": "AUTH_ERROR"},
         )
-        return payload["sub"]
-    except JWTError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
 
 @router.get("/", response_model=list[NoteResponse])

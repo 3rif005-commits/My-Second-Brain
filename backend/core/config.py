@@ -6,6 +6,12 @@ class Settings(BaseSettings):
 
     supabase_url: str
     supabase_service_role_key: str
+    # No longer read anywhere (routers/notes.py's get_user_id now verifies
+    # remotely via Supabase's auth API instead of decoding the JWT locally
+    # — see that function's docstring). Kept here, not removed: .env still
+    # sets SUPABASE_JWT_SECRET and this app's Settings is extra="forbid",
+    # so dropping the field breaks config loading unless .env is edited
+    # too. Harmless to keep; safe to delete whenever .env is next touched.
     supabase_jwt_secret: str
     google_api_key: str = ""
     openrouter_api_key: str = ""
