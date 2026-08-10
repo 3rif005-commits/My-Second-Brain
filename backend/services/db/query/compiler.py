@@ -137,12 +137,25 @@ def compile_sorts(
     row-identity tiebreaker regardless). `sql_order` never emits a bound
     param (it only ever orders by a computed expression, never compares
     against a request-supplied value), so unlike compile_filter there is
-    nothing here to renumber."""
+    nothing here to renumber.
+
+    Deliberately checks `REGISTRY`, not `TYPE_OPERATORS` (unlike
+    compile_condition's type check): TYPE_OPERATORS deliberately excludes
+    formula/rollup/place/button (Milestone 8 dispatch, or "not filterable"),
+    but every one of those 4 still has a REGISTRY entry with a working
+    sql_order — there's no operator concept for a sort, so there's no
+    reason to reject a type here just because it can't be *filtered* yet.
+    A type key absent from REGISTRY entirely (corrupt data, a typo) is the
+    actual failure mode this guards against — without it, that case raises
+    a bare KeyError -> HTTP 500 instead of the FilterValidationError -> 400
+    every other unknown-input path in this module gives."""
     parts: list[str] = []
     for sort in sorts:
         lookup = properties.get(sort.property)
         if lookup is None:
             raise FilterValidationError(f"unknown property key: {sort.property!r}")
+        if lookup.type not in REGISTRY:
+            raise FilterValidationError(f"{lookup.type!r} is not a sortable property type")
         ctx = SqlContext(key=lookup.key, alias=alias, storage=lookup.storage)
         parts.append(REGISTRY[lookup.type].sql_order(ctx, sort.direction).sql)
     return SqlFragment(sql=", ".join(parts), params=())

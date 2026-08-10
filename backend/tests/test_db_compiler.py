@@ -11,8 +11,10 @@ rolled back on teardown. NEVER touches `core.config.settings.database_url`
 """
 from __future__ import annotations
 
+import re
 import uuid
 
+import asyncpg
 import pytest
 from fastapi import HTTPException
 
@@ -175,6 +177,28 @@ def test_compile_sorts_joins_multiple_with_comma():
     assert frag.sql.count(",") == 1
 
 
+def test_compile_sorts_unresolvable_registry_type_raises_filter_validation_error_not_keyerror():
+    # A PropertyLookup.type that isn't a real REGISTRY key (corrupt data, a
+    # typo) must fail the same way an unknown property key does — a bare
+    # `REGISTRY[lookup.type]` KeyError would surface as an uncaught 500
+    # instead of the FilterValidationError -> 400 every other bad-input path
+    # in this module gives.
+    bogus_lookup = {"x": PropertyLookup(type="not_a_real_type", storage="jsonb", key="a1b2c3d4")}
+    with pytest.raises(FilterValidationError):
+        compile_sorts([SortSpec(property="x", direction="asc")], bogus_lookup, alias="p")
+
+
+def test_compile_sorts_accepts_formula_and_rollup_types_unlike_compile_filter():
+    # Deliberate asymmetry with compile_filter (see compiler.py's
+    # compile_sorts docstring): formula/rollup/place/button are absent from
+    # TYPE_OPERATORS (not filterable pre-Milestone-8, or never filterable),
+    # but all 4 still have a working REGISTRY entry, so sorting by one is
+    # not rejected here.
+    lookup = {"f": PropertyLookup(type="formula", storage="jsonb", key="a1b2c3d4")}
+    frag = compile_sorts([SortSpec(property="f", direction="asc")], lookup, alias="p")
+    assert frag.sql
+
+
 # ---------------------------------------------------------------------------
 # Depth 10 allowed / 11 rejected, end to end through compile_filter
 # ---------------------------------------------------------------------------
@@ -250,6 +274,99 @@ def test_build_pagination_params_bound_not_interpolated():
     assert "34" not in frag.sql
 
 
+# ---------------------------------------------------------------------------
+# _scope() guard sweep — every SqlFragment QueryBuilder.build() can produce
+# must scope on user_id (spec §8.3), not just the empty-filter/empty-sorts
+# corner the two `test_build_*_mode_sql_contains_scope` tests above happen
+# to cover. Same technique test_databases_router.py's tenancy-guard sweep
+# uses (tests/test_databases_router.py:876-926): grep the compiled SQL for
+# a real `user_id = $N` predicate, not just a substring mention, plus a
+# count floor so the sweep itself can't silently shrink to near-nothing.
+# That existing sweep enumerates SQL statements straight from source
+# (routers/databases.py, services/db/views.py); builder.py's scope isn't a
+# static literal — it's assembled by `_scope()` at call time — so this
+# sweep instead parametrizes the actual shape space `build()` accepts and
+# inspects each call's output, which is the closest equivalent for a
+# builder rather than hand-written SQL.
+# ---------------------------------------------------------------------------
+
+_SCOPE_PREDICATE_RE = re.compile(r"user_id\s*=\s*\$\d+")
+
+_SCOPE_SWEEP_ALL_NOTES_PROPS = {
+    "title": PropertyLookup(type="title", storage="column", key="title"),
+}
+_SCOPE_SWEEP_ORDINARY_PROPS = {
+    "title": PropertyLookup(type="title", storage="jsonb", key="a1b2c3d4"),
+}
+
+
+def _scope_sweep_simple_filter() -> FilterCondition:
+    return FilterCondition(type="condition", property="title", operator="is_not_empty", value=None)
+
+
+def _scope_sweep_nested_group_filter() -> FilterGroup:
+    return FilterGroup(
+        type="group",
+        op="and",
+        children=[
+            FilterCondition(type="condition", property="title", operator="is_not_empty", value=None),
+            FilterGroup(
+                type="group",
+                op="or",
+                children=[
+                    FilterCondition(type="condition", property="title", operator="is_empty", value=None),
+                ],
+            ),
+        ],
+    )
+
+
+def _build_scope_sweep_cases() -> list:
+    # Both modes x {no filter, simple filter, nested-group filter} x
+    # {no sorts, with sorts}: 2 x 3 x 2 = 12 cases.
+    modes = [
+        ("all_notes", None, _SCOPE_SWEEP_ALL_NOTES_PROPS),
+        ("ordinary", "ds-1", _SCOPE_SWEEP_ORDINARY_PROPS),
+    ]
+    filters = [
+        ("no_filter", lambda: None),
+        ("simple_filter", _scope_sweep_simple_filter),
+        ("nested_group_filter", _scope_sweep_nested_group_filter),
+    ]
+    sorts_variants = [
+        ("no_sorts", []),
+        ("with_sorts", [SortSpec(property="title", direction="asc")]),
+    ]
+    cases = []
+    for mode_name, data_source_id, properties in modes:
+        for filter_name, filter_fn in filters:
+            for sorts_name, sorts in sorts_variants:
+                cases.append(
+                    pytest.param(
+                        data_source_id, properties, filter_fn(), sorts,
+                        id=f"{mode_name}-{filter_name}-{sorts_name}",
+                    )
+                )
+    return cases
+
+
+_SCOPE_SWEEP_CASES = _build_scope_sweep_cases()
+
+
+def test_scope_sweep_case_count_floor():
+    # Same discipline as test_databases_router.py's own
+    # `assert len(statements) >= 8` — a floor so this sweep can't silently
+    # regress to near-vacuous coverage if a case is accidentally dropped.
+    assert len(_SCOPE_SWEEP_CASES) >= 8
+
+
+@pytest.mark.parametrize("data_source_id,properties,filter_node,sorts", _SCOPE_SWEEP_CASES)
+def test_build_always_scopes_on_user_id(data_source_id, properties, filter_node, sorts):
+    qb = QueryBuilder(user_id="u-1", data_source_id=data_source_id, properties=properties)
+    frag = qb.build(filter_node, sorts, Pagination())
+    assert _SCOPE_PREDICATE_RE.search(frag.sql), f"missing user_id = $N predicate:\n{frag.sql}"
+
+
 # ===========================================================================
 # Harness-backed tests
 # ===========================================================================
@@ -297,6 +414,7 @@ async def test_full_operator_matrix_compiles_and_executes(db_conn, test_user):
     """All ~131 (type x operator) pairs compile to SQL that actually
     executes against the real schema, one condition per pair."""
     data_source_id = await _make_ordinary_source(db_conn, test_user)
+    executed = 0
     for prop_type, ops in TYPE_OPERATORS.items():
         lookup = {"prop": PropertyLookup(type=prop_type, storage="jsonb", key="a1b2c3d4")}
         for operator_name, operator in ops.items():
@@ -310,17 +428,23 @@ async def test_full_operator_matrix_compiles_and_executes(db_conn, test_user):
             frag = qb.build(node, [], Pagination())
             # Must actually run without raising against the real schema.
             await db_conn.fetch(frag.sql, *frag.params)
+            executed += 1
+    # 131 total pairs - 6 known-broken unique_id numeric ops (see above) =
+    # 125. A floor, not `== 125`, so a future TYPE_OPERATORS addition
+    # doesn't need this test edited — but if TYPE_OPERATORS were ever
+    # emptied by a refactor, this catches it rather than passing vacuously.
+    assert executed >= 125
 
 
-async def test_unique_id_numeric_operators_currently_fail_at_execution(db_conn, test_user):
-    """Documents the gap above so a future fix to properties/base.py's
-    `_VALUE_SHAPES` turns this into a visible, deliberate test change
-    rather than a silent behaviour flip. If this test starts failing
-    because the query now succeeds, that's progress — update it."""
-    import asyncpg
+@pytest.mark.parametrize("operator_name", sorted(_UNIQUE_ID_BROKEN_NUMERIC_OPS))
+async def test_unique_id_numeric_operators_currently_fail_at_execution(db_conn, test_user, operator_name):
+    """Documents the gap above for all 6 excluded ops (not just one), so the
+    pin and the `test_full_operator_matrix_compiles_and_executes` exclusion
+    set can't silently drift apart. If this starts failing because a given
+    op's query now succeeds, that's progress — update both together."""
     data_source_id = await _make_ordinary_source(db_conn, test_user)
     lookup = {"prop": PropertyLookup(type="unique_id", storage="jsonb", key="a1b2c3d4")}
-    node = FilterCondition(type="condition", property="prop", operator="equals", value=1)
+    node = FilterCondition(type="condition", property="prop", operator=operator_name, value=1)
     qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
     frag = qb.build(node, [], Pagination())
     with pytest.raises(asyncpg.exceptions.DataError):
