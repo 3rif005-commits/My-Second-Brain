@@ -247,6 +247,26 @@ class _GenericProperty:
         shape = _VALUE_SHAPES.get(self.key) or _text_shape(self.key)
         hop = shape.order_hop if (for_order and shape.order_hop) else shape.hop
         expr = f"{ctx.alias}.properties -> '{_jsonb_key(ctx.key)}' {hop}"
+        # Spec §8.2 / research §K.7 call for this `::double precision` cast
+        # to be *guarded* (`CASE WHEN ... THEN ...::double precision ELSE
+        # NULL END`) so one malformed legacy `number` value can't 500 an
+        # entire filtered query. M3 (Task 11) deliberately does NOT apply
+        # that guard: it was implemented, found to break Milestone 0's
+        # validated B-tree expression index (a CASE-wrapped expression
+        # doesn't match the bare-cast expression the index was built on
+        # syntactically, so number/unique_id filter/sort would silently
+        # fall onto the unindexed ~450ms-p95 NO-GO path instead of the
+        # ~90ms-p95 GO path), and was reverted after that tradeoff was
+        # escalated to and decided by the human partner: there is currently
+        # no legacy/malformed `number` data in production for this
+        # brand-new feature, so the hazard the guard protects against is
+        # hypothetical today, and trading away an empirically-validated,
+        # gate-passing index for it isn't worth it yet (task-11-report.md
+        # has the full history). Revisit this cast when either (a)
+        # Milestone 5's `coerce_write` is fully authoritative and the guard
+        # becomes pure defense-in-depth, or (b) real malformed data risk
+        # actually materialises — and ship a matching functional/partial
+        # index alongside the guard at that point, not after it.
         return f"({expr}){shape.cast}" if shape.cast else expr
 
     def sql_extract(self, ctx: SqlContext) -> SqlFragment:

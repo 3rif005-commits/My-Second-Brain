@@ -311,12 +311,21 @@ def test_me_resolution_binds_user_id_not_literal_me():
     assert "me" not in frag.sql
 
 
-# --- The guarded numeric cast (properties/base.py, spec §8.2) --------------
+# --- The numeric cast (properties/base.py, spec §8.2) ----------------------
+#
+# Spec §8.2 calls for a *guarded* `::double precision` cast (CASE WHEN ...
+# ELSE NULL END) so one malformed legacy `number` value can't fail a whole
+# filtered query. M3 tried that guard and reverted it (see task-11-report.md):
+# it breaks Milestone 0's validated B-tree expression index, since a
+# CASE-wrapped expression no longer matches the bare-cast expression the
+# index was built on. The human partner decided, given zero legacy/malformed
+# `number` data exists yet for this brand-new feature, to keep the fast
+# indexed path and defer the guard. This test documents that decision so a
+# future change back to a guarded cast is a deliberate one, not an accident.
 
-def test_number_sql_extract_uses_a_guarded_cast_not_an_unconditional_one():
+def test_number_sql_extract_uses_the_plain_unguarded_cast_by_deliberate_m3_decision():
     from services.db.properties.base import REGISTRY as base_registry
 
     frag = base_registry["number"].sql_extract(SqlContext(key="a1b2c3d4", alias="p"))
-    assert "CASE WHEN" in frag.sql
-    assert "::double precision" in frag.sql
-    assert "ELSE NULL END" in frag.sql
+    assert "CASE WHEN" not in frag.sql
+    assert frag.sql == "(p.properties -> 'a1b2c3d4' ->> 'number')::double precision"
