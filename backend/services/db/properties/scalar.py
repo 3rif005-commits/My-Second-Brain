@@ -1,0 +1,198 @@
+"""Number and UniqueId: Milestone 5's richer descriptors for the two scalar
+numeric types (task-14-brief.md §1).
+
+Spec: docs/superpowers/specs/2026-08-08-notion-databases-design.md §5.
+Research: docs/research/notion-databases-research.md §F.1 items 4 (Number,
+~line 494) and 22 (Unique ID, ~line 1411).
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Literal
+
+import asyncpg
+from pydantic import BaseModel, ConfigDict
+
+from .base import Operator, SqlContext, SqlFragment, _GenericProperty
+
+__all__ = ["Number", "NumberConfig", "UniqueId", "UniqueIdConfig", "next_unique_id"]
+
+
+# Research §F.1 item 4: the property schema object's `format` enum, "copy
+# verbatim" per task-14-brief.md. The brief's own prose claims "40 values"
+# and the research doc repeats that claim ("That is 40 values.") right
+# above its own enumerated list -- but the enumerated list in both places
+# is 39 items, not 40 (counted twice). This is copied verbatim as
+# enumerated (39), not padded to match the prose count; flagged in
+# task-14-report.md for the reviewer rather than silently "fixed" by
+# guessing a 40th format that appears nowhere in either source.
+NumberFormat = Literal[
+    "number", "number_with_commas", "percent", "dollar", "canadian_dollar",
+    "singapore_dollar", "hong_kong_dollar", "new_zealand_dollar",
+    "new_taiwan_dollar", "euro", "pound", "yen", "yuan", "won", "ruble",
+    "rupee", "rupiah", "real", "lira", "franc", "krona", "norwegian_krone",
+    "danish_krone", "mexican_peso", "chilean_peso", "philippine_peso",
+    "colombian_peso", "argentine_peso", "uruguayan_peso", "rand", "zloty",
+    "baht", "forint", "koruna", "shekel", "dirham", "riyal", "ringgit", "leu",
+]
+
+
+class NumberConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Display-only (research: "API number config contains only format", and
+    # format itself doesn't change the stored value) -- so this field never
+    # touches sql_extract/sql_order/coerce_write, only carried through for a
+    # future frontend cell editor (out of this task's scope per the brief).
+    format: NumberFormat = "number"
+
+
+class UniqueIdConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prefix: str | None = None
+
+
+_NUMBER_OPS: tuple[Operator, ...] = (
+    Operator(name="equals", arg_type="num"),
+    Operator(name="does_not_equal", arg_type="num"),
+    Operator(name="greater_than", arg_type="num"),
+    Operator(name="less_than", arg_type="num"),
+    Operator(name="greater_than_or_equal_to", arg_type="num"),
+    Operator(name="less_than_or_equal_to", arg_type="num"),
+    Operator(name="is_empty", arg_type="none"),
+    Operator(name="is_not_empty", arg_type="none"),
+)
+
+
+def _is_empty(value: Any) -> bool:
+    # Same rule as _GenericProperty.is_empty (base.py) -- duplicated here
+    # rather than imported, matching this codebase's own precedent of
+    # small, sibling-module duplication over a shared private helper (see
+    # query/grouping.py and query/aggregations.py both defining their own
+    # `_parse_instant`).
+    return value is None or value == "" or value == [] or value == {}
+
+
+@dataclass(frozen=True)
+class Number:
+    """Research: "Default: empty (null), not 0" -- explicit, so `default()`
+    is `None`, never `0`."""
+
+    key: str = "number"
+    config_model: type[BaseModel] = NumberConfig
+
+    def default(self) -> Any:
+        return None
+
+    def is_empty(self, value: Any) -> bool:
+        return _is_empty(value)
+
+    def sql_extract(self, ctx: SqlContext) -> SqlFragment:
+        # Delegate to `_GenericProperty` rather than re-deriving the JSONB
+        # hop: this is the strongest possible guarantee that the swap
+        # doesn't change M3/M4's compiled SQL shape at all (task-14-brief.md
+        # "must not change" requirement) -- it isn't merely tested to match,
+        # it *is* the same call.
+        return _GenericProperty(key=self.key).sql_extract(ctx)
+
+    def sql_order(self, ctx: SqlContext, direction: str) -> SqlFragment:
+        return _GenericProperty(key=self.key).sql_order(ctx, direction)
+
+    def operators(self) -> dict[str, Operator]:
+        return {op.name: op for op in _NUMBER_OPS}
+
+    def aggregations(self) -> set[str]:
+        return {
+            "count_all", "count_empty", "count_not_empty",
+            "sum", "average", "median", "min", "max", "range",
+        }
+
+    def coerce_write(self, raw: Any) -> Any:
+        if raw is None:
+            return None
+        # bool is a subclass of int (isinstance(True, int) is True) -- the
+        # same trap query/operators.py's coerce_value already documents for
+        # this exact type. Must be checked before the int/float check.
+        if isinstance(raw, bool):
+            raise ValueError(f"number value cannot be a bool, got: {raw!r}")
+        if isinstance(raw, (int, float)):
+            return raw
+        # No `float(raw)` data-cleaning attempt on e.g. a numeric string --
+        # spec's "fail loud" standard (same reasoning query/operators.py's
+        # module docstring applies to filter values applies here to writes).
+        raise ValueError(f"number value must be int/float/None, got: {type(raw).__name__}")
+
+
+@dataclass(frozen=True)
+class UniqueId:
+    """Research: "created_time, created_by, ... unique_id are read-only
+    values" -- assigned only by `next_unique_id`'s counter, never by a
+    direct write."""
+
+    key: str = "unique_id"
+    config_model: type[BaseModel] = UniqueIdConfig
+
+    def default(self) -> Any:
+        return None
+
+    def is_empty(self, value: Any) -> bool:
+        return _is_empty(value)
+
+    def sql_extract(self, ctx: SqlContext) -> SqlFragment:
+        return _GenericProperty(key=self.key).sql_extract(ctx)
+
+    def sql_order(self, ctx: SqlContext, direction: str) -> SqlFragment:
+        return _GenericProperty(key=self.key).sql_order(ctx, direction)
+
+    def operators(self) -> dict[str, Operator]:
+        # research/operators.py decision: "unique_id gets the full 8 numeric
+        # operators (schema is permissive)" -- same family as Number.
+        return {op.name: op for op in _NUMBER_OPS}
+
+    def aggregations(self) -> set[str]:
+        # query/aggregations.py deliberately excludes unique_id from the
+        # numeric aggregators ("unique_id is numeric too but deliberately
+        # out of scope... do not extend it") -- mirrored here so this
+        # method doesn't advertise a capability M4 doesn't actually honour.
+        return {"count_all", "count_empty", "count_not_empty"}
+
+    def coerce_write(self, raw: Any) -> Any:
+        # `None` is accepted as a no-op/absent-value case (matches every
+        # other type's coerce_write(None) and the generic protocol test in
+        # test_db_property_registry.py that calls it on every REGISTRY
+        # entry) -- but any real value is rejected: there is no valid
+        # direct write to a unique_id cell.
+        if raw is None:
+            return None
+        raise ValueError(
+            "unique_id is read-only; its value is assigned by next_unique_id(), never written directly"
+        )
+
+
+async def next_unique_id(conn: asyncpg.Connection, property_id: str) -> int:
+    """Atomically increments and returns this property's next counter value, persisted in
+    `db_properties.config->>'next_value'` (no migration needed -- `config` is already a
+    flexible JSONB column from migration 014; storing counter state there avoids a schema
+    change for a single integer). Starts at 1 if absent. Research: "unique_id counters
+    consume numbers for deleted rows (gaps permanent)" -- this function never reads or
+    considers existing row values, only ever increments its own persisted counter, so a
+    deleted row's number is never reused. Single atomic UPDATE...RETURNING, no read-then-
+    write race.
+    """
+    row = await conn.fetchrow(
+        """
+        UPDATE db_properties
+        SET config = jsonb_set(
+            config,
+            '{next_value}',
+            to_jsonb(COALESCE((config->>'next_value')::int, 0) + 1)
+        )
+        WHERE id = $1
+        RETURNING (config->>'next_value')::int AS next_value
+        """,
+        property_id,
+    )
+    if row is None:
+        raise ValueError(f"no db_properties row with id={property_id!r}")
+    return row["next_value"]

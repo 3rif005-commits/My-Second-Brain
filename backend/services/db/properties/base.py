@@ -301,6 +301,36 @@ _REAL_TYPE_KEYS = (
     "verification", "button",
 )
 
+# Milestone 5 (task-14-brief.md): richer, type-specific descriptors for the
+# 8 keys the plan's own M5 test cases name (40 number formats, status
+# groups, date ranges + timezone, unique_id counters). The other 16 keys
+# stay on `_GenericProperty` until a milestone needs their richness
+# (people/files/relation need M7's relations; formula/rollup need M8's
+# engine).
+#
+# Imported here, at the bottom of the module rather than at the top: these
+# three submodules import `_GenericProperty`/`Operator`/`SqlContext`/
+# `SqlFragment` back from this module (`from .base import ...`), so this
+# module must finish *defining* those names before importing the
+# submodules that need them, or Python raises ImportError on a partially
+# initialised module. `_GenericProperty`/`Operator`/`SqlContext`/
+# `SqlFragment` are unchanged above this point; only the import's position
+# in the file is new.
+from .scalar import Number, UniqueId  # noqa: E402
+from .choice import Select, MultiSelect, Status  # noqa: E402
+from .temporal import Date, CreatedTime, LastEditedTime  # noqa: E402
+
+_RICH_OVERRIDES: dict[str, PropertyType] = {
+    "number": Number(),
+    "unique_id": UniqueId(),
+    "select": Select(),
+    "multi_select": MultiSelect(),
+    "status": Status(),
+    "date": Date(),
+    "created_time": CreatedTime(),
+    "last_edited_time": LastEditedTime(),
+}
+
 REGISTRY: dict[str, PropertyType] = {
-    key: _GenericProperty(key=key) for key in _REAL_TYPE_KEYS
+    key: _RICH_OVERRIDES.get(key, _GenericProperty(key=key)) for key in _REAL_TYPE_KEYS
 }
