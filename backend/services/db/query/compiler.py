@@ -39,6 +39,25 @@ class PropertyLookup:
     key: str
 
 
+def _resolve_alias(lookup: PropertyLookup, row_alias: str) -> str:
+    """A `storage='column'` property's real home is always `notes n` —
+    never `row_alias` — even in ordinary mode, where `row_alias` is `"p"`
+    (`db_row_props`). `db_row_props` happens to have its own `created_at`/
+    `updated_at` columns (migration 014), and `COLUMN_BACKED` exposes
+    `notes` columns under those exact names, so a column-backed lookup
+    naively given the mode's row alias compiles to syntactically valid but
+    *wrong-table* SQL (`p.created_at` instead of `n.created_at`) — silent
+    wrong answers, no error, exactly the failure class spec §8.2 exists to
+    prevent (final M3 review, Important finding 1). `create_property`
+    hardcodes `storage='jsonb'` today so this is unreachable via the
+    current write path, but PropertyLookup/QueryBuilder don't structurally
+    forbid it, so every SqlContext this module builds resolves its alias
+    per-lookup rather than trusting the single mode-wide alias callers pass
+    in. In All Notes mode `row_alias` is already `"n"`, so this is a no-op
+    there — only ordinary mode's behaviour changes."""
+    return "n" if lookup.storage == "column" else row_alias
+
+
 def filter_validation_error_to_http(exc: FilterValidationError) -> HTTPException:
     """spec §8.2 layer 2: "Unknown key -> HTTP 400, never a silently dropped
     clause." Callers (eventually a router, not this task) translate the
@@ -102,11 +121,18 @@ def _compile_node(
         ]
         return _combine(children, "AND" if node.op == "and" else "OR")
 
-    assert isinstance(node, FilterCondition)
+    if not isinstance(node, FilterCondition):
+        # Load-bearing, not a sanity check: FilterNode is only ever
+        # FilterGroup | FilterCondition (ast.py's discriminated union), so
+        # this branch should be unreachable — but `assert` is stripped
+        # under `python -O`, and columns.py's own guard against exposing an
+        # engine-state column deliberately uses `raise RuntimeError` for
+        # exactly this reason (a correctness guard must not be strippable).
+        raise RuntimeError(f"unreachable: FilterNode was neither a group nor a condition: {node!r}")
     lookup = properties.get(node.property)
     if lookup is None:
         raise FilterValidationError(f"unknown property key: {node.property!r}")
-    ctx = SqlContext(key=lookup.key, alias=alias, storage=lookup.storage)
+    ctx = SqlContext(key=lookup.key, alias=_resolve_alias(lookup, alias), storage=lookup.storage)
     return compile_condition(lookup.type, ctx, node.operator, node.value, user_id=user_id)
 
 
@@ -120,7 +146,13 @@ def compile_filter(
     """Walks the AST (ast.py's FilterCondition/FilterGroup), resolving each
     condition's `property` key against `properties`. `node is None` -> a
     trivial `TRUE` fragment (spec's implicit default: no filter, matches
-    list_rows's current unfiltered behaviour)."""
+    list_rows's current unfiltered behaviour).
+
+    Never call this directly to assemble a query — it has no opinion on
+    tenancy at all. `QueryBuilder.build()` (builder.py) is the only thing
+    that guarantees the mandatory `_scope()` predicate (spec §8.3) actually
+    ends up in the final SQL; this function alone produces a `WHERE`
+    sub-fragment, not a safe, executable query."""
     if node is None:
         return SqlFragment("TRUE", ())
     return _compile_node(node, properties, user_id=user_id, alias=alias)
@@ -148,7 +180,11 @@ def compile_sorts(
     A type key absent from REGISTRY entirely (corrupt data, a typo) is the
     actual failure mode this guards against — without it, that case raises
     a bare KeyError -> HTTP 500 instead of the FilterValidationError -> 400
-    every other unknown-input path in this module gives."""
+    every other unknown-input path in this module gives.
+
+    Never call this directly to assemble a query — same caveat as
+    compile_filter: it has no opinion on tenancy, only `QueryBuilder.build()`
+    guarantees `_scope()` ends up in the final SQL."""
     parts: list[str] = []
     for sort in sorts:
         lookup = properties.get(sort.property)
@@ -156,6 +192,6 @@ def compile_sorts(
             raise FilterValidationError(f"unknown property key: {sort.property!r}")
         if lookup.type not in REGISTRY:
             raise FilterValidationError(f"{lookup.type!r} is not a sortable property type")
-        ctx = SqlContext(key=lookup.key, alias=alias, storage=lookup.storage)
+        ctx = SqlContext(key=lookup.key, alias=_resolve_alias(lookup, alias), storage=lookup.storage)
         parts.append(REGISTRY[lookup.type].sql_order(ctx, sort.direction).sql)
     return SqlFragment(sql=", ".join(parts), params=())

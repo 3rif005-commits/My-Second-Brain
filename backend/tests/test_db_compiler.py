@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import asyncpg
 import pytest
@@ -274,6 +275,25 @@ def test_build_pagination_params_bound_not_interpolated():
     assert "34" not in frag.sql
 
 
+def test_ordinary_mode_column_backed_property_resolves_to_notes_alias_not_row_alias():
+    # Final M3 review, Important finding 1: a storage="column" property's
+    # real home is always `notes n`, never the mode's row alias — even in
+    # ordinary mode, where the row alias is "p" (db_row_props). db_row_props
+    # happens to have its own created_at/updated_at columns (migration 014)
+    # that COLUMN_BACKED names-match exactly, so naively using the mode
+    # alias for a column-backed lookup would compile to syntactically valid
+    # but wrong-table SQL (`p.created_at` instead of `n.created_at`) —
+    # silent wrong answers, no error. create_property hardcodes
+    # storage='jsonb' today so this is unreachable via the current write
+    # path, but PropertyLookup/QueryBuilder don't structurally forbid it.
+    lookup = {"created": PropertyLookup(type="created_time", storage="column", key="created_at")}
+    node = FilterCondition(type="condition", property="created", operator="is_not_empty", value=None)
+    qb = QueryBuilder(user_id="u-1", data_source_id="ds-1", properties=lookup)
+    frag = qb.build(node, [SortSpec(property="created", direction="asc")], Pagination())
+    assert "n.created_at" in frag.sql
+    assert "p.created_at" not in frag.sql
+
+
 # ---------------------------------------------------------------------------
 # _scope() guard sweep — every SqlFragment QueryBuilder.build() can produce
 # must scope on user_id (spec §8.3), not just the empty-filter/empty-sorts
@@ -510,6 +530,156 @@ async def test_semantic_correctness_number_equals(db_conn, test_user):
     assert note_ids == {matching_note}
 
 
+# ---------------------------------------------------------------------------
+# Row-level semantic correctness (final M3 review, Important finding 2):
+# the matrix sweep above only proves every pair *executes*; these prove a
+# representative pair per remaining value-shape family (text, choice, date)
+# returns the *right rows*, closing the gap left between Task 11's DB-free
+# shape tests and this task's DB-executes-without-raising sweep.
+# ---------------------------------------------------------------------------
+
+
+async def _insert_row(db_conn, user_id, data_source_id, note_id, properties):
+    await db_conn.execute(
+        "INSERT INTO db_row_props (note_id, data_source_id, user_id, properties) VALUES ($1, $2, $3, $4)",
+        note_id, data_source_id, user_id, properties,
+    )
+
+
+async def test_text_does_not_equal_is_null_safe_includes_absent_property(db_conn, test_user):
+    # SQL's three-valued logic: a bare `E <> $1` is NULL (neither true nor
+    # false) when the property is absent entirely, which would silently
+    # drop that row from a "does not equal" result set — exactly why
+    # `_text_scalar_sql`'s does_not_equal wraps in `(E IS NULL OR E <> $1)`.
+    # Proves that guard actually holds against real Postgres, not just that
+    # the SQL string contains "IS NULL" (operators.py's own DB-free tests
+    # already check the string shape).
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    matching_value = await _insert_note(db_conn, test_user, title="different value")
+    matching_absent = await _insert_note(db_conn, test_user, title="absent property")
+    excluded_equal = await _insert_note(db_conn, test_user, title="equal value")
+    await _insert_row(
+        db_conn, test_user, data_source_id, matching_value,
+        {"a1b2c3d4": {"type": "title", "title": "something else"}},
+    )
+    await _insert_row(db_conn, test_user, data_source_id, matching_absent, {})
+    await _insert_row(
+        db_conn, test_user, data_source_id, excluded_equal,
+        {"a1b2c3d4": {"type": "title", "title": "target"}},
+    )
+
+    lookup = {"t": PropertyLookup(type="title", storage="jsonb", key="a1b2c3d4")}
+    node = FilterCondition(type="condition", property="t", operator="does_not_equal", value="target")
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+    frag = qb.build(node, [], Pagination())
+    rows = await db_conn.fetch(frag.sql, *frag.params)
+    note_ids = {str(r["note_id"]) for r in rows}
+    assert note_ids == {matching_value, matching_absent}
+
+
+async def test_text_contains_percent_literal_not_wildcard(db_conn, test_user):
+    # `_escape_like`/`ESCAPE '\'` exist so a literal "%" in the search value
+    # is matched literally, not as an ILIKE wildcard. If escaping were
+    # broken, searching for "%" would compile to `ILIKE '%' || '%' || '%'`
+    # == `ILIKE '%%%'`, which matches every row regardless of content —
+    # this test's negative case (a row with no "%" at all) is what proves
+    # escaping actually happened, not just that the containing row matched.
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    has_percent = await _insert_note(db_conn, test_user, title="50% off")
+    no_percent = await _insert_note(db_conn, test_user, title="fifty percent off")
+    await _insert_row(
+        db_conn, test_user, data_source_id, has_percent,
+        {"a1b2c3d4": {"type": "title", "title": "50% off"}},
+    )
+    await _insert_row(
+        db_conn, test_user, data_source_id, no_percent,
+        {"a1b2c3d4": {"type": "title", "title": "fifty percent off"}},
+    )
+
+    lookup = {"t": PropertyLookup(type="title", storage="jsonb", key="a1b2c3d4")}
+    node = FilterCondition(type="condition", property="t", operator="contains", value="%")
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+    frag = qb.build(node, [], Pagination())
+    rows = await db_conn.fetch(frag.sql, *frag.params)
+    note_ids = {str(r["note_id"]) for r in rows}
+    assert note_ids == {has_percent}
+
+
+async def test_choice_equals_list_form_is_or_semantics(db_conn, test_user):
+    # `equals: ["A", "B"]` on a select/status property compiles to
+    # `E = ANY($1::text[])` (_choice_scalar_sql's list branch) — OR
+    # semantics: match A OR B, not both.
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    note_a = await _insert_note(db_conn, test_user, title="A")
+    note_b = await _insert_note(db_conn, test_user, title="B")
+    note_c = await _insert_note(db_conn, test_user, title="C")
+    for note_id, value in ((note_a, "A"), (note_b, "B"), (note_c, "C")):
+        await _insert_row(
+            db_conn, test_user, data_source_id, note_id,
+            {"a1b2c3d4": {"type": "select", "select": value}},
+        )
+
+    lookup = {"choice": PropertyLookup(type="select", storage="jsonb", key="a1b2c3d4")}
+    node = FilterCondition(type="condition", property="choice", operator="equals", value=["A", "B"])
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+    frag = qb.build(node, [], Pagination())
+    rows = await db_conn.fetch(frag.sql, *frag.params)
+    note_ids = {str(r["note_id"]) for r in rows}
+    assert note_ids == {note_a, note_b}
+
+
+async def test_date_past_week_selects_rows_inside_the_window(db_conn, test_user):
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    now = datetime.now(UTC)
+    inside_window = await _insert_note(db_conn, test_user, title="3 days ago")
+    outside_window = await _insert_note(db_conn, test_user, title="3 weeks ago")
+    inside_iso = (now - timedelta(days=3)).isoformat()
+    outside_iso = (now - timedelta(days=21)).isoformat()
+    await _insert_row(
+        db_conn, test_user, data_source_id, inside_window,
+        {"a1b2c3d4": {"type": "date", "date": {"start": inside_iso}}},
+    )
+    await _insert_row(
+        db_conn, test_user, data_source_id, outside_window,
+        {"a1b2c3d4": {"type": "date", "date": {"start": outside_iso}}},
+    )
+
+    lookup = {"d": PropertyLookup(type="date", storage="jsonb", key="a1b2c3d4")}
+    node = FilterCondition(type="condition", property="d", operator="past_week", value=None)
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+    frag = qb.build(node, [], Pagination())
+    rows = await db_conn.fetch(frag.sql, *frag.params)
+    note_ids = {str(r["note_id"]) for r in rows}
+    assert note_ids == {inside_window}
+
+
+async def test_date_malformed_value_excluded_not_erroring(db_conn, test_user):
+    # `_guarded_date_expr`'s regex-guarded CASE cast (operators.py) exists
+    # so one legacy/malformed non-ISO date string doesn't 500 the whole
+    # query — it should evaluate to NULL (excluded from any non-IS-NULL
+    # comparison) instead. Proves both halves: the query doesn't raise, and
+    # the malformed row is excluded rather than matching spuriously.
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    well_formed = await _insert_note(db_conn, test_user, title="well-formed")
+    malformed = await _insert_note(db_conn, test_user, title="malformed")
+    await _insert_row(
+        db_conn, test_user, data_source_id, well_formed,
+        {"a1b2c3d4": {"type": "date", "date": {"start": "2020-01-01T00:00:00Z"}}},
+    )
+    await _insert_row(
+        db_conn, test_user, data_source_id, malformed,
+        {"a1b2c3d4": {"type": "date", "date": {"start": "not-a-real-date"}}},
+    )
+
+    lookup = {"d": PropertyLookup(type="date", storage="jsonb", key="a1b2c3d4")}
+    node = FilterCondition(type="condition", property="d", operator="before", value="2030-01-01")
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+    frag = qb.build(node, [], Pagination())
+    rows = await db_conn.fetch(frag.sql, *frag.params)  # must not raise
+    note_ids = {str(r["note_id"]) for r in rows}
+    assert note_ids == {well_formed}
+
+
 async def test_ordinary_mode_excludes_trashed_notes(db_conn, test_user):
     data_source_id = await _make_ordinary_source(db_conn, test_user)
     live_note = await _insert_note(db_conn, test_user, title="live")
@@ -542,6 +712,47 @@ async def test_all_notes_mode_excludes_trashed_notes(db_conn, test_user):
     rows = await db_conn.fetch(frag.sql, *frag.params)
     ids = {str(r["id"]) for r in rows}
     assert ids == {live_note}
+
+
+async def test_ordinary_mode_column_backed_reads_notes_row_not_db_row_props_row(db_conn, test_user):
+    # Same finding as the SQL-text test above, proven with real, deliberately
+    # mismatched data: notes.created_at and db_row_props.created_at are set
+    # to *different* values for both notes, then swapped between them, so
+    # filtering on the column-backed created_time property only returns the
+    # expected row if the compiled SQL actually reads notes.created_at
+    # (n.created_at) rather than db_row_props.created_at (p.created_at).
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    t1 = datetime(2020, 1, 1, tzinfo=UTC)
+    t2 = datetime(2021, 1, 1, tzinfo=UTC)
+    note1 = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title, created_at) VALUES ($1, 'n1', $2) RETURNING id",
+        test_user, t1,
+    )
+    note2 = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title, created_at) VALUES ($1, 'n2', $2) RETURNING id",
+        test_user, t2,
+    )
+    note1_id, note2_id = str(note1["id"]), str(note2["id"])
+    # db_row_props.created_at deliberately swapped relative to notes.created_at.
+    await db_conn.execute(
+        "INSERT INTO db_row_props (note_id, data_source_id, user_id, properties, created_at) VALUES ($1, $2, $3, '{}', $4)",
+        note1["id"], data_source_id, test_user, t2,
+    )
+    await db_conn.execute(
+        "INSERT INTO db_row_props (note_id, data_source_id, user_id, properties, created_at) VALUES ($1, $2, $3, '{}', $4)",
+        note2["id"], data_source_id, test_user, t1,
+    )
+
+    lookup = {"created": PropertyLookup(type="created_time", storage="column", key="created_at")}
+    node = FilterCondition(type="condition", property="created", operator="equals", value=t1.isoformat())
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+    frag = qb.build(node, [], Pagination())
+    rows = await db_conn.fetch(frag.sql, *frag.params)
+    note_ids = {str(r["note_id"]) for r in rows}
+    # notes.created_at == t1 for note1 -> correct (n.created_at) resolution
+    # returns note1. The bug this guards against (p.created_at) would
+    # instead return note2, whose db_row_props.created_at == t1.
+    assert note_ids == {note1_id}
 
 
 # --- ASC NULLS LAST / DESC NULLS FIRST, one type per value-shape family ----
@@ -666,3 +877,38 @@ async def test_pagination_window(db_conn, test_user):
     assert 1 in frag.params
     rows = await db_conn.fetch(frag.sql, *frag.params)
     assert len(rows) == 2
+
+
+async def test_pagination_two_pages_are_disjoint_and_complete(db_conn, test_user):
+    # Final M3 review, Important finding 2: the row-count-only check above
+    # doesn't prove pages don't repeat/skip rows. >=5 rows with tied sort
+    # keys (two pairs share the same title) — the `n.id ASC` tiebreaker
+    # `build()` always appends is what guarantees LIMIT/OFFSET pagination
+    # over tied rows is deterministic and complete across consecutive pages;
+    # this proves that end to end against a real fetched full ordering,
+    # rather than just asserting a window's row count.
+    titles = ["a", "a", "b", "b", "c"]
+    note_ids = [await _insert_note(db_conn, test_user, title=t) for t in titles]
+
+    lookup = {"title": PropertyLookup(type="title", storage="column", key="title")}
+    qb = QueryBuilder(user_id=test_user, data_source_id=None, properties=lookup)
+    sorts = [SortSpec(property="title", direction="asc")]
+
+    full_frag = qb.build(None, sorts, Pagination(page_size=200, offset=0))
+    full_rows = await db_conn.fetch(full_frag.sql, *full_frag.params)
+    full_ids = [str(r["id"]) for r in full_rows]
+    assert set(full_ids) == set(note_ids)
+
+    page1_frag = qb.build(None, sorts, Pagination(page_size=3, offset=0))
+    page1_ids = [str(r["id"]) for r in await db_conn.fetch(page1_frag.sql, *page1_frag.params)]
+
+    page2_frag = qb.build(None, sorts, Pagination(page_size=3, offset=3))
+    page2_ids = [str(r["id"]) for r in await db_conn.fetch(page2_frag.sql, *page2_frag.params)]
+
+    # Correctly ordered: each page matches the corresponding slice of the
+    # complete, deterministically-ordered result.
+    assert page1_ids == full_ids[0:3]
+    assert page2_ids == full_ids[3:6]
+    # Disjoint and complete: no row repeated or skipped across the two pages.
+    assert set(page1_ids).isdisjoint(page2_ids)
+    assert set(page1_ids) | set(page2_ids) == set(full_ids)
