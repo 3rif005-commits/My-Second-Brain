@@ -311,6 +311,98 @@ def test_me_resolution_binds_user_id_not_literal_me():
     assert "me" not in frag.sql
 
 
+# --- Fix-round findings (task review of 93f0655..1b49404) ------------------
+
+@pytest.mark.parametrize("prop_type", ["created_by", "last_edited_by"])
+def test_created_by_and_last_edited_by_use_text_scalar_sql_not_jsonb_array(prop_type):
+    # REGISTRY[...].sql_extract() for these two types is NOT in base.py's
+    # _ARRAY_VALUED (only multi_select/people/files/relation are), so it
+    # falls through to the plain text-scalar shape ("->>' <type>'", not the
+    # bare "-> '<type>'" the array types get). Postgres has no `text ? ...`
+    # or `text = jsonb` operator, so routing these through the jsonb-array
+    # SQL family (`E ? $1`, `E = '[]'::jsonb`, ...) would fail at execution
+    # time -- a bug the DB-free full-matrix test couldn't catch because it
+    # only asserts "a SqlFragment came back," never inspects its shape.
+    ctx = SqlContext(key="a1b2c3d4", alias="p", storage="jsonb")
+
+    contains_frag = compile_condition(
+        prop_type, ctx, "contains", "12345678-1234-5678-1234-567812345678", user_id="u-1"
+    )
+    assert "->>" in contains_frag.sql  # scalar text extraction, not the bare array "->"
+    assert "?" not in contains_frag.sql
+    assert "'[]'::jsonb" not in contains_frag.sql
+
+    empty_frag = compile_condition(prop_type, ctx, "is_empty", None, user_id="u-1")
+    assert "= ''" in empty_frag.sql  # text-empty check, not jsonb "= '[]'::jsonb"
+    assert "'[]'::jsonb" not in empty_frag.sql
+
+
+_DATE_WINDOW_OPERATORS = (
+    "this_week", "past_week", "past_month", "past_year",
+    "next_week", "next_month", "next_year",
+)
+
+
+def _is_fully_parenthesized(sql: str) -> bool:
+    """True iff `sql` is wrapped in one matching outer `(...)` pair that
+    doesn't close until the very last character. A naive `startswith("(")
+    and endswith(")")` check is NOT sufficient here: several of the
+    date-window fragments end in `now()`, whose own closing paren
+    satisfies `endswith(")")` even when the fragment's outer boundary
+    (from the guarded-date CASE expression) closes early mid-string —
+    exactly the bug this test exists to catch."""
+    if not (sql.startswith("(") and sql.endswith(")")):
+        return False
+    depth = 0
+    for i, ch in enumerate(sql):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0 and i != len(sql) - 1:
+                return False
+    return depth == 0
+
+
+@pytest.mark.parametrize("operator_name", _DATE_WINDOW_OPERATORS)
+def test_date_window_operators_are_self_parenthesized(operator_name):
+    # Every other multi-clause fragment in this module self-parenthesizes;
+    # these 7 were the exception. compile_condition's contract with Task 12
+    # is that a fragment is atomic -- an unparenthesized `A AND B` spliced
+    # into `... OR <this fragment>` silently mis-binds (AND before OR), no
+    # error, just wrong rows.
+    ctx = SqlContext(key="a1b2c3d4", alias="p", storage="jsonb")
+    frag = compile_condition("date", ctx, operator_name, None, user_id="u-1")
+    assert _is_fully_parenthesized(frag.sql), frag.sql
+
+    # Concretely: joined with a sibling OR clause, the fragment's own
+    # boundary must be the only thing OR can see -- not one of its
+    # internal ANDs.
+    joined = f"{frag.sql} OR some_other_condition"
+    assert joined.startswith("(") and " OR some_other_condition" in joined
+
+
+def test_coerce_date_relative_and_iso_both_return_aware_datetimes():
+    # Both branches of coerce_value("date", ...) must return the same kind
+    # of datetime -- these get bound against ::timestamptz SQL, and asyncpg
+    # cares whether a bound datetime is naive or aware.
+    relative = coerce_value("date", "today")
+    iso_no_offset = coerce_value("date", "2026-08-10")
+    iso_with_offset = coerce_value("date", "2026-08-10T12:00:00Z")
+    assert relative.tzinfo is not None
+    assert iso_no_offset.tzinfo is not None
+    assert iso_with_offset.tzinfo is not None
+
+
+def test_coerce_date_today_uses_utc_calendar_day_not_local_system_clock():
+    from datetime import UTC, datetime
+
+    from services.db.query.operators import _resolve_relative_date
+
+    result = _resolve_relative_date("today")
+    assert result.date() == datetime.now(UTC).date()
+
+
 # --- The numeric cast (properties/base.py, spec §8.2) ----------------------
 #
 # Spec §8.2 calls for a *guarded* `::double precision` cast (CASE WHEN ...

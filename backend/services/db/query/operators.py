@@ -20,7 +20,7 @@ task-11-report.md for the full reasoning):
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from services.db.properties.base import Operator, SqlContext, SqlFragment, REGISTRY
@@ -163,7 +163,12 @@ _VERIFICATION_STATUSES = {"verified", "expired", "none"}
 
 def _resolve_relative_date(keyword: str) -> datetime:
     now = datetime.now(UTC)
-    today = datetime.combine(date.today(), datetime.min.time(), tzinfo=UTC)
+    # `date.today()` reads the system-local calendar date; on a non-UTC host
+    # that can resolve "today"/"tomorrow"/"yesterday" to the wrong UTC day,
+    # contradicting this module's own UTC-only contract (see `_date_scalar_sql`'s
+    # `now()`-based window operators, which are always UTC). Derive the
+    # calendar day from the UTC clock instead.
+    today = datetime.combine(now.date(), datetime.min.time(), tzinfo=UTC)
     return {
         "today": today,
         "tomorrow": today + timedelta(days=1),
@@ -182,7 +187,15 @@ def _coerce_date(raw_value: Any) -> datetime:
         return _resolve_relative_date(raw_value)
     normalised = raw_value[:-1] + "+00:00" if raw_value.endswith("Z") else raw_value
     try:
-        return datetime.fromisoformat(normalised)
+        parsed = datetime.fromisoformat(normalised)
+        # A bare date/datetime string with no offset (e.g. "2026-08-10")
+        # parses naive; `_resolve_relative_date` always returns UTC-aware.
+        # Both branches of this function must return the same kind of
+        # datetime — asyncpg binds naive and aware datetimes differently
+        # against a `timestamptz` column, and the SQL this module generates
+        # always casts to `::timestamptz`. Default the naive case to UTC
+        # rather than let it travel as a silently different type.
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
     except ValueError as exc:
         raise FilterValidationError(
             f"date value must be ISO-8601 or one of {sorted(_RELATIVE_DATE_KEYWORDS)}, "
@@ -269,11 +282,20 @@ def _escape_like(value: str) -> str:
 
 
 _TEXT_SHAPE_TYPES = {"title", "rich_text", "url", "email", "phone_number"}
+# `created_by`/`last_edited_by` are single-valued (one person per row), and
+# `properties/base.py`'s `_ARRAY_VALUED` deliberately does NOT include them
+# (only `multi_select`/`people`/`files`/`relation` are real jsonb arrays) —
+# their `sql_extract()` falls through to the plain scalar text shape
+# (`->> 'created_by'`), same as `title`/`url`/etc. Routing them through the
+# jsonb-array SQL family (`E ? $1`, `E = '[]'::jsonb`, ...) would emit SQL
+# that fails at execution: Postgres has no `text ? unknown` or `text =
+# jsonb` operator. `people` itself stays in the jsonb-array family below —
+# it's the one genuinely multi-valued type in this operator family.
+_TEXT_SHAPE_TYPES |= {"created_by", "last_edited_by"}
 _NUMBER_SHAPE_TYPES = {"number", "unique_id"}
 _CHOICE_SHAPE_TYPES = {"select", "status"}
 _DATE_SHAPE_TYPES = {"date", "created_time", "last_edited_time"}
-_JSONB_ARRAY_SHAPE_TYPES = {"multi_select", "people", "created_by", "last_edited_by", "files", "relation"}
-_ME_TYPES = {"people", "created_by", "last_edited_by"}
+_JSONB_ARRAY_SHAPE_TYPES = {"multi_select", "people", "files", "relation"}
 
 # Column-backed keys whose column is a native Postgres array (currently only
 # `topics`) rather than JSONB — resolved from COLUMN_BACKED, not hardcoded,
@@ -379,24 +401,31 @@ def _date_scalar_sql(
         return f"{d} <= $1", (value,)
     if operator_name == "on_or_after":
         return f"{d} >= $1", (value,)
+    # These 7 each emit a two-clause `A AND B` — every other multi-clause
+    # fragment in this module self-parenthesizes (see does_not_equal,
+    # is_empty/is_not_empty patterns above); these must too. compile_condition's
+    # contract with Task 12 is that a returned fragment is atomic — an
+    # unparenthesized `A AND B` spliced into a sibling `... OR <fragment>`
+    # silently mis-binds (AND before OR: SQL precedence, not a syntax error),
+    # producing wrong rows with no exception anywhere.
     if operator_name == "this_week":
         return (
-            f"{d} >= date_trunc('week', now()) AND "
-            f"{d} < date_trunc('week', now()) + interval '7 days'",
+            f"({d} >= date_trunc('week', now()) AND "
+            f"{d} < date_trunc('week', now()) + interval '7 days')",
             (),
         )
     if operator_name == "past_week":
-        return f"{d} >= now() - interval '7 days' AND {d} <= now()", ()
+        return f"({d} >= now() - interval '7 days' AND {d} <= now())", ()
     if operator_name == "next_week":
-        return f"{d} >= now() AND {d} <= now() + interval '7 days'", ()
+        return f"({d} >= now() AND {d} <= now() + interval '7 days')", ()
     if operator_name == "past_month":
-        return f"{d} >= now() - interval '1 month' AND {d} <= now()", ()
+        return f"({d} >= now() - interval '1 month' AND {d} <= now())", ()
     if operator_name == "next_month":
-        return f"{d} >= now() AND {d} <= now() + interval '1 month'", ()
+        return f"({d} >= now() AND {d} <= now() + interval '1 month')", ()
     if operator_name == "past_year":
-        return f"{d} >= now() - interval '1 year' AND {d} <= now()", ()
+        return f"({d} >= now() - interval '1 year' AND {d} <= now())", ()
     if operator_name == "next_year":
-        return f"{d} >= now() AND {d} <= now() + interval '1 year'", ()
+        return f"({d} >= now() AND {d} <= now() + interval '1 year')", ()
     if operator_name == "is_empty":
         return f"{d} IS NULL", ()
     if operator_name == "is_not_empty":
@@ -469,12 +498,10 @@ def compile_condition(
     value = coerce_value(operator.arg_type, raw_value)
 
     # "me" resolves to the bound user_id parameter — never the literal
-    # string "me" — before it ever reaches SQL generation.
-    if operator.arg_type == "uuid_or_me":
-        if isinstance(value, list):
-            value = [user_id if v == "me" else v for v in value]
-        elif value == "me":
-            value = user_id
+    # string "me" — before it ever reaches SQL generation. No list case:
+    # coerce_value("uuid_or_me", ...) only ever returns a scalar str.
+    if operator.arg_type == "uuid_or_me" and value == "me":
+        value = user_id
 
     e = REGISTRY[prop_type].sql_extract(ctx).sql
 
