@@ -1,19 +1,35 @@
 "use client";
 
-// Thin wrapper around a database's table view: title bar (icon + name) and
-// the one view tab this milestone ships. No filter/sort/group UI yet
-// (Milestone 3+) — the view tab row is here so it's a small addition later,
-// not a rewrite.
+// Shell around a database: title bar, view tabs (+ creation), and a
+// switch over the active view's `type` that renders the matching view
+// component. Was hardcoded to `views[0]` + TableView only (Milestone 2);
+// task-16 adds real view switching/creation and the Board view.
 import { useDatabaseView } from "@/lib/database/useDatabaseView";
+import { getGroupBySpec, getSubGroupBySpec } from "@/lib/database/types";
 import { TableView } from "./views/TableView";
+import { BoardView } from "./views/BoardView";
+import { ViewTabs } from "./ViewTabs";
 
 interface DatabaseShellProps {
   databaseId: string;
 }
 
 export function DatabaseShell({ databaseId }: DatabaseShellProps) {
-  const { database, dataSource, properties, views, rows, loading, error, updateCell } =
-    useDatabaseView(databaseId);
+  const {
+    database,
+    dataSource,
+    properties,
+    views,
+    activeViewId,
+    setActiveViewId,
+    rows,
+    groups,
+    loading,
+    error,
+    updateCell,
+    createView,
+    updateView,
+  } = useDatabaseView(databaseId);
 
   if (loading && !database) {
     return (
@@ -34,7 +50,68 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
   if (!database || !dataSource) return null;
 
   const editable = !dataSource.is_virtual;
-  const activeView = views[0];
+  const activeView = views.find((v) => v.id === activeViewId) ?? views[0] ?? null;
+
+  /** "+ New view" (ViewTabs.tsx): create, then — for a Board with a chosen
+   * group-by property — persist that choice via the existing `PATCH
+   * /db/views/{id}` endpoint before switching to it, so the new view never
+   * renders with a dangling/missing group_by. */
+  async function handleCreateView(input: { name: string; type: string; groupPropertyKey?: string }) {
+    const created = await createView(input.name, input.type);
+    if (input.type === "board" && input.groupPropertyKey) {
+      await updateView(created.id, { config: { group_by: { property_key: input.groupPropertyKey } } });
+    }
+    setActiveViewId(created.id);
+  }
+
+  function renderActiveView() {
+    if (!activeView) return null;
+
+    switch (activeView.type) {
+      case "table":
+        return (
+          <TableView
+            properties={properties}
+            rows={rows}
+            editable={editable}
+            onCellChange={updateCell}
+          />
+        );
+      case "board": {
+        const groupBy = getGroupBySpec(activeView.config);
+        const subGroupBy = getSubGroupBySpec(activeView.config);
+        return (
+          <BoardView
+            properties={properties}
+            groups={groups}
+            groupPropertyKey={groupBy?.property_key ?? null}
+            hideEmptyGroups={groupBy?.hide_empty_groups ?? false}
+            onToggleHideEmptyGroups={(value) =>
+              updateView(activeView.id, {
+                config: {
+                  ...activeView.config,
+                  group_by: { ...(groupBy ?? { property_key: "" }), hide_empty_groups: value },
+                  ...(subGroupBy ? { sub_group_by: subGroupBy } : {}),
+                },
+              })
+            }
+            editable={editable}
+            onCellChange={updateCell}
+          />
+        );
+      }
+      default:
+        // Task-15's own spirit for view *config* ("tolerates unknown...
+        // drops them at read"), applied to view *type* rendering — Gallery/
+        // List/Feed land in Task 17; until then this is a plain message,
+        // never a crash or a blank screen.
+        return (
+          <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500">
+            This view type isn&apos;t supported yet.
+          </div>
+        );
+    }
+  }
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900">
@@ -52,25 +129,17 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
           )}
         </div>
 
-        {/* View tabs — one view for now */}
-        {activeView && (
-          <div className="flex items-center gap-1 mt-2.5">
-            <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-              {activeView.name}
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Table */}
-      <div className="flex-1 min-h-0">
-        <TableView
+        <ViewTabs
+          views={views}
+          activeViewId={activeView?.id ?? ""}
+          onSelect={setActiveViewId}
           properties={properties}
-          rows={rows}
-          editable={editable}
-          onCellChange={(rowId, propertyKey, value) => updateCell(rowId, propertyKey, value)}
+          onCreateView={handleCreateView}
         />
       </div>
+
+      {/* Active view */}
+      <div className="flex-1 min-h-0">{renderActiveView()}</div>
     </div>
   );
 }

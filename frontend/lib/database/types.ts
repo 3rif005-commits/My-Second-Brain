@@ -72,6 +72,67 @@ export interface DatabaseDetailResponse {
   views: ViewResponse[];
 }
 
+/** JSON mirror of `services.db.query.grouping.GroupBySpec` (task-15's
+ * `QueryRequest.group_by`/`sub_group_by`, and the shape stored verbatim at
+ * `ViewResponse.config.group_by`/`config.sub_group_by` — spec §10's "config
+ * follows Notion's own Views API verbatim"). Only `property_key` is
+ * required; everything else is per-type/optional exactly as the backend
+ * dataclass documents. */
+export interface GroupBySpec {
+  property_key: string;
+  mode?: string;
+  start_day_of_week?: number;
+  range_start?: number | null;
+  range_end?: number | null;
+  range_size?: number | null;
+  hide_empty_groups?: boolean;
+}
+
+/** JSON mirror of `GroupResult` (task-15's `QueryResponse.groups[]`).
+ * `subgroups` is `null`/absent unless `sub_group_by` was requested, and —
+ * same as the backend `Group` dataclass — never present on a subgroup
+ * itself (sub-grouping is exactly two levels). */
+export interface Group {
+  key: string;
+  label: string;
+  row_count: number;
+  rows: DatabaseRow[];
+  subgroups: Group[] | null;
+}
+
+/** The property types `services.db.query.grouping.group_rows` can group a
+ * Board view by without raising `ValueError`/`NotImplementedError` for a
+ * missing mode (task-16-brief.md's "requires an existing groupable
+ * property" — this app doesn't auto-create a status property the way
+ * Notion does, so the Board-creation UI restricts its dropdown to these). */
+export const GROUPABLE_PROPERTY_TYPES = ["select", "status", "multi_select"] as const;
+
+export type GroupablePropertyType = (typeof GROUPABLE_PROPERTY_TYPES)[number];
+
+export function isGroupablePropertyType(type: string): type is GroupablePropertyType {
+  return (GROUPABLE_PROPERTY_TYPES as readonly string[]).includes(type);
+}
+
+/** Reads `config.group_by`/`config.sub_group_by` out of a view's opaque
+ * `config` JSONB, tolerating a missing/malformed shape (undefined, not a
+ * throw) — same "tolerates unknown... drops them at read" spirit spec §10
+ * already states for view config generally. */
+export function getGroupBySpec(config: Record<string, unknown>): GroupBySpec | undefined {
+  const raw = config.group_by;
+  if (raw && typeof raw === "object" && typeof (raw as Record<string, unknown>).property_key === "string") {
+    return raw as GroupBySpec;
+  }
+  return undefined;
+}
+
+export function getSubGroupBySpec(config: Record<string, unknown>): GroupBySpec | undefined {
+  const raw = config.sub_group_by;
+  if (raw && typeof raw === "object" && typeof (raw as Record<string, unknown>).property_key === "string") {
+    return raw as GroupBySpec;
+  }
+  return undefined;
+}
+
 /** One row's per-property values, keyed by `PropertyResponse.key`. Works for
  * both ordinary and virtual (All Notes) sources — see RowsResponse below. */
 export interface DatabaseRow {

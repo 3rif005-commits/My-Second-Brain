@@ -22,29 +22,8 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import type {
-  CheckboxValue,
-  DatabaseRow,
-  DateValue,
-  MultiSelectValue,
-  NumberValue,
-  PropertyResponse,
-  PropertyValue,
-  RichTextValue,
-  SelectValue,
-  StatusValue,
-  TitleValue,
-  UnknownValue,
-} from "@/lib/database/types";
-import { TitleCell } from "../cells/TitleCell";
-import { TextCell } from "../cells/TextCell";
-import { NumberCell } from "../cells/NumberCell";
-import { SelectCell } from "../cells/SelectCell";
-import { MultiSelectCell } from "../cells/MultiSelectCell";
-import { StatusCell } from "../cells/StatusCell";
-import { DateCell } from "../cells/DateCell";
-import { CheckboxCell } from "../cells/CheckboxCell";
-import { GenericCell } from "../cells/GenericCell";
+import type { DatabaseRow, PropertyResponse, PropertyValue } from "@/lib/database/types";
+import { renderCellValue } from "../cells/renderCellValue";
 
 interface TableViewProps {
   properties: PropertyResponse[];
@@ -52,58 +31,6 @@ interface TableViewProps {
   /** All Notes passes false (no write endpoint yet); ordinary databases pass true. */
   editable: boolean;
   onCellChange: (rowId: string, propertyKey: string, value: PropertyValue | null) => void;
-}
-
-/** Dispatches to the right cell component by `property.type`; anything not
- * in the 8 known types falls back to GenericCell, always read-only. */
-function renderCellValue(
-  property: PropertyResponse,
-  value: PropertyValue | undefined,
-  editable: boolean,
-  onChange: (value: PropertyValue | null) => void
-) {
-  switch (property.type) {
-    case "title":
-      return (
-        <TitleCell value={value as TitleValue | undefined} editable={editable} onChange={onChange} />
-      );
-    case "rich_text":
-      return (
-        <TextCell value={value as RichTextValue | undefined} editable={editable} onChange={onChange} />
-      );
-    case "number":
-      return (
-        <NumberCell value={value as NumberValue | undefined} editable={editable} onChange={onChange} />
-      );
-    case "select":
-      return (
-        <SelectCell value={value as SelectValue | undefined} editable={editable} onChange={onChange} />
-      );
-    case "multi_select":
-      return (
-        <MultiSelectCell
-          value={value as MultiSelectValue | undefined}
-          editable={editable}
-          onChange={onChange}
-        />
-      );
-    case "status":
-      return (
-        <StatusCell value={value as StatusValue | undefined} editable={editable} onChange={onChange} />
-      );
-    case "date":
-      return <DateCell value={value as DateValue | undefined} editable={editable} onChange={onChange} />;
-    case "checkbox":
-      return (
-        <CheckboxCell
-          value={value as CheckboxValue | undefined}
-          editable={editable}
-          onChange={onChange}
-        />
-      );
-    default:
-      return <GenericCell value={value as UnknownValue | undefined} />;
-  }
 }
 
 const columnHelper = createColumnHelper<DatabaseRow>();
