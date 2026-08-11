@@ -19,11 +19,14 @@ interface ViewTabsProps {
   onCreateView: (input: { name: string; type: string; groupPropertyKey?: string }) => Promise<void>;
 }
 
-// The two view types this task and Task 15 support creating; Gallery/
-// List/Feed land in Task 17 and can extend this list then.
+// The five view types this milestone supports creating (table/board —
+// Task 16; gallery/list/feed — Task 17).
 const VIEW_TYPE_OPTIONS = [
   { value: "table", label: "Table" },
   { value: "board", label: "Board" },
+  { value: "gallery", label: "Gallery" },
+  { value: "list", label: "List" },
+  { value: "feed", label: "Feed" },
 ] as const;
 
 export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateView }: ViewTabsProps) {

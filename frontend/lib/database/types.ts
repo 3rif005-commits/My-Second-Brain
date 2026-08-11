@@ -134,10 +134,21 @@ export function getSubGroupBySpec(config: Record<string, unknown>): GroupBySpec 
 }
 
 /** One row's per-property values, keyed by `PropertyResponse.key`. Works for
- * both ordinary and virtual (All Notes) sources — see RowsResponse below. */
+ * both ordinary and virtual (All Notes) sources — see RowsResponse below.
+ *
+ * `cover_image_url` (task-17): a dedicated field, not a `properties[]` entry —
+ * mirrors the backend's own choice (`routers/databases.py`'s
+ * `_decode_all_notes_row`/`_decode_ordinary_row`, task-15's query endpoint)
+ * to lift the `notes.cover_image_url` column out alongside `properties`
+ * rather than exposing it as a new `COLUMN_BACKED` property, so it never
+ * shows up as a Table/Board column. Only ever populated by `POST .../query`
+ * (`useDatabaseView`'s `loadRows`) — `undefined` is the "this row came from
+ * somewhere else, or the note has no cover" case; GalleryView's placeholder
+ * treats both `undefined` and `null` the same way. */
 export interface DatabaseRow {
   id: string;
   properties: Record<string, PropertyValue>;
+  cover_image_url?: string | null;
 }
 
 export interface RowsResponse {

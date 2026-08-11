@@ -8,6 +8,9 @@ import { useDatabaseView } from "@/lib/database/useDatabaseView";
 import { getGroupBySpec, getSubGroupBySpec } from "@/lib/database/types";
 import { TableView } from "./views/TableView";
 import { BoardView } from "./views/BoardView";
+import { GalleryView } from "./views/GalleryView";
+import { ListView } from "./views/ListView";
+import { FeedView } from "./views/FeedView";
 import { ViewTabs } from "./ViewTabs";
 
 interface DatabaseShellProps {
@@ -100,11 +103,38 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
           />
         );
       }
+      case "gallery":
+        return (
+          <GalleryView
+            properties={properties}
+            rows={rows}
+            editable={editable}
+            onCellChange={updateCell}
+            config={activeView.config}
+            onConfigChange={(patch) => updateView(activeView.id, { config: { ...activeView.config, ...patch } })}
+          />
+        );
+      case "list":
+        return (
+          <ListView properties={properties} rows={rows} editable={editable} onCellChange={updateCell} />
+        );
+      case "feed":
+        return (
+          <FeedView
+            properties={properties}
+            rows={rows}
+            editable={editable}
+            onCellChange={updateCell}
+            config={activeView.config}
+            onConfigChange={(patch) => updateView(activeView.id, { config: { ...activeView.config, ...patch } })}
+          />
+        );
       default:
         // Task-15's own spirit for view *config* ("tolerates unknown...
-        // drops them at read"), applied to view *type* rendering — Gallery/
-        // List/Feed land in Task 17; until then this is a plain message,
-        // never a crash or a blank screen.
+        // drops them at read"), applied to view *type* rendering — every
+        // type this milestone ships (table/board/gallery/list/feed) has a
+        // branch above; anything else (a future type, or a stale/unknown
+        // string) is a plain message, never a crash or a blank screen.
         return (
           <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500">
             This view type isn&apos;t supported yet.
