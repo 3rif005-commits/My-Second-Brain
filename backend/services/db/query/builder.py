@@ -55,14 +55,23 @@ class QueryBuilder:
         return "FROM db_row_props p JOIN notes n ON n.id = p.note_id"
 
     def _columns(self) -> str:
+        # task-17: `n.cover_image_url` is appended in both modes, unconditionally --
+        # a real `notes` column (migration 005), reachable in ordinary mode too since
+        # `_from()` already joins `notes n` there for every query this builder
+        # produces (the mandatory `n.deleted_at IS NULL` scope in `_scope()` needs
+        # that join regardless). It's deliberately NOT one of `COLUMN_BACKED`'s
+        # entries -- routers/databases.py's decode functions lift it into a
+        # dedicated `cover_image_url` field on each row dict, not into
+        # `properties{}`, so it never becomes a Table/Board column or an editable
+        # property (task-17-brief.md's Gallery-view cover-image scope call).
         if self.data_source_id is None:
             # Same pattern routers/databases.py's list_rows already uses —
             # COLUMN_BACKED is the one source of truth for the All Notes
             # column list, never hand-rolled here (see that router's own
             # comment on why a duplicated literal list would silently drift).
             cols = ", ".join(prop.column for prop in COLUMN_BACKED.values())
-            return f"n.id, {cols}"
-        return "p.note_id, p.properties"
+            return f"n.id, {cols}, n.cover_image_url"
+        return "p.note_id, p.properties, n.cover_image_url"
 
     def build(
         self,

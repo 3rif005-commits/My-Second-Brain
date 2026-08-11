@@ -96,6 +96,81 @@ async def test_query_with_no_filter_matches_list_rows_all_notes_mode(client, db_
 
 
 # ---------------------------------------------------------------------------
+# task-17: `cover_image_url` plumbing for Gallery view. Not a `COLUMN_BACKED`
+# property (it never becomes a column in `properties{}`, never shows up as a
+# Table/Board column) -- a dedicated field alongside `properties` on each row
+# dict, populated only by `POST .../query` (QueryBuilder's `_columns()` now
+# selects `n.cover_image_url` in both modes). `GET .../rows` (list_rows)
+# deliberately keeps using its own hand-rolled SQL, which does NOT select
+# this column -- the shared decode helpers read it with `record.get(...)`
+# rather than `record[...]` specifically so list_rows keeps returning
+# `cover_image_url: None` (never a KeyError) instead of the real value. That
+# asymmetry is intentional per task-17-brief.md's minimal-scope call: no live
+# frontend caller uses `GET .../rows` any more (task-16 moved everything to
+# `POST .../query`), so it doesn't need the real value, and the two byte-
+# shape-equivalence tests above only hold because neither test note sets a
+# real cover_image_url (both sides read back None either way).
+# ---------------------------------------------------------------------------
+
+async def test_query_returns_real_cover_image_url_ordinary_mode(client, db_conn, test_user):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title, cover_image_url) VALUES ($1, 'Row 1', $2) RETURNING id",
+        test_user, "https://example.com/cover.png",
+    )
+    await db_conn.execute(
+        "INSERT INTO db_row_props (note_id, data_source_id, user_id, properties) "
+        "VALUES ($1, $2, $3, '{}')",
+        note["id"], ds_id, test_user,
+    )
+
+    res = await client.post(f"/db/data-sources/{ds_id}/query", json={})
+    assert res.status_code == 200
+    rows = res.json()["rows"]
+    assert len(rows) == 1
+    assert rows[0]["cover_image_url"] == "https://example.com/cover.png"
+
+
+async def test_query_returns_real_cover_image_url_all_notes_mode(client, db_conn, test_user):
+    await db_conn.execute(
+        "INSERT INTO notes (user_id, title, cover_image_url) VALUES ($1, 'N1', $2)",
+        test_user, "https://example.com/all-notes-cover.png",
+    )
+
+    res = await client.post(f"/db/data-sources/{ALL_NOTES_ID}/query", json={})
+    assert res.status_code == 200
+    rows = res.json()["rows"]
+    assert len(rows) == 1
+    assert rows[0]["cover_image_url"] == "https://example.com/all-notes-cover.png"
+
+
+async def test_query_returns_null_cover_image_url_when_note_has_none(client, db_conn, test_user):
+    await db_conn.execute("INSERT INTO notes (user_id, title) VALUES ($1, 'No cover')", test_user)
+
+    res = await client.post(f"/db/data-sources/{ALL_NOTES_ID}/query", json={})
+    assert res.status_code == 200
+    rows = res.json()["rows"]
+    assert rows[0]["cover_image_url"] is None
+
+
+async def test_list_rows_does_not_leak_the_real_cover_image_url(client, db_conn, test_user):
+    """`GET .../rows` has no live caller left (task-16); this pins the
+    documented asymmetry above -- it always reports `None`, on purpose,
+    rather than silently starting to leak the real value the moment
+    someone adds `n.cover_image_url` to its own hand-rolled SQL later
+    without reading this comment."""
+    await db_conn.execute(
+        "INSERT INTO notes (user_id, title, cover_image_url) VALUES ($1, 'N1', $2)",
+        test_user, "https://example.com/cover.png",
+    )
+
+    res = await client.get(f"/db/data-sources/{ALL_NOTES_ID}/rows")
+    assert res.status_code == 200
+    assert res.json()["rows"][0]["cover_image_url"] is None
+
+
+# ---------------------------------------------------------------------------
 # A real filter returns only matching rows, both modes.
 # ---------------------------------------------------------------------------
 

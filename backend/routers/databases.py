@@ -104,13 +104,23 @@ def _decode_all_notes_row(record: asyncpg.Record) -> dict[str, Any]:
     task-15) -- into the wire shape both endpoints promise: spec §3.3's discriminated
     wrapper per property, keyed by each COLUMN_BACKED property's `notes` column name.
     Extracted here (task-15-brief.md §1.4) so the two callers stay byte-identical rather
-    than duplicating and silently drifting."""
+    than duplicating and silently drifting.
+
+    `cover_image_url` (task-17) rides alongside `properties` as its own field, read with
+    `record.get(...)` rather than `record[...]` on purpose: `query_rows`'s QueryBuilder-
+    produced SQL always selects `n.cover_image_url` now, but `list_rows`'s own hand-rolled
+    SQL below does not -- `.get()` returns `None` for that caller instead of a KeyError,
+    which is the deliberate, documented asymmetry (see the `# ---` block above
+    `test_query_returns_real_cover_image_url_ordinary_mode` in
+    tests/test_databases_query_endpoint.py): `list_rows` has no live frontend caller left
+    (task-16 moved everything to `POST .../query`), so it doesn't need the real value."""
     return {
         "id": str(record["id"]),
         "properties": {
             prop.column: _wrap_column_value(prop.type, _jsonify(record[prop.column]))
             for prop in COLUMN_BACKED.values()
         },
+        "cover_image_url": record.get("cover_image_url"),
     }
 
 
@@ -118,8 +128,16 @@ def _decode_ordinary_row(record: asyncpg.Record) -> dict[str, Any]:
     """Same purpose as `_decode_all_notes_row`, for an ordinary data source's
     `db_row_props` record (`note_id`, `properties`). The JSONB is already spec
     §3.3-shaped by construction (every write path enforces the wrapper -- see
-    `update_row_property`), so this is a straight field rename, not a re-shaping."""
-    return {"id": str(record["note_id"]), "properties": record["properties"]}
+    `update_row_property`), so this is a straight field rename, not a re-shaping.
+
+    `cover_image_url`: same `.get()`-not-`[]` reasoning as `_decode_all_notes_row` above --
+    `list_rows`'s ordinary-mode SQL doesn't join `notes` at all, let alone select the
+    column, so this is `None` for that caller and the real value for `query_rows`."""
+    return {
+        "id": str(record["note_id"]),
+        "properties": record["properties"],
+        "cover_image_url": record.get("cover_image_url"),
+    }
 
 
 def _row(record: asyncpg.Record) -> dict[str, Any]:
