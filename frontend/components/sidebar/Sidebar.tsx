@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { MessageSquare, Upload, Plus, LogOut, PanelLeftClose, Trash2, RotateCcw, ChevronDown, ChevronRight, Search, Star, Clock, Sun, Moon, LayoutGrid, Table2 } from "lucide-react";
-import { useTheme } from "@/app/providers";
+import { MessageSquare, Upload, Plus, LogOut, PanelLeftClose, Trash2, RotateCcw, ChevronDown, ChevronRight, Search, Star, Clock, Sun, Moon, LayoutGrid, Table2, DatabaseIcon } from "lucide-react";
+import { useTheme, useToast } from "@/app/providers";
 import { createClient } from "@/lib/supabase/client";
 import { useNotes } from "@/lib/hooks/useNotes";
 import { useCollections } from "@/lib/hooks/useCollections";
@@ -47,6 +47,7 @@ export function Sidebar({
   const router = useRouter();
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
+  const { showToast } = useToast();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const { notes, loading: notesLoading, createNote, deleteNote, toggleFavorite, reorderNotes } = useNotes();
@@ -70,6 +71,29 @@ export function Sidebar({
   async function handleNewNote() {
     const note = await createNote();
     navigate(`/brain/${note.id}`);
+  }
+
+  // POST /db/databases (backend, Milestone 2) has existed since before Milestone 6, but
+  // nothing in the UI ever called it — Board/Gallery/List/Feed views (M6) had no live entry
+  // point at all without this. Immediate create-and-navigate, same one-click convention as
+  // "New Note" above, rather than a name-first dialog — a database can be renamed afterward
+  // from its own page, matching how a new note starts "Untitled" too.
+  async function handleNewDatabase() {
+    try {
+      const res = await fetch("/api/db/databases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Untitled Database" }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.detail || body?.error || `Request failed (${res.status})`);
+      }
+      const data: { database: { id: string } } = await res.json();
+      navigate(`/brain/db/${data.database.id}`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not create database", "error");
+    }
   }
 
   async function handleSignOut() {
@@ -156,6 +180,14 @@ export function Sidebar({
           active={pathname?.startsWith("/brain/db/all-notes") ?? false}
           onClick={() => navigate("/brain/db/all-notes")}
         />
+        <button
+          onClick={handleNewDatabase}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-white/5 transition-all"
+        >
+          <DatabaseIcon size={15} strokeWidth={2} />
+          New Database
+          <Plus size={13} strokeWidth={2.5} className="ml-auto" />
+        </button>
       </nav>
 
       {/* Divider */}
