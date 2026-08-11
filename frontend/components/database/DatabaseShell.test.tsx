@@ -176,4 +176,26 @@ describe("DatabaseShell", () => {
     expect(mockHook.updateView).toHaveBeenCalledWith("v9", { config: { group_by: { property_key: "status" } } });
     expect(mockHook.setActiveViewId).toHaveBeenCalledWith("v9");
   });
+
+  it("threads dataSource.id and refetch down to TableView's Add row control (task-18)", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: "row-2", properties: {} }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<DatabaseShell databaseId="db-1" />);
+    await user.click(screen.getByRole("button", { name: "+ New" }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/db/data-sources/ds-1/rows",
+      expect.objectContaining({ method: "POST" })
+    );
+    await vi.waitFor(() => expect(mockHook.refetch).toHaveBeenCalled());
+
+    vi.unstubAllGlobals();
+  });
 });

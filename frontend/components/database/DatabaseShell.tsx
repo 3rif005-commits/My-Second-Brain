@@ -32,6 +32,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     updateCell,
     createView,
     updateView,
+    refetch,
   } = useDatabaseView(databaseId);
 
   if (loading && !database) {
@@ -54,6 +55,11 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
 
   const editable = !dataSource.is_virtual;
   const activeView = views.find((v) => v.id === activeViewId) ?? views[0] ?? null;
+  // Captured as a plain string rather than reading `dataSource.id` inside
+  // `renderActiveView` below: TS's control-flow narrowing from the
+  // `!dataSource` check above doesn't cross into a nested function's body,
+  // so `dataSource` would still type as possibly-null there.
+  const dataSourceId = dataSource.id;
 
   /** "+ New view" (ViewTabs.tsx): create, then — for a Board with a chosen
    * group-by property — persist that choice via the existing `PATCH
@@ -78,6 +84,8 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             rows={rows}
             editable={editable}
             onCellChange={updateCell}
+            dataSourceId={dataSourceId}
+            refetch={refetch}
           />
         );
       case "board": {

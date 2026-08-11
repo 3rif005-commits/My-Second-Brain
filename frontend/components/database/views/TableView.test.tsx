@@ -1,9 +1,21 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TableView } from "./TableView";
+import { KNOWN_PROPERTY_TYPES } from "@/lib/database/types";
 import type { DatabaseRow, PropertyResponse } from "@/lib/database/types";
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function prop(overrides: Partial<PropertyResponse>): PropertyResponse {
   return {
@@ -109,5 +121,154 @@ describe("TableView", () => {
     await user.click(checkbox);
 
     expect(onCellChange).toHaveBeenCalledWith("row-1", "done", { type: "checkbox", checkbox: false });
+  });
+
+  describe("empty-state gap fix", () => {
+    it("still renders column headers (not just a bare message) when there are no rows", () => {
+      render(
+        <TableView properties={PROPERTIES} rows={[]} editable={false} onCellChange={vi.fn()} />
+      );
+      expect(screen.getByText(/no rows yet/i)).toBeInTheDocument();
+      expect(screen.getByRole("columnheader", { name: "Title" })).toBeInTheDocument();
+      expect(screen.getByRole("columnheader", { name: "Notes" })).toBeInTheDocument();
+    });
+
+    it("shows both add-controls alongside the empty-state message when editable", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      expect(screen.getByText(/no rows yet/i)).toBeInTheDocument();
+      expect(screen.getByRole("columnheader", { name: "Title" })).toBeInTheDocument();
+      expect(screen.getByLabelText(/add property/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "+ New" })).toBeInTheDocument();
+    });
+  });
+
+  describe("Add property", () => {
+    it("is hidden when editable=false", () => {
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={false} onCellChange={vi.fn()} />);
+      expect(screen.queryByLabelText(/add property/i)).not.toBeInTheDocument();
+    });
+
+    it("is shown when editable=true", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      expect(screen.getByLabelText(/add property/i)).toBeInTheDocument();
+    });
+
+    it("offers exactly the 7 non-title KNOWN_PROPERTY_TYPES in its type picker", async () => {
+      const user = userEvent.setup();
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      const select = screen.getByLabelText(/property type/i) as HTMLSelectElement;
+      const values = Array.from(select.options).map((o) => o.value);
+      expect(values).toEqual(KNOWN_PROPERTY_TYPES.filter((t) => t !== "title"));
+      expect(values).not.toContain("title");
+      expect(values).toHaveLength(7);
+    });
+
+    it("submitting POSTs {name, type} to the properties endpoint, then refetches", async () => {
+      const user = userEvent.setup();
+      const refetch = vi.fn().mockResolvedValue(undefined);
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "prop-2" }, 201));
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={refetch}
+        />
+      );
+
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.type(screen.getByLabelText(/property name/i), "Priority");
+      await user.selectOptions(screen.getByLabelText(/property type/i), "select");
+      await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+      await waitFor(() => expect(refetch).toHaveBeenCalled());
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/db/data-sources/ds-1/properties",
+        expect.objectContaining({ method: "POST" })
+      );
+      const [, init] = fetchMock.mock.calls[0];
+      expect(JSON.parse(init.body as string)).toEqual({ name: "Priority", type: "select" });
+    });
+  });
+
+  describe("Add row", () => {
+    it("is visible whenever editable=true, including the empty-rows case", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      expect(screen.getByRole("button", { name: "+ New" })).toBeInTheDocument();
+    });
+
+    it("is hidden when editable=false", () => {
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={false} onCellChange={vi.fn()} />);
+      expect(screen.queryByRole("button", { name: "+ New" })).not.toBeInTheDocument();
+    });
+
+    it("clicking it POSTs to the rows endpoint with no body, then refetches", async () => {
+      const user = userEvent.setup();
+      const refetch = vi.fn().mockResolvedValue(undefined);
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "row-2", properties: {} }, 201));
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={refetch}
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: "+ New" }));
+
+      await waitFor(() => expect(refetch).toHaveBeenCalled());
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/db/data-sources/ds-1/rows",
+        expect.objectContaining({ method: "POST" })
+      );
+      const [, init] = fetchMock.mock.calls[0];
+      expect(init).not.toHaveProperty("body");
+    });
   });
 });
