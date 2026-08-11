@@ -47,9 +47,15 @@ interface TableViewProps {
    * source) never renders those controls, so it's optional rather than
    * threading a dummy id through every other call site. */
   dataSourceId?: string;
-  /** useDatabaseView's `load`/`refetch` — called after a successful add so
-   * the new property/row shows up without a full page reload. */
+  /** useDatabaseView's `load`/`refetch` — called after adding a property so
+   * the new column shows up without a full page reload. Does NOT refresh
+   * `rows` (see `refetchRows`). */
   refetch?: () => void | Promise<void>;
+  /** useDatabaseView's `loadRows` — called after adding a row. `refetch`
+   * alone doesn't re-run the rows query (its effect isn't keyed to
+   * anything a new row changes), so a new row would silently never appear
+   * without calling this specifically. */
+  refetchRows?: () => void | Promise<void>;
 }
 
 const columnHelper = createColumnHelper<DatabaseRow>();
@@ -87,6 +93,7 @@ export function TableView({
   onCellChange,
   dataSourceId,
   refetch,
+  refetchRows,
 }: TableViewProps) {
   const { showToast } = useToast();
 
@@ -165,7 +172,7 @@ export function TableView({
     try {
       const res = await fetch(`/api/db/data-sources/${dataSourceId}/rows`, { method: "POST" });
       if (!res.ok) throw new Error(await errorMessage(res));
-      await refetch?.();
+      await refetchRows?.();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Could not add row", "error");
     } finally {

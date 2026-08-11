@@ -416,4 +416,39 @@ describe("useDatabaseView", () => {
 
     expect(result.current.views.find((v) => v.id === "v1")?.config).toEqual({ foo: "bar" });
   });
+
+  it("refetch vs refetchRows: refetch alone does not re-run the rows query, refetchRows does (live-verified regression)", async () => {
+    // A real bug shipped and was caught by live-clicking the app, not by
+    // this suite: TableView's "Add row" called `refetch` (= `load`) after a
+    // successful POST, but `load` only re-fetches database/properties/views
+    // — `loadRows`'s own effect is keyed to activeView's id/type/filter/
+    // sorts/config, none of which change when a row is merely added, so it
+    // never re-ran. The new row was created server-side (confirmed 201) but
+    // never appeared — "No rows yet." stuck forever. `refetchRows` is the
+    // separately-exposed function that actually re-queries rows.
+    let queryCallCount = 0;
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+      if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+        queryCallCount += 1;
+        return Promise.resolve(jsonResponse({ rows: ROWS }));
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(queryCallCount).toBe(1); // the initial load
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+    expect(queryCallCount).toBe(1); // unchanged — refetch must not touch rows
+
+    await act(async () => {
+      await result.current.refetchRows();
+    });
+    expect(queryCallCount).toBe(2); // refetchRows actually re-queries
+  });
 });

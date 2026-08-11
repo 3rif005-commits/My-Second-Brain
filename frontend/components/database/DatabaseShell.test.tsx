@@ -26,6 +26,7 @@ const mockHook: {
   createView: ReturnType<typeof vi.fn>;
   updateView: ReturnType<typeof vi.fn>;
   refetch: ReturnType<typeof vi.fn>;
+  refetchRows: ReturnType<typeof vi.fn>;
 } = {
   database: {
     id: "db-1",
@@ -69,6 +70,7 @@ const mockHook: {
   createView: vi.fn(),
   updateView: vi.fn(),
   refetch: vi.fn(),
+  refetchRows: vi.fn(),
 };
 
 vi.mock("@/lib/database/useDatabaseView", () => ({
@@ -83,6 +85,14 @@ beforeEach(() => {
     { id: "v1", data_source_id: "ds-1", user_id: "user-1", name: "Table view", icon: null, type: "table", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },
   ];
   mockHook.groups = null;
+  // Reset in case a test (e.g. the "group by a Select property" test below)
+  // appends to this array — `mockHook.properties` is otherwise a single
+  // module-scoped object every test shares, so a mutation would otherwise
+  // leak into every test declared after it.
+  mockHook.properties = [
+    { id: "p1", data_source_id: "ds-1", user_id: "user-1", key: "title", name: "Title", type: "title", config: {}, description: null, storage: "jsonb", column_name: null, result_type: null, is_volatile: false, position: 0, created_at: "2026-01-01T00:00:00Z" },
+    { id: "p2", data_source_id: "ds-1", user_id: "user-1", key: "status", name: "Status", type: "status", config: {}, description: null, storage: "jsonb", column_name: null, result_type: null, is_volatile: false, position: 1, created_at: "2026-01-01T00:00:00Z" },
+  ];
   vi.clearAllMocks();
 });
 
@@ -159,11 +169,22 @@ describe("DatabaseShell", () => {
     expect(mockHook.setActiveViewId).toHaveBeenCalledWith("v2");
   });
 
-  it("creating a Board view via the '+ New view' form: creates it, sets group_by config, then switches to it", async () => {
+  it("creating a Board view grouped by a Status property: creates it, sets group_by with mode='option', then switches to it", async () => {
+    // Regression, live-verified: services.db.query.grouping.GroupBySpec has no
+    // implicit default `mode` for `status` (Milestone 4's own "fail loud, don't
+    // guess" decision) — omitting it isn't a no-op, it's a real 400 from
+    // POST .../query the moment this view is opened. Confirmed by actually
+    // creating a Board grouped by Status in the running app and watching it get
+    // stuck on "Loading…" forever (a 400 with no error surfaced). This test
+    // previously asserted the buggy shape (`{ property_key: "status" }`, no
+    // `mode`) and passed, which is exactly how it shipped uncaught.
     const user = userEvent.setup();
     const createdView = { id: "v9", data_source_id: "ds-1", user_id: "user-1", name: "New view", icon: null, type: "board", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
     mockHook.createView.mockResolvedValue(createdView);
-    mockHook.updateView.mockResolvedValue({ ...createdView, config: { group_by: { property_key: "status" } } });
+    mockHook.updateView.mockResolvedValue({
+      ...createdView,
+      config: { group_by: { property_key: "status", mode: "option" } },
+    });
 
     render(<DatabaseShell databaseId="db-1" />);
 
@@ -173,11 +194,35 @@ describe("DatabaseShell", () => {
     await user.click(screen.getByRole("button", { name: /^create$/i }));
 
     expect(mockHook.createView).toHaveBeenCalledWith("New view", "board");
-    expect(mockHook.updateView).toHaveBeenCalledWith("v9", { config: { group_by: { property_key: "status" } } });
+    expect(mockHook.updateView).toHaveBeenCalledWith("v9", {
+      config: { group_by: { property_key: "status", mode: "option" } },
+    });
     expect(mockHook.setActiveViewId).toHaveBeenCalledWith("v9");
   });
 
-  it("threads dataSource.id and refetch down to TableView's Add row control (task-18)", async () => {
+  it("creating a Board view grouped by a Select property: no mode needed, group_by stays bare", async () => {
+    mockHook.properties = [
+      ...mockHook.properties,
+      { id: "p3", data_source_id: "ds-1", user_id: "user-1", key: "priority", name: "Priority", type: "select", config: {}, description: null, storage: "jsonb", column_name: null, result_type: null, is_volatile: false, position: 2, created_at: "2026-01-01T00:00:00Z" },
+    ];
+    const user = userEvent.setup();
+    const createdView = { id: "v10", data_source_id: "ds-1", user_id: "user-1", name: "New view", icon: null, type: "board", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
+    mockHook.createView.mockResolvedValue(createdView);
+    mockHook.updateView.mockResolvedValue({ ...createdView, config: { group_by: { property_key: "priority" } } });
+
+    render(<DatabaseShell databaseId="db-1" />);
+
+    await user.click(screen.getByText("+ New view"));
+    await user.selectOptions(screen.getByLabelText(/view type/i), "board");
+    await user.selectOptions(screen.getByLabelText(/group by/i), "priority");
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(mockHook.updateView).toHaveBeenCalledWith("v10", {
+      config: { group_by: { property_key: "priority" } },
+    });
+  });
+
+  it("threads dataSource.id and refetchRows down to TableView's Add row control (task-18)", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: "row-2", properties: {} }), {
@@ -194,7 +239,12 @@ describe("DatabaseShell", () => {
       "/api/db/data-sources/ds-1/rows",
       expect.objectContaining({ method: "POST" })
     );
-    await vi.waitFor(() => expect(mockHook.refetch).toHaveBeenCalled());
+    // Regression: adding a row must refetch *rows*, not just database
+    // metadata — `refetch` (=`load`) never re-runs the rows query, so
+    // asserting it alone is a false-positive that let a real live-verified
+    // bug ship (the new row never appeared, "No rows yet." stuck forever).
+    await vi.waitFor(() => expect(mockHook.refetchRows).toHaveBeenCalled());
+    expect(mockHook.refetch).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
   });

@@ -33,6 +33,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     createView,
     updateView,
     refetch,
+    refetchRows,
   } = useDatabaseView(databaseId);
 
   if (loading && !database) {
@@ -64,11 +65,26 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
   /** "+ New view" (ViewTabs.tsx): create, then — for a Board with a chosen
    * group-by property — persist that choice via the existing `PATCH
    * /db/views/{id}` endpoint before switching to it, so the new view never
-   * renders with a dangling/missing group_by. */
+   * renders with a dangling/missing group_by.
+   *
+   * Live-verified regression: `services.db.query.grouping.GroupBySpec` has
+   * no implicit default `mode` for `status` (Milestone 4's own "fail loud,
+   * don't guess" decision — `mode=None` raises `ValueError`, surfaced as a
+   * real 400 from `POST .../query`, confirmed by actually creating a Board
+   * grouped by a Status property and watching it 400 with "status requires
+   * mode='option' or 'group'"). `select`/`multi_select` (the other two
+   * `GROUPABLE_PROPERTY_TYPES`) have no mode concept at all, so this only
+   * needs to special-case `status` — default it to `"option"` (individual
+   * options, not status groups — matches how the Status column itself
+   * already renders/edits, since status *groups* aren't configurable
+   * anywhere in this UI yet). */
   async function handleCreateView(input: { name: string; type: string; groupPropertyKey?: string }) {
     const created = await createView(input.name, input.type);
     if (input.type === "board" && input.groupPropertyKey) {
-      await updateView(created.id, { config: { group_by: { property_key: input.groupPropertyKey } } });
+      const groupProperty = properties.find((p) => p.key === input.groupPropertyKey);
+      const groupBy: Record<string, unknown> = { property_key: input.groupPropertyKey };
+      if (groupProperty?.type === "status") groupBy.mode = "option";
+      await updateView(created.id, { config: { group_by: groupBy } });
     }
     setActiveViewId(created.id);
   }
@@ -86,6 +102,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             onCellChange={updateCell}
             dataSourceId={dataSourceId}
             refetch={refetch}
+            refetchRows={refetchRows}
           />
         );
       case "board": {

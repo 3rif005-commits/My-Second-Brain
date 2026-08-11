@@ -273,5 +273,14 @@ export function useDatabaseView(databaseId: string) {
     createView,
     updateView,
     refetch: load,
+    // `load` only re-fetches database/properties/views — `loadRows`'s own
+    // effect is keyed to activeView's id/type/filter/sorts/config, none of
+    // which change when a row is merely added or removed, so it never
+    // re-runs on its own after a write that only affects row *data*.
+    // Exposed separately (not folded into `refetch`) so a caller that only
+    // changed a property doesn't pay for an unnecessary rows re-query, and
+    // a caller that only added/removed a row doesn't pay for an
+    // unnecessary properties re-fetch.
+    refetchRows: loadRows,
   };
 }

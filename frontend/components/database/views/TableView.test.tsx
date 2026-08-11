@@ -243,9 +243,21 @@ describe("TableView", () => {
       expect(screen.queryByRole("button", { name: "+ New" })).not.toBeInTheDocument();
     });
 
-    it("clicking it POSTs to the rows endpoint with no body, then refetches", async () => {
+    it("clicking it POSTs to the rows endpoint with no body, then refetches rows specifically", async () => {
+      // Regression test: useDatabaseView's `refetch` (=`load`) only re-fetches
+      // database/properties/views — its `loadRows` has a separate effect keyed
+      // to activeView's id/type/filter/sorts/config, none of which change when
+      // a row is merely added. Live-verified bug: calling `refetch` alone after
+      // POSTing a new row left the table showing "No rows yet." forever, even
+      // though the row was created successfully server-side (confirmed via the
+      // network log: POST .../rows → 201, followed only by GET .../databases,
+      // never another POST .../query). `refetchRows` (=`loadRows`) is the one
+      // that actually needs to be called here — asserting only "some refetch
+      // happened" (the original version of this test) is exactly how this
+      // shipped without being caught.
       const user = userEvent.setup();
       const refetch = vi.fn().mockResolvedValue(undefined);
+      const refetchRows = vi.fn().mockResolvedValue(undefined);
       const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "row-2", properties: {} }, 201));
       vi.stubGlobal("fetch", fetchMock);
 
@@ -257,12 +269,14 @@ describe("TableView", () => {
           onCellChange={vi.fn()}
           dataSourceId="ds-1"
           refetch={refetch}
+          refetchRows={refetchRows}
         />
       );
 
       await user.click(screen.getByRole("button", { name: "+ New" }));
 
-      await waitFor(() => expect(refetch).toHaveBeenCalled());
+      await waitFor(() => expect(refetchRows).toHaveBeenCalled());
+      expect(refetch).not.toHaveBeenCalled();
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/db/data-sources/ds-1/rows",
         expect.objectContaining({ method: "POST" })
