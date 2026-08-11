@@ -154,7 +154,26 @@ export function useDatabaseView(databaseId: string) {
    * backend already computed the grouping once (task-15), so this doesn't
    * duplicate that logic to guess which column a row belongs in now; it
    * just asks again. Table's (ungrouped) `rows` keeps updating in place,
-   * unchanged from before this task. */
+   * unchanged from before this task.
+   *
+   * task-17 fix round, finding 3: the PATCH and the follow-up grouped
+   * `loadRows()` are two *separate* failure modes, and only the first one
+   * means the write didn't happen. Originally both were inside one
+   * try/catch, so a `loadRows()` throw (e.g. a transient network blip on
+   * the refetch, nothing wrong with the write itself) rolled `rows` back to
+   * its pre-edit state and showed "could not save that change" — a lie:
+   * the PATCH had already succeeded, the property really did change
+   * server-side, only the client's picture of the new grouping is stale.
+   * Splitting the two: a PATCH failure keeps the real rollback + real error
+   * toast (unchanged); a post-success refetch failure does neither —
+   * instead a milder "info" toast, since the write is real and rolling it
+   * back client-side would be actively wrong (the next full reload would
+   * show the change again, and the user would have no idea why "editing
+   * again" mysteriously never seemed to fail). No retry loop here: a single
+   * transient failure is common enough to not be worth toasting loudly
+   * over, and a real outage will surface again on the next interaction (or
+   * `refetch()`) rather than justifying open-ended retries inside a single
+   * cell edit. */
   async function updateCell(rowId: string, propertyKey: string, value: PropertyValue | null) {
     if (!dataSource) return;
     const previousRows = rows;
@@ -171,6 +190,7 @@ export function useDatabaseView(databaseId: string) {
       })
     );
 
+    let updated: RowResponse;
     try {
       const res = await fetch(`/api/db/data-sources/${dataSource.id}/rows/${rowId}`, {
         method: "PATCH",
@@ -178,16 +198,30 @@ export function useDatabaseView(databaseId: string) {
         body: JSON.stringify({ property_key: propertyKey, value }),
       });
       if (!res.ok) throw new Error(await errorMessage(res));
-      const updated: RowResponse = await res.json();
-      setRows((prev) =>
-        prev.map((row) => (row.id === updated.id ? { id: updated.id, properties: updated.properties } : row))
-      );
-      if (wasGrouped) {
-        await loadRows();
-      }
+      updated = await res.json();
     } catch (e) {
       setRows(previousRows);
       showToast(e instanceof Error ? e.message : "Could not save that change", "error");
+      return;
+    }
+
+    // The write itself is done and confirmed at this point — nothing below
+    // this line rolls it back.
+    setRows((prev) =>
+      prev.map((row) => (row.id === updated.id ? { id: updated.id, properties: updated.properties } : row))
+    );
+
+    if (wasGrouped) {
+      try {
+        await loadRows();
+      } catch (e) {
+        showToast(
+          e instanceof Error
+            ? `Saved, but the board view may be out of date: ${e.message}`
+            : "Saved, but the board view may be out of date — refresh to see the latest.",
+          "info"
+        );
+      }
     }
   }
 

@@ -297,6 +297,69 @@ describe("useDatabaseView", () => {
     await waitFor(() => expect(result.current.groups).toEqual(movedGroups));
   });
 
+  it("updateCell: PATCH succeeds but the follow-up grouped refetch fails — doesn't roll back the write and doesn't show a false 'could not save' toast (task-17 fix round, finding 3)", async () => {
+    const boardDetail = detail([BOARD_VIEW]);
+    const initialGroups: Group[] = [
+      {
+        key: "todo",
+        label: "To do",
+        row_count: 1,
+        rows: [
+          {
+            id: "row-1",
+            properties: { titleKey: { type: "title", title: "First" }, status: { type: "status", status: "todo" } },
+          },
+        ],
+        subgroups: null,
+      },
+      { key: "done", label: "Done", row_count: 0, rows: [], subgroups: null },
+    ];
+
+    let queryCount = 0;
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(boardDetail));
+      if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+        queryCount += 1;
+        // First query (initial load) succeeds; the second (updateCell's
+        // post-write grouped refetch) simulates a transient network blip.
+        if (queryCount === 1) return Promise.resolve(jsonResponse({ groups: initialGroups }));
+        return Promise.reject(new Error("network blip"));
+      }
+      if (url === "/api/db/data-sources/ds-1/rows/row-1" && init?.method === "PATCH") {
+        return Promise.resolve(
+          jsonResponse({
+            id: "row-1",
+            properties: { titleKey: { type: "title", title: "First" }, status: { type: "status", status: "done" } },
+          })
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current.groups).toEqual(initialGroups));
+
+    await act(async () => {
+      await result.current.updateCell("row-1", "status", { type: "status", status: "done" });
+    });
+
+    // The PATCH succeeded — the property really did change server-side —
+    // so the refetch failing afterward must not roll `groups` back to
+    // something else or null it out.
+    expect(result.current.groups).toEqual(initialGroups);
+
+    // No false "could not save" toast: the write wasn't the thing that
+    // failed. Exactly one toast fires, and it's the milder "out of date"
+    // notice, distinguishable by variant from a real write failure.
+    expect(showToast).toHaveBeenCalledTimes(1);
+    const [message, variant] = showToast.mock.calls[0];
+    expect(variant).toBe("info");
+    expect(message).not.toMatch(/could not save/i);
+    expect(message).toMatch(/saved.*out of date/i);
+  });
+
   it("createView: POSTs to .../views and appends the created view to `views`", async () => {
     const created: ViewResponse = { ...BOARD_VIEW, id: "v3", name: "New view" };
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {

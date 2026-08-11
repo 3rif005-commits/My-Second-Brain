@@ -2,7 +2,16 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { BoardView, resolveDropValue } from "./BoardView";
+// BoardCard renders an OpenNoteButton (task-17 fix round, finding 1), which
+// navigates via next/navigation's useRouter — outside a real Next.js app
+// router tree (as here, a plain RTL render) that throws "invariant expected
+// app router to be mounted" unless mocked, same as ListView.test.tsx.
+const push = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+}));
+
+import { BoardView, cardDraggableId, computeDragEndWrite, resolveDropValue } from "./BoardView";
 import type { DatabaseRow, Group, PropertyResponse } from "@/lib/database/types";
 
 function prop(overrides: Partial<PropertyResponse>): PropertyResponse {
@@ -232,5 +241,154 @@ describe("BoardView", () => {
     await user.click(checkbox);
 
     expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  it("clicking a card's Open note button navigates to the note's workspace route (task-17 fix round, finding 1)", async () => {
+    const user = userEvent.setup();
+    render(
+      <BoardView
+        properties={[TITLE_PROP, STATUS_PROP]}
+        groups={GROUPS}
+        groupPropertyKey="status"
+        hideEmptyGroups={false}
+        onToggleHideEmptyGroups={vi.fn()}
+        editable={true}
+        onCellChange={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getAllByRole("button", { name: /open note/i })[0]);
+    expect(push).toHaveBeenCalledWith("/brain/workspace/row-1");
+  });
+});
+
+describe("cardDraggableId (pure id-shaping logic, task-17 fix round, finding 2)", () => {
+  it("disambiguates by sub-bucket when the same row appears in two sub-buckets of one column (multi_select sub_group_by)", () => {
+    // Only possible when sub_group_by targets a multi_select property: the
+    // same row can land in more than one sub-bucket of the same top-level
+    // column. sourceGroupKey alone is identical for both instances there,
+    // so without the sub-bucket's own key in the id, dnd-kit's internal
+    // registry would silently drop one draggable's handlers (last
+    // registration wins).
+    const idInSubA = cardDraggableId("urgent", "tag-a", "row-1");
+    const idInSubB = cardDraggableId("urgent", "tag-b", "row-1");
+    expect(idInSubA).not.toEqual(idInSubB);
+  });
+
+  it("still disambiguates the pre-existing case: the same row in two different top-level columns (multi_select group_by)", () => {
+    const idInColumnA = cardDraggableId("urgent", undefined, "row-1");
+    const idInColumnB = cardDraggableId("backlog", undefined, "row-1");
+    expect(idInColumnA).not.toEqual(idInColumnB);
+  });
+
+  it("is stable (not accidentally colliding) for the ordinary non-sub-grouped case", () => {
+    expect(cardDraggableId("todo", undefined, "row-1")).toEqual(cardDraggableId("todo", undefined, "row-1"));
+  });
+});
+
+describe("BoardView sub-grouping render (synthetic fixture, no real sub_group_by UI needed)", () => {
+  it("renders the same row once per sub-bucket without React key/id collisions when sub-grouped by a multi_select property", () => {
+    // Constructed directly, the same way task-16-brief.md's own sub-group
+    // shape works: a top-level Group whose `rows` is empty (task-15's own
+    // contract — a sub-grouped Group's own `.rows` is unused once
+    // `.subgroups` is set) and two subgroups both containing the same row,
+    // modeling a card with two tags under a multi_select sub_group_by.
+    const SUBGROUPED: Group[] = [
+      {
+        key: "urgent",
+        label: "Urgent",
+        row_count: 1,
+        rows: [],
+        subgroups: [
+          { key: "tag-a", label: "Tag A", row_count: 1, rows: [row("row-1", "Task 1")], subgroups: null },
+          { key: "tag-b", label: "Tag B", row_count: 1, rows: [row("row-1", "Task 1")], subgroups: null },
+        ],
+      },
+    ];
+
+    render(
+      <BoardView
+        properties={[TITLE_PROP, STATUS_PROP]}
+        groups={SUBGROUPED}
+        groupPropertyKey="status"
+        hideEmptyGroups={false}
+        onToggleHideEmptyGroups={vi.fn()}
+        editable={true}
+        onCellChange={vi.fn()}
+      />
+    );
+
+    // Both sub-bucket instances render — the real dnd-kit-registry
+    // collision this closes can't be observed without simulating a full
+    // pointer drag (see the cardDraggableId unit tests above for the
+    // uniqueness guarantee itself); this is a rendering sanity check that
+    // the fix didn't break the sub-grouped layout.
+    expect(screen.getAllByText("Task 1")).toHaveLength(2);
+    expect(screen.getByText(/tag a/i)).toBeInTheDocument();
+    expect(screen.getByText(/tag b/i)).toBeInTheDocument();
+  });
+});
+
+describe("computeDragEndWrite (handleDragEnd's wiring, task-17 fix round, finding 4)", () => {
+  const groups: Group[] = [
+    {
+      key: "todo",
+      label: "To do",
+      row_count: 1,
+      rows: [row("row-1", "Task 1", { status: { type: "status", status: "todo" } })],
+      subgroups: null,
+    },
+    { key: "done", label: "Done", row_count: 0, rows: [], subgroups: null },
+  ];
+
+  it("returns the write to make for a valid drop on a different column's droppable", () => {
+    const event = {
+      over: { id: "column:done" },
+      active: { data: { current: { rowId: "row-1", sourceGroupKey: "todo" } } },
+    };
+    const result = computeDragEndWrite(event, STATUS_PROP, groups);
+    expect(result).toEqual({ rowId: "row-1", value: { type: "status", status: "done" } });
+  });
+
+  it("returns undefined when dropped outside any droppable (over is null)", () => {
+    const event = { over: null, active: { data: { current: { rowId: "row-1", sourceGroupKey: "todo" } } } };
+    expect(computeDragEndWrite(event, STATUS_PROP, groups)).toBeUndefined();
+  });
+
+  it("returns undefined when dropped on something that isn't a column droppable", () => {
+    const event = {
+      over: { id: "not-a-column" },
+      active: { data: { current: { rowId: "row-1", sourceGroupKey: "todo" } } },
+    };
+    expect(computeDragEndWrite(event, STATUS_PROP, groups)).toBeUndefined();
+  });
+
+  it("returns undefined when there's no drag data attached to the active draggable", () => {
+    const event = { over: { id: "column:done" }, active: { data: { current: undefined } } };
+    expect(computeDragEndWrite(event, STATUS_PROP, groups)).toBeUndefined();
+  });
+
+  it("returns undefined when groupProperty hasn't resolved yet", () => {
+    const event = {
+      over: { id: "column:done" },
+      active: { data: { current: { rowId: "row-1", sourceGroupKey: "todo" } } },
+    };
+    expect(computeDragEndWrite(event, undefined, groups)).toBeUndefined();
+  });
+
+  it("returns undefined when groups is null (query not resolved yet)", () => {
+    const event = {
+      over: { id: "column:done" },
+      active: { data: { current: { rowId: "row-1", sourceGroupKey: "todo" } } },
+    };
+    expect(computeDragEndWrite(event, STATUS_PROP, null)).toBeUndefined();
+  });
+
+  it("returns undefined for a no-op drop (dropped back in its own column)", () => {
+    const event = {
+      over: { id: "column:todo" },
+      active: { data: { current: { rowId: "row-1", sourceGroupKey: "todo" } } },
+    };
+    expect(computeDragEndWrite(event, STATUS_PROP, groups)).toBeUndefined();
   });
 });

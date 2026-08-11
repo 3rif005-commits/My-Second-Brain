@@ -2,6 +2,14 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+// GalleryCard renders an OpenNoteButton (task-17 fix round, finding 1),
+// which navigates via next/navigation's useRouter — outside a real Next.js
+// app router tree that throws unless mocked, same as ListView.test.tsx.
+const push = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push }),
+}));
+
 import { GalleryView } from "./GalleryView";
 import type { DatabaseRow, PropertyResponse } from "@/lib/database/types";
 
@@ -166,5 +174,22 @@ describe("GalleryView", () => {
     );
 
     expect(screen.getByText(/no rows yet/i)).toBeInTheDocument();
+  });
+
+  it("clicking a card's Open note button navigates to the note's workspace route (task-17 fix round, finding 1)", async () => {
+    const user = userEvent.setup();
+    render(
+      <GalleryView
+        properties={[TITLE_PROP]}
+        rows={[row("row-1", "First")]}
+        editable={false}
+        onCellChange={vi.fn()}
+        config={{}}
+        onConfigChange={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /open note/i }));
+    expect(push).toHaveBeenCalledWith("/brain/workspace/row-1");
   });
 });

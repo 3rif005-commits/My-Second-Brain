@@ -31,8 +31,15 @@
 // per-view `config.hidden_properties: string[]` of property keys, title's
 // included when hidden. A minimal, documented simplification — not a
 // general column-visibility feature.
+//
+// Click-to-open (task-17 fix round, finding 1): a small `OpenNoteButton`
+// over the cover, not the whole card — the title is rendered through
+// TitleCell (`renderCellValue`), whose own click starts inline editing, so
+// making the whole card navigate would fire both on a title click. See
+// `OpenNoteButton.tsx` for the full reasoning (same call as BoardView).
 import type { DatabaseRow, PropertyResponse, PropertyValue } from "@/lib/database/types";
 import { renderCellValue } from "../cells/renderCellValue";
+import { OpenNoteButton } from "../OpenNoteButton";
 
 const COVER_SIZES = ["small", "medium", "large"] as const;
 type CoverSize = (typeof COVER_SIZES)[number];
@@ -118,7 +125,7 @@ function GalleryCard({
     <div
       className={`${COVER_SIZE_CLASSES[coverSize]} shrink-0 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden`}
     >
-      <div className="aspect-video">
+      <div className="relative aspect-video">
         {row.cover_image_url ? (
           // eslint-disable-next-line @next/next/no-img-element -- arbitrary
           // user-provided URLs, not a local/optimizable asset Next's <Image>
@@ -131,6 +138,7 @@ function GalleryCard({
         ) : (
           <CoverPlaceholder />
         )}
+        <OpenNoteButton noteId={row.id} className="absolute top-1 right-1" />
       </div>
       <div className={cardLayout === "compact" ? "p-1.5" : "p-2.5"}>
         {!titleHidden && titleProp && (

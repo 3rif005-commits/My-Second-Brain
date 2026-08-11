@@ -36,6 +36,13 @@
 //  - any card size/preview-image control — undocumented per research
 //    (unlike Gallery, which has an explicit `cover_size`/`cover_aspect`
 //    spec to build against).
+//
+// Click-to-open (task-17 fix round, finding 1): a card's title navigates to
+// the note, same as ListView.tsx (`lib/database/useOpenNote.ts`). Feed's
+// title is already plain read-only text, not TitleCell, so — unlike
+// Board/Gallery — there's no competing inline-edit click to collide with;
+// making the title itself the click target is unambiguous here.
+import { useOpenNote } from "@/lib/database/useOpenNote";
 import type { DatabaseRow, PropertyResponse, PropertyValue, TitleValue } from "@/lib/database/types";
 import { renderCellValue } from "../cells/renderCellValue";
 
@@ -80,6 +87,7 @@ export interface FeedViewProps {
 }
 
 export function FeedView({ properties, rows, editable, onCellChange, config, onConfigChange }: FeedViewProps) {
+  const openNote = useOpenNote();
   const hiddenProperties = readHiddenProperties(config);
   const titleProp = properties.find((p) => p.type === "title");
   const visibleOtherProps = properties
@@ -133,9 +141,13 @@ export function FeedView({ properties, rows, editable, onCellChange, config, onC
               key={row.id}
               className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-3"
             >
-              <div className="text-sm font-medium mb-1.5 text-gray-900 dark:text-gray-100">
+              <button
+                type="button"
+                onClick={() => openNote(row.id)}
+                className="block w-full text-left text-sm font-medium mb-1.5 text-gray-900 dark:text-gray-100 hover:underline"
+              >
                 {titleValue || <span className="font-normal text-gray-400">Untitled</span>}
-              </div>
+              </button>
               {visibleOtherProps.length > 0 && (
                 <div className="space-y-1">
                   {visibleOtherProps.map((p) => (

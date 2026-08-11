@@ -24,6 +24,7 @@ import {
 } from "@dnd-kit/core";
 import type { DatabaseRow, Group, MultiSelectValue, PropertyResponse, PropertyValue } from "@/lib/database/types";
 import { renderCellValue } from "../cells/renderCellValue";
+import { OpenNoteButton } from "../OpenNoteButton";
 
 // Mirrors services.db.query.grouping._NO_VALUE_KEY exactly — the implicit
 // bucket every grouped type gets for rows with no value on the grouped
@@ -95,24 +96,54 @@ export function resolveDropValue(
   return { type: groupProperty.type, [groupProperty.type]: targetGroupKey } as PropertyValue;
 }
 
+/** The dnd-kit draggable id for one card *instance*. Exported and
+ * unit-tested directly (task-17 fix round, finding 2) because the
+ * uniqueness guarantee it exists for can't be observed from outside
+ * dnd-kit's internal registry without simulating a real drag — proof by
+ * construction is the only practical way to pin it.
+ *
+ * `sourceGroupKey` alone already disambiguates a multi_select-grouped
+ * top-level card that appears in more than one column (one instance per
+ * tag it has — the original reason this function exists). Sub-grouping by
+ * a multi_select property (no UI to configure that yet, but the grouping
+ * engine and BoardColumn's rendering both already support it) introduces a
+ * second axis: the *same* row can appear in two different sub-buckets of
+ * the *same* top-level column, where `sourceGroupKey` is identical for
+ * both — so `subgroupKey` has to be part of the id too, or the second
+ * registration silently overwrites dnd-kit's record of the first (last
+ * mount wins), and a drag started from the first card's DOM node would
+ * resolve against the second card's data. `subgroupKey` is `undefined` for
+ * a top-level (non-sub-grouped) card; normalized to `""` here so the id
+ * shape is uniform either way. */
+export function cardDraggableId(sourceGroupKey: string, subgroupKey: string | undefined, rowId: string): string {
+  return `card:${sourceGroupKey}:${subgroupKey ?? ""}:${rowId}`;
+}
+
 function BoardCard({
   row,
   properties,
   editable,
   onCellChange,
   sourceGroupKey,
+  subgroupKey,
 }: {
   row: DatabaseRow;
   properties: PropertyResponse[];
   editable: boolean;
   onCellChange: BoardViewProps["onCellChange"];
   sourceGroupKey: string;
+  /** Only set when this card instance is rendered inside a sub-group (see
+   * `cardDraggableId` above) — never part of the drag *data* (that stays
+   * `sourceGroupKey`-only, matching what `resolveDropValue`/`handleDragEnd`
+   * expect), only the draggable *id*. */
+  subgroupKey?: string;
 }) {
-  // id must be unique per (row, column) instance, not just per row — a
-  // multi_select-grouped card can appear in more than one column (once per
-  // tag), and dnd-kit requires unique draggable ids within one DndContext.
+  // id must be unique per (row, column[, sub-bucket]) instance, not just
+  // per row — a multi_select-grouped card can appear in more than one
+  // column (once per tag), and dnd-kit requires unique draggable ids
+  // within one DndContext.
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `card:${sourceGroupKey}:${row.id}`,
+    id: cardDraggableId(sourceGroupKey, subgroupKey, row.id),
     data: { rowId: row.id, sourceGroupKey } satisfies DragData,
   });
 
@@ -132,12 +163,13 @@ function BoardCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 mb-2 shadow-sm cursor-grab active:cursor-grabbing touch-none ${
+      className={`relative rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 mb-2 shadow-sm cursor-grab active:cursor-grabbing touch-none ${
         isDragging ? "opacity-40" : ""
       }`}
     >
+      <OpenNoteButton noteId={row.id} className="absolute top-1 right-1" />
       {titleProp && (
-        <div className="text-sm font-medium mb-1 text-gray-900 dark:text-gray-100">
+        <div className="text-sm font-medium mb-1 pr-5 text-gray-900 dark:text-gray-100">
           {renderCellValue(titleProp, row.properties[titleProp.key], editable, (value) =>
             onCellChange(row.id, titleProp.key, value)
           )}
@@ -155,6 +187,51 @@ function BoardCard({
       </div>
     </div>
   );
+}
+
+/** Structural subset of dnd-kit's real `DragEndEvent` — just the fields
+ * `computeDragEndWrite` actually reads. A real `DragEndEvent` has more
+ * fields (`activatorEvent`, `collisions`, `delta`, `active.rect`, ...) and
+ * is structurally assignable here without a cast; `data.current` stays
+ * loosely typed (dnd-kit's own `AnyData = Record<string, any>`, same as
+ * the real `Active.data` field) and is narrowed to `DragData` inside the
+ * function body, same as `handleDragEnd` did before this was extracted. */
+interface DragEndEventLike {
+  over: { id: string | number } | null;
+  active: { data: { current?: Record<string, unknown> } };
+}
+
+/** The "wiring" between a real dnd-kit drag-end event and `resolveDropValue`
+ * above: parses the `column:` droppable-id prefix, reads
+ * `active.data.current`, and returns the write to make — or `undefined` for
+ * every no-op case (dropped outside a column droppable, no `groups`/
+ * `groupProperty` resolved yet, no drag data attached, or `resolveDropValue`
+ * itself decided there's nothing to write).
+ *
+ * Exported and unit-tested directly against a hand-built event-shaped
+ * object (task-17 fix round, finding 4) — same reasoning as
+ * `resolveDropValue`: this doesn't need real dnd-kit pointer-event
+ * simulation to verify, only a plain object matching the shape this
+ * function actually reads. Previously this logic lived inline inside
+ * `handleDragEnd` below with no coverage of its own (only the
+ * `resolveDropValue` call inside it was tested). */
+export function computeDragEndWrite(
+  event: DragEndEventLike,
+  groupProperty: PropertyResponse | undefined,
+  groups: Group[] | null
+): { rowId: string; value: PropertyValue | null } | undefined {
+  const { active, over } = event;
+  if (!over || !groupProperty || !groups) return undefined;
+  const overId = String(over.id);
+  if (!overId.startsWith(COLUMN_DROPPABLE_PREFIX)) return undefined;
+  const targetGroupKey = overId.slice(COLUMN_DROPPABLE_PREFIX.length);
+
+  const data = active.data.current as DragData | undefined;
+  if (!data) return undefined;
+
+  const value = resolveDropValue(data, targetGroupKey, groupProperty, groups);
+  if (value === undefined) return undefined; // no-op drop
+  return { rowId: data.rowId, value };
 }
 
 function BoardColumn({
@@ -201,6 +278,7 @@ function BoardColumn({
                 editable={editable}
                 onCellChange={onCellChange}
                 sourceGroupKey={group.key}
+                subgroupKey={sub.key}
               />
             ))}
           </div>
@@ -261,18 +339,9 @@ export function BoardView({
   const resolvedGroupPropertyKey: string = groupPropertyKey;
 
   function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || !groupProperty || !groups) return;
-    const overId = String(over.id);
-    if (!overId.startsWith(COLUMN_DROPPABLE_PREFIX)) return;
-    const targetGroupKey = overId.slice(COLUMN_DROPPABLE_PREFIX.length);
-
-    const data = active.data.current as DragData | undefined;
-    if (!data) return;
-
-    const value = resolveDropValue(data, targetGroupKey, groupProperty, groups);
-    if (value === undefined) return; // no-op drop
-    onCellChange(data.rowId, resolvedGroupPropertyKey, value);
+    const result = computeDragEndWrite(event, groupProperty, groups);
+    if (!result) return;
+    onCellChange(result.rowId, resolvedGroupPropertyKey, result.value);
   }
 
   return (

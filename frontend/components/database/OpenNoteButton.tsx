@@ -1,0 +1,53 @@
+"use client";
+
+// A small, explicit "open the note" affordance for card-based views whose
+// cards already have a competing click behavior on their main content:
+// Board cards are dnd-kit drag handles over their *entire* surface, and
+// both Board and Gallery cards render their title through TitleCell, whose
+// own click toggles inline editing. Making the whole card (or the title)
+// double as "click to open" would fire both behaviors at once on the same
+// click (start a drag, or start editing, *and* navigate away) — this is a
+// separate, small, always-visible control instead, mirroring the "hover to
+// reveal Open" affordance Notion itself uses on gallery/board cards for the
+// same reason.
+//
+// List/Feed don't need this: their titles are always plain read-only text
+// (no TitleCell, no inline-edit competing click), so clicking the title
+// itself is unambiguous there — see ListView.tsx/FeedView.tsx.
+//
+// `onPointerDown`/`onClick` both call `stopPropagation()`: BoardCard spreads
+// dnd-kit's `listeners` (pointer-down-driven) across the *entire* outer
+// card div this button lives inside, so without stopping propagation a
+// click here would also register as the start of a (zero-distance, so
+// harmless) drag gesture — cheap to prevent outright rather than rely on
+// dnd-kit's activation-distance threshold to absorb it.
+import { useOpenNote } from "@/lib/database/useOpenNote";
+
+interface OpenNoteButtonProps {
+  noteId: string;
+  className?: string;
+}
+
+export function OpenNoteButton({ noteId, className = "" }: OpenNoteButtonProps) {
+  const openNote = useOpenNote();
+
+  return (
+    <button
+      type="button"
+      aria-label="Open note"
+      title="Open note"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        openNote(noteId);
+      }}
+      className={`inline-flex items-center justify-center rounded p-1 bg-white/80 dark:bg-gray-900/80 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-white dark:hover:bg-gray-900 ${className}`}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+        <path d="M15 3h6v6" />
+        <path d="M10 14 21 3" />
+      </svg>
+    </button>
+  );
+}
