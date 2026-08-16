@@ -35,6 +35,8 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict
 
+from services.db.relations import RelationRef
+
 from .columns import COLUMN_BACKED_NAMES
 
 
@@ -86,11 +88,38 @@ class SqlContext:
     built-in "All Notes" virtual source (§6), `p` (or similar) for
     `db_row_props` otherwise. The query compiler (Milestone 3) constructs
     this; property types only ever read it.
+
+    `relation` (Milestone 7) is the relation-pair identity a `type=
+    "relation"` property resolves to (`services.db.relations.
+    RelationRef`), or `None` for every other type and for a malformed/
+    pre-015 relation property. `row_id_expr` is the SQL expression for
+    *this row's own id*, and it is `n.id` in both builder.py modes -- All
+    Notes selects `FROM notes n`, and ordinary mode always `JOIN notes n
+    ON n.id = p.note_id` (`_scope()` needs `n.deleted_at` regardless).
+    It cannot be derived from `alias`, which is `p` in ordinary mode and
+    would give `p.id`, a column that does not exist on `db_row_props` --
+    the same class of wrong-table trap `_resolve_alias` in
+    query/compiler.py guards against for column-backed properties.
+
+    `user_id` (Milestone 7) is the tenancy value a relation's EXISTS/count
+    SQL binds as `rl.user_id = $n` -- mandatory even though the outer query
+    is already scoped, because `db_relation_links.user_id` is not
+    structurally tied to the row's owner (the same gap migration 019's
+    header documents for `db_row_props`). It has no effect on any
+    non-relation descriptor. Not part of the brief's enumerated SqlContext
+    fields (`relation`/`row_id_expr` only) -- added because `sql_order`'s
+    fixed `(self, ctx, direction)` signature has no other channel to reach
+    a bound user_id into the count subquery `query/compiler.py`'s
+    `compile_sorts` must build for a relation sort (task-20-report.md's
+    judgement-call list).
     """
 
     key: str
     alias: str = "notes"
     storage: Literal["jsonb", "column"] = "jsonb"
+    relation: RelationRef | None = None
+    row_id_expr: str = "n.id"
+    user_id: str = ""
 
 
 # `keys.mint_key` mints 8 base62 characters; the bound is loose so a test or
@@ -157,7 +186,14 @@ def _text_shape(type_key: str) -> _ValueShape:
 # 5 replaces the generic descriptor with real per-type descriptors; these
 # shapes exist now so the SQL Milestone 1 ships is index-compatible and not
 # actively wrong, not because they are the final word.
-_ARRAY_VALUED = ("multi_select", "people", "files", "relation")
+#
+# "relation" is deliberately NOT here (Milestone 7 removed it): it was a
+# Milestone-1/3 placeholder written before `db_relation_links` existed.
+# `db_row_props.properties->'<relation key>'` must never be treated as the
+# link list -- migration 015's header and services/db/relations.py are the
+# single source of truth now. properties/relation.py's `Relation` descriptor
+# replaces `_GenericProperty` for this type entirely (REGISTRY, below).
+_ARRAY_VALUED = ("multi_select", "people", "files")
 
 _VALUE_SHAPES: dict[str, _ValueShape] = {
     # `::double precision` (not `::numeric`) is deliberate: it is the exact
@@ -303,13 +339,14 @@ _REAL_TYPE_KEYS = (
 
 # Milestone 5 (task-14-brief.md): richer, type-specific descriptors for the
 # 8 keys the plan's own M5 test cases name (40 number formats, status
-# groups, date ranges + timezone, unique_id counters). The other 16 keys
-# stay on `_GenericProperty` until a milestone needs their richness
-# (people/files/relation need M7's relations; formula/rollup need M8's
-# engine).
+# groups, date ranges + timezone, unique_id counters). Milestone 7
+# (task-20-brief.md) adds `relation`'s (its SQL is genuinely different from
+# every other type -- see properties/relation.py). The remaining keys stay
+# on `_GenericProperty` until a milestone needs their richness (formula/
+# rollup need M8's engine).
 #
 # Imported here, at the bottom of the module rather than at the top: these
-# three submodules import `_GenericProperty`/`Operator`/`SqlContext`/
+# four submodules import `_GenericProperty`/`Operator`/`SqlContext`/
 # `SqlFragment` back from this module (`from .base import ...`), so this
 # module must finish *defining* those names before importing the
 # submodules that need them, or Python raises ImportError on a partially
@@ -319,6 +356,7 @@ _REAL_TYPE_KEYS = (
 from .scalar import Number, UniqueId  # noqa: E402
 from .choice import Select, MultiSelect, Status  # noqa: E402
 from .temporal import Date, CreatedTime, LastEditedTime  # noqa: E402
+from .relation import Relation  # noqa: E402
 
 _RICH_OVERRIDES: dict[str, PropertyType] = {
     "number": Number(),
@@ -329,6 +367,7 @@ _RICH_OVERRIDES: dict[str, PropertyType] = {
     "date": Date(),
     "created_time": CreatedTime(),
     "last_edited_time": LastEditedTime(),
+    "relation": Relation(),
 }
 
 REGISTRY: dict[str, PropertyType] = {
