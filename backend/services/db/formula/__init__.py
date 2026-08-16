@@ -29,6 +29,17 @@ from .ast import (
 )
 from .lexer import FormulaSyntaxError, Token, TokenKind, tokenize
 from .parser import MAX_PARSE_DEPTH, parse
+from .types import FType, PROPERTY_TYPE_TO_FTYPE, unify
+from .typecheck import CheckResult, FormulaTypeError, FUNCTION_SIGNATURES, check
+from .deps import (
+    FormulaCycleError,
+    Graph,
+    PropertyDef,
+    build_graph,
+    max_reference_depth,
+    referenced_properties,
+    topological_order,
+)
 
 __all__ = [
     "parse",
@@ -51,4 +62,19 @@ __all__ = [
     "MethodCall",
     "Lambda",
     "Let",
+    # Milestone 8b (Task 24): type system, type checker, dependency graph.
+    "FType",
+    "PROPERTY_TYPE_TO_FTYPE",
+    "unify",
+    "check",
+    "CheckResult",
+    "FormulaTypeError",
+    "FUNCTION_SIGNATURES",
+    "referenced_properties",
+    "build_graph",
+    "topological_order",
+    "max_reference_depth",
+    "FormulaCycleError",
+    "Graph",
+    "PropertyDef",
 ]
