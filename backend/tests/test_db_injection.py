@@ -15,6 +15,7 @@ from services.db.query.operators import FilterValidationError
 from services.db.query.compiler import PropertyLookup, compile_filter
 from services.db.query.builder import QueryBuilder
 from services.db.query.ast import Pagination
+from services.db.relations import RelationRef
 
 PAYLOAD = "'; DROP TABLE notes; --"
 
@@ -199,6 +200,70 @@ async def test_payload_nested_two_levels_deep_in_str_or_list_never_leaks(db_conn
 # leaves zero row growth. This test itself adds a belt-and-suspenders check
 # within its own transaction.
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Milestone 7 (task-20): relation's "uuid" arg_type must reject the
+# injection payload at coercion, the same layer-1 defence an unknown
+# property key gets -- and the leakage sweep must exercise the new
+# EXISTS/NOT EXISTS branch too, not just the pre-existing JSONB-shaped
+# families every test above covers.
+# ---------------------------------------------------------------------------
+
+_RELATION_LOOKUP = {
+    "rel": PropertyLookup(
+        type="relation",
+        storage="jsonb",
+        key="c3d4e5f6",
+        relation=RelationRef(relation_id="11111111-1111-1111-1111-111111111111", side="forward"),
+    )
+}
+
+
+def test_relation_payload_value_rejected_by_uuid_coercion_before_reaching_sql():
+    node = FilterCondition(type="condition", property="rel", operator="contains", value=PAYLOAD)
+    with pytest.raises(FilterValidationError):
+        compile_filter(node, _RELATION_LOOKUP, user_id="u-1", alias="p")
+
+
+async def test_relation_exists_branch_survives_and_returns_right_row(db_conn, test_user):
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    relation_id = "22222222-2222-2222-2222-222222222222"
+    row_note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'row') RETURNING id", test_user
+    )
+    target_note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'target') RETURNING id", test_user
+    )
+    await db_conn.execute(
+        "INSERT INTO db_row_props (note_id, data_source_id, user_id, properties) VALUES ($1, $2, $3, '{}')",
+        row_note["id"], data_source_id, test_user,
+    )
+    await db_conn.execute(
+        "INSERT INTO db_relation_links (user_id, relation_id, from_row_id, to_row_id) VALUES ($1, $2, $3, $4)",
+        test_user, relation_id, row_note["id"], target_note["id"],
+    )
+
+    lookup = {
+        "rel": PropertyLookup(
+            type="relation",
+            storage="jsonb",
+            key="c3d4e5f6",
+            relation=RelationRef(relation_id=relation_id, side="forward"),
+        )
+    }
+    node = FilterCondition(
+        type="condition", property="rel", operator="contains", value=str(target_note["id"])
+    )
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+    built = qb.build(node, [], Pagination())
+    assert "EXISTS" in built.sql
+    assert PAYLOAD not in built.sql
+    assert "DROP TABLE" not in built.sql.upper()
+
+    rows = await db_conn.fetch(built.sql, *built.params)
+    assert {str(r["note_id"]) for r in rows} == {str(row_note["id"])}
+    assert await _notes_table_exists(db_conn)
 
 
 async def test_notes_table_survives_the_whole_suite(db_conn, test_user):

@@ -5,8 +5,11 @@ SQL against a real Postgres.
 """
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
+from services.db.relations import RelationRef
 from services.db.query.ast import (
     FilterCondition,
     FilterGroup,
@@ -254,6 +257,21 @@ _ARG_TYPE_SAMPLE_VALUES: dict[str, list[Any]] = {
 def _ctx_for(prop_type: str) -> SqlContext:
     # Any jsonb-backed condition works with an arbitrary base62-shaped key;
     # the native-array branch is exercised separately via `topics`.
+    if prop_type == "relation":
+        # "relation" needs a real RelationRef (task-20-brief.md §3.1) --
+        # compile_condition's relation branch raises FilterValidationError
+        # when ctx.relation is None, which is exercised separately by
+        # test_compile_condition_relation_without_ref_raises below. This
+        # matrix sweep is about proving every (type, operator) pair
+        # compiles, so it needs a *configured* relation property.
+        return SqlContext(
+            key="a1b2c3d4",
+            alias="p",
+            storage="jsonb",
+            relation=RelationRef(relation_id=str(uuid.uuid4()), side="forward"),
+            row_id_expr="n.id",
+            user_id="u-1",
+        )
     return SqlContext(key="a1b2c3d4", alias="p", storage="jsonb")
 
 
@@ -311,13 +329,85 @@ def test_me_resolution_binds_user_id_not_literal_me():
     assert "me" not in frag.sql
 
 
+# --- Milestone 7: relation's EXISTS/NOT EXISTS branch -----------------------
+
+
+def test_compile_condition_relation_without_ref_raises():
+    # ctx.relation is None -- a malformed/pre-015 relation property, or a
+    # caller bug. A 400 (FilterValidationError), never a crash and never a
+    # silent JSONB fallback (task-20-brief.md §3.2).
+    ctx = SqlContext(key="a1b2c3d4", alias="p", storage="jsonb")
+    with pytest.raises(OpFilterValidationError):
+        compile_condition("relation", ctx, "contains", str(uuid.uuid4()), user_id="u-1")
+
+
+def _relation_ctx(side="forward", relation_id=None) -> SqlContext:
+    return SqlContext(
+        key="a1b2c3d4",
+        alias="p",
+        storage="jsonb",
+        relation=RelationRef(relation_id=relation_id or str(uuid.uuid4()), side=side),
+        row_id_expr="n.id",
+        user_id="u-1",
+    )
+
+
+def test_relation_contains_compiles_to_exists_with_bound_relation_id_and_user_id():
+    other_id = str(uuid.uuid4())
+    frag = compile_condition("relation", _relation_ctx(), "contains", other_id, user_id="u-1")
+    assert frag.sql.strip().startswith("EXISTS")
+    assert "db_relation_links" in frag.sql
+    assert "rl.from_row_id = n.id" in frag.sql
+    assert "rl.to_row_id = $3" in frag.sql
+    assert frag.params[-1] == other_id
+    # relation_id and user_id are bound params, never literals.
+    assert frag.params[0] not in frag.sql
+    assert "u-1" not in frag.sql
+
+
+def test_relation_does_not_contain_compiles_to_not_exists():
+    frag = compile_condition(
+        "relation", _relation_ctx(), "does_not_contain", str(uuid.uuid4()), user_id="u-1"
+    )
+    assert frag.sql.strip().startswith("NOT EXISTS")
+
+
+def test_relation_is_empty_and_is_not_empty_omit_the_value_clause():
+    empty_frag = compile_condition("relation", _relation_ctx(), "is_empty", None, user_id="u-1")
+    assert empty_frag.sql.strip().startswith("NOT EXISTS")
+    assert len(empty_frag.params) == 2  # relation_id, user_id only
+
+    not_empty_frag = compile_condition(
+        "relation", _relation_ctx(), "is_not_empty", None, user_id="u-1"
+    )
+    assert not_empty_frag.sql.strip().startswith("EXISTS")
+    assert len(not_empty_frag.params) == 2
+
+
+def test_relation_reverse_side_swaps_own_and_other_columns():
+    forward_frag = compile_condition(
+        "relation", _relation_ctx(side="forward"), "is_not_empty", None, user_id="u-1"
+    )
+    reverse_frag = compile_condition(
+        "relation", _relation_ctx(side="reverse"), "is_not_empty", None, user_id="u-1"
+    )
+    assert "rl.from_row_id = n.id" in forward_frag.sql
+    assert "rl.to_row_id = n.id" in reverse_frag.sql
+
+
+def test_relation_value_must_be_a_uuid():
+    with pytest.raises(OpFilterValidationError):
+        compile_condition("relation", _relation_ctx(), "contains", "not-a-uuid", user_id="u-1")
+
+
 # --- Fix-round findings (task review of 93f0655..1b49404) ------------------
 
 @pytest.mark.parametrize("prop_type", ["created_by", "last_edited_by"])
 def test_created_by_and_last_edited_by_use_text_scalar_sql_not_jsonb_array(prop_type):
     # REGISTRY[...].sql_extract() for these two types is NOT in base.py's
-    # _ARRAY_VALUED (only multi_select/people/files/relation are), so it
-    # falls through to the plain text-scalar shape ("->>' <type>'", not the
+    # _ARRAY_VALUED (only multi_select/people/files are, since Milestone 7
+    # repointed relation off JSONB entirely), so it falls through to the
+    # plain text-scalar shape ("->>' <type>'", not the
     # bare "-> '<type>'" the array types get). Postgres has no `text ? ...`
     # or `text = jsonb` operator, so routing these through the jsonb-array
     # SQL family (`E ? $1`, `E = '[]'::jsonb`, ...) would fail at execution

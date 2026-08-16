@@ -21,6 +21,7 @@ from fastapi import HTTPException
 
 from services.db.properties.base import REGISTRY, SqlContext, SqlFragment
 from services.db.properties.columns import COLUMN_BACKED
+from services.db.relations import RelationRef
 from services.db.query.ast import (
     FilterCondition,
     FilterGroup,
@@ -151,17 +152,17 @@ def test_filter_validation_error_to_http_maps_to_400():
 
 
 def test_compile_sorts_empty_list_is_empty_fragment():
-    frag = compile_sorts([], _TITLE_LOOKUP, alias="p")
+    frag = compile_sorts([], _TITLE_LOOKUP, user_id="u-1", alias="p")
     assert frag.sql == ""
 
 
 def test_compile_sorts_unknown_key_raises():
     with pytest.raises(FilterValidationError):
-        compile_sorts([SortSpec(property="ghost")], _TITLE_LOOKUP, alias="p")
+        compile_sorts([SortSpec(property="ghost")], _TITLE_LOOKUP, user_id="u-1", alias="p")
 
 
 def test_compile_sorts_uses_registry_sql_order():
-    frag = compile_sorts([SortSpec(property="title", direction="asc")], _TITLE_LOOKUP, alias="p")
+    frag = compile_sorts([SortSpec(property="title", direction="asc")], _TITLE_LOOKUP, user_id="u-1", alias="p")
     expected = REGISTRY["title"].sql_order(
         SqlContext(key="a1b2c3d4", alias="p", storage="jsonb"), "asc"
     ).sql
@@ -172,6 +173,7 @@ def test_compile_sorts_joins_multiple_with_comma():
     frag = compile_sorts(
         [SortSpec(property="title", direction="asc"), SortSpec(property="num", direction="desc")],
         _TWO_PROP_LOOKUP,
+        user_id="u-1",
         alias="p",
     )
     assert ", " in frag.sql
@@ -186,7 +188,7 @@ def test_compile_sorts_unresolvable_registry_type_raises_filter_validation_error
     # in this module gives.
     bogus_lookup = {"x": PropertyLookup(type="not_a_real_type", storage="jsonb", key="a1b2c3d4")}
     with pytest.raises(FilterValidationError):
-        compile_sorts([SortSpec(property="x", direction="asc")], bogus_lookup, alias="p")
+        compile_sorts([SortSpec(property="x", direction="asc")], bogus_lookup, user_id="u-1", alias="p")
 
 
 def test_compile_sorts_accepts_formula_and_rollup_types_unlike_compile_filter():
@@ -196,7 +198,7 @@ def test_compile_sorts_accepts_formula_and_rollup_types_unlike_compile_filter():
     # but all 4 still have a working REGISTRY entry, so sorting by one is
     # not rejected here.
     lookup = {"f": PropertyLookup(type="formula", storage="jsonb", key="a1b2c3d4")}
-    frag = compile_sorts([SortSpec(property="f", direction="asc")], lookup, alias="p")
+    frag = compile_sorts([SortSpec(property="f", direction="asc")], lookup, user_id="u-1", alias="p")
     assert frag.sql
 
 
@@ -436,7 +438,24 @@ async def test_full_operator_matrix_compiles_and_executes(db_conn, test_user):
     data_source_id = await _make_ordinary_source(db_conn, test_user)
     executed = 0
     for prop_type, ops in TYPE_OPERATORS.items():
-        lookup = {"prop": PropertyLookup(type=prop_type, storage="jsonb", key="a1b2c3d4")}
+        if prop_type == "relation":
+            # Milestone 7: relation's filter branch needs a real RelationRef
+            # (task-20-brief.md §3.1) -- a bare jsonb PropertyLookup with no
+            # `relation` set is the "malformed/pre-015 config" case, which
+            # correctly 400s (test_db_operators.py's dedicated test covers
+            # that). This sweep is about "every pair executes", so it needs
+            # a configured one; the relation_id doesn't need to correspond
+            # to a real db_properties row for the EXISTS subquery to run.
+            lookup = {
+                "prop": PropertyLookup(
+                    type=prop_type,
+                    storage="jsonb",
+                    key="a1b2c3d4",
+                    relation=RelationRef(relation_id=str(uuid.uuid4()), side="forward"),
+                )
+            }
+        else:
+            lookup = {"prop": PropertyLookup(type=prop_type, storage="jsonb", key="a1b2c3d4")}
         for operator_name, operator in ops.items():
             if prop_type == "unique_id" and operator_name in _UNIQUE_ID_BROKEN_NUMERIC_OPS:
                 continue
@@ -753,6 +772,202 @@ async def test_ordinary_mode_column_backed_reads_notes_row_not_db_row_props_row(
     # returns note1. The bug this guards against (p.created_at) would
     # instead return note2, whose db_row_props.created_at == t1.
     assert note_ids == {note1_id}
+
+
+# ---------------------------------------------------------------------------
+# Milestone 7 (task-20): the relation filter compiles to EXISTS/NOT EXISTS
+# and executes against the harness returning the right row ids -- not just
+# "a fragment came back" (M3's own final review promoted exactly this gap
+# to an Important finding for every other type; the brief names it again
+# here so it isn't reintroduced for relation).
+# ---------------------------------------------------------------------------
+
+
+async def _insert_relation_link(db_conn, user_id, relation_id, from_row_id, to_row_id, position=0.0):
+    await db_conn.execute(
+        """
+        INSERT INTO db_relation_links (user_id, relation_id, from_row_id, to_row_id, position)
+        VALUES ($1, $2, $3, $4, $5)
+        """,
+        user_id, relation_id, from_row_id, to_row_id, position,
+    )
+
+
+async def test_relation_contains_executes_and_returns_right_row_ids(db_conn, test_user):
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    relation_id = str(uuid.uuid4())
+    linked_note = await _insert_note(db_conn, test_user, title="linked")
+    unlinked_note = await _insert_note(db_conn, test_user, title="unlinked")
+    target_note = await _insert_note(db_conn, test_user, title="target")
+    other_note = await _insert_note(db_conn, test_user, title="other target")
+    for note_id in (linked_note, unlinked_note):
+        await _insert_row(db_conn, test_user, data_source_id, note_id, {})
+    await _insert_relation_link(db_conn, test_user, relation_id, linked_note, target_note)
+    await _insert_relation_link(db_conn, test_user, relation_id, unlinked_note, other_note)
+
+    lookup = {
+        "rel": PropertyLookup(
+            type="relation", storage="jsonb", key="a1b2c3d4",
+            relation=RelationRef(relation_id=relation_id, side="forward"),
+        )
+    }
+    node = FilterCondition(type="condition", property="rel", operator="contains", value=target_note)
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+    frag = qb.build(node, [], Pagination())
+    rows = await db_conn.fetch(frag.sql, *frag.params)
+    note_ids = {str(r["note_id"]) for r in rows}
+    assert note_ids == {linked_note}
+
+
+async def test_relation_does_not_contain_executes_and_returns_right_row_ids(db_conn, test_user):
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    relation_id = str(uuid.uuid4())
+    linked_note = await _insert_note(db_conn, test_user, title="linked")
+    unlinked_note = await _insert_note(db_conn, test_user, title="unlinked")
+    target_note = await _insert_note(db_conn, test_user, title="target")
+    other_note = await _insert_note(db_conn, test_user, title="other target")
+    for note_id in (linked_note, unlinked_note):
+        await _insert_row(db_conn, test_user, data_source_id, note_id, {})
+    await _insert_relation_link(db_conn, test_user, relation_id, linked_note, target_note)
+    await _insert_relation_link(db_conn, test_user, relation_id, unlinked_note, other_note)
+
+    lookup = {
+        "rel": PropertyLookup(
+            type="relation", storage="jsonb", key="a1b2c3d4",
+            relation=RelationRef(relation_id=relation_id, side="forward"),
+        )
+    }
+    node = FilterCondition(
+        type="condition", property="rel", operator="does_not_contain", value=target_note
+    )
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+    frag = qb.build(node, [], Pagination())
+    rows = await db_conn.fetch(frag.sql, *frag.params)
+    note_ids = {str(r["note_id"]) for r in rows}
+    assert note_ids == {unlinked_note}
+
+
+async def test_relation_is_empty_and_is_not_empty_executes_and_returns_right_row_ids(db_conn, test_user):
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    relation_id = str(uuid.uuid4())
+    has_link = await _insert_note(db_conn, test_user, title="has link")
+    no_link = await _insert_note(db_conn, test_user, title="no link")
+    target_note = await _insert_note(db_conn, test_user, title="target")
+    for note_id in (has_link, no_link):
+        await _insert_row(db_conn, test_user, data_source_id, note_id, {})
+    await _insert_relation_link(db_conn, test_user, relation_id, has_link, target_note)
+
+    lookup = {
+        "rel": PropertyLookup(
+            type="relation", storage="jsonb", key="a1b2c3d4",
+            relation=RelationRef(relation_id=relation_id, side="forward"),
+        )
+    }
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+
+    not_empty_node = FilterCondition(type="condition", property="rel", operator="is_not_empty", value=None)
+    not_empty_frag = qb.build(not_empty_node, [], Pagination())
+    not_empty_rows = await db_conn.fetch(not_empty_frag.sql, *not_empty_frag.params)
+    assert {str(r["note_id"]) for r in not_empty_rows} == {has_link}
+
+    empty_node = FilterCondition(type="condition", property="rel", operator="is_empty", value=None)
+    empty_frag = qb.build(empty_node, [], Pagination())
+    empty_rows = await db_conn.fetch(empty_frag.sql, *empty_frag.params)
+    assert {str(r["note_id"]) for r in empty_rows} == {no_link}
+
+
+async def test_relation_reverse_side_reads_the_other_direction_end_to_end(db_conn, test_user):
+    # A reverse-side property's own_column is to_row_id: a link stored as
+    # (from_row_id=some_other_note, to_row_id=this_row) must be visible to
+    # a reverse-side "contains" filter on this_row, even though the row
+    # never appears as from_row_id anywhere.
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    relation_id = str(uuid.uuid4())
+    this_row = await _insert_note(db_conn, test_user, title="this row")
+    other_row = await _insert_note(db_conn, test_user, title="other row")
+    pointer_note = await _insert_note(db_conn, test_user, title="pointer")
+    await _insert_row(db_conn, test_user, data_source_id, this_row, {})
+    await _insert_row(db_conn, test_user, data_source_id, other_row, {})
+    # forward link: pointer_note -> this_row
+    await _insert_relation_link(db_conn, test_user, relation_id, pointer_note, this_row)
+
+    lookup = {
+        "rel": PropertyLookup(
+            type="relation", storage="jsonb", key="a1b2c3d4",
+            relation=RelationRef(relation_id=relation_id, side="reverse"),
+        )
+    }
+    node = FilterCondition(type="condition", property="rel", operator="contains", value=pointer_note)
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+    frag = qb.build(node, [], Pagination())
+    rows = await db_conn.fetch(frag.sql, *frag.params)
+    assert {str(r["note_id"]) for r in rows} == {this_row}
+
+
+async def test_relation_sort_orders_by_link_count(db_conn, test_user):
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    relation_id = str(uuid.uuid4())
+    two_links = await _insert_note(db_conn, test_user, title="two links")
+    one_link = await _insert_note(db_conn, test_user, title="one link")
+    zero_links = await _insert_note(db_conn, test_user, title="zero links")
+    targets = [await _insert_note(db_conn, test_user, title=f"t{i}") for i in range(2)]
+    for note_id in (two_links, one_link, zero_links):
+        await _insert_row(db_conn, test_user, data_source_id, note_id, {})
+    await _insert_relation_link(db_conn, test_user, relation_id, two_links, targets[0])
+    await _insert_relation_link(db_conn, test_user, relation_id, two_links, targets[1])
+    await _insert_relation_link(db_conn, test_user, relation_id, one_link, targets[0])
+
+    lookup = {
+        "rel": PropertyLookup(
+            type="relation", storage="jsonb", key="a1b2c3d4",
+            relation=RelationRef(relation_id=relation_id, side="forward"),
+        )
+    }
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+    frag = qb.build(None, [SortSpec(property="rel", direction="asc")], Pagination())
+    rows = await db_conn.fetch(frag.sql, *frag.params)
+    ordered_ids = [str(r["note_id"]) for r in rows]
+    assert ordered_ids == [zero_links, one_link, two_links]
+
+
+async def test_relation_filter_and_sort_combined_params_renumber_correctly(db_conn, test_user):
+    # Regression coverage for the ordering the brief calls out explicitly:
+    # scope params, then filter params, then sort params, then limit/offset.
+    # A relation filter AND a relation sort together (two different
+    # relation_ids, so no ambiguity about which fragment's params ended up
+    # where) proves builder.build() spliced them in the right order rather
+    # than merely "some correct count of params".
+    data_source_id = await _make_ordinary_source(db_conn, test_user)
+    filter_relation_id = str(uuid.uuid4())
+    sort_relation_id = str(uuid.uuid4())
+    row_a = await _insert_note(db_conn, test_user, title="a")
+    row_b = await _insert_note(db_conn, test_user, title="b")
+    target = await _insert_note(db_conn, test_user, title="target")
+    for note_id in (row_a, row_b):
+        await _insert_row(db_conn, test_user, data_source_id, note_id, {})
+    await _insert_relation_link(db_conn, test_user, filter_relation_id, row_a, target)
+    await _insert_relation_link(db_conn, test_user, filter_relation_id, row_b, target)
+    await _insert_relation_link(db_conn, test_user, sort_relation_id, row_a, target)
+
+    lookup = {
+        "filt": PropertyLookup(
+            type="relation", storage="jsonb", key="a1b2c3d4",
+            relation=RelationRef(relation_id=filter_relation_id, side="forward"),
+        ),
+        "sortby": PropertyLookup(
+            type="relation", storage="jsonb", key="b2c3d4e5",
+            relation=RelationRef(relation_id=sort_relation_id, side="forward"),
+        ),
+    }
+    node = FilterCondition(type="condition", property="filt", operator="is_not_empty", value=None)
+    qb = QueryBuilder(user_id=test_user, data_source_id=data_source_id, properties=lookup)
+    frag = qb.build(node, [SortSpec(property="sortby", direction="desc")], Pagination())
+    rows = await db_conn.fetch(frag.sql, *frag.params)
+    ordered_ids = [str(r["note_id"]) for r in rows]
+    # Both rows pass the filter (both link to `target` on filter_relation_id);
+    # sorted desc by link count on sort_relation_id, row_a (1 link) before
+    # row_b (0 links).
+    assert ordered_ids == [row_a, row_b]
 
 
 # --- ASC NULLS LAST / DESC NULLS FIRST, one type per value-shape family ----

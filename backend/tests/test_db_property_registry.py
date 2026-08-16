@@ -68,8 +68,17 @@ def test_registry_entries_satisfy_property_type_protocol(key):
     aggs = prop.aggregations()
     assert isinstance(aggs, set)
 
-    # coerce_write must at least accept None without raising.
-    prop.coerce_write(None)
+    # coerce_write must at least accept None without raising -- except
+    # "relation" (task-20-brief.md §2): migration 015 made db_row_props
+    # the wrong place to store a relation's value entirely, so
+    # Relation.coerce_write is a hard failure for *every* input, None
+    # included, not a silent accept. See test_relation_coerce_write_
+    # always_raises below for the dedicated positive assertion.
+    if key == "relation":
+        with pytest.raises(ValueError):
+            prop.coerce_write(None)
+    else:
+        prop.coerce_write(None)
 
 
 def test_column_backed_never_touches_engine_state_columns():
@@ -137,7 +146,11 @@ def test_number_order_uses_the_same_indexable_expression():
     assert order.sql.endswith("ASC NULLS LAST")
 
 
-@pytest.mark.parametrize("key", sorted(REAL_TYPE_KEYS))
+# "relation" is excluded (task-20-brief.md §2): Milestone 7 repointed it
+# entirely away from JSONB, so REGISTRY["relation"].sql_extract has nothing
+# to extract and raises rather than returning a bare-wrapper-shaped
+# fragment -- see test_relation_sql_extract_raises below.
+@pytest.mark.parametrize("key", sorted(REAL_TYPE_KEYS - {"relation"}))
 def test_no_type_extracts_the_bare_wrapper_object(key):
     """`properties -> 'key'` alone is the §3.3 wrapper (`{"type": ...,
     "<type>": ...}`), not a value: unindexable, and orders by jsonb key
@@ -145,6 +158,15 @@ def test_no_type_extracts_the_bare_wrapper_object(key):
     frag = REGISTRY[key].sql_extract(SqlContext(key="a1b2c3d4", alias="p"))
     assert not re.fullmatch(r"[a-z_]+\.properties\s*->\s*'a1b2c3d4'", frag.sql.strip())
     assert "'a1b2c3d4'" in frag.sql  # the key is still reached
+
+
+def test_relation_sql_extract_raises():
+    # Migration 015: db_relation_links is the only source of truth for a
+    # relation's value. sql_extract raising (rather than emitting some
+    # JSONB path) matches coerce_write's hard failure -- there is no JSONB
+    # copy to point at in either direction.
+    with pytest.raises(ValueError):
+        REGISTRY["relation"].sql_extract(SqlContext(key="a1b2c3d4", alias="p"))
 
 
 def test_date_sorts_on_start_not_the_whole_date_object():
