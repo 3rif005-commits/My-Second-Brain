@@ -914,7 +914,14 @@ def _assert_has_scope_predicate(stmt: str) -> None:
 
 def test_every_query_in_databases_router_has_a_user_id_scope_predicate():
     statements = _extract_sql_statements(_ROUTER_PATH)
-    assert len(statements) >= 8, "expected to find the router's SQL statements"
+    # Milestone 7 (task-21) added the relation/sub-item/dependency endpoints'
+    # own SQL (35 total statements at that point, up from 8) — the floor is
+    # raised so this sweep can't silently go vacuous if those endpoints'
+    # queries are ever refactored away from the router without a matching
+    # drop in this floor (this exact failure mode is why the floor exists
+    # at all, per the brief: "extend the floor; do not leave the new
+    # handlers outside the sweep").
+    assert len(statements) >= 30, "expected to find the router's SQL statements"
     for stmt in statements:
         _assert_has_scope_predicate(stmt)
 
