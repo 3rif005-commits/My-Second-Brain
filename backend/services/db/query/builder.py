@@ -87,7 +87,15 @@ class QueryBuilder:
         filter_frag = renumber(raw_filter, start=len(params) + 1)
         params.extend(filter_frag.params)
 
-        sorts_frag = compile_sorts(sorts, self.properties, alias=alias)
+        # Milestone 7: compile_sorts can now emit bound params too (a
+        # relation sort's count subquery) -- renumber into position right
+        # after the filter's, same as the filter fragment above. Final
+        # param order down the whole query: scope, then filter, then
+        # sorts, then limit/offset (get this wrong and the injection suite
+        # notices -- task-20-brief.md §3.3).
+        raw_sorts = compile_sorts(sorts, self.properties, user_id=self.user_id, alias=alias)
+        sorts_frag = renumber(raw_sorts, start=len(params) + 1)
+        params.extend(sorts_frag.params)
         # `n.id ASC` is always appended, even when sorts is empty or every
         # requested sort key ties — without it, LIMIT/OFFSET pagination over
         # rows with equal sort keys is nondeterministic between pages (rows

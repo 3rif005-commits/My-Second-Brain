@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import HTTPException, status
 
 from services.db.properties.base import REGISTRY, SqlContext, SqlFragment
+from services.db.relations import RelationRef
 from .ast import FilterCondition, FilterGroup, FilterNode, SortSpec
 from .operators import FilterValidationError, compile_condition
 
@@ -37,6 +38,13 @@ class PropertyLookup:
     type: str
     storage: Literal["jsonb", "column"]
     key: str
+    # Milestone 7: only set (by Task 21's router, from db_properties.config
+    # via relation_ref_from_config) when `type == "relation"`. `None` for
+    # every other type, and for a relation property whose config is
+    # malformed/pre-015 -- compile_condition's relation branch and
+    # Relation.sql_order both treat that as "unusable", never "fall back to
+    # JSONB" (there is no JSONB copy to fall back to).
+    relation: RelationRef | None = None
 
 
 def _resolve_alias(lookup: PropertyLookup, row_alias: str) -> str:
@@ -132,7 +140,13 @@ def _compile_node(
     lookup = properties.get(node.property)
     if lookup is None:
         raise FilterValidationError(f"unknown property key: {node.property!r}")
-    ctx = SqlContext(key=lookup.key, alias=_resolve_alias(lookup, alias), storage=lookup.storage)
+    ctx = SqlContext(
+        key=lookup.key,
+        alias=_resolve_alias(lookup, alias),
+        storage=lookup.storage,
+        relation=lookup.relation,
+        user_id=user_id,
+    )
     return compile_condition(lookup.type, ctx, node.operator, node.value, user_id=user_id)
 
 
@@ -159,17 +173,27 @@ def compile_filter(
 
 
 def compile_sorts(
-    sorts: list[SortSpec], properties: dict[str, PropertyLookup], *, alias: str
+    sorts: list[SortSpec], properties: dict[str, PropertyLookup], *, user_id: str, alias: str
 ) -> SqlFragment:
     """Same unknown-key handling as compile_filter (HTTP 400, never
     dropped). Calls REGISTRY[lookup.type].sql_order(ctx, sort.direction) per
     entry — already implemented, handles ASC NULLS LAST / DESC NULLS FIRST
-    (spec §5.1) — and joins the results with ', '. An empty `sorts` list
-    yields an empty fragment (legal: builder.py always appends its own
-    row-identity tiebreaker regardless). `sql_order` never emits a bound
-    param (it only ever orders by a computed expression, never compares
-    against a request-supplied value), so unlike compile_filter there is
-    nothing here to renumber.
+    (spec §5.1) — and joins the results with ', '.
+
+    An empty `sorts` list yields an empty fragment (legal: builder.py
+    always appends its own row-identity tiebreaker regardless).
+
+    Milestone 7 update: `sql_order` was previously guaranteed to never emit
+    a bound param (every pre-M7 type only ever orders by a computed
+    expression, never compares against a request-supplied value) — that
+    invariant no longer holds. `relation`'s `sql_order` (properties/
+    relation.py) binds `relation_id`/`user_id` into a count subquery, so
+    each sort's fragment is renumbered (the same `renumber` helper
+    compile_filter's `_combine` uses) into one contiguous sequence before
+    being joined, and its params are collected in order. `user_id` is a
+    new required kwarg for exactly that: `ctx.user_id` is the only channel
+    a `sql_order(self, ctx, direction)` implementation has to reach a bound
+    user_id (see `SqlContext.user_id`'s docstring).
 
     Deliberately checks `REGISTRY`, not `TYPE_OPERATORS` (unlike
     compile_condition's type check): TYPE_OPERATORS deliberately excludes
@@ -184,14 +208,28 @@ def compile_sorts(
 
     Never call this directly to assemble a query — same caveat as
     compile_filter: it has no opinion on tenancy, only `QueryBuilder.build()`
-    guarantees `_scope()` ends up in the final SQL."""
+    guarantees `_scope()` ends up in the final SQL (and, as of M7, is also
+    responsible for splicing this function's params into the right
+    position — see builder.py's `build()`)."""
     parts: list[str] = []
+    params: list[Any] = []
+    offset = 1
     for sort in sorts:
         lookup = properties.get(sort.property)
         if lookup is None:
             raise FilterValidationError(f"unknown property key: {sort.property!r}")
         if lookup.type not in REGISTRY:
             raise FilterValidationError(f"{lookup.type!r} is not a sortable property type")
-        ctx = SqlContext(key=lookup.key, alias=_resolve_alias(lookup, alias), storage=lookup.storage)
-        parts.append(REGISTRY[lookup.type].sql_order(ctx, sort.direction).sql)
-    return SqlFragment(sql=", ".join(parts), params=())
+        ctx = SqlContext(
+            key=lookup.key,
+            alias=_resolve_alias(lookup, alias),
+            storage=lookup.storage,
+            relation=lookup.relation,
+            user_id=user_id,
+        )
+        frag = REGISTRY[lookup.type].sql_order(ctx, sort.direction)
+        shifted = renumber(frag, offset)
+        parts.append(shifted.sql)
+        params.extend(shifted.params)
+        offset += len(frag.params)
+    return SqlFragment(sql=", ".join(parts), params=tuple(params))

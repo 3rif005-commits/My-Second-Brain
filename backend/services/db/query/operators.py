@@ -295,7 +295,12 @@ _TEXT_SHAPE_TYPES |= {"created_by", "last_edited_by"}
 _NUMBER_SHAPE_TYPES = {"number", "unique_id"}
 _CHOICE_SHAPE_TYPES = {"select", "status"}
 _DATE_SHAPE_TYPES = {"date", "created_time", "last_edited_time"}
-_JSONB_ARRAY_SHAPE_TYPES = {"multi_select", "people", "files", "relation"}
+# "relation" is deliberately NOT here (Milestone 7): it has its own branch
+# in compile_condition below (EXISTS/NOT EXISTS over db_relation_links),
+# not a JSONB path -- see migration 015's header and services/db/
+# relations.py. Leaving it in this set was the Milestone-1/3 placeholder
+# bug this task exists to fix.
+_JSONB_ARRAY_SHAPE_TYPES = {"multi_select", "people", "files"}
 
 # Column-backed keys whose column is a native Postgres array (currently only
 # `topics`) rather than JSONB — resolved from COLUMN_BACKED, not hardcoded,
@@ -467,6 +472,55 @@ def _native_array_sql(operator_name: str, e: str, value: Any) -> tuple[str, tupl
     raise AssertionError(f"unreachable: {operator_name!r} for native array")
 
 
+# The only two real db_relation_links column names RelationRef.own_column/
+# other_column can ever produce (see services/db/relations.py). Asserted
+# before interpolation below, same defensive style as _column_reference in
+# properties/base.py -- even though they're structurally safe by
+# construction, a bound param is fine here (a real B-tree index, not the
+# expression-index literal-key requirement SqlFragment's docstring warns
+# about), so relation_id/user_id/value all travel as $N, never interpolated.
+_RELATION_LINK_COLUMNS = ("from_row_id", "to_row_id")
+
+
+def _relation_filter_sql(
+    operator_name: str, ctx: SqlContext, value: Any, *, user_id: str
+) -> tuple[str, tuple[Any, ...]]:
+    """Milestone 7: a relation filter compiles to an EXISTS/NOT EXISTS
+    subquery over `db_relation_links`, never a JSONB array op -- migration
+    015's header is explicit that the JSONB is not the source of truth for
+    relations. `ctx.relation is None` means the property's config carries
+    no usable relation_id/side (malformed or pre-015) -- a 400, never a
+    crash and never a silent JSONB fallback."""
+    if ctx.relation is None:
+        raise FilterValidationError("relation property is not configured")
+    own, other = ctx.relation.own_column, ctx.relation.other_column
+    assert own in _RELATION_LINK_COLUMNS and other in _RELATION_LINK_COLUMNS, (own, other)
+    row_id_expr = ctx.row_id_expr
+
+    exists = (
+        f"EXISTS (SELECT 1 FROM db_relation_links rl "
+        f"WHERE rl.relation_id = $1::uuid AND rl.user_id = $2::uuid "
+        f"AND rl.{own} = {row_id_expr}"
+    )
+    if operator_name in ("contains", "does_not_contain"):
+        clause = f"{exists} AND rl.{other} = $3::uuid)"
+        params: tuple[Any, ...] = (ctx.relation.relation_id, user_id, value)
+    elif operator_name in ("is_empty", "is_not_empty"):
+        clause = f"{exists})"
+        params = (ctx.relation.relation_id, user_id)
+    else:
+        raise AssertionError(f"unreachable: {operator_name!r} for relation")
+
+    # does_not_contain/is_empty both negate with a bare `NOT EXISTS`, which
+    # is already NULL-safe by construction (unlike the text family's
+    # `IS NULL OR ...` dance) -- a row with zero links for this relation_id
+    # simply has no matching EXISTS row, no NULL comparison involved. Do
+    # not "fix" this into an IS NULL OR form; there is nothing to guard.
+    if operator_name in ("does_not_contain", "is_empty"):
+        clause = f"NOT {clause}"
+    return clause, params
+
+
 def compile_condition(
     prop_type: str,
     ctx: SqlContext,
@@ -502,6 +556,16 @@ def compile_condition(
     # coerce_value("uuid_or_me", ...) only ever returns a scalar str.
     if operator.arg_type == "uuid_or_me" and value == "me":
         value = user_id
+
+    # Milestone 7: relation has its own branch, ahead of the generic
+    # `sql_extract()` call below -- there is no JSONB expression to extract
+    # (REGISTRY["relation"].sql_extract raises if reached; see
+    # properties/relation.py), and this branch alone needs `user_id` bound
+    # into its EXISTS subquery, which the (ctx, operator, value)-only shape
+    # every other family uses below has no room for.
+    if prop_type == "relation":
+        sql, params = _relation_filter_sql(operator_name, ctx, value, user_id=user_id)
+        return SqlFragment(sql=sql, params=params)
 
     e = REGISTRY[prop_type].sql_extract(ctx).sql
 
