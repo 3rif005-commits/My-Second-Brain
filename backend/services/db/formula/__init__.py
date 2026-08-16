@@ -40,6 +40,9 @@ from .deps import (
     referenced_properties,
     topological_order,
 )
+from .values import EMPTY, FValue, Page, Person, is_empty, stringify, truthy, as_number
+from .evaluator import EvalContext, FormulaEvalError, evaluate, make_now
+from . import functions as functions
 
 __all__ = [
     "parse",
@@ -77,4 +80,18 @@ __all__ = [
     "FormulaCycleError",
     "Graph",
     "PropertyDef",
+    # Milestone 8c (Task 25): value representation, evaluator, builtins.
+    "EMPTY",
+    "FValue",
+    "Page",
+    "Person",
+    "is_empty",
+    "truthy",
+    "as_number",
+    "stringify",
+    "EvalContext",
+    "FormulaEvalError",
+    "evaluate",
+    "make_now",
+    "functions",
 ]
