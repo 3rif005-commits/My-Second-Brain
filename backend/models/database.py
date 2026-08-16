@@ -154,12 +154,34 @@ class RowsResponse(BaseModel):
     rows: list[dict[str, Any]]
 
 
-class RowResponse(BaseModel):
-    """A single row, same `properties` shape as one entry of
-    `RowsResponse.rows` — returned by `PATCH .../rows/{note_id}`."""
+class ShiftedRow(BaseModel):
+    """One row moved by a Milestone 7 dependency date-shift cascade
+    (`services.db.relations.cascade_dependency_shift`) — `properties` carries
+    only the one date property that moved, wrapped the same §3.3 way as any
+    other property value, so the frontend can merge it into its cache with
+    the same code path it already uses for an ordinary property write."""
 
     id: str
     properties: dict[str, Any]
+
+
+class RowResponse(BaseModel):
+    """A single row, same `properties` shape as one entry of
+    `RowsResponse.rows` — returned by `PATCH .../rows/{note_id}`.
+
+    `shifted_rows` (Milestone 7, task-21-brief.md §4): non-`None` only when
+    this write was to a `date` property whose data source has dependencies
+    enabled and configured to watch that exact property — the rows a
+    dependency cascade moved as a *side effect* of this write, so the
+    client can apply them without a refetch. `None` (not `[]`) for every
+    ordinary write, including a date write that triggered a cascade which
+    moved zero rows — `[]` there would claim "a cascade ran and touched
+    nothing," which is a different, false statement from "no cascade was
+    even eligible.\""""
+
+    id: str
+    properties: dict[str, Any]
+    shifted_rows: list[ShiftedRow] | None = None
 
 
 class QueryRequest(BaseModel):
@@ -255,3 +277,81 @@ class RowPropertyUpdate(BaseModel):
 
     property_key: str
     value: Any
+
+
+# ---------------------------------------------------------------------------
+# Milestone 7 (task-21): relation, sub-item and dependency endpoints.
+# ---------------------------------------------------------------------------
+
+
+class RelationCreate(BaseModel):
+    """`POST /db/data-sources/{data_source_id}/relations` body — an
+    ordinary (non-system) relation pair. `two_way=True` (the default)
+    requires `reverse_name`; `services.db.relations.create_relation_pair`
+    itself enforces that (raises `RelationError`, mapped to a 400 at the
+    router seam) rather than this model duplicating the check."""
+
+    name: str
+    target_data_source_id: str
+    two_way: bool = True
+    reverse_name: str | None = None
+
+
+class RelationPairResponse(BaseModel):
+    """Both properties of a freshly created relation pair (an ordinary
+    relation, or the sub-items/dependencies system pairs) — `reverse` is
+    `None` only for a one-way ordinary relation (`two_way=False`); the two
+    system pairs are always two-way."""
+
+    forward: PropertyResponse
+    reverse: PropertyResponse | None = None
+
+
+class RelatedRow(BaseModel):
+    """One linked row, as returned by every relation-links endpoint.
+    `services/db/relations.py` stores only ids (`db_relation_links`); the
+    router joins against `notes` for a human-readable `title` — a bare list
+    of UUIDs is useless to a UI (task-21-brief.md §1)."""
+
+    id: str
+    title: str
+
+
+class RelationLinksResponse(BaseModel):
+    """GET/PUT/POST/DELETE on `.../relations/{property_key}[/links[...]]`
+    all return this same shape: the row's *current* full link list after
+    the operation, in link order, with trashed (`deleted_at IS NOT NULL`)
+    rows excluded (migration 015's header note 5: links to a trashed row
+    are kept, but a trashed row must not appear as a live link)."""
+
+    rows: list[RelatedRow]
+
+
+class RelationLinksSet(BaseModel):
+    """`PUT .../relations/{property_key}` body: the whole desired link
+    list, in order. Duplicate ids are de-duplicated, first occurrence wins
+    — the same convention `services.db.relations.set_links` itself uses."""
+
+    row_ids: list[str]
+
+
+class RelationLinkAdd(BaseModel):
+    """`POST .../relations/{property_key}/links` body: add one link."""
+
+    row_id: str
+
+
+class DependencySettingsUpdate(BaseModel):
+    """`PATCH /db/relations/{relation_id}/dependency-settings` body —
+    partial update of the forward dependency property's `config`
+    (`date_shift_mode` must be one of `services.db.relations.
+    DATE_SHIFT_MODES`; `avoid_weekends`; `date_property_key`). Only fields
+    present in the request are touched (`model_dump(exclude_unset=True)`
+    in the router, matching `ViewUpdate`'s own convention above). Unlike
+    `ViewUpdate`'s NOT NULL columns, every one of these three config keys
+    is optional, so an explicit `null` for a present field clears that
+    setting (removes the key from `config`) rather than being a no-op."""
+
+    date_shift_mode: str | None = None
+    avoid_weekends: bool | None = None
+    date_property_key: str | None = None

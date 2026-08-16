@@ -19,7 +19,7 @@ columns.py) instead.
 from __future__ import annotations
 
 import uuid as uuid_lib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import asyncpg
@@ -31,15 +31,23 @@ from models.database import (
     DatabaseDetailResponse,
     DatabaseResponse,
     DataSourceResponse,
+    DependencySettingsUpdate,
     GroupResult,
     PropertyCreate,
     PropertyRename,
     PropertyResponse,
     QueryRequest,
     QueryResponse,
+    RelatedRow,
+    RelationCreate,
+    RelationLinkAdd,
+    RelationLinksResponse,
+    RelationLinksSet,
+    RelationPairResponse,
     RowPropertyUpdate,
     RowResponse,
     RowsResponse,
+    ShiftedRow,
     ViewCreate,
     ViewResponse,
     ViewUpdate,
@@ -53,6 +61,20 @@ from services.db.query import ast
 from services.db.query import grouping
 from services.db.query.builder import QueryBuilder
 from services.db.query.compiler import PropertyLookup
+from services.db.relations import (
+    DATE_SHIFT_MODES,
+    SHIFT_NEVER,
+    RelationError,
+    SYSTEM_DEPENDENCY,
+    SYSTEM_SUB_ITEM,
+    cascade_dependency_shift,
+    create_relation_pair,
+    delete_relation_pair,
+    link_checked,
+    list_links,
+    relation_ref_from_config,
+    unlink,
+)
 from services.db.views import sweep_property_from_views
 
 router = APIRouter(prefix="/db", tags=["databases"])
@@ -86,6 +108,38 @@ def _jsonify(value: Any) -> Any:
     if isinstance(value, uuid_lib.UUID):
         return str(value)
     return value
+
+
+def _parse_date_start(value: Any) -> datetime | None:
+    """Extracts just the `start` instant from a spec §3.3 date wrapper
+    (`{"type": "date", "date": {"start": ..., "end": ..., "time_zone": ...}}`)
+    -- the seam where `update_row_property` computes the delta Milestone 7's
+    dependency cascade needs (task-21-brief.md §4). `None` for anything that
+    isn't a usable start (a clear, a wrapper missing `start`, a malformed
+    value) -- the caller treats that as "no cascade is possible here", the
+    same "no date -> not part of the shift graph" stance
+    `services.db.relations.cascade_dependency_shift`'s own docstring takes
+    (task-20-report.md judgement call 8).
+
+    Same ISO normalisation as `services/db/relations.py`'s private
+    `_parse_iso`, duplicated rather than imported -- a router must not
+    reach into a service module's underscore-prefixed helpers, the same
+    discipline `relations.py` itself gives for duplicating this exact five
+    lines from `query/operators.py`/`properties/temporal.py`."""
+    if not isinstance(value, dict):
+        return None
+    date = value.get("date")
+    if not isinstance(date, dict):
+        return None
+    start = date.get("start")
+    if not isinstance(start, str):
+        return None
+    normalised = start[:-1] + "+00:00" if start.endswith("Z") else start
+    try:
+        parsed = datetime.fromisoformat(normalised)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
 def _wrap_column_value(prop_type: str, raw: Any) -> dict[str, Any]:
@@ -535,7 +589,21 @@ async def query_rows(
             user_id,
         )
         properties = {
-            r["key"]: PropertyLookup(type=r["type"], storage=r["storage"], key=r["key"])
+            r["key"]: PropertyLookup(
+                type=r["type"],
+                storage=r["storage"],
+                key=r["key"],
+                # Milestone 7: without this, every relation filter/sort 400s
+                # with "relation property is not configured" (the safe
+                # failure, per compile_condition's/Relation.sql_order's own
+                # ctx.relation is None guard) but is still broken —
+                # task-21-brief.md §2. relation_ref_from_config already
+                # returns None for a non-relation property's config (no
+                # relation_id/side keys), so this is safe to call
+                # unconditionally rather than gating on `r["type"] ==
+                # "relation"` first.
+                relation=relation_ref_from_config(r["config"]),
+            )
             for r in prop_rows
         }
         # Group-label resolution (below) needs each property's configured option list
@@ -736,17 +804,45 @@ async def update_row_property(
     if ds_row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
 
+    # Milestone 7: widened to also pull the row's pre-write value for this
+    # key in the same round trip (task-21-brief.md §4: "the endpoint already
+    # fetches the property's type and storage column; widen that read
+    # rather than adding a round trip" -- the same move task-15 made for
+    # `config` in query_rows). The LEFT JOIN means `old_value` is SQL NULL
+    # (not an error) whenever the row has no db_row_props value yet for
+    # this key, or no db_row_props row at all -- both mean "no old date to
+    # diff against" to the cascade logic below.
     prop_row = await conn.fetchrow(
         """
-        SELECT storage, type FROM db_properties
-        WHERE data_source_id = $1 AND user_id = $2 AND key = $3
+        SELECT dp.storage, dp.type, drp.properties -> dp.key AS old_value
+        FROM db_properties dp
+        LEFT JOIN db_row_props drp
+          ON drp.note_id = $2 AND drp.data_source_id = $1 AND drp.user_id = $3
+        WHERE dp.data_source_id = $1 AND dp.user_id = $3 AND dp.key = $4
         """,
         data_source_id,
+        note_id,
         user_id,
         body.property_key,
     )
     if prop_row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "property not found")
+    if prop_row["type"] == "relation":
+        # task-21-brief.md §1: `update_row_property` currently writes any
+        # key into db_row_props.properties -- if a relation key were
+        # allowed through, it would create exactly the second copy
+        # migration 015's whole design forbids (its header: "the JSONB is
+        # not the source of truth for relations"). `db_relation_links`,
+        # via the relations endpoints below, is the only legal way to
+        # change a relation's value -- Relation.coerce_write's own hard
+        # failure (properties/relation.py) makes the same point one layer
+        # down, for any caller that reaches it directly.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "relation properties are not writable through this endpoint -- use "
+            "GET/PUT /db/data-sources/{data_source_id}/rows/{note_id}/relations/"
+            "{property_key} (and its /links sub-paths) instead",
+        )
     if prop_row["storage"] != "jsonb":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "property is not JSONB-backed")
 
@@ -770,44 +866,129 @@ async def update_row_property(
                 f'{{"type": "{prop_row["type"]}", ...}}',
             )
 
-    if body.value is None:
-        # A top-level `null` means "clear/unset this property", not "set
-        # its value to SQL NULL" — `db_row_props.properties` is NOT NULL
-        # (migration 014), and `jsonb_set(properties, path, NULL, true)`
-        # would set the *entire column* to NULL, not just this key
-        # (review finding 1, fix round 2 — verified end-to-end against
-        # the harness as a real NotNullViolationError, not a theoretical
-        # concern). `properties - key` drops just the one key; spec §3.3:
-        # "Absent key ≡ empty."
-        row = await conn.fetchrow(
-            """
-            UPDATE db_row_props
-            SET properties = properties - $1, updated_at = now()
-            WHERE note_id = $2 AND data_source_id = $3 AND user_id = $4
-            RETURNING note_id, properties
-            """,
-            body.property_key,
-            note_id,
-            data_source_id,
-            user_id,
-        )
-    else:
-        row = await conn.fetchrow(
-            """
-            UPDATE db_row_props
-            SET properties = jsonb_set(properties, $1, $2, true), updated_at = now()
-            WHERE note_id = $3 AND data_source_id = $4 AND user_id = $5
-            RETURNING note_id, properties
-            """,
-            [body.property_key],
-            body.value,
-            note_id,
-            data_source_id,
-            user_id,
-        )
-    if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "row not found")
-    return RowResponse(id=str(row["note_id"]), properties=row["properties"])
+    # Milestone 7: the write and the (possible) dependency cascade it
+    # triggers must commit or roll back together (task-21-brief.md §4: "a
+    # partial cascade is worse than none. If the cascade raises, the whole
+    # write rolls back and returns 400") -- both live inside one
+    # transaction now, where every prior milestone's version of this
+    # function had only the single UPDATE statement (already atomic on its
+    # own, so it never needed one explicitly).
+    old_start = _parse_date_start(prop_row["old_value"])
+    shifted_rows: list[ShiftedRow] | None = None
+    async with conn.transaction():
+        if body.value is None:
+            # A top-level `null` means "clear/unset this property", not "set
+            # its value to SQL NULL" — `db_row_props.properties` is NOT NULL
+            # (migration 014), and `jsonb_set(properties, path, NULL, true)`
+            # would set the *entire column* to NULL, not just this key
+            # (review finding 1, fix round 2 — verified end-to-end against
+            # the harness as a real NotNullViolationError, not a theoretical
+            # concern). `properties - key` drops just the one key; spec §3.3:
+            # "Absent key ≡ empty."
+            row = await conn.fetchrow(
+                """
+                UPDATE db_row_props
+                SET properties = properties - $1, updated_at = now()
+                WHERE note_id = $2 AND data_source_id = $3 AND user_id = $4
+                RETURNING note_id, properties
+                """,
+                body.property_key,
+                note_id,
+                data_source_id,
+                user_id,
+            )
+        else:
+            row = await conn.fetchrow(
+                """
+                UPDATE db_row_props
+                SET properties = jsonb_set(properties, $1, $2, true), updated_at = now()
+                WHERE note_id = $3 AND data_source_id = $4 AND user_id = $5
+                RETURNING note_id, properties
+                """,
+                [body.property_key],
+                body.value,
+                note_id,
+                data_source_id,
+                user_id,
+            )
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "row not found")
+
+        # Milestone 7 dependency date-shift cascade (task-21-brief.md §4).
+        # Only even considered for a successful write to a `date` property
+        # where both the old and the new value have a usable `start` --
+        # without both ends there is no delta to compute, and "no date ->
+        # not part of the shift graph" is cascade_dependency_shift's own
+        # stance (task-20-report.md judgement call 8) applied one level up,
+        # at the row that was actually written. Deliberately NOT gated on
+        # `new_start != old_start`: a write that only changes `end` (start
+        # unchanged) must still reach cascade_dependency_shift, because
+        # SHIFT_WHEN_OVERLAP's own logic (services/db/relations.py's
+        # resolve_shift) depends on the blocker's *end*, not its start, and
+        # ignores the delta parameter entirely for that mode -- gating here
+        # would silently skip a real overlap cascade.
+        if prop_row["type"] == "date":
+            new_start = _parse_date_start(body.value)
+            if old_start is not None and new_start is not None:
+                dep_row = await conn.fetchrow(
+                    """
+                    SELECT config FROM db_properties
+                    WHERE data_source_id = $1 AND user_id = $2 AND type = 'relation'
+                      AND config->>'system' = 'dependency' AND config->>'side' = 'forward'
+                    """,
+                    data_source_id,
+                    user_id,
+                )
+                if (
+                    dep_row is not None
+                    and dep_row["config"].get("date_property_key") == body.property_key
+                ):
+                    dep_ref = relation_ref_from_config(dep_row["config"])
+                    if dep_ref is not None:
+                        try:
+                            changes = await cascade_dependency_shift(
+                                conn,
+                                user_id,
+                                dep_ref,
+                                changed_row_id=note_id,
+                                delta=new_start - old_start,
+                                mode=dep_row["config"].get("date_shift_mode") or SHIFT_NEVER,
+                                avoid_weekends=bool(dep_row["config"].get("avoid_weekends", False)),
+                                date_property_key=body.property_key,
+                            )
+                        except (RelationError, ValueError) as exc:
+                            # Any failure here -- a cycle somehow reaching
+                            # this far (shouldn't, link_checked forbids it
+                            # at write time, but this is not the place to
+                            # trust that), a malformed date on a downstream
+                            # row, an unknown mode string -- rolls back the
+                            # whole write via this `async with` block, not
+                            # just the cascade. Never a 500 either way.
+                            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+                        if changes:
+                            shifted_rows = [
+                                ShiftedRow(
+                                    id=shifted_id,
+                                    properties={
+                                        body.property_key: {
+                                            "type": "date",
+                                            "date": {
+                                                "start": window.start.isoformat(),
+                                                "end": (
+                                                    window.end.isoformat()
+                                                    if window.end is not None
+                                                    else None
+                                                ),
+                                                "time_zone": None,
+                                            },
+                                        }
+                                    },
+                                )
+                                for shifted_id, window in changes.items()
+                            ]
+    return RowResponse(
+        id=str(row["note_id"]), properties=row["properties"], shifted_rows=shifted_rows
+    )
 
 
 @router.post(
@@ -1060,3 +1241,546 @@ async def update_view(
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "view not found")
     return ViewResponse(**_row(row))
+
+
+# ---------------------------------------------------------------------------
+# Milestone 7 (task-21): relation, sub-item and dependency endpoints.
+#
+# `services/db/relations.py` (task-20) is the whole service layer; every
+# endpoint below is a thin HTTP seam over it -- parse/404 path params,
+# resolve a `RelationRef` from `db_properties.config`, call the one
+# relations.py function that does the actual work, map its framework-free
+# exceptions to a 400. None of these write `db_row_props.properties` for a
+# relation key directly -- `db_relation_links`, via relations.py, is the
+# only source of truth (migration 015's header).
+# ---------------------------------------------------------------------------
+
+
+def _relation_error_to_http(exc: RelationError) -> HTTPException:
+    """Task 21's mapping seam for `services.db.relations`'s deliberately
+    framework-free exceptions -- the same layering `query/compiler.py`'s
+    `filter_validation_error_to_http` gives the filter compiler's
+    `FilterValidationError`. One function handles all three rows of the
+    brief's error table (`RelationCycleError`/`SubItemDepthError`/the base
+    `RelationError`), not three branches: `RelationCycleError.__str__`
+    already renders the cycle path (`"a -> b -> a"`) and
+    `SubItemDepthError`'s message already embeds the depth and the cap
+    (both classes, `services/db/relations.py`), so `str(exc)` alone
+    satisfies "message includes the cycle path" / "message includes the
+    depth and the cap" for every subtype -- Python's `except RelationError`
+    at each call site below also catches both subclasses for free."""
+    return HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+
+
+async def _get_relation_property(
+    conn: asyncpg.Connection, user_id: str, data_source_id: str, property_key: str
+) -> asyncpg.Record:
+    """Fetches one property row by key, requiring `type = 'relation'` --
+    404 if the key doesn't exist at all, 400 (not 404) if it exists but is
+    some other type, the same "exists but wrong shape" -> 400 distinction
+    `update_row_property` already makes for `storage != 'jsonb'`."""
+    row = await conn.fetchrow(
+        """
+        SELECT * FROM db_properties
+        WHERE data_source_id = $1 AND user_id = $2 AND key = $3
+        """,
+        data_source_id,
+        user_id,
+        property_key,
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "property not found")
+    if row["type"] != "relation":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "property is not a relation property")
+    return row
+
+
+async def _require_row(
+    conn: asyncpg.Connection, user_id: str, data_source_id: str, note_id: str
+) -> None:
+    """404s unless `note_id` is an actual row (`db_row_props`) of
+    `data_source_id` -- every relation-links endpoint below reads/writes
+    `db_relation_links` keyed by bare note ids, which has no
+    `data_source_id` column of its own (migration 015's header, note 4), so
+    this is the one place that stops a caller reaching a relation through a
+    note id that was never actually a row of *this* data source."""
+    exists = await conn.fetchval(
+        """
+        SELECT 1 FROM db_row_props
+        WHERE note_id = $1 AND data_source_id = $2 AND user_id = $3
+        """,
+        note_id,
+        data_source_id,
+        user_id,
+    )
+    if exists is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "row not found")
+
+
+async def _fetch_related_rows(
+    conn: asyncpg.Connection, user_id: str, row_ids: list[str]
+) -> list[RelatedRow]:
+    """`row_ids` (link order, from `services.db.relations.list_links`) ->
+    `RelatedRow`s with real titles -- "a list of bare UUIDs is useless to a
+    UI" (task-21-brief.md §1). Joins against `notes`, filtering
+    `deleted_at IS NULL`: migration 015's header note 5 keeps a trashed
+    row's links (restoring the row restores the relationship), but a
+    trashed row must not appear as a *live* link, so it is silently
+    dropped from the result here rather than surfaced with some
+    placeholder title."""
+    if not row_ids:
+        return []
+    records = await conn.fetch(
+        """
+        SELECT id, title FROM notes
+        WHERE id = ANY($1::uuid[]) AND user_id = $2 AND deleted_at IS NULL
+        """,
+        row_ids,
+        user_id,
+    )
+    titles = {str(r["id"]): r["title"] for r in records}
+    return [RelatedRow(id=rid, title=titles[rid]) for rid in row_ids if rid in titles]
+
+
+@router.post(
+    "/data-sources/{data_source_id}/relations",
+    response_model=RelationPairResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_relation(
+    data_source_id: str,
+    body: RelationCreate,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RelationPairResponse:
+    """An ordinary (non-system) relation pair -- `system` is never
+    accepted from the client here; only `enable_sub_items`/
+    `enable_dependencies` below ever pass one, which is what keeps
+    migration 015's one-sub-item-pair/one-dependency-pair-per-data-source
+    invariant meaningful (a client could otherwise mint an arbitrary
+    number of "system" pairs through this endpoint)."""
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "cannot add properties to the built-in All Notes source",
+        )
+    if body.target_data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "cannot target the built-in All Notes source with a relation",
+        )
+
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    ds_row = await conn.fetchrow(
+        "SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2", data_source_id, user_id
+    )
+    if ds_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    target_data_source_id = _parse_uuid_or_404(body.target_data_source_id, "target data source")
+    target_row = await conn.fetchrow(
+        "SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2",
+        target_data_source_id,
+        user_id,
+    )
+    if target_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "target data source not found")
+
+    try:
+        forward, reverse = await create_relation_pair(
+            conn,
+            user_id,
+            data_source_id=data_source_id,
+            name=body.name,
+            target_data_source_id=target_data_source_id,
+            two_way=body.two_way,
+            reverse_name=body.reverse_name,
+        )
+    except RelationError as exc:
+        raise _relation_error_to_http(exc) from exc
+    return RelationPairResponse(
+        forward=PropertyResponse(**forward),
+        reverse=PropertyResponse(**reverse) if reverse is not None else None,
+    )
+
+
+@router.delete("/relations/{relation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_relation(
+    relation_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> None:
+    """Deletes both properties of the pair and sweeps every
+    `db_relation_links` row for it (`services.db.relations.
+    delete_relation_pair` -- migration 015's header note 4: there is no FK
+    from `db_relation_links.relation_id` to `db_properties`, so this sweep
+    is the app's own responsibility). No `data_source_id` in this path --
+    All Notes never has a `db_properties` row to match, so it 404s here
+    the same way any other nonexistent `relation_id` would, with no
+    special case needed."""
+    relation_id = _parse_uuid_or_404(relation_id, "relation")
+    exists = await conn.fetchval(
+        """
+        SELECT 1 FROM db_properties
+        WHERE user_id = $1 AND type = 'relation' AND config->>'relation_id' = $2
+        LIMIT 1
+        """,
+        user_id,
+        relation_id,
+    )
+    if exists is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "relation not found")
+    await delete_relation_pair(conn, user_id, relation_id)
+
+
+@router.get(
+    "/data-sources/{data_source_id}/rows/{note_id}/relations/{property_key}",
+    response_model=RelationLinksResponse,
+)
+async def get_relation_links(
+    data_source_id: str,
+    note_id: str,
+    property_key: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RelationLinksResponse:
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "the All Notes source has no relation properties"
+        )
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    note_id = _parse_uuid_or_404(note_id, "row")
+
+    prop_row = await _get_relation_property(conn, user_id, data_source_id, property_key)
+    await _require_row(conn, user_id, data_source_id, note_id)
+    ref = relation_ref_from_config(prop_row["config"])
+    if ref is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "relation property is not configured")
+
+    other_ids = await list_links(conn, user_id, ref, note_id)
+    return RelationLinksResponse(rows=await _fetch_related_rows(conn, user_id, other_ids))
+
+
+@router.put(
+    "/data-sources/{data_source_id}/rows/{note_id}/relations/{property_key}",
+    response_model=RelationLinksResponse,
+)
+async def set_relation_links(
+    data_source_id: str,
+    note_id: str,
+    property_key: str,
+    body: RelationLinksSet,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RelationLinksResponse:
+    """Replaces the whole link list. Deliberately does NOT delegate to
+    `services.db.relations.set_links` (its own bulk delete/insert) --
+    `link_checked` is "the only function Task 21's endpoints call to
+    create a link" (relations.py's own docstring for it), so a new edge
+    added here goes through the same cycle/sub-item-depth guard as the
+    single-link POST below, even for a bulk replace. The trade-off (a
+    documented judgement call, see the task report): survivors of the
+    replace keep their existing `position`; only the *added* ids are
+    appended in the request's order, rather than the whole list being
+    rewritten to exactly match the caller's order the way `set_links`
+    itself would."""
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "the All Notes source has no relation properties"
+        )
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    note_id = _parse_uuid_or_404(note_id, "row")
+
+    prop_row = await _get_relation_property(conn, user_id, data_source_id, property_key)
+    await _require_row(conn, user_id, data_source_id, note_id)
+    ref = relation_ref_from_config(prop_row["config"])
+    if ref is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "relation property is not configured")
+    system = prop_row["config"].get("system")
+
+    new_ids = list(dict.fromkeys(_parse_uuid_or_404(i, "row") for i in body.row_ids))
+    if new_ids:
+        valid = await conn.fetch(
+            "SELECT id FROM notes WHERE id = ANY($1::uuid[]) AND user_id = $2 AND deleted_at IS NULL",
+            new_ids,
+            user_id,
+        )
+        valid_ids = {str(r["id"]) for r in valid}
+        missing = [i for i in new_ids if i not in valid_ids]
+        if missing:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"row(s) not found: {missing}")
+
+    existing_ids = await list_links(conn, user_id, ref, note_id)
+    to_delete = set(existing_ids) - set(new_ids)
+    to_add = [i for i in new_ids if i not in existing_ids]
+    try:
+        async with conn.transaction():
+            for other_id in to_delete:
+                await unlink(conn, user_id, ref, note_id, other_id)
+            for other_id in to_add:
+                await link_checked(conn, user_id, ref, note_id, other_id, system=system)
+    except RelationError as exc:
+        raise _relation_error_to_http(exc) from exc
+
+    other_ids = await list_links(conn, user_id, ref, note_id)
+    return RelationLinksResponse(rows=await _fetch_related_rows(conn, user_id, other_ids))
+
+
+@router.post(
+    "/data-sources/{data_source_id}/rows/{note_id}/relations/{property_key}/links",
+    response_model=RelationLinksResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_relation_link(
+    data_source_id: str,
+    note_id: str,
+    property_key: str,
+    body: RelationLinkAdd,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RelationLinksResponse:
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "the All Notes source has no relation properties"
+        )
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    note_id = _parse_uuid_or_404(note_id, "row")
+    other_id = _parse_uuid_or_404(body.row_id, "row")
+
+    prop_row = await _get_relation_property(conn, user_id, data_source_id, property_key)
+    await _require_row(conn, user_id, data_source_id, note_id)
+    ref = relation_ref_from_config(prop_row["config"])
+    if ref is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "relation property is not configured")
+
+    other_exists = await conn.fetchval(
+        "SELECT 1 FROM notes WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL",
+        other_id,
+        user_id,
+    )
+    if other_exists is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "row not found")
+
+    try:
+        await link_checked(
+            conn, user_id, ref, note_id, other_id, system=prop_row["config"].get("system")
+        )
+    except RelationError as exc:
+        raise _relation_error_to_http(exc) from exc
+
+    other_ids = await list_links(conn, user_id, ref, note_id)
+    return RelationLinksResponse(rows=await _fetch_related_rows(conn, user_id, other_ids))
+
+
+@router.delete(
+    "/data-sources/{data_source_id}/rows/{note_id}/relations/{property_key}/links/{other_id}",
+    response_model=RelationLinksResponse,
+)
+async def remove_relation_link(
+    data_source_id: str,
+    note_id: str,
+    property_key: str,
+    other_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RelationLinksResponse:
+    """Idempotent, like `services.db.relations.unlink` itself: removing a
+    link that doesn't exist is not an error (204 isn't used here precisely
+    so a client can see the resulting list without a follow-up GET, the
+    same reasoning the POST-link endpoint above follows)."""
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "the All Notes source has no relation properties"
+        )
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    note_id = _parse_uuid_or_404(note_id, "row")
+    other_id = _parse_uuid_or_404(other_id, "row")
+
+    prop_row = await _get_relation_property(conn, user_id, data_source_id, property_key)
+    await _require_row(conn, user_id, data_source_id, note_id)
+    ref = relation_ref_from_config(prop_row["config"])
+    if ref is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "relation property is not configured")
+
+    await unlink(conn, user_id, ref, note_id, other_id)
+
+    other_ids = await list_links(conn, user_id, ref, note_id)
+    return RelationLinksResponse(rows=await _fetch_related_rows(conn, user_id, other_ids))
+
+
+@router.post(
+    "/data-sources/{data_source_id}/sub-items",
+    response_model=RelationPairResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def enable_sub_items(
+    data_source_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RelationPairResponse:
+    """Sub-items are a self-relation wearing a label (migration 015's
+    header; research §3.1) -- `create_relation_pair(system=SYSTEM_SUB_ITEM)`
+    with `target_data_source_id == data_source_id`. Names are Notion's own
+    documented ones (research §3.1): forward "Sub-item", reverse "Parent
+    item". Enabling twice is a clean 400 ("already enabled"), driven by
+    `create_relation_pair` catching migration 015's
+    `db_properties_system_relation_uniq` violation and raising
+    `RelationError` -- not a pre-check race (task-21-brief.md §1)."""
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "cannot add properties to the built-in All Notes source",
+        )
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    ds_row = await conn.fetchrow(
+        "SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2", data_source_id, user_id
+    )
+    if ds_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    try:
+        forward, reverse = await create_relation_pair(
+            conn,
+            user_id,
+            data_source_id=data_source_id,
+            name="Sub-item",
+            target_data_source_id=data_source_id,
+            two_way=True,
+            reverse_name="Parent item",
+            system=SYSTEM_SUB_ITEM,
+        )
+    except RelationError as exc:
+        raise _relation_error_to_http(exc) from exc
+    assert reverse is not None  # two_way=True always mints one
+    return RelationPairResponse(
+        forward=PropertyResponse(**forward), reverse=PropertyResponse(**reverse)
+    )
+
+
+@router.post(
+    "/data-sources/{data_source_id}/dependencies",
+    response_model=RelationPairResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def enable_dependencies(
+    data_source_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RelationPairResponse:
+    """Dependencies are also a self-relation wearing a label (research
+    §4.1), enabled the same way sub-items are, one data source, one pair.
+
+    Property names: research §4.1 explicitly records that Notion's help
+    centre never names the dependency properties in text -- **UNRESOLVED**
+    in the research doc. "Blocking"/"Blocked by" is this task's own choice
+    of the commonly-seen labels (task-21-brief.md §1 flags this exact
+    gap and mandates the choice, not a discovery from the research doc).
+    """
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "cannot add properties to the built-in All Notes source",
+        )
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    ds_row = await conn.fetchrow(
+        "SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2", data_source_id, user_id
+    )
+    if ds_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    try:
+        forward, reverse = await create_relation_pair(
+            conn,
+            user_id,
+            data_source_id=data_source_id,
+            name="Blocking",
+            target_data_source_id=data_source_id,
+            two_way=True,
+            reverse_name="Blocked by",
+            system=SYSTEM_DEPENDENCY,
+        )
+    except RelationError as exc:
+        raise _relation_error_to_http(exc) from exc
+    assert reverse is not None  # two_way=True always mints one
+    return RelationPairResponse(
+        forward=PropertyResponse(**forward), reverse=PropertyResponse(**reverse)
+    )
+
+
+@router.patch("/relations/{relation_id}/dependency-settings", response_model=PropertyResponse)
+async def update_dependency_settings(
+    relation_id: str,
+    body: DependencySettingsUpdate,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> PropertyResponse:
+    """Partial update of the forward dependency property's `config`
+    (migration 015's header: "Dependency behaviour settings ... live in
+    the *forward* dependency property's config"). Only fields present in
+    the request are touched (`exclude_unset=True`, `ViewUpdate`'s own
+    convention); an explicit `null` for a present field *clears* that
+    setting rather than being a no-op, because every one of these three
+    config keys is optional JSONB, not a NOT NULL column (unlike
+    `ViewUpdate`'s five NOT NULL fields)."""
+    relation_id = _parse_uuid_or_404(relation_id, "relation")
+    prop_row = await conn.fetchrow(
+        """
+        SELECT * FROM db_properties
+        WHERE user_id = $1 AND type = 'relation' AND config->>'relation_id' = $2
+          AND config->>'side' = 'forward' AND config->>'system' = 'dependency'
+        """,
+        user_id,
+        relation_id,
+    )
+    if prop_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "dependency relation not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    config = dict(prop_row["config"] or {})
+
+    if "date_shift_mode" in updates:
+        mode = updates["date_shift_mode"]
+        if mode is not None and mode not in DATE_SHIFT_MODES:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"date_shift_mode must be one of {DATE_SHIFT_MODES}, got: {mode!r}",
+            )
+        if mode is None:
+            config.pop("date_shift_mode", None)
+        else:
+            config["date_shift_mode"] = mode
+
+    if "avoid_weekends" in updates:
+        if updates["avoid_weekends"] is None:
+            config.pop("avoid_weekends", None)
+        else:
+            config["avoid_weekends"] = updates["avoid_weekends"]
+
+    if "date_property_key" in updates:
+        key = updates["date_property_key"]
+        if key is None:
+            config.pop("date_property_key", None)
+        else:
+            date_prop = await conn.fetchrow(
+                """
+                SELECT 1 FROM db_properties
+                WHERE data_source_id = $1 AND user_id = $2 AND key = $3 AND type = 'date'
+                """,
+                prop_row["data_source_id"],
+                user_id,
+                key,
+            )
+            if date_prop is None:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{key!r} is not a date property on this data source",
+                )
+            config["date_property_key"] = key
+
+    row = await conn.fetchrow(
+        "UPDATE db_properties SET config = $1 WHERE id = $2 AND user_id = $3 RETURNING *",
+        config,
+        prop_row["id"],
+        user_id,
+    )
+    return PropertyResponse(**_row(row))
