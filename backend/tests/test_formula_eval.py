@@ -430,15 +430,18 @@ class TestDefensivePaths:
         with pytest.raises(FormulaEvalError):
             evaluate(node, ctx)
 
-    def test_unimplemented_category_raises_formula_eval_error_not_key_error(self):
-        # `now`/`today`/etc. (date/time), list functions, and page/person
-        # functions are Task 26's territory -- calling one by name today
-        # must fail LOUDLY and specifically, not with a bare KeyError or
-        # (worse) silently returning EMPTY as if it were a documented
-        # runtime edge case.
-        tree = parse("now()")
+    def test_unrecognized_function_raises_formula_eval_error_not_key_error(self):
+        # A genuinely unknown function name (not one of Task 24's 93 in
+        # typecheck.FUNCTION_SIGNATURES) must fail LOUDLY and specifically,
+        # not with a bare KeyError or (worse) silently returning EMPTY as
+        # if it were a documented runtime edge case. Task 25 wrote this
+        # test against `now()`, which was unimplemented at the time;
+        # updated by Task 26 (which implements `now()`) to a name that
+        # will never exist, since the original assertion (`now()` raises)
+        # is no longer true.
+        tree = parse("totallyUnimplementedFormulaFunction()")
         ctx = EvalContext(properties={}, now=make_now())
-        with pytest.raises(FormulaEvalError, match="now"):
+        with pytest.raises(FormulaEvalError, match="totallyUnimplementedFormulaFunction"):
             evaluate(tree, ctx)
 
     def test_unbound_variable_is_empty_not_a_crash(self):
@@ -457,13 +460,15 @@ def test_registry_consistency_check_passes():
     functions.check_registry_consistency()
 
 
-def test_registry_has_exactly_the_53_functions_this_task_implements():
-    # 8 (logic) + 25 (numeric) + 16 (string) + 4 (regex) = 53, per this
-    # task's brief. The remaining 40 (19 date/time + 18 list + 3
-    # page/person) are Task 26's `_PENDING_CATEGORIES`.
-    assert len(functions.REGISTRY) == 53
-    assert len(functions._PENDING_CATEGORIES) == 40
-    assert len(functions.REGISTRY) + len(functions._PENDING_CATEGORIES) == 93
+def test_registry_has_all_93_functions_after_task_26():
+    # Task 25 implemented 53 (8 logic + 25 numeric + 16 string + 4 regex)
+    # behind an explicit `_PENDING_CATEGORIES` hatch for the other 40.
+    # Task 26's own definition of done deletes that hatch and completes
+    # the registry -- this replaces Task 25's "53 + pending 40" assertion
+    # (which referenced `_PENDING_CATEGORIES`, now gone) with the
+    # unconditional total.
+    assert len(functions.REGISTRY) == 93
+    assert not hasattr(functions, "_PENDING_CATEGORIES")
 
 
 def test_person_and_page_are_declared_but_unused_this_task():

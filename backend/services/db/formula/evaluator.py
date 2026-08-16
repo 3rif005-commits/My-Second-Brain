@@ -12,13 +12,14 @@ task's report), §H.2.3-2.5 (conditionals/let/dot-notation), §H.3.1-3.4
 (the four categories this task implements).
 Brief: .superpowers/sdd/2026-08-08-notion-databases/task-25-brief.md.
 
-Out of scope (Task 26): `now()`/`today()`/date arithmetic, list functions
-(`map`/`filter`/`sort`/...), page/person functions (`id`/`name`/`email`).
-Calling one of those by name raises `NotImplementedError` here -- a real
-"not built yet" gap, deliberately NOT folded into the EMPTY-for-
-undocumented-edges ruling below (that ruling is for behaviour research
-declines to specify; a whole missing category is this codebase's own,
-temporary, and loud limitation).
+Task 26 (date/time §3.6, list §3.7, page/person §3.8) completes this
+module: `now()`/`today()` (`_eval_now_today`), the bare `id()` overload
+(`_eval_bare_id`), and the 8 `current`/`index`-scoped higher-order list
+functions (`_eval_higher_order_call`) all need something a plain
+`functions.REGISTRY` entry cannot see (`EvalContext` itself, or an
+unevaluated AST node) -- see each function's own docstring below for why
+they are intercepted here rather than reached through the ordinary
+`_invoke` path every other builtin in this package uses.
 """
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ from typing import Mapping
 
 from . import ast as A
 from . import functions
-from .values import EMPTY, FValue, as_number, stringify, truthy
+from .values import EMPTY, Date, FValue, as_number, stringify, truthy
 
 __all__ = ["EvalContext", "evaluate", "FormulaEvalError"]
 
@@ -71,16 +72,66 @@ class EvalContext:
       dict -- mirrors `typecheck._Checker`'s identical `dict(scope)`-copy-
       on-extend discipline, for the identical reason (an inner binding
       must never leak into a sibling branch that didn't introduce it).
+    - `page_id` (Task 26): the id of the row this formula is attached to,
+      for bare `id()` with no argument (research §1.6, official: "If no
+      page is provided, returns the id of the page the formula is on") --
+      see `_eval_bare_id`. `None` for any caller that doesn't supply it
+      (every test in this package that isn't specifically about `id()`),
+      in which case `id()` is `EMPTY`, never a fabricated id.
+    - `depth_budget`/relation-hop tracking (Task 26): the relation-
+      traversal depth cap (spec §7.3, capped at 3) is a MATERIALISATION
+      concern -- Task 27's job, not this evaluator's, because nothing
+      inside `evaluate()` itself chases a relation hop (`_eval_prop`
+      always resolves `.prop("Name")` against `ctx.properties` -- THIS
+      row's own values -- regardless of what the receiver evaluates to,
+      Task 24's own committed ruling, inherited unchanged; see
+      `_eval_prop`'s docstring). This class exposes the typed CONTRACT
+      Task 27 needs (`with_relation_hop`, `depth_exceeded`) without this
+      task inventing a caller for it, since no code path in this task's
+      four categories actually performs a hop.
     """
 
     properties: Mapping[str, FValue]
     now: datetime
     scope: Mapping[str, FValue] = field(default_factory=dict)
+    page_id: str | None = None
+    depth_budget: int = 3
+    # A one-element-when-tripped mutable box, deliberately NOT a plain
+    # `bool` field -- `EvalContext` is frozen, and `with_relation_hop`
+    # needs to leave a mark that every OTHER context derived from the same
+    # root (via `replace()`, which passes field VALUES through --
+    # preserving this list's object identity, not copying it) can still
+    # see. Mirrors `typecheck._Checker.errors`'s identical "one shared
+    # mutable accumulator, not a copy-on-write field" pattern, adapted for
+    # a frozen dataclass instead of a stateful visitor object.
+    _depth_exceeded_flag: list[bool] = field(default_factory=list)
 
     def with_binding(self, name: str, value: FValue) -> "EvalContext":
         new_scope = dict(self.scope)
         new_scope[name] = value
         return replace(self, scope=new_scope)
+
+    def with_relation_hop(self) -> "EvalContext | None":
+        """For a future caller (Task 27's materialisation pass) about to
+        evaluate a formula on a page reached through one relation hop.
+        Returns a new `EvalContext` with `depth_budget` decremented by
+        one, or `None` when the budget is already exhausted -- the
+        brief's own contract: "when it hits zero, return EMPTY and set a
+        flag on the context that Task 27 turns into the
+        `{"type":"unsupported"}` sentinel" (research §1.9/§4.6's own API
+        marker for a formula that "depends on too many related pages").
+        The caller's responsibility, not this method's: use `EMPTY` as
+        that hop's contribution when this returns `None`, and check
+        `depth_exceeded` once the whole pass finishes to decide whether to
+        surface `unsupported` instead of a real value. Never raises."""
+        if self.depth_budget <= 0:
+            self._depth_exceeded_flag.append(True)
+            return None
+        return replace(self, depth_budget=self.depth_budget - 1)
+
+    @property
+    def depth_exceeded(self) -> bool:
+        return bool(self._depth_exceeded_flag)
 
 
 # ---------------------------------------------------------------------------
@@ -106,15 +157,26 @@ class EvalContext:
 #     must not always answer EMPTY regardless of `x`).
 _EMPTY_AWARE = frozenset({"empty", "if", "ifs", "equal", "unequal"})
 
+# Task 26: the 9 names that need something a plain `functions.REGISTRY`
+# entry cannot access, and are therefore intercepted in `_eval_call`/
+# `_eval_method_call` BEFORE the generic `_invoke` dispatch below --
+# `_eval_now_today`'s and `_eval_higher_order_call`'s own docstrings have
+# the full reasoning for each group.
+_NULLARY_DATE_FUNCTIONS = frozenset({"now", "today"})
+_HIGHER_ORDER_LIST_FNS = frozenset(
+    {"map", "filter", "find", "findIndex", "some", "every", "sort", "count"}
+)
+
 
 def _invoke(name: str, arg_values: list[FValue]) -> FValue:
     fn = functions.REGISTRY.get(name)
     if fn is None:
         raise FormulaEvalError(
-            f"formula function {name!r} has no evaluator implementation "
-            "yet (belongs to a category Task 26 implements -- date/time, "
-            "list, or page/person; see functions/__init__.py's "
-            "_PENDING_CATEGORIES)"
+            f"formula function {name!r} has no REGISTRY entry at all -- "
+            "either a genuine typo/unimplemented builtin, or (if it's one "
+            "of the 9 names evaluator.py special-cases -- now/today/the "
+            "8 higher-order list functions) evaluator.py's own dispatch "
+            "failed to intercept it before reaching _invoke"
         )
     if name not in _EMPTY_AWARE and any(v is EMPTY for v in arg_values):
         return EMPTY
@@ -262,8 +324,13 @@ def _eval_compare(op: str, left: FValue, right: FValue) -> FValue:
             return 1.0 if v else 0.0  # booleans compare as 1/0, research §1.8
         if isinstance(v, float):
             return v
-        if isinstance(v, datetime):
-            return v
+        if isinstance(v, Date):
+            # Ordered by `.start` only -- no documented ordering rule for
+            # a RANGED Date's `end` component in a `>`/`<` comparison
+            # (research is silent; `sort()`'s own default ordering has the
+            # identical "Date earlier->later" rule with no ranged-value
+            # carve-out either). Decided, flagged in this task's report.
+            return v.start
         return None  # String/List/Person/Page: not comparable, see typecheck._COMPARABLE
 
     l_ord = _ordinal(left)
@@ -335,6 +402,24 @@ def _eval_method_call(node: A.MethodCall, ctx: EvalContext) -> FValue:
         for a in node.args:
             evaluate(a, ctx)
         return EMPTY
+    if node.name in _NULLARY_DATE_FUNCTIONS:
+        # research §2.5's own UNRESOLVED #17: no documented dot-form for a
+        # nullary function (mechanically it has no receiver to be "the"
+        # argument). Handled leniently, the same way `context`'s dot-form
+        # is above: evaluate the receiver for its own nested errors/side
+        # effects, then answer with the SAME real `now`/`today` value the
+        # bare-call form would -- deliberately NOT falling through to the
+        # generic `_invoke` path below, which would silently pass the
+        # receiver as now/today's first argument and hit the
+        # unreachable-stub's `RuntimeError` (functions.
+        # unreachable_via_evaluator) instead of a value. Consistency
+        # between `now()` and `x.now()` (should either ever be written) is
+        # worth more than strictly rejecting an unlikely form no research
+        # example ever exercises either way.
+        evaluate(node.receiver, ctx)
+        return _eval_now_today(node.name, ctx)
+    if node.name in _HIGHER_ORDER_LIST_FNS:
+        return _eval_higher_order_call(node.name, [node.receiver, *node.args], ctx)
     arg_values = [evaluate(node.receiver, ctx)] + [evaluate(a, ctx) for a in node.args]
     return _invoke(node.name, arg_values)
 
@@ -352,6 +437,12 @@ def _eval_call(name: str, arg_nodes: list[A.Node], ctx: EvalContext) -> FValue:
         for a in arg_nodes:
             evaluate(a, ctx)
         return EMPTY
+    if name in _NULLARY_DATE_FUNCTIONS:
+        return _eval_now_today(name, ctx)
+    if name == "id" and not arg_nodes:
+        return _eval_bare_id(ctx)
+    if name in _HIGHER_ORDER_LIST_FNS:
+        return _eval_higher_order_call(name, arg_nodes, ctx)
     arg_values = [evaluate(a, ctx) for a in arg_nodes]
     return _invoke(name, arg_values)
 
@@ -401,6 +492,240 @@ def _eval_context(args: list[A.Node], ctx: EvalContext) -> FValue:
     for a in args:
         evaluate(a, ctx)
     return EMPTY
+
+
+# -- Task 26: now/today, bare id() -----------------------------------------
+
+
+def _eval_now_today(name: str, ctx: EvalContext) -> FValue:
+    """`now()`/`today()` (research §3.6) -- the first two real callers of
+    `EvalContext.now` in this package (Task 25's report: "nothing inside
+    this module reads ctx.now" was true until this task). Handled here,
+    NOT through the ordinary `functions.REGISTRY`/`_invoke` dispatch every
+    other builtin call in this module uses, because neither function can
+    be a pure `list[FValue] -> FValue` -- both need `ctx.now`, the ONE
+    instant `EvalContext` was built to capture once and thread through an
+    entire evaluation pass (`make_now`'s own docstring). `REGISTRY` still
+    carries an entry for both names (`functions/datetime.py`, via
+    `functions.unreachable_via_evaluator`), but only to satisfy
+    `check_registry_consistency()`'s now-unconditional assertion; it is
+    unreachable through `evaluate()` -- every `Call`/`MethodCall` node
+    named `now`/`today` is intercepted here first, in both
+    `_eval_call` and `_eval_method_call`.
+
+    UTC-only decision #2 of 3 (see `functions/datetime.py`'s module
+    docstring for all three stated together): research documents `now()`
+    as "the viewer's local time zone" -- this codebase has no per-user
+    time zone concept, so both return UTC. `today()` truncates `ctx.now`
+    to UTC midnight."""
+    if name == "today":
+        midnight = ctx.now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return Date(start=midnight)
+    return Date(start=ctx.now)
+
+
+def _eval_bare_id(ctx: EvalContext) -> FValue:
+    """Bare `id()` (research §1.6/§3.8, official: "If no page is
+    provided, returns the id of the page the formula is on") -- the one
+    `id()` call shape needing `EvalContext` at all. The 1-arg
+    `id(Page)`/`id(Person)` overload is a pure value read
+    (`functions/page.py`'s ordinary `REGISTRY` entry), reached through the
+    generic dispatch in `_eval_call`/`_eval_method_call` exactly like any
+    other builtin -- only the 0-arg bare-`Call` shape comes here.
+    `ctx.page_id is None` (every test in this task's golden table that
+    isn't specifically about `id()`) -> `EMPTY`, never a fabricated id."""
+    if ctx.page_id is None:
+        return EMPTY
+    return ctx.page_id.replace("-", "")  # research §1.6: ids render without dashes
+
+
+# -- Task 26: current/index-scoped higher-order list functions -------------
+
+
+def _eval_higher_order_call(name: str, arg_nodes: list[A.Node], ctx: EvalContext) -> FValue:
+    """`map`/`filter`/`find`/`findIndex`/`some`/`every`/`sort`/`count`
+    (research §2.12, §3.7) -- the ONE place in this module that needs an
+    UNEVALUATED AST node (the trailing `current`/`index`-scoped
+    expression) rather than an already-evaluated `FValue`. Every other
+    builtin call in this file evaluates its arguments eagerly and hands
+    plain values to `functions.REGISTRY` through `_invoke`; these eight
+    cannot, because the whole point of a `current`-expression is that it
+    is evaluated ONCE PER ELEMENT, against a scope that rebinds
+    `current`/`index` fresh each time (Task 24's typecheck.py report,
+    judgment call #7: `index` is bound in ALL eight, not just `map` --
+    this evaluator inherits that already-committed ruling rather than
+    re-deriving it). `functions.REGISTRY` therefore carries only
+    unreachable, invariant-asserting stubs for these eight names
+    (`functions/list_fns.py`, via `functions.unreachable_via_evaluator`)
+    -- see `_eval_now_today`'s docstring above for the identical reasoning
+    applied to `now`/`today`.
+
+    **Corrects a real error in this task's own brief**, found by Task 23's
+    implementer and reconfirmed here: there is NO lambda syntax in this
+    language (research §2.12's own first sentence). `current`/`index` are
+    ordinary `ast.Variable` nodes bound into a child `EvalContext.scope`
+    via `with_binding` -- exactly like a `let` binding -- not a
+    closure/lambda object; `ast.Lambda` is never constructed by the parser
+    (Task 23's report) and is never consulted anywhere in this function.
+
+    `sort`/`count`'s trailing expr is OPTIONAL (research §3.7's own
+    signatures: `sort(List)` / `sort(List, expr)`, `count(List)` /
+    `count(List, expr)`) -- `typecheck.FUNCTION_SIGNATURES` already
+    encodes this split (`current_expr`: `"required"` for the other six vs.
+    `"optional"` for these two). A required expr that's missing anyway
+    (malformed post-typecheck input -- research §1.9: "a formula with
+    errors can still be saved") is `EMPTY`, never a crash."""
+    if not arg_nodes:
+        return EMPTY  # malformed arity, post-typecheck; never raise
+    lst = evaluate(arg_nodes[0], ctx)
+    if lst is EMPTY:
+        return EMPTY  # general propagation rule -- none of these 8 are in _EMPTY_AWARE
+    if not isinstance(lst, list):
+        return EMPTY  # malformed post-typecheck input (e.g. a bare Number)
+
+    expr_node = arg_nodes[1] if len(arg_nodes) > 1 else None
+    needs_expr = name not in ("sort", "count")
+    if needs_expr and expr_node is None:
+        return EMPTY
+
+    def _child_ctx(element: FValue, index: int) -> EvalContext:
+        # Rebinds `current`/`index` FRESH from THIS function's own `ctx`
+        # parameter for every element -- which is precisely why a NESTED
+        # higher-order call's inner `current` correctly shadows an outer
+        # one (research §2.12's own "Nesting shadows" paragraph): the
+        # inner call's `_eval_higher_order_call` invocation receives
+        # whatever `ctx` the OUTER element-iteration already built (with
+        # the outer `current` bound), and rebinding `current` again here
+        # only affects `_child_ctx`'s own return value, never mutating the
+        # outer `ctx` it was built from. This is also exactly why `lets`
+        # is documented as the workaround for capturing an outer `current`
+        # before it gets shadowed one level deeper: a `lets(outer,
+        # current, ...)` binding, evaluated against the OUTER context
+        # before the inner call rebinds `current`, is captured under a
+        # name the inner rebinding never touches.
+        return ctx.with_binding("current", element).with_binding("index", float(index))
+
+    if name == "map":
+        return [evaluate(expr_node, _child_ctx(el, i)) for i, el in enumerate(lst)]
+
+    if name == "filter":
+        return [
+            el for i, el in enumerate(lst) if truthy(evaluate(expr_node, _child_ctx(el, i)))
+        ]
+
+    if name == "find":
+        # research §1.4/§3.7, official: no match -> Empty.
+        for i, el in enumerate(lst):
+            if truthy(evaluate(expr_node, _child_ctx(el, i))):
+                return el
+        return EMPTY
+
+    if name == "findIndex":
+        # research §1.4/§3.7, official: no match -> -1 (NOT Empty) -- the
+        # deliberate asymmetry with `find` immediately above, this task's
+        # brief names it explicitly.
+        for i, el in enumerate(lst):
+            if truthy(evaluate(expr_node, _child_ctx(el, i))):
+                return float(i)
+        return -1.0
+
+    if name == "some":
+        return any(truthy(evaluate(expr_node, _child_ctx(el, i))) for i, el in enumerate(lst))
+
+    if name == "every":
+        # Vacuous truth for an empty list (`every([], ...) == true`) --
+        # no research example either way; decided by the standard
+        # mathematical convention ("every element of the empty set
+        # satisfies any predicate"), flagged in this task's report as
+        # brief-uncovered.
+        return all(truthy(evaluate(expr_node, _child_ctx(el, i))) for i, el in enumerate(lst))
+
+    if name == "count":
+        if expr_node is None:
+            return float(len(lst))
+        return float(
+            sum(1 for i, el in enumerate(lst) if truthy(evaluate(expr_node, _child_ctx(el, i))))
+        )
+
+    if name == "sort":
+        return _eval_sort(lst, expr_node, ctx)
+
+    raise FormulaEvalError(  # pragma: no cover
+        f"evaluate(): unhandled higher-order list function {name!r}"
+    )
+
+
+_NATIVE_SORT_TAGS = frozenset({"bool", "number", "string", "date"})
+
+
+def _sort_tag(v: FValue) -> str:
+    if isinstance(v, bool):
+        return "bool"
+    if isinstance(v, float):
+        return "number"
+    if isinstance(v, str):
+        return "string"
+    if isinstance(v, Date):
+        return "date"
+    return "other"  # List / Person / Page / EMPTY -- always string-compared, see _eval_sort
+
+
+def _native_sort_key(v: FValue, tag: str):
+    if tag == "bool":
+        return 1 if v else 0
+    if tag == "date":
+        return v.start
+    return v  # number / string: compare directly
+
+
+def _eval_sort(lst: list[FValue], expr_node: A.Node | None, ctx: EvalContext) -> FValue:
+    """`sort(List)` / `sort(List, expr)` (research §3.7). Default ordering
+    (no `expr`) is research's own documented rule, cited in this task's
+    brief: *"String A->Z; Number ascending; Boolean false then true; Date
+    earlier->later... Mixed-type lists are compared entirely as strings,
+    but the returned elements keep their original types."*
+
+    Extended here to the 2-arg form (brief-uncovered, flagged in this
+    task's report): research calls `expr` a "sort key/comparator" without
+    saying which, but this language has no way to bind TWO elements at
+    once (only `current`/`index`, research §2.12) -- a JS-style
+    two-argument comparator function is not even expressible, so `expr`
+    MUST be a per-element KEY extractor (`current` bound to each element
+    in turn, exactly like `map`'s own per-element evaluation), and the
+    extracted KEYS are then ordered by the IDENTICAL default-ordering rule
+    research documents for the no-`expr` form. The result contains the
+    ORIGINAL elements in that order, not the keys.
+
+    "Mixed-type... compared as strings" is implemented as: if every KEY
+    shares one of the four natively-ordered tags (bool/number/string/
+    date), compare natively; otherwise (more than one tag present, or any
+    key of some OTHER tag) every key is compared by its `stringify()`.
+    List/Person/Page keys are ALWAYS string-compared even in a
+    single-type list of just that one kind -- research's default-ordering
+    rule has no "native" ordering for those three at all ("nested List
+    compared as a comma-joined string," "Page and Person compared as
+    strings"), which `stringify()` already produces (comma-joined for
+    List, per its own docstring; `.id` for Person/Page -- the one
+    identity value this evaluator's wrappers carry, an honest proxy for
+    "rendered title" that this evaluator's `Page`/`Person` have no field
+    for at all, flagged in this task's report)."""
+    if expr_node is not None:
+        keys: list[FValue] = [
+            evaluate(expr_node, ctx.with_binding("current", el).with_binding("index", float(i)))
+            for i, el in enumerate(lst)
+        ]
+    else:
+        keys = list(lst)
+
+    tags = {_sort_tag(k) for k in keys}
+    if len(tags) == 1 and next(iter(tags)) in _NATIVE_SORT_TAGS:
+        tag = next(iter(tags))
+        sort_keys: list = [_native_sort_key(k, tag) for k in keys]
+    else:
+        sort_keys = [stringify(k) for k in keys]
+
+    order = sorted(range(len(lst)), key=lambda i: sort_keys[i])
+    return [lst[i] for i in order]
 
 
 def make_now() -> datetime:

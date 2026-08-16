@@ -5,21 +5,20 @@ key off the same string name.
 
 Task 25 brief §1: "Add a startup-time consistency assertion... every name
 in Task 24's signature table has an implementation, and every
-implementation has a signature." That assertion is `_check_consistency()`
-below -- run once at import time (module-level, so importing this package
-at all is enough to catch drift) AND callable directly by a test
-(`test_formula_functions_core.py`), per the brief's explicit "a
-module-level check, and a test that calls it."
+implementation has a signature." That assertion is `check_registry_
+consistency()` below -- run once at import time (module-level, so
+importing this package at all is enough to catch drift) AND callable
+directly by a test (`test_formula_functions_core.py`), per the brief's
+explicit "a module-level check, and a test that calls it."
 
-`_PENDING_CATEGORIES` is the documented hatch for Task 26 (brief §1: "use
-an explicit `_PENDING_CATEGORIES` set that Task 26 deletes, rather than a
-loose `if name in registry` skip that would silently hide a real gap
-forever"). It lists every function name belonging to a category this task
-does not implement (date/time §3.6, list §3.7, page/person §3.8) so the
-consistency check below can assert "every OTHER name is implemented"
-without failing on categories that don't exist yet. When Task 26 lands
-those three categories, it deletes every entry here; if it forgets one,
-`_check_consistency()` starts failing loudly on that name.
+Task 25 introduced `_PENDING_CATEGORIES`, an explicit hatch listing every
+function name belonging to a category it didn't implement (date/time
+§3.6, list §3.7, page/person §3.8), so the consistency check could assert
+"every OTHER name is implemented" without failing on categories that
+didn't exist yet. **Task 26 deletes it** (its own brief, explicit: "part
+of this task's definition of done") -- every one of Task 24's 93
+`FUNCTION_SIGNATURES` names now has a `REGISTRY` entry, and the assertion
+below is unconditional.
 """
 from __future__ import annotations
 
@@ -28,7 +27,7 @@ from typing import Callable
 from ..typecheck import FUNCTION_SIGNATURES
 from ..values import FValue
 
-__all__ = ["builtin", "REGISTRY", "check_registry_consistency"]
+__all__ = ["builtin", "REGISTRY", "check_registry_consistency", "unreachable_via_evaluator"]
 
 BuiltinFn = Callable[[list[FValue]], FValue]
 
@@ -53,72 +52,54 @@ def builtin(name: str) -> Callable[[BuiltinFn], BuiltinFn]:
     return _register
 
 
-# Task 26's territory (brief §1's own "Out of scope: date/time, list,
-# page/person functions"), enumerated by name so the consistency check can
-# tell "not implemented yet, on purpose" apart from "missing by accident."
-# Counts cross-checked against `typecheck.FUNCTION_SIGNATURES`'s own
-# category comments (research §3.6/3.7/3.8: 19 + 18 + 3 = 40 names).
-_PENDING_CATEGORIES: frozenset[str] = frozenset(
-    {
-        # -- §3.6 Date & time (19) -------------------------------------
-        "now",
-        "today",
-        "minute",
-        "hour",
-        "day",
-        "date",
-        "week",
-        "month",
-        "year",
-        "dateAdd",
-        "dateSubtract",
-        "dateBetween",
-        "dateRange",
-        "dateStart",
-        "dateEnd",
-        "timestamp",
-        "fromTimestamp",
-        "formatDate",
-        "parseDate",
-        # -- §3.7 List (18, incl. count/splice) -------------------------
-        "at",
-        "first",
-        "last",
-        "slice",
-        "concat",
-        "sort",
-        "reverse",
-        "unique",
-        "includes",
-        "find",
-        "findIndex",
-        "filter",
-        "some",
-        "every",
-        "map",
-        "flat",
-        "count",
-        "splice",
-        # -- §3.8 Page / Person / relation (3) ---------------------------
-        "id",
-        "name",
-        "email",
-    }
-)
+def unreachable_via_evaluator(name: str) -> BuiltinFn:
+    """A `REGISTRY` stub for a builtin whose REAL implementation needs
+    something a plain `list[FValue] -> FValue` function structurally
+    cannot access: `EvalContext` itself (`now`/`today` need `ctx.now`), or
+    an UNEVALUATED AST node (the 8 `current`/`index`-scoped higher-order
+    list functions -- `map`/`filter`/`find`/`findIndex`/`some`/`every`/
+    `sort`/`count` -- need the raw expr node plus `ctx`, to evaluate it
+    once per element against a freshly rebound scope). `evaluator.py`'s
+    `_eval_call`/`_eval_method_call` intercept all 9 of these names BEFORE
+    `_invoke`/`REGISTRY` is ever consulted for them (see `evaluator.
+    _eval_now_today` and `evaluator._eval_higher_order_call`'s
+    docstrings for the full reasoning) -- this function exists only so
+    `check_registry_consistency()`'s now-unconditional assertion (Task 26
+    deletes `_PENDING_CATEGORIES`) has a `REGISTRY` entry to find for
+    every one of Task 24's 93 names, including these 9.
+
+    Raises, rather than returning `EMPTY`, if ever actually invoked --
+    deliberately NOT this package's usual "never raise on malformed
+    formula input" ruling. Reaching this stub would mean `evaluator.py`'s
+    interception broke: a real bug in THIS package's own dispatch code,
+    not a runtime edge case in someone's formula, and the brief-wide
+    EMPTY-for-UNRESOLVED-edges ruling was never about hiding this
+    package's own defects from itself."""
+
+    def _stub(args: list[FValue]) -> FValue:
+        raise RuntimeError(
+            f"formula builtin {name!r} has no direct REGISTRY implementation "
+            "-- it is dispatched exclusively by evaluator.py before reaching "
+            "REGISTRY (see functions.unreachable_via_evaluator's docstring); "
+            "reaching this stub means evaluator.py's interception broke"
+        )
+
+    return _stub
 
 
 def check_registry_consistency() -> None:
-    """Every name in `FUNCTION_SIGNATURES` is either implemented in
-    `REGISTRY` or explicitly pending (`_PENDING_CATEGORIES`); every
-    implemented name has a signature (nothing in `REGISTRY` that isn't
-    also in `FUNCTION_SIGNATURES` -- that would mean a builtin nothing can
-    ever type-check, i.e. dead or misspelled code). Raises `AssertionError`
-    with the exact offending names, not just "mismatch", so a failure is
-    immediately actionable."""
+    """Every name in `FUNCTION_SIGNATURES` has a `REGISTRY` implementation
+    (`unreachable_via_evaluator`'s stubs count -- they ARE registry
+    entries, just ones that raise instead of computing a real value);
+    every implemented name has a signature (nothing in `REGISTRY` that
+    isn't also in `FUNCTION_SIGNATURES` -- that would mean a builtin
+    nothing can ever type-check, i.e. dead or misspelled code). Raises
+    `AssertionError` with the exact offending names, not just "mismatch",
+    so a failure is immediately actionable."""
     signature_names = set(FUNCTION_SIGNATURES)
     implemented_names = set(REGISTRY)
 
-    missing = (signature_names - _PENDING_CATEGORIES) - implemented_names
+    missing = signature_names - implemented_names
     assert not missing, (
         f"formula functions with a signature but no evaluator implementation: "
         f"{sorted(missing)}"
@@ -130,17 +111,14 @@ def check_registry_consistency() -> None:
         f"(typo, or Task 24's table needs updating): {sorted(orphaned)}"
     )
 
-    stale_pending = _PENDING_CATEGORIES & implemented_names
-    assert not stale_pending, (
-        f"these names are implemented AND still listed in _PENDING_CATEGORIES "
-        f"-- delete them from the pending set: {sorted(stale_pending)}"
-    )
-
 
 # Import for side effect: each submodule's `@builtin(...)`-decorated
 # functions register themselves into REGISTRY on import. Order does not
-# matter (each module is independent; none imports another).
-from . import logic, numeric, string, regex  # noqa: E402,F401
+# matter (each module is independent; none imports another) -- EXCEPT that
+# `list_fns.py` imports `functions.logic._strict_eq` (see its own
+# docstring for why that one cross-category import is warranted), which is
+# a same-package sibling import, not an ordering dependency on THIS file.
+from . import datetime, list_fns, logic, numeric, page, regex, string  # noqa: E402,F401
 
 # Startup-time assertion (brief §1). Runs once, the first time anything
 # imports this package -- e.g. `evaluator.py`, or a test importing

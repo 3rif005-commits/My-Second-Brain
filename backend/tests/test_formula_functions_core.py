@@ -184,18 +184,30 @@ def test_golden_value(case_id, src, expected):
 
 
 def test_golden_table_covers_every_implemented_function_at_least_once():
-    """Every one of the 53 registered names appears in at least one golden
-    case above (by simple substring-of-source-text search, sufficient
-    since builtin names are called by name in every case)."""
-    from services.db.formula import functions
+    """Every one of the 53 names THIS FILE's golden table covers (logic /
+    numeric / string / regex, Task 25's four categories) appears in at
+    least one golden case above (by simple substring-of-source-text
+    search, sufficient since builtin names are called by name in every
+    case).
 
+    Scoped to exactly those 53 -- NOT `functions.REGISTRY` as a whole,
+    which Task 26 completed to 93 -- because Task 26's own golden tables
+    (test_formula_functions_date.py, test_formula_functions_list.py) carry
+    the identical completeness check for the other 40 date/time/list/
+    page-person names. Checking the full registry from this file would
+    make it fail every time a category this file doesn't own gets
+    implemented -- exactly what happened when Task 26 landed, fixed here.
+
+    `typecheck.FUNCTION_SIGNATURES` is declared in research's own
+    §3.1(logic)->§3.2(numeric)->§3.3(string)->§3.4(regex)->§3.6..3.8(date/
+    list/page) order, so its first 53 keys ARE exactly Task 25's 53 names
+    -- verified once, directly, against `functions.REGISTRY`'s own
+    logic.py/numeric.py/string.py/regex.py module boundaries."""
+    from services.db.formula.typecheck import FUNCTION_SIGNATURES
+
+    task_25_names = list(FUNCTION_SIGNATURES)[:53]
     covered_source = " ".join(src for _id, src, _expected in ALL_GOLDEN_CASES)
-    missing = []
-    for name in functions.REGISTRY:
-        # crude but adequate: every case calls its function(s) by literal
-        # name, so a simple containment check is a real coverage signal.
-        if name not in covered_source:
-            missing.append(name)
+    missing = [name for name in task_25_names if name not in covered_source]
     assert not missing, f"no golden-value case exercises: {sorted(missing)}"
 
 

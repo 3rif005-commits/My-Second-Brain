@@ -18,9 +18,8 @@ boundary, Task 27).
 from __future__ import annotations
 
 import math
-from datetime import datetime
 
-from ..values import EMPTY, FValue, as_number
+from ..values import EMPTY, Date, FValue, as_number
 from . import builtin
 
 
@@ -364,14 +363,12 @@ def _to_number(args: list[FValue]) -> FValue:
             return float(v.strip())
         except ValueError:
             return EMPTY
-    if isinstance(v, datetime):
+    if isinstance(v, Date):
         # research §1.8: "toNumber(now()) returns the Unix ms timestamp" --
-        # matches `timestamp()`'s own documented semantics (Task 26), but
-        # `toNumber` on a Date is in THIS task's signature table (its
-        # param type is `Any`), so it needs handling here even though no
-        # function in this task's four categories can construct a Date
-        # value to feed it (flagged in this task's report: untestable by
-        # this task's own golden-value table, forward-compatible with
-        # Task 26).
-        return v.timestamp() * 1000.0
+        # matches `timestamp()`'s own documented semantics (Task 26).
+        # `Date` (Task 26) may carry a range (`start`/`end`); a Number has
+        # no room for two instants, so this reads `.start` only -- the
+        # same choice `functions/datetime.py`'s own `timestamp()` builtin
+        # makes, for the identical reason (this task's report).
+        return v.start.timestamp() * 1000.0
     return EMPTY  # List / Person / Page: no documented numeric coercion

@@ -18,9 +18,7 @@ generic propagation) can otherwise assume its arguments are never `EMPTY`.
 """
 from __future__ import annotations
 
-from datetime import datetime
-
-from ..values import EMPTY, FValue, Page, Person, is_empty, truthy
+from ..values import EMPTY, Date, FValue, Page, Person, is_empty, truthy
 from . import builtin
 
 
@@ -111,7 +109,11 @@ def _strict_eq(a: FValue, b: FValue) -> bool:
         return a == b
     if isinstance(a, str) and isinstance(b, str):
         return a == b
-    if isinstance(a, datetime) and isinstance(b, datetime):
+    if isinstance(a, Date) and isinstance(b, Date):
+        # `Date` (Task 26) is a frozen dataclass (`start`, `end`) --
+        # dataclass `==` is already field-wise, so this compares both
+        # components in one expression; a ranged Date only equals another
+        # ranged Date with the identical start AND end.
         return a == b
     if isinstance(a, list) and isinstance(b, list):
         return len(a) == len(b) and all(_strict_eq(x, y) for x, y in zip(a, b))

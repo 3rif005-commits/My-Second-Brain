@@ -27,6 +27,7 @@ __all__ = [
     "EMPTY",
     "Person",
     "Page",
+    "Date",
     "is_empty",
     "truthy",
     "as_number",
@@ -36,22 +37,75 @@ __all__ = [
 
 @dataclass(frozen=True)
 class Person:
-    """A workspace user (research §1.7). Not exercised by this task's four
-    categories (logic/numeric/string/regex never produce or consume one),
-    but declared here per the brief's value-representation spec so
-    Task 26's page/person functions have it ready without another
-    evaluator-wide edit."""
+    """A workspace user (research §1.7). Declared by Task 25 with only
+    `id` (nothing in its four categories produced or consumed a Person).
+    Task 26 extends it with optional `name`/`email` -- both default
+    `None` -- so `name()`/`email()` (research §3.8) have real fields to
+    read. A `Person` built by a caller that only has the id (e.g. a
+    relation link with no cached display data) leaves `name`/`email`
+    `None`, and `name()`/`email()` on it return `EMPTY` rather than
+    raising -- this package's usual total-function discipline."""
+
+    id: str
+    name: str | None = None
+    email: str | None = None
+
+
+@dataclass(frozen=True)
+class Page:
+    """A database row (research §1.6). Task 25 declared this with only
+    `id` (nothing in its four categories produced one); Task 26 is the
+    first real producer/consumer (`id(Page)`, relation-typed properties
+    surfaced as `list[Page]` by a caller's `EvalContext.properties`) and
+    needs nothing more than `id` -- research §1.6, explicit: "There is no
+    `.name()` on a Page," so unlike `Person` this type gains no new
+    fields."""
 
     id: str
 
 
 @dataclass(frozen=True)
-class Page:
-    """A database row (research §1.6). Same status as `Person` above --
-    declared for the brief's value model, not yet produced by anything in
-    this task's scope."""
+class Date:
+    """A Date value (research §1.1/§1.3): either an instant, or -- when
+    `end` is set -- a date RANGE. Research §1.3, official: "A date range
+    is not a separate type -- it is the Date type with an end component,"
+    and `dateRange(start, end)`'s own return type is documented as "Date
+    (with an end)." This evaluator therefore has exactly ONE Date
+    representation for both cases (a bare instant is a `Date` with
+    `end=None`) rather than two competing shapes -- matching
+    `services/db/relations.py`'s `DateWindow` (`start: datetime; end:
+    datetime | None = None`), which Task 26's brief names explicitly as
+    the precedent to stay consistent with.
 
-    id: str
+    `start`/`end`, when set, are timezone-aware UTC `datetime`s -- this
+    evaluator is UTC-only end to end (see `functions/datetime.py`'s
+    module docstring for the three places that decision was made).
+    Research also documents a third component of Notion's real Date type,
+    "time zone" -- not represented here at all, since every `Date` this
+    evaluator produces is implicitly "UTC" and there is no per-value zone
+    to carry (same non-decision `EvalContext.now`'s own docstring already
+    makes for the evaluator as a whole)."""
+
+    start: datetime
+    end: datetime | None = None
+
+
+# Shared with `functions/datetime.py`'s `formatDate` token table
+# (`MMMM`/`MMM`/`dddd`/`ddd`/`dd` tokens) so `format(now())`'s default
+# rendering and `formatDate(now(), "MMMM")`'s token-driven rendering can
+# never spell a month/weekday name differently -- defined here rather than
+# in `functions/datetime.py` because `stringify()` below needs them and
+# `functions/datetime.py` already imports from `values.py` (the reverse
+# import would cycle). Leading underscore: package-private, not part of
+# `__all__`, but explicitly importable by name -- same convention as every
+# other module-private helper in this package.
+_MONTH_NAMES = (
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+)  # fmt: skip
+_WEEKDAY_NAMES = (
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+)  # fmt: skip  # index 0 = Monday, matching `datetime.weekday()`
 
 
 class _EmptyType:
@@ -92,8 +146,10 @@ EMPTY = _EmptyType()
 # citizens: `EMPTY` (a value, not a type) and Python's own `list` for
 # `List` (heterogeneous, unparameterised -- types.py's own documented
 # choice, carried into the runtime representation here). `float` for every
-# Number (brief: "IEEE-754/JS-like, so 1/2 == 0.5" -- never `int`).
-FValue = Union[str, float, bool, datetime, list, Person, Page, _EmptyType]
+# Number (brief: "IEEE-754/JS-like, so 1/2 == 0.5" -- never `int`). `Date`
+# (this module's own wrapper, above), not a bare `datetime` -- Task 26
+# upgraded the representation to carry an optional `end` component.
+FValue = Union[str, float, bool, Date, list, Person, Page, _EmptyType]
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +234,16 @@ def as_number(value: FValue) -> float | None:
 # ---------------------------------------------------------------------------
 
 
+def _render_date_instant(value: "Date") -> str:
+    """The default (`formatDate`-token-free) rendering of one Date
+    instant -- `stringify()`'s Date branch below is the only caller. Takes
+    a `Date` (not a bare `datetime`) purely so both call sites (the plain
+    `value` and the synthesised `Date(start=value.end)` for a ranged
+    value's second half) share one signature; only `.start` is read."""
+    dt = value.start
+    return f"{_MONTH_NAMES[dt.month - 1]} {dt.day}, {dt.year} {dt.hour:02d}:{dt.minute:02d}"
+
+
 def stringify(value: FValue) -> str:
     """`format(Any) -> Text` (research §3.3/§3.9: "plain, unstyled
     stringification"), and also what `+`'s string-concatenation overload
@@ -210,16 +276,26 @@ def stringify(value: FValue) -> str:
         return str(value)
     if isinstance(value, str):
         return value
-    if isinstance(value, datetime):
-        # Date stringification (`format(now())` -> "August 30, 2023
-        # 17:55") is Task 26's territory (it needs Luxon-style date
-        # formatting, out of scope here per this task's brief's "Out of
-        # scope" list) -- isoformat is a placeholder so `format()` stays
-        # total rather than crashing if a Date value ever reaches this
-        # task's code path (it cannot yet, since nothing in this task's
-        # four categories produces a Date value; flagged in this task's
-        # report).
-        return value.isoformat()
+    if isinstance(value, Date):
+        # `format(Date) -> Text` (research §3.3/§3.9, official example:
+        # `format(now())` -> "August 30, 2023 17:55"). Task 25 left this
+        # as an isoformat placeholder ("Task 26's territory"); this is
+        # that real implementation. Research gives exactly the one
+        # example -- no ruling on seconds, on whether a date with no
+        # time-of-day omits the clock, or on a ranged value -- so the
+        # choices below are this task's own reading, flagged in its
+        # report: always render `HH:MM` in 24-hour time (matching the one
+        # official example, which shows a PM hour as "17", not "5 PM");
+        # never omit the time even for a `today()`-produced midnight
+        # value (this evaluator's `Date` has no separate "date-only"
+        # flag, see its own docstring); a RANGED value (`end` set) renders
+        # as `"{start} → {end}"`, reusing the exact arrow the official
+        # docs use to DISPLAY `dateRange`'s own worked example
+        # (`@September 7, 2022 → September 7, 2023`).
+        rendered = _render_date_instant(value)
+        if value.end is not None:
+            return f"{rendered} → {_render_date_instant(Date(start=value.end))}"
+        return rendered
     if isinstance(value, list):
         # No documented `format([...])` example. Comma-joining each
         # element's own `stringify()` is the conservative reading (matches
@@ -228,9 +304,11 @@ def stringify(value: FValue) -> str:
         return ", ".join(stringify(v) for v in value)
     if isinstance(value, (Person, Page)):
         # research §1.6 marks "whether a bare Page value coerces to its
-        # title in string concatenation" UNRESOLVED. Neither type is
-        # producible by this task's four categories, so this is a
-        # forward-compatible placeholder, not a real decision this task
-        # needs to defend.
+        # title in string concatenation" UNRESOLVED. Task 26's `Page`/
+        # `Person` still carry no title/display-name-shaped field usable
+        # here (`Person.name` exists but research's own `name()` function
+        # is the documented way to read it, not implicit stringification),
+        # so this stays the same placeholder Task 25 chose (`.id`) --
+        # carried forward, not re-decided.
         return value.id
     return str(value)  # pragma: no cover - exhaustive above for real FValues
