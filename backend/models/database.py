@@ -341,6 +341,29 @@ class RelationLinkAdd(BaseModel):
     row_id: str
 
 
+class RelationLinksBulkRequest(BaseModel):
+    """`POST .../relations/{property_key}/links/bulk` body: the row ids to
+    fetch links for in one round trip. M7 combined-review Important
+    finding 3: `services.db.relations.list_links_bulk` was built by task 20
+    explicitly to be the N+1 killer for exactly this ("one query, grouped
+    in Python" — its own docstring), but task 21 never exposed it through
+    a router, so `TableView.tsx`'s sub-item tree ended up issuing one
+    `GET .../relations/{property_key}` per visible row instead. Capped at
+    `routers.databases._BULK_RELATION_ROW_IDS_LIMIT` per request."""
+
+    row_ids: list[str]
+
+
+class RelationLinksBulkResponse(BaseModel):
+    """One entry per requested row id, even `[]` for a row with no links
+    (mirrors `list_links_bulk`'s own "every requested id is a key" contract
+    — an absent key would mean "not asked about", a different thing from
+    "asked about, has none"), each hydrated with titles the same way
+    `RelationLinksResponse.rows` is."""
+
+    links: dict[str, list[RelatedRow]]
+
+
 class DependencySettingsUpdate(BaseModel):
     """`PATCH /db/relations/{relation_id}/dependency-settings` body —
     partial update of the forward dependency property's `config`

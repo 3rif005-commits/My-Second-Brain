@@ -314,15 +314,21 @@ class RelationRef:
 # The only two real column names `own_column`/`other_column` can ever
 # produce. They are safe to interpolate into SQL by construction (the
 # ternary above can't yield anything else regardless of `side`'s actual
-# value), but every call site below still asserts membership before doing
-# so -- the same defensive-in-depth style `_column_reference` in
-# properties/base.py uses for its allow-listed column names.
+# value), but every call site below still checks membership before doing
+# so and raises rather than asserting -- this codebase's standard for a
+# correctness guard on interpolated SQL identity, since `assert` is
+# stripped under `python -O`. Matches `_column_reference` in
+# properties/base.py, which does the identical check on the identical
+# class of value with `raise ValueError` (that module's own precedent,
+# not the reverse -- an earlier version of this comment mis-cited it as
+# using `assert`, which it never did).
 _LINK_COLUMNS = ("from_row_id", "to_row_id")
 
 
 def _own_other(ref: RelationRef) -> tuple[str, str]:
     own, other = ref.own_column, ref.other_column
-    assert own in _LINK_COLUMNS and other in _LINK_COLUMNS, (own, other)
+    if own not in _LINK_COLUMNS or other not in _LINK_COLUMNS:
+        raise ValueError(f"invalid relation link column: {(own, other)!r}")
     return own, other
 
 

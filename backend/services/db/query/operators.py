@@ -473,12 +473,17 @@ def _native_array_sql(operator_name: str, e: str, value: Any) -> tuple[str, tupl
 
 
 # The only two real db_relation_links column names RelationRef.own_column/
-# other_column can ever produce (see services/db/relations.py). Asserted
-# before interpolation below, same defensive style as _column_reference in
-# properties/base.py -- even though they're structurally safe by
-# construction, a bound param is fine here (a real B-tree index, not the
-# expression-index literal-key requirement SqlFragment's docstring warns
-# about), so relation_id/user_id/value all travel as $N, never interpolated.
+# other_column can ever produce (see services/db/relations.py). Checked
+# before interpolation below via `raise`, not `assert` -- `assert` is
+# stripped under `python -O`, and this codebase's standard for a
+# correctness guard on interpolated SQL identity is `raise`, the same
+# style `_column_reference` in properties/base.py uses for its
+# allow-listed column names (and `properties/relation.py`'s `sql_order`
+# for this identical check on this identical value). Even though they're
+# structurally safe by construction, a bound param is fine here (a real
+# B-tree index, not the expression-index literal-key requirement
+# SqlFragment's docstring warns about), so relation_id/user_id/value all
+# travel as $N, never interpolated.
 _RELATION_LINK_COLUMNS = ("from_row_id", "to_row_id")
 
 
@@ -494,7 +499,8 @@ def _relation_filter_sql(
     if ctx.relation is None:
         raise FilterValidationError("relation property is not configured")
     own, other = ctx.relation.own_column, ctx.relation.other_column
-    assert own in _RELATION_LINK_COLUMNS and other in _RELATION_LINK_COLUMNS, (own, other)
+    if own not in _RELATION_LINK_COLUMNS or other not in _RELATION_LINK_COLUMNS:
+        raise ValueError(f"invalid relation link column: {(own, other)!r}")
     row_id_expr = ctx.row_id_expr
 
     exists = (

@@ -41,6 +41,8 @@ from models.database import (
     RelatedRow,
     RelationCreate,
     RelationLinkAdd,
+    RelationLinksBulkRequest,
+    RelationLinksBulkResponse,
     RelationLinksResponse,
     RelationLinksSet,
     RelationPairResponse,
@@ -72,6 +74,7 @@ from services.db.relations import (
     delete_relation_pair,
     link_checked,
     list_links,
+    list_links_bulk,
     relation_ref_from_config,
     unlink,
 )
@@ -97,6 +100,14 @@ _KEY_MINT_ATTEMPTS = 5
 # params, "load more" UI) is explicitly Milestone 3+ scope — this is just a
 # hard cap, not a feature.
 _ROWS_LIMIT = 500
+
+# M7 combined-review Important finding 3: caps `POST .../relations/
+# {property_key}/links/bulk`'s `row_ids` body -- a distinct limit from
+# `_ROWS_LIMIT` above (that one bounds rows *returned from a data source
+# query*; this one bounds row ids a single client request may ask about in
+# one go) even though both currently land on 500, the same generous-for-a-
+# personal-knowledge-base reasoning `_ROWS_LIMIT`'s own comment gives.
+_BULK_RELATION_ROW_IDS_LIMIT = 500
 
 
 def _jsonify(value: Any) -> Any:
@@ -1317,6 +1328,98 @@ async def _require_row(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "row not found")
 
 
+async def _require_relation_target_row(
+    conn: asyncpg.Connection, user_id: str, target_data_source_id: str | None, row_id: str
+) -> None:
+    """M7 combined-review Important finding 1: `add_relation_link` and
+    `set_relation_links` used to verify only that the *other*-side row was
+    some `notes` row owned by this user and not trashed -- never that it
+    belonged to the relation property's own declared
+    `config.target_data_source_id`, and since that check queried `notes`
+    directly, the other row didn't even need to be a database row at all.
+    Reproduced live by the reviewer: a link from a Tasks row to a row in a
+    third, unrelated data source returned 201.
+
+    This is `_require_row` above, widened one step: `_require_row` proves
+    `note_id` is a `db_row_props` member of `data_source_id` (the *primary*
+    row, from the URL path); this proves `row_id` is a `db_row_props`
+    member of `target_data_source_id` (the *other* row, from the request
+    body) -- same query shape, same `deleted_at IS NULL` exclusion of
+    trashed rows `_fetch_related_rows` already applies on the read path, so
+    a trashed row is treated as "not found" here too rather than silently
+    linkable. For a self-relation (sub-item/dependency, where
+    `target_data_source_id == data_source_id`) this is exactly the same
+    membership `_require_row` already proved for the primary row -- the
+    self-relation case is not a special case here, it falls out of the
+    predicate being the same shape with a different data_source_id.
+
+    404 when `row_id` doesn't resolve to a live row anywhere for this user
+    (the existing "unknown row" contract, unchanged) -- 400, not 404 or
+    500, when it resolves to a live row but in the *wrong* data source,
+    naming both ids so the mismatch is diagnosable from the response body
+    alone."""
+    if target_data_source_id is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "relation property has no configured target_data_source_id",
+        )
+    own_data_source = await conn.fetchval(
+        """
+        SELECT drp.data_source_id FROM db_row_props drp
+        JOIN notes n ON n.id = drp.note_id
+        WHERE drp.note_id = $1 AND drp.user_id = $2 AND n.deleted_at IS NULL
+        """,
+        row_id,
+        user_id,
+    )
+    if own_data_source is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "row not found")
+    if str(own_data_source) != str(target_data_source_id):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"row {row_id!r} belongs to data source {str(own_data_source)!r}, "
+            f"not this relation's target data source {target_data_source_id!r}",
+        )
+
+
+async def _require_relation_target_rows(
+    conn: asyncpg.Connection, user_id: str, target_data_source_id: str | None, row_ids: list[str]
+) -> None:
+    """Bulk form of `_require_relation_target_row` above, for
+    `set_relation_links`'s whole-list replace -- one query instead of N.
+    Same 404 ("doesn't exist/trashed") vs 400 ("exists, wrong data source")
+    split, reported as a list so a caller sees every offending id at once
+    rather than only the first."""
+    if not row_ids:
+        return
+    if target_data_source_id is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "relation property has no configured target_data_source_id",
+        )
+    found = await conn.fetch(
+        """
+        SELECT drp.note_id AS id, drp.data_source_id FROM db_row_props drp
+        JOIN notes n ON n.id = drp.note_id
+        WHERE drp.note_id = ANY($1::uuid[]) AND drp.user_id = $2 AND n.deleted_at IS NULL
+        """,
+        row_ids,
+        user_id,
+    )
+    found_map = {str(r["id"]): str(r["data_source_id"]) for r in found}
+    missing = [i for i in row_ids if i not in found_map]
+    if missing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"row(s) not found: {missing}")
+    mismatched = [i for i in row_ids if found_map[i] != str(target_data_source_id)]
+    if mismatched:
+        detail = ", ".join(f"{i!r} (belongs to {found_map[i]!r})" for i in mismatched)
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"row(s) do not belong to this relation's target data source "
+            f"{target_data_source_id!r}: {detail}",
+        )
+
+
 async def _fetch_related_rows(
     conn: asyncpg.Connection, user_id: str, row_ids: list[str]
 ) -> list[RelatedRow]:
@@ -1499,16 +1602,19 @@ async def set_relation_links(
     system = prop_row["config"].get("system")
 
     new_ids = list(dict.fromkeys(_parse_uuid_or_404(i, "row") for i in body.row_ids))
-    if new_ids:
-        valid = await conn.fetch(
-            "SELECT id FROM notes WHERE id = ANY($1::uuid[]) AND user_id = $2 AND deleted_at IS NULL",
-            new_ids,
-            user_id,
-        )
-        valid_ids = {str(r["id"]) for r in valid}
-        missing = [i for i in new_ids if i not in valid_ids]
-        if missing:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, f"row(s) not found: {missing}")
+    # M7 combined-review Important finding 1: this used to check only that
+    # each id was *some* live `notes` row for this user -- not that it
+    # belonged to this relation's own `target_data_source_id`, so a link
+    # could point at a row in a completely unrelated data source (or one
+    # that was never a database row at all). `_require_relation_target_rows`
+    # closes that the same way `_require_row` above already validates the
+    # primary row against `data_source_id` -- for a self-relation
+    # (sub_item/dependency, `target_data_source_id == data_source_id`) this
+    # is exactly the membership `_require_row` already proved, so nothing
+    # new is rejected there.
+    await _require_relation_target_rows(
+        conn, user_id, prop_row["config"].get("target_data_source_id"), new_ids
+    )
 
     existing_ids = await list_links(conn, user_id, ref, note_id)
     to_delete = set(existing_ids) - set(new_ids)
@@ -1553,13 +1659,13 @@ async def add_relation_link(
     if ref is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "relation property is not configured")
 
-    other_exists = await conn.fetchval(
-        "SELECT 1 FROM notes WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL",
-        other_id,
-        user_id,
+    # M7 combined-review Important finding 1: see the identical comment in
+    # `set_relation_links` above -- this used to check only that `other_id`
+    # was *some* live `notes` row for this user, not that it belonged to
+    # this relation's own `target_data_source_id`.
+    await _require_relation_target_row(
+        conn, user_id, prop_row["config"].get("target_data_source_id"), other_id
     )
-    if other_exists is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "row not found")
 
     try:
         await link_checked(
@@ -1606,6 +1712,83 @@ async def remove_relation_link(
 
     other_ids = await list_links(conn, user_id, ref, note_id)
     return RelationLinksResponse(rows=await _fetch_related_rows(conn, user_id, other_ids))
+
+
+@router.post(
+    "/data-sources/{data_source_id}/relations/{property_key}/links/bulk",
+    response_model=RelationLinksBulkResponse,
+)
+async def get_relation_links_bulk(
+    data_source_id: str,
+    property_key: str,
+    body: RelationLinksBulkRequest,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RelationLinksBulkResponse:
+    """The N+1 killer, finally wired up (M7 combined-review Important
+    finding 3): `services.db.relations.list_links_bulk` was built by task
+    20 for exactly this, but task 21 never exposed it -- `TableView.tsx`'s
+    sub-item tree pre-fetch and `useDatabaseView`'s relation-cache warming
+    both ended up issuing one `GET .../relations/{property_key}` per
+    visible row instead of one request for the whole page. This does not
+    replace that per-row GET (`get_relation_links` above) -- `RelationCell`
+    still uses it for a single cell's own lazy load; this is for "every
+    row on the page, one round trip", the shape `list_links_bulk` and
+    `TableView`'s sub-item tree both actually need.
+
+    A POST, not a GET-with-body: matches this router's own precedent for a
+    read that needs a request body (`query_rows`, task-15's `POST
+    .../query`), and avoids the encoding awkwardness of putting a
+    potentially-500-long id list on a query string.
+
+    A `path` (not `body`) `property_key`, matching every other relation
+    endpoint's URL shape -- only the *ids to ask about* are bulk, not the
+    property being asked about, since one call site only ever needs one
+    property's worth of links across many rows (`TableView`'s single
+    sub-item column, `useDatabaseView`'s per-property cache warm)."""
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "the All Notes source has no relation properties"
+        )
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    if len(body.row_ids) > _BULK_RELATION_ROW_IDS_LIMIT:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"at most {_BULK_RELATION_ROW_IDS_LIMIT} row_ids per request, "
+            f"got {len(body.row_ids)}",
+        )
+    row_ids = [_parse_uuid_or_404(i, "row") for i in body.row_ids]
+
+    prop_row = await _get_relation_property(conn, user_id, data_source_id, property_key)
+    ref = relation_ref_from_config(prop_row["config"])
+    if ref is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "relation property is not configured")
+
+    links = await list_links_bulk(conn, user_id, ref, row_ids)
+
+    # One title lookup for every distinct linked id across the whole batch
+    # (not one `_fetch_related_rows` call per owner row) -- that's the
+    # entire point of this endpoint existing. Same `deleted_at IS NULL`
+    # trashed-row exclusion `_fetch_related_rows` applies on the per-row
+    # path, so a trashed row silently drops out of its owner's list here
+    # too rather than surfacing with a placeholder title.
+    all_other_ids = sorted({other_id for ids in links.values() for other_id in ids})
+    title_records = await conn.fetch(
+        "SELECT id, title FROM notes WHERE id = ANY($1::uuid[]) AND user_id = $2 AND deleted_at IS NULL",
+        all_other_ids,
+        user_id,
+    )
+    titles = {str(r["id"]): r["title"] for r in title_records}
+    return RelationLinksBulkResponse(
+        links={
+            owner_id: [
+                RelatedRow(id=other_id, title=titles[other_id])
+                for other_id in other_ids
+                if other_id in titles
+            ]
+            for owner_id, other_ids in links.items()
+        }
+    )
 
 
 @router.post(

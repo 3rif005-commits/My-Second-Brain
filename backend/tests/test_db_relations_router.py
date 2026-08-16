@@ -328,6 +328,155 @@ async def test_set_relation_links_unknown_row_id_404(client, db_conn):
     assert res.status_code == 404
 
 
+# ---------------------------------------------------------------------------
+# M7 combined-review Important finding 1: the other-side row must belong to
+# the relation's own declared config.target_data_source_id, not merely be
+# some live notes row for this user. Reproduced live by the reviewer before
+# the fix: a link from a Tasks row to a row in a third, unrelated data
+# source returned 201.
+# ---------------------------------------------------------------------------
+
+
+async def test_set_relation_links_wrong_data_source_400_and_nothing_committed(client, db_conn):
+    tasks = await _create_database(client, "Tasks")
+    projects = await _create_database(client, "Projects")
+    other = await _create_database(client, "Unrelated")
+    tasks_ds = tasks["data_source"]["id"]
+    projects_ds = projects["data_source"]["id"]
+    other_ds = other["data_source"]["id"]
+    pair = await client.post(
+        f"/db/data-sources/{tasks_ds}/relations",
+        json={"name": "Project", "target_data_source_id": projects_ds, "two_way": False},
+    )
+    key = pair.json()["forward"]["key"]
+    task_row = await _create_row(client, db_conn, tasks_ds)
+    good_row = await _create_row(client, db_conn, projects_ds, title="Good")
+    bad_row = await _create_row(client, db_conn, other_ds, title="Bad")
+
+    res = await client.put(
+        f"/db/data-sources/{tasks_ds}/rows/{task_row}/relations/{key}",
+        json={"row_ids": [good_row, bad_row]},
+    )
+    assert res.status_code == 400, res.text
+    assert other_ds in res.text  # names the mismatched data source
+    assert bad_row in res.text  # names the offending row
+
+    # Nothing committed -- not even the one row (good_row) that would have
+    # been valid on its own.
+    link_count = await db_conn.fetchval(
+        "SELECT count(*) FROM db_relation_links WHERE from_row_id = $1", task_row
+    )
+    assert link_count == 0
+
+
+async def test_add_relation_link_wrong_data_source_400_and_nothing_committed(client, db_conn):
+    tasks = await _create_database(client, "Tasks")
+    projects = await _create_database(client, "Projects")
+    other = await _create_database(client, "Unrelated")
+    tasks_ds = tasks["data_source"]["id"]
+    projects_ds = projects["data_source"]["id"]
+    other_ds = other["data_source"]["id"]
+    pair = await client.post(
+        f"/db/data-sources/{tasks_ds}/relations",
+        json={"name": "Project", "target_data_source_id": projects_ds, "two_way": False},
+    )
+    key = pair.json()["forward"]["key"]
+    task_row = await _create_row(client, db_conn, tasks_ds)
+    other_row = await _create_row(client, db_conn, other_ds, title="Unrelated Row")
+
+    res = await client.post(
+        f"/db/data-sources/{tasks_ds}/rows/{task_row}/relations/{key}/links",
+        json={"row_id": other_row},
+    )
+    assert res.status_code == 400, res.text
+    assert other_ds in res.text  # names the mismatched data source
+    assert other_row in res.text  # names the offending row
+
+    link_count = await db_conn.fetchval(
+        "SELECT count(*) FROM db_relation_links WHERE from_row_id = $1", task_row
+    )
+    assert link_count == 0
+
+
+async def test_add_relation_link_to_a_plain_note_that_is_not_a_database_row_400(
+    client, db_conn, test_user
+):
+    """Before the fix, the other-side check queried `notes` directly, so a
+    plain note that was never a database row at all (no `db_row_props` row
+    anywhere) passed -- the exact "need not be a database row at all" half
+    of the reviewer's finding. Now it 404s the same way any other unknown
+    row id would, since `db_row_props` membership is what's actually
+    checked."""
+    tasks = await _create_database(client, "Tasks")
+    projects = await _create_database(client, "Projects")
+    tasks_ds = tasks["data_source"]["id"]
+    projects_ds = projects["data_source"]["id"]
+    pair = await client.post(
+        f"/db/data-sources/{tasks_ds}/relations",
+        json={"name": "Project", "target_data_source_id": projects_ds, "two_way": False},
+    )
+    key = pair.json()["forward"]["key"]
+    task_row = await _create_row(client, db_conn, tasks_ds)
+
+    plain_note = await db_conn.fetchval(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Just a note') RETURNING id",
+        test_user,
+    )
+
+    res = await client.post(
+        f"/db/data-sources/{tasks_ds}/rows/{task_row}/relations/{key}/links",
+        json={"row_id": str(plain_note)},
+    )
+    assert res.status_code == 404, res.text
+
+
+async def test_add_relation_link_self_relation_target_equals_own_data_source_still_works(
+    client, db_conn
+):
+    """Important finding 1's fix must not regress the self-relation case
+    (sub-items/dependencies, and any ordinary relation a user points at its
+    own data source) -- `target_data_source_id == data_source_id` there, so
+    the new check reduces to exactly the membership `_require_row` already
+    proved for the primary row."""
+    db = await _create_database(client, "Tasks")
+    ds_id = db["data_source"]["id"]
+    pair = await client.post(
+        f"/db/data-sources/{ds_id}/relations",
+        json={"name": "Related", "target_data_source_id": ds_id, "two_way": False},
+    )
+    assert pair.status_code == 201, pair.text
+    key = pair.json()["forward"]["key"]
+    a = await _create_row(client, db_conn, ds_id, title="A")
+    b = await _create_row(client, db_conn, ds_id, title="B")
+
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/rows/{a}/relations/{key}/links", json={"row_id": b}
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["rows"] == [{"id": b, "title": "B"}]
+
+
+async def test_set_relation_links_self_relation_target_equals_own_data_source_still_works(
+    client, db_conn
+):
+    db = await _create_database(client, "Tasks")
+    ds_id = db["data_source"]["id"]
+    pair = await client.post(
+        f"/db/data-sources/{ds_id}/relations",
+        json={"name": "Related", "target_data_source_id": ds_id, "two_way": False},
+    )
+    key = pair.json()["forward"]["key"]
+    a = await _create_row(client, db_conn, ds_id, title="A")
+    b = await _create_row(client, db_conn, ds_id, title="B")
+    c = await _create_row(client, db_conn, ds_id, title="C")
+
+    res = await client.put(
+        f"/db/data-sources/{ds_id}/rows/{a}/relations/{key}", json={"row_ids": [b, c]}
+    )
+    assert res.status_code == 200, res.text
+    assert {r["id"] for r in res.json()["rows"]} == {b, c}
+
+
 async def test_add_relation_link_unknown_row_404(client, db_conn):
     tasks = await _create_database(client, "Tasks")
     projects = await _create_database(client, "Projects")
@@ -363,6 +512,142 @@ async def test_remove_relation_link_idempotent(client, db_conn):
     )
     assert res.status_code == 200
     assert res.json()["rows"] == []
+
+
+# ---------------------------------------------------------------------------
+# POST .../relations/{property_key}/links/bulk (M7 combined-review
+# Important finding 3): the N+1 killer, finally exposed through the router.
+# ---------------------------------------------------------------------------
+
+
+async def test_relation_links_bulk_returns_one_entry_per_requested_row_including_empty(
+    client, db_conn
+):
+    tasks = await _create_database(client, "Tasks")
+    projects = await _create_database(client, "Projects")
+    tasks_ds, projects_ds = tasks["data_source"]["id"], projects["data_source"]["id"]
+    pair = await client.post(
+        f"/db/data-sources/{tasks_ds}/relations",
+        json={"name": "Project", "target_data_source_id": projects_ds, "two_way": False},
+    )
+    key = pair.json()["forward"]["key"]
+    linked_row = await _create_row(client, db_conn, tasks_ds, title="Has a link")
+    unlinked_row = await _create_row(client, db_conn, tasks_ds, title="No links")
+    project_row = await _create_row(client, db_conn, projects_ds, title="Q3")
+
+    add_res = await client.post(
+        f"/db/data-sources/{tasks_ds}/rows/{linked_row}/relations/{key}/links",
+        json={"row_id": project_row},
+    )
+    assert add_res.status_code == 201, add_res.text
+
+    res = await client.post(
+        f"/db/data-sources/{tasks_ds}/relations/{key}/links/bulk",
+        json={"row_ids": [linked_row, unlinked_row]},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["links"][linked_row] == [{"id": project_row, "title": "Q3"}]
+    assert body["links"][unlinked_row] == []  # present as an empty list, not absent
+
+
+async def test_relation_links_bulk_matches_per_row_endpoint_output(client, db_conn):
+    """The whole point of the bulk endpoint is that it returns exactly what
+    N calls to the per-row `GET .../relations/{property_key}` endpoint
+    would have, in one round trip -- not a different shape."""
+    tasks = await _create_database(client, "Tasks")
+    projects = await _create_database(client, "Projects")
+    tasks_ds, projects_ds = tasks["data_source"]["id"], projects["data_source"]["id"]
+    pair = await client.post(
+        f"/db/data-sources/{tasks_ds}/relations",
+        json={"name": "Project", "target_data_source_id": projects_ds, "two_way": False},
+    )
+    key = pair.json()["forward"]["key"]
+    row1 = await _create_row(client, db_conn, tasks_ds, title="Row 1")
+    row2 = await _create_row(client, db_conn, tasks_ds, title="Row 2")
+    p1 = await _create_row(client, db_conn, projects_ds, title="P1")
+    p2 = await _create_row(client, db_conn, projects_ds, title="P2")
+    await client.post(
+        f"/db/data-sources/{tasks_ds}/rows/{row1}/relations/{key}/links", json={"row_id": p1}
+    )
+    await client.post(
+        f"/db/data-sources/{tasks_ds}/rows/{row2}/relations/{key}/links", json={"row_id": p2}
+    )
+
+    per_row_1 = await client.get(f"/db/data-sources/{tasks_ds}/rows/{row1}/relations/{key}")
+    per_row_2 = await client.get(f"/db/data-sources/{tasks_ds}/rows/{row2}/relations/{key}")
+
+    bulk = await client.post(
+        f"/db/data-sources/{tasks_ds}/relations/{key}/links/bulk",
+        json={"row_ids": [row1, row2]},
+    )
+    assert bulk.status_code == 200, bulk.text
+    assert bulk.json()["links"][row1] == per_row_1.json()["rows"]
+    assert bulk.json()["links"][row2] == per_row_2.json()["rows"]
+
+
+async def test_relation_links_bulk_empty_row_ids_returns_empty_links(client, db_conn):
+    tasks = await _create_database(client, "Tasks")
+    projects = await _create_database(client, "Projects")
+    tasks_ds, projects_ds = tasks["data_source"]["id"], projects["data_source"]["id"]
+    pair = await client.post(
+        f"/db/data-sources/{tasks_ds}/relations",
+        json={"name": "Project", "target_data_source_id": projects_ds, "two_way": False},
+    )
+    key = pair.json()["forward"]["key"]
+
+    res = await client.post(
+        f"/db/data-sources/{tasks_ds}/relations/{key}/links/bulk", json={"row_ids": []}
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["links"] == {}
+
+
+async def test_relation_links_bulk_all_notes_400(client):
+    res = await client.post(
+        f"/db/data-sources/{ALL_NOTES_ID}/relations/abcdefgh/links/bulk", json={"row_ids": []}
+    )
+    assert res.status_code == 400
+
+
+async def test_relation_links_bulk_non_relation_property_400(client):
+    db = await _create_database(client, "Tasks")
+    ds_id = db["data_source"]["id"]
+    prop = await _create_property(client, ds_id, "Notes", "rich_text")
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/relations/{prop['key']}/links/bulk", json={"row_ids": []}
+    )
+    assert res.status_code == 400
+
+
+async def test_relation_links_bulk_unknown_property_404(client):
+    db = await _create_database(client, "Tasks")
+    ds_id = db["data_source"]["id"]
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/relations/zzzzzzzz/links/bulk", json={"row_ids": []}
+    )
+    assert res.status_code == 404
+
+
+async def test_relation_links_bulk_over_the_cap_is_400_not_500(client, db_conn):
+    tasks = await _create_database(client, "Tasks")
+    projects = await _create_database(client, "Projects")
+    tasks_ds, projects_ds = tasks["data_source"]["id"], projects["data_source"]["id"]
+    pair = await client.post(
+        f"/db/data-sources/{tasks_ds}/relations",
+        json={"name": "Project", "target_data_source_id": projects_ds, "two_way": False},
+    )
+    key = pair.json()["forward"]["key"]
+
+    # The cap is checked before any row id is validated/resolved, so a
+    # batch of syntactically-arbitrary strings is enough to prove the
+    # limit fires -- no need to actually create 501 rows.
+    too_many = [f"row-{i}" for i in range(501)]
+    res = await client.post(
+        f"/db/data-sources/{tasks_ds}/relations/{key}/links/bulk", json={"row_ids": too_many}
+    )
+    assert res.status_code == 400, res.text
+    assert "501" in res.text
 
 
 # ---------------------------------------------------------------------------
