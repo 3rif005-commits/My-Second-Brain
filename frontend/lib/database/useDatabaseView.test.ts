@@ -417,6 +417,151 @@ describe("useDatabaseView", () => {
     expect(result.current.views.find((v) => v.id === "v1")?.config).toEqual({ foo: "bar" });
   });
 
+  it("ensureRelationLinks: fetches once, caches the result, and is a no-op on a second call for the same key", async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+      if (url === "/api/db/data-sources/ds-1/query") return Promise.resolve(jsonResponse({ rows: ROWS }));
+      if (url === "/api/db/data-sources/ds-1/rows/row-1/relations/related") {
+        return Promise.resolve(jsonResponse({ rows: [{ id: "row-2", title: "Second" }] }));
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.ensureRelationLinks("row-1", "related");
+    });
+    expect(result.current.relationLinks["row-1:related"]).toEqual([{ id: "row-2", title: "Second" }]);
+
+    const relationCallsBefore = fetchMock.mock.calls.filter(([url]) =>
+      (url as string).includes("/relations/")
+    ).length;
+    await act(async () => {
+      await result.current.ensureRelationLinks("row-1", "related");
+    });
+    const relationCallsAfter = fetchMock.mock.calls.filter(([url]) =>
+      (url as string).includes("/relations/")
+    ).length;
+    expect(relationCallsAfter).toBe(relationCallsBefore); // cached — no second fetch
+  });
+
+  it("setRelationLinks: applies optimistically, PUTs {row_ids}, then reconciles with the server response", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+      if (url === "/api/db/data-sources/ds-1/query") return Promise.resolve(jsonResponse({ rows: ROWS }));
+      if (url === "/api/db/data-sources/ds-1/rows/row-1/relations/related" && init?.method === "PUT") {
+        return Promise.resolve(jsonResponse({ rows: [{ id: "row-2", title: "Second" }] }));
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.setRelationLinks("row-1", "related", [{ id: "row-2", title: "Second" }]);
+    });
+
+    expect(result.current.relationLinks["row-1:related"]).toEqual([{ id: "row-2", title: "Second" }]);
+    expect(showToast).not.toHaveBeenCalled();
+
+    const putCall = fetchMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === "PUT"
+    );
+    expect(putCall).toBeTruthy();
+    expect(JSON.parse((putCall![1] as RequestInit).body as string)).toEqual({ row_ids: ["row-2"] });
+  });
+
+  it("setRelationLinks: rolls back the cache and toasts an error on a failed PUT", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+      if (url === "/api/db/data-sources/ds-1/query") return Promise.resolve(jsonResponse({ rows: ROWS }));
+      if (url === "/api/db/data-sources/ds-1/rows/row-1/relations/related" && init?.method === "PUT") {
+        return Promise.resolve(jsonResponse({ detail: "cycle detected: a -> b -> a" }, 400));
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.setRelationLinks("row-1", "related", [{ id: "row-2", title: "Second" }]);
+    });
+
+    // Nothing was cached before this call — rollback means the key goes
+    // back to "not fetched" (absent), not `[]`.
+    expect("row-1:related" in result.current.relationLinks).toBe(false);
+    expect(showToast).toHaveBeenCalledWith("cycle detected: a -> b -> a", "error");
+  });
+
+  it("setRelationLinks: rolls back to the PREVIOUS cached value (not an empty list) when one existed", async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+      if (url === "/api/db/data-sources/ds-1/query") return Promise.resolve(jsonResponse({ rows: ROWS }));
+      if (url === "/api/db/data-sources/ds-1/rows/row-1/relations/related" && init?.method === "PUT") {
+        return Promise.resolve(jsonResponse({ detail: "boom" }, 500));
+      }
+      if (url === "/api/db/data-sources/ds-1/rows/row-1/relations/related") {
+        return Promise.resolve(jsonResponse({ rows: [{ id: "row-2", title: "Second" }] }));
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.ensureRelationLinks("row-1", "related");
+    });
+    expect(result.current.relationLinks["row-1:related"]).toEqual([{ id: "row-2", title: "Second" }]);
+
+    await act(async () => {
+      await result.current.setRelationLinks("row-1", "related", []);
+    });
+
+    expect(result.current.relationLinks["row-1:related"]).toEqual([{ id: "row-2", title: "Second" }]);
+  });
+
+  it("setRelationLinks: PUT succeeds but the follow-up rows refetch fails — doesn't roll back the write and shows an info toast, not an error toast (mirrors updateCell's task-17 fix)", async () => {
+    let queryCount = 0;
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+      if (url === "/api/db/data-sources/ds-1/query") {
+        queryCount += 1;
+        if (queryCount === 1) return Promise.resolve(jsonResponse({ rows: ROWS }));
+        return Promise.reject(new Error("network blip"));
+      }
+      if (url === "/api/db/data-sources/ds-1/rows/row-1/relations/related" && init?.method === "PUT") {
+        return Promise.resolve(jsonResponse({ rows: [{ id: "row-2", title: "Second" }] }));
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.setRelationLinks("row-1", "related", [{ id: "row-2", title: "Second" }]);
+    });
+
+    // The write succeeded — the cache must reflect that, not roll back.
+    expect(result.current.relationLinks["row-1:related"]).toEqual([{ id: "row-2", title: "Second" }]);
+
+    expect(showToast).toHaveBeenCalledTimes(1);
+    const [message, variant] = showToast.mock.calls[0];
+    expect(variant).toBe("info");
+    expect(message).not.toMatch(/could not save/i);
+    expect(message).toMatch(/saved.*out of date/i);
+  });
+
   it("refetch vs refetchRows: refetch alone does not re-run the rows query, refetchRows does (live-verified regression)", async () => {
     // A real bug shipped and was caught by live-clicking the app, not by
     // this suite: TableView's "Add row" called `refetch` (= `load`) after a

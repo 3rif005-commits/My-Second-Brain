@@ -22,6 +22,8 @@ import type {
   Group,
   PropertyResponse,
   PropertyValue,
+  RelatedRow,
+  RelationLinksResponse,
   RowResponse,
   ViewResponse,
 } from "./types";
@@ -60,6 +62,17 @@ export function useDatabaseView(databaseId: string) {
   const [groups, setGroups] = useState<Group[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Milestone 7 (task-21/task-22): a relation property's value never lands
+  // in `rows[i].properties` — migration 015 keeps `db_relation_links` as
+  // the single source of truth, and `update_row_property` even rejects a
+  // relation key outright (task-21-report.md). So relation values need
+  // their own cache here, keyed by `${rowId}:${propertyKey}` (one row can
+  // have more than one relation property, e.g. both "Sub-item" and
+  // "Blocking" on the same data source) rather than living on `DatabaseRow`
+  // itself. `undefined` for a key means "not fetched yet" — distinct from
+  // `[]` ("fetched, no links") the same way `getGroupBySpec`-style helpers
+  // above distinguish "absent" from "empty".
+  const [relationLinks, setRelationLinksState] = useState<Record<string, RelatedRow[]>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -225,6 +238,101 @@ export function useDatabaseView(databaseId: string) {
     }
   }
 
+  function relationCacheKey(rowId: string, propertyKey: string): string {
+    return `${rowId}:${propertyKey}`;
+  }
+
+  /** Lazily fetches one row/property's linked rows (with titles —
+   * `GET .../relations/{property_key}`) into `relationLinks`, unless
+   * already cached. `RelationCell` calls this once on mount so its chips
+   * have something to render; the sub-item tree builder in `TableView`
+   * calls it up front for every row it needs a parent/child answer for.
+   * No-op (not an error) when the key is already cached — this is a cache
+   * warm, not a refresh; call `refetchRows`/`refetch` for that. */
+  const ensureRelationLinks = useCallback(
+    async (rowId: string, propertyKey: string) => {
+      if (!dataSource) return;
+      const key = relationCacheKey(rowId, propertyKey);
+      if (key in relationLinks) return;
+      try {
+        const res = await fetch(
+          `/api/db/data-sources/${dataSource.id}/rows/${rowId}/relations/${propertyKey}`
+        );
+        if (!res.ok) throw new Error(await errorMessage(res));
+        const data: RelationLinksResponse = await res.json();
+        setRelationLinksState((prev) => ({ ...prev, [key]: data.rows }));
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "Could not load related rows", "error");
+      }
+    },
+    [dataSource, relationLinks, showToast]
+  );
+
+  /** Replaces one row/property's whole link list — `PUT
+   * .../relations/{property_key}` (task-21). Optimistic update, then
+   * write, then reconcile with the server's response (its own current
+   * link list, per `RelationLinksResponse`'s contract); rollback + error
+   * toast on a failed write, same shape as `updateCell` above.
+   *
+   * Unlike `updateCell`, the PUT response is already the reconciled truth
+   * — no separate read is needed to know the new link list. But a
+   * relation write can still change what the *rest* of the table should
+   * show (most concretely: editing the sub-item relation changes which
+   * rows are parents/children, which `TableView`'s tree builder derives
+   * from `rows`, not from `relationLinks` alone) — so, same as
+   * `updateCell`'s grouped-view case, a `refetchRows()` follows a
+   * successful write. Copying `updateCell`'s hard-won split (task-17 fix
+   * round, finding 3) rather than re-deriving it: if that follow-up
+   * refetch itself fails, the already-successful write must NOT be rolled
+   * back and must NOT show a false "could not save" error — only a milder
+   * "saved, but may be out of date" info toast. */
+  async function setRelationLinks(rowId: string, propertyKey: string, rows: RelatedRow[]) {
+    if (!dataSource) return;
+    const key = relationCacheKey(rowId, propertyKey);
+    const hadPrevious = key in relationLinks;
+    const previous = relationLinks[key];
+
+    setRelationLinksState((prev) => ({ ...prev, [key]: rows }));
+
+    let result: RelationLinksResponse;
+    try {
+      const res = await fetch(
+        `/api/db/data-sources/${dataSource.id}/rows/${rowId}/relations/${propertyKey}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ row_ids: rows.map((r) => r.id) }),
+        }
+      );
+      if (!res.ok) throw new Error(await errorMessage(res));
+      result = await res.json();
+    } catch (e) {
+      setRelationLinksState((prev) => {
+        const next = { ...prev };
+        if (hadPrevious) next[key] = previous!;
+        else delete next[key];
+        return next;
+      });
+      showToast(e instanceof Error ? e.message : "Could not save that change", "error");
+      return;
+    }
+
+    // The write itself is done and confirmed at this point — nothing below
+    // this line rolls it back.
+    setRelationLinksState((prev) => ({ ...prev, [key]: result.rows }));
+
+    try {
+      await loadRows();
+    } catch (e) {
+      showToast(
+        e instanceof Error
+          ? `Saved, but some rows may be out of date: ${e.message}`
+          : "Saved, but some rows may be out of date — refresh to see the latest.",
+        "info"
+      );
+    }
+  }
+
   /** `POST /db/data-sources/{id}/views` (task-15) — the first way to
    * create a non-default view. Appends to local `views` state; does not
    * switch `activeViewId` itself, leaving sequencing (e.g. "create, then
@@ -270,6 +378,9 @@ export function useDatabaseView(databaseId: string) {
     loading,
     error,
     updateCell,
+    relationLinks,
+    ensureRelationLinks,
+    setRelationLinks,
     createView,
     updateView,
     refetch: load,

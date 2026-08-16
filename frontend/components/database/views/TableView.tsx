@@ -24,7 +24,7 @@
 // here. No virtualization (@tanstack/react-virtual) either — not needed for
 // this milestone's scope; worth adding if a data source's row count becomes
 // a real performance problem.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createColumnHelper,
   flexRender,
@@ -32,9 +32,10 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useToast } from "@/app/providers";
-import { KNOWN_PROPERTY_TYPES } from "@/lib/database/types";
-import type { DatabaseRow, PropertyResponse, PropertyValue } from "@/lib/database/types";
+import { KNOWN_PROPERTY_TYPES, findSystemRelationProperty } from "@/lib/database/types";
+import type { DatabaseRow, PropertyResponse, PropertyValue, RelatedRow, SubtaskDisplayMode } from "@/lib/database/types";
 import { renderCellValue } from "../cells/renderCellValue";
+import { buildSubItemTree } from "@/lib/database/subItemTree";
 
 interface TableViewProps {
   properties: PropertyResponse[];
@@ -56,6 +57,24 @@ interface TableViewProps {
    * anything a new row changes), so a new row would silently never appear
    * without calling this specifically. */
   refetchRows?: () => void | Promise<void>;
+  // Milestone 7 (task-22): relation cells and sub-item nesting. All four
+  // are optional — a caller that omits them (e.g. an older test) just gets
+  // relation columns rendered as a read-only GenericCell fallback and no
+  // tree/nesting, matching this feature's pre-task behaviour rather than
+  // crashing.
+  /** useDatabaseView's relation-links cache, keyed by `${rowId}:${propertyKey}`. */
+  relationLinks?: Record<string, RelatedRow[]>;
+  /** useDatabaseView's `ensureRelationLinks` — lazily warms the cache above. */
+  ensureRelationLinks?: (rowId: string, propertyKey: string) => void;
+  /** useDatabaseView's `setRelationLinks` — commits an add/remove. */
+  setRelationLinks?: (rowId: string, propertyKey: string, rows: RelatedRow[]) => void | Promise<void>;
+  /** The active view's `config.subtasks.display_mode` (task-22-brief.md
+   * §3) — `undefined`/anything other than "show"/"flattened" renders the
+   * data source's rows flat, same as before this task. Scope note: only
+   * `show`/`flattened` are implemented; `hidden`/`disabled` are absent
+   * rather than half-built (research §3.4 also names them, but the brief
+   * explicitly scopes this task down to the first two). */
+  subItemDisplayMode?: SubtaskDisplayMode;
 }
 
 const columnHelper = createColumnHelper<DatabaseRow>();
@@ -94,6 +113,10 @@ export function TableView({
   dataSourceId,
   refetch,
   refetchRows,
+  relationLinks,
+  ensureRelationLinks,
+  setRelationLinks,
+  subItemDisplayMode,
 }: TableViewProps) {
   const { showToast } = useToast();
 
@@ -103,11 +126,64 @@ export function TableView({
   const [propertySubmitting, setPropertySubmitting] = useState(false);
   const [propertyFormError, setPropertyFormError] = useState<string | null>(null);
   const [rowSubmitting, setRowSubmitting] = useState(false);
+  // Sub-item "show" mode's expand/collapse state (task-22-brief.md §3) —
+  // every row starts expanded (empty set), matching Notion's own default.
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
   const orderedProperties = useMemo(
     () => [...properties].sort((a, b) => a.position - b.position),
     [properties]
   );
+
+  const titleProperty = useMemo(() => orderedProperties.find((p) => p.type === "title"), [orderedProperties]);
+  // The one sub-item relation pair on this data source, if enabled
+  // (research §3.2: the property choice is data-source-global, not a
+  // per-view setting — there is exactly one, found by `config.system`).
+  const subItemForwardProp = useMemo(
+    () => findSystemRelationProperty(orderedProperties, "sub_item", "forward"),
+    [orderedProperties]
+  );
+  const subItemReverseProp = useMemo(
+    () => findSystemRelationProperty(orderedProperties, "sub_item", "reverse"),
+    [orderedProperties]
+  );
+
+  // Pre-fetch every visible row's sub-item links up front (needed to know
+  // who's a root/parent/child *before* any row renders) — not on individual
+  // cell mount the way an ordinary relation column's cells do. Keyed to
+  // `rows`'s identity (changes once per `loadRows()` completion) and the
+  // mode/property, deliberately NOT to `ensureRelationLinks`'s own identity
+  // (which changes on every single cache write — see useDatabaseView.ts's
+  // comment on why) or this effect would re-issue a full "already cached,
+  // no-op" pass for every row on every individual fetch's completion.
+  useEffect(() => {
+    if (!ensureRelationLinks) return;
+    if (subItemDisplayMode === "show" && subItemForwardProp) {
+      for (const row of rows) ensureRelationLinks(row.id, subItemForwardProp.key);
+    } else if (subItemDisplayMode === "flattened" && subItemReverseProp) {
+      for (const row of rows) ensureRelationLinks(row.id, subItemReverseProp.key);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, subItemDisplayMode, subItemForwardProp?.key, subItemReverseProp?.key]);
+
+  const treeEntries = useMemo(() => {
+    if (subItemDisplayMode !== "show" || !subItemForwardProp || !relationLinks) return null;
+    const key = subItemForwardProp.key;
+    return buildSubItemTree(
+      rows,
+      (rowId) => relationLinks[`${rowId}:${key}`]?.map((r) => r.id),
+      collapsedIds
+    );
+  }, [subItemDisplayMode, subItemForwardProp, relationLinks, rows, collapsedIds]);
+
+  function toggleCollapsed(rowId: string) {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  }
 
   const columns = useMemo(
     () =>
@@ -115,13 +191,28 @@ export function TableView({
         columnHelper.accessor((row) => row.properties[property.key], {
           id: property.key || property.id,
           header: property.name,
-          cell: (info) =>
-            renderCellValue(property, info.getValue(), editable, (value) =>
-              onCellChange(info.row.original.id, property.key, value)
-            ),
+          cell: (info) => {
+            const rowId = info.row.original.id;
+            const relationExtras =
+              property.type === "relation" && ensureRelationLinks && setRelationLinks
+                ? {
+                    links: relationLinks?.[`${rowId}:${property.key}`],
+                    onEnsureLoaded: () => ensureRelationLinks(rowId, property.key),
+                    onLinksChange: (nextRows: RelatedRow[]) =>
+                      setRelationLinks(rowId, property.key, nextRows),
+                  }
+                : undefined;
+            return renderCellValue(
+              property,
+              info.getValue(),
+              editable,
+              (value) => onCellChange(rowId, property.key, value),
+              relationExtras
+            );
+          },
         })
       ),
-    [orderedProperties, editable, onCellChange]
+    [orderedProperties, editable, onCellChange, relationLinks, ensureRelationLinks, setRelationLinks]
   );
 
   const table = useReactTable({
@@ -262,20 +353,83 @@ export function TableView({
               </td>
             </tr>
           )}
-          {rows.length > 0 &&
-            table.getRowModel().rows.map((row) => (
-              <tr
-                key={row.id}
-                className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-3 py-1.5 align-middle max-w-xs">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-                {editable && <td className="px-3 py-1.5" />}
-              </tr>
-            ))}
+          {rows.length > 0 && treeEntries
+            ? // Sub-item "show" mode: tree order + indentation/toggle on the
+              // title cell (task-22-brief.md §3). `table.getRow(id)` looks up
+              // the same TanStack Row the flat branch below would use — the
+              // column defs (and every non-title cell) are unchanged, only
+              // the iteration order/decoration differs.
+              treeEntries.map(({ row: entryRow, depth, hasChildren }) => {
+                const tableRow = table.getRow(entryRow.id);
+                return (
+                  <tr
+                    key={entryRow.id}
+                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                  >
+                    {tableRow.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-3 py-1.5 align-middle max-w-xs">
+                        {cell.column.id === titleProperty?.key ? (
+                          <div className="flex items-center gap-1" style={{ paddingLeft: depth * 16 }}>
+                            {hasChildren ? (
+                              <button
+                                type="button"
+                                aria-label={collapsedIds.has(entryRow.id) ? "Expand" : "Collapse"}
+                                onClick={() => toggleCollapsed(entryRow.id)}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 w-3 shrink-0"
+                              >
+                                {collapsedIds.has(entryRow.id) ? "▸" : "▾"}
+                              </button>
+                            ) : (
+                              <span className="w-3 shrink-0" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </div>
+                          </div>
+                        ) : (
+                          flexRender(cell.column.columnDef.cell, cell.getContext())
+                        )}
+                      </td>
+                    ))}
+                    {editable && <td className="px-3 py-1.5" />}
+                  </tr>
+                );
+              })
+            : rows.length > 0 &&
+              table.getRowModel().rows.map((row) => {
+                // Flattened mode's "sub-items marked with a parent
+                // indicator" (task-22-brief.md §3) — the reverse ("Parent
+                // item") property's cached links, first one only (a
+                // sub-item conceptually has one parent; nothing in this
+                // schema enforces that structurally, so this just shows the
+                // first link rather than guessing which one is "the" parent).
+                const parentTitle =
+                  subItemDisplayMode === "flattened" && subItemReverseProp
+                    ? relationLinks?.[`${row.original.id}:${subItemReverseProp.key}`]?.[0]?.title
+                    : undefined;
+                return (
+                  <tr
+                    key={row.id}
+                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-3 py-1.5 align-middle max-w-xs">
+                        {cell.column.id === titleProperty?.key && parentTitle ? (
+                          <div>
+                            <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                              ↳ {parentTitle}
+                            </div>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </div>
+                        ) : (
+                          flexRender(cell.column.columnDef.cell, cell.getContext())
+                        )}
+                      </td>
+                    ))}
+                    {editable && <td className="px-3 py-1.5" />}
+                  </tr>
+                );
+              })}
           {editable && (
             <tr>
               <td colSpan={Math.max(columnCount, 1)} className="px-3 py-1.5">

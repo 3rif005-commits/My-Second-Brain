@@ -201,6 +201,76 @@ export type PropertyValue =
   | CheckboxValue
   | UnknownValue;
 
+// ── Milestone 7: relations, sub-items, dependencies ────────────────────────
+// Mirrors backend/models/database.py's RelatedRow/RelationLinksResponse
+// (task-21) plus services.db.relations.DATE_SHIFT_MODES (task-20) — see
+// backend/services/db/relations.py for the authoritative strings. Relation
+// *values* never appear in DatabaseRow.properties (migration 015: they live
+// in db_relation_links, not db_row_props.properties — see task-21-report.md
+// judgement calls and task-22-report.md), so they get their own types here
+// rather than joining the PropertyValue union above.
+
+/** One linked row, as returned by every `.../relations/...` endpoint. */
+export interface RelatedRow {
+  id: string;
+  title: string;
+}
+
+export interface RelationLinksResponse {
+  rows: RelatedRow[];
+}
+
+/** `services.db.relations.DATE_SHIFT_MODES` verbatim — task-21-brief.md/
+ * task-22-brief.md §4 both require these exact strings (not paraphrased)
+ * to appear in the dependency settings UI. */
+export const DATE_SHIFT_MODES = [
+  "Shift only when dates overlap",
+  "Shift & maintain time between items",
+  "Do not automatically shift",
+] as const;
+
+export type DateShiftMode = (typeof DATE_SHIFT_MODES)[number];
+
+/** The two `config.subtasks.display_mode` values this milestone renders
+ * (research §3.4 also lists `hidden`/`disabled` — task-22-brief.md §3
+ * explicitly scopes this task down to `show`/`flattened` only). Lives on
+ * the *view's* config, not the property (research §3.2: the sub-item
+ * property choice is data-source-global — there is exactly one sub-item
+ * relation pair per data source, found via `config.system === "sub_item"`
+ * on a `type: "relation"` property, not a per-view setting). */
+export const SUBTASK_DISPLAY_MODES = ["show", "flattened"] as const;
+
+export type SubtaskDisplayMode = (typeof SUBTASK_DISPLAY_MODES)[number];
+
+/** Reads `config.subtasks.display_mode` out of a view's opaque `config`
+ * JSONB, tolerating a missing/malformed shape — same spirit as
+ * `getGroupBySpec`/`getSubGroupBySpec` above. */
+export function getSubtaskDisplayMode(config: Record<string, unknown>): SubtaskDisplayMode | undefined {
+  const raw = config.subtasks;
+  if (raw && typeof raw === "object") {
+    const mode = (raw as Record<string, unknown>).display_mode;
+    if (typeof mode === "string" && (SUBTASK_DISPLAY_MODES as readonly string[]).includes(mode)) {
+      return mode as SubtaskDisplayMode;
+    }
+  }
+  return undefined;
+}
+
+/** Finds the one sub-item or dependency relation pair's forward/reverse
+ * property on a data source's `properties[]`, by `config.system`/
+ * `config.side` — mirrors how `routers/databases.py`'s own
+ * `update_dependency_settings` looks up the forward dependency property.
+ * `undefined` when the system relation hasn't been enabled yet. */
+export function findSystemRelationProperty(
+  properties: PropertyResponse[],
+  system: "sub_item" | "dependency",
+  side: "forward" | "reverse"
+): PropertyResponse | undefined {
+  return properties.find(
+    (p) => p.type === "relation" && p.config?.system === system && p.config?.side === side
+  );
+}
+
 /** The 8 property `type` strings this UI has a dedicated cell component for. */
 export const KNOWN_PROPERTY_TYPES = [
   "title",

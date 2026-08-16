@@ -66,6 +66,13 @@ export async function POST(req: Request, ctx: Ctx) {
 export async function PATCH(req: Request, ctx: Ctx) {
   return proxy(req, (await ctx.params).path);
 }
+export async function PUT(req: Request, ctx: Ctx) {
+  // Milestone 7 (task-22): `PUT .../relations/{property_key}` (task-21,
+  // routers/databases.py's `set_relation_links`) is the first PUT this
+  // router needs — every earlier milestone only ever used GET/POST/PATCH/
+  // DELETE, so this proxy never exported a PUT handler until now.
+  return proxy(req, (await ctx.params).path);
+}
 export async function DELETE(req: Request, ctx: Ctx) {
   return proxy(req, (await ctx.params).path);
 }

@@ -14,6 +14,7 @@ import type {
   NumberValue,
   PropertyResponse,
   PropertyValue,
+  RelatedRow,
   RichTextValue,
   SelectValue,
   StatusValue,
@@ -29,12 +30,29 @@ import { StatusCell } from "./StatusCell";
 import { DateCell } from "./DateCell";
 import { CheckboxCell } from "./CheckboxCell";
 import { GenericCell } from "./GenericCell";
+import { RelationCell } from "./RelationCell";
+
+/** Milestone 7's relation cell needs data `CellProps<V>` (value/editable/
+ * onChange) has no room for — its value never travels through `onChange`
+ * at all (see RelationCell.tsx). Passed as an optional 5th argument so
+ * every other caller (Board/Gallery/List/Feed views, all of which predate
+ * relations) keeps working unchanged: a "relation"-typed column rendered
+ * without this argument falls back to `GenericCell` — the same read-only
+ * "—" placeholder those views already showed for relation columns before
+ * this task, not a crash (task-22-report.md: relation cells with a real
+ * picker are TableView-only in this task's scope). */
+export interface RelationCellHandlers {
+  links: RelatedRow[] | undefined;
+  onEnsureLoaded: () => void;
+  onLinksChange: (rows: RelatedRow[]) => void | Promise<void>;
+}
 
 export function renderCellValue(
   property: PropertyResponse,
   value: PropertyValue | undefined,
   editable: boolean,
-  onChange: (value: PropertyValue | null) => void
+  onChange: (value: PropertyValue | null) => void,
+  relation?: RelationCellHandlers
 ) {
   switch (property.type) {
     case "title":
@@ -73,6 +91,17 @@ export function renderCellValue(
           value={value as CheckboxValue | undefined}
           editable={editable}
           onChange={onChange}
+        />
+      );
+    case "relation":
+      if (!relation) return <GenericCell value={value as UnknownValue | undefined} />;
+      return (
+        <RelationCell
+          property={property}
+          editable={editable}
+          links={relation.links}
+          onEnsureLoaded={relation.onEnsureLoaded}
+          onLinksChange={relation.onLinksChange}
         />
       );
     default:

@@ -5,13 +5,14 @@
 // component. Was hardcoded to `views[0]` + TableView only (Milestone 2);
 // task-16 adds real view switching/creation and the Board view.
 import { useDatabaseView } from "@/lib/database/useDatabaseView";
-import { getGroupBySpec, getSubGroupBySpec } from "@/lib/database/types";
+import { getGroupBySpec, getSubGroupBySpec, getSubtaskDisplayMode } from "@/lib/database/types";
 import { TableView } from "./views/TableView";
 import { BoardView } from "./views/BoardView";
 import { GalleryView } from "./views/GalleryView";
 import { ListView } from "./views/ListView";
 import { FeedView } from "./views/FeedView";
 import { ViewTabs } from "./ViewTabs";
+import { DatabaseSettingsMenu } from "./DatabaseSettingsMenu";
 
 interface DatabaseShellProps {
   databaseId: string;
@@ -30,6 +31,9 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     loading,
     error,
     updateCell,
+    relationLinks,
+    ensureRelationLinks,
+    setRelationLinks,
     createView,
     updateView,
     refetch,
@@ -103,6 +107,10 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             dataSourceId={dataSourceId}
             refetch={refetch}
             refetchRows={refetchRows}
+            relationLinks={relationLinks}
+            ensureRelationLinks={ensureRelationLinks}
+            setRelationLinks={setRelationLinks}
+            subItemDisplayMode={getSubtaskDisplayMode(activeView.config)}
           />
         );
       case "board": {
@@ -181,6 +189,21 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
               Read only
             </span>
+          )}
+          {/* All Notes has no db_properties/db_views rows to configure at
+           * all (it's synthesized from COLUMN_BACKED, routers/databases.py)
+           * — hidden rather than shown-disabled, same "not merely disabled"
+           * rule the relation controls follow. */}
+          {editable && (
+            <div className="ml-auto">
+              <DatabaseSettingsMenu
+                dataSourceId={dataSourceId}
+                properties={properties}
+                activeView={activeView}
+                onPropertiesChanged={refetch}
+                onUpdateView={updateView}
+              />
+            </div>
           )}
         </div>
 

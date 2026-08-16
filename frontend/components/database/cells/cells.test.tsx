@@ -11,6 +11,8 @@ import { StatusCell } from "./StatusCell";
 import { DateCell } from "./DateCell";
 import { CheckboxCell } from "./CheckboxCell";
 import { GenericCell } from "./GenericCell";
+import { RelationCell } from "./RelationCell";
+import type { PropertyResponse, RelatedRow } from "@/lib/database/types";
 
 describe("TitleCell", () => {
   it("renders read-only, with no input, when not editable", () => {
@@ -243,5 +245,146 @@ describe("GenericCell", () => {
   it("JSON-stringifies a non-string inner value rather than crashing", () => {
     render(<GenericCell value={{ type: "weird", weird: { a: 1 } }} />);
     expect(screen.getByText('{"a":1}')).toBeInTheDocument();
+  });
+});
+
+function relationProperty(overrides: Partial<PropertyResponse> = {}): PropertyResponse {
+  return {
+    id: "p-rel",
+    data_source_id: "ds-1",
+    user_id: "user-1",
+    key: "related",
+    name: "Related",
+    type: "relation",
+    config: { relation_id: "rel-1", side: "forward", target_data_source_id: "ds-2" },
+    description: null,
+    storage: "jsonb",
+    column_name: null,
+    result_type: null,
+    is_volatile: false,
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+const LINKED: RelatedRow[] = [
+  { id: "row-a", title: "Alpha" },
+  { id: "row-b", title: "Beta" },
+];
+
+describe("RelationCell", () => {
+  it("calls onEnsureLoaded once on mount", () => {
+    const onEnsureLoaded = vi.fn();
+    render(
+      <RelationCell
+        property={relationProperty()}
+        editable={false}
+        links={undefined}
+        onEnsureLoaded={onEnsureLoaded}
+        onLinksChange={vi.fn()}
+      />
+    );
+    expect(onEnsureLoaded).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders chips with titles, not bare ids", () => {
+    render(
+      <RelationCell
+        property={relationProperty()}
+        editable={false}
+        links={LINKED}
+        onEnsureLoaded={vi.fn()}
+        onLinksChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    expect(screen.getByText("Beta")).toBeInTheDocument();
+    expect(screen.queryByText("row-a")).not.toBeInTheDocument();
+  });
+
+  it("read-only: no '×' remove buttons and no '+' link button at all (not merely disabled)", () => {
+    render(
+      <RelationCell
+        property={relationProperty()}
+        editable={false}
+        links={LINKED}
+        onEnsureLoaded={vi.fn()}
+        onLinksChange={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /remove/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /link a row/i })).not.toBeInTheDocument();
+  });
+
+  it("editable: each chip has a '×' that removes just that link via onLinksChange", async () => {
+    const user = userEvent.setup();
+    const onLinksChange = vi.fn();
+    render(
+      <RelationCell
+        property={relationProperty()}
+        editable={true}
+        links={LINKED}
+        onEnsureLoaded={vi.fn()}
+        onLinksChange={onLinksChange}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Remove Alpha" }));
+    expect(onLinksChange).toHaveBeenCalledWith([{ id: "row-b", title: "Beta" }]);
+  });
+
+  it("editable: '+' opens the RelationPicker", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ rows: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+    );
+    render(
+      <RelationCell
+        property={relationProperty()}
+        editable={true}
+        links={LINKED}
+        onEnsureLoaded={vi.fn()}
+        onLinksChange={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole("dialog", { name: /link rows/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Link a row" }));
+    expect(screen.getByRole("dialog", { name: /link rows/i })).toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+  });
+
+  it("shows a loading placeholder (not '—') while links is undefined", () => {
+    render(
+      <RelationCell
+        property={relationProperty()}
+        editable={false}
+        links={undefined}
+        onEnsureLoaded={vi.fn()}
+        onLinksChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText("…")).toBeInTheDocument();
+  });
+
+  it("shows an em-dash once loaded with zero links", () => {
+    render(
+      <RelationCell
+        property={relationProperty()}
+        editable={false}
+        links={[]}
+        onEnsureLoaded={vi.fn()}
+        onLinksChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText("—")).toBeInTheDocument();
   });
 });

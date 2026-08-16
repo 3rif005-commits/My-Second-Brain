@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TableView } from "./TableView";
 import { KNOWN_PROPERTY_TYPES } from "@/lib/database/types";
-import type { DatabaseRow, PropertyResponse } from "@/lib/database/types";
+import type { DatabaseRow, PropertyResponse, RelatedRow } from "@/lib/database/types";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -283,6 +283,196 @@ describe("TableView", () => {
       );
       const [, init] = fetchMock.mock.calls[0];
       expect(init).not.toHaveProperty("body");
+    });
+  });
+
+  describe("relation cells (task-22)", () => {
+    const RELATION_PROP = prop({
+      key: "related",
+      name: "Related",
+      type: "relation",
+      position: 9,
+      config: { relation_id: "rel-1", side: "forward", target_data_source_id: "ds-2" },
+    });
+    const PROPS_WITH_RELATION = [...PROPERTIES, RELATION_PROP];
+
+    it("calls ensureRelationLinks once per visible relation cell on mount", () => {
+      const ensureRelationLinks = vi.fn();
+      render(
+        <TableView
+          properties={PROPS_WITH_RELATION}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={{}}
+          ensureRelationLinks={ensureRelationLinks}
+          setRelationLinks={vi.fn()}
+        />
+      );
+      expect(ensureRelationLinks).toHaveBeenCalledWith("row-1", "related");
+    });
+
+    it("renders linked titles from the relationLinks cache, and removing one calls setRelationLinks with the remainder", async () => {
+      const user = userEvent.setup();
+      const setRelationLinks = vi.fn();
+      render(
+        <TableView
+          properties={PROPS_WITH_RELATION}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={{ "row-1:related": [{ id: "row-9", title: "Linked Note" }] }}
+          ensureRelationLinks={vi.fn()}
+          setRelationLinks={setRelationLinks}
+        />
+      );
+      expect(screen.getByText("Linked Note")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Remove Linked Note" }));
+      expect(setRelationLinks).toHaveBeenCalledWith("row-1", "related", []);
+    });
+
+    it("falls back to a read-only placeholder when relation handler props are omitted (older/other-view callers)", () => {
+      render(<TableView properties={PROPS_WITH_RELATION} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+      // GenericCell's fallback for an absent value — no crash, no picker controls.
+      expect(screen.queryByRole("button", { name: /link a row/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("sub-item nesting (task-22)", () => {
+    const SUBITEM_FORWARD = prop({
+      key: "subitem",
+      name: "Sub-item",
+      type: "relation",
+      position: 10,
+      config: { relation_id: "rel-2", side: "forward", system: "sub_item", target_data_source_id: "ds-1" },
+    });
+    const SUBITEM_REVERSE = prop({
+      key: "parentitem",
+      name: "Parent item",
+      type: "relation",
+      position: 11,
+      config: { relation_id: "rel-2", side: "reverse", system: "sub_item", target_data_source_id: "ds-1" },
+    });
+    const PROPS_WITH_SUBITEMS = [...PROPERTIES, SUBITEM_FORWARD, SUBITEM_REVERSE];
+
+    const PARENT_ROW: DatabaseRow = {
+      id: "parent-1",
+      properties: { title: { type: "title", title: "Parent" } },
+    };
+    const CHILD_ROW: DatabaseRow = {
+      id: "child-1",
+      properties: { title: { type: "title", title: "Child" } },
+    };
+    const TREE_ROWS = [PARENT_ROW, CHILD_ROW];
+
+    function relationLinksFor(childrenOfParent: RelatedRow[]): Record<string, RelatedRow[]> {
+      return {
+        "parent-1:subitem": childrenOfParent,
+        "child-1:subitem": [],
+      };
+    }
+
+    it("'show' mode: nests a child under its parent, indented, with an expand/collapse toggle", () => {
+      render(
+        <TableView
+          properties={PROPS_WITH_SUBITEMS}
+          rows={TREE_ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={relationLinksFor([{ id: "child-1", title: "Child" }])}
+          ensureRelationLinks={vi.fn()}
+          setRelationLinks={vi.fn()}
+          subItemDisplayMode="show"
+        />
+      );
+
+      // `getByRole("button", ...)` (not `getByText`) specifically targets
+      // TitleCell's own button (its accessible name is the bare title) —
+      // the Sub-item relation column, rendered as a column in its own
+      // right, *also* shows "Child" as a chip on the parent's row (it's
+      // linked there), which would make a plain text query ambiguous.
+      expect(screen.getByRole("button", { name: "Parent" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Child" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Collapse" })).toBeInTheDocument();
+    });
+
+    it("'show' mode: collapsing the parent hides the child row", async () => {
+      const user = userEvent.setup();
+      render(
+        <TableView
+          properties={PROPS_WITH_SUBITEMS}
+          rows={TREE_ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={relationLinksFor([{ id: "child-1", title: "Child" }])}
+          ensureRelationLinks={vi.fn()}
+          setRelationLinks={vi.fn()}
+          subItemDisplayMode="show"
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: "Collapse" }));
+
+      expect(screen.getByRole("button", { name: "Parent" })).toBeInTheDocument();
+      // The child *row* is gone — its own TitleCell button no longer
+      // exists — even though "Child" the text still appears elsewhere (the
+      // parent's own Sub-item relation column still shows its link chip;
+      // collapsing hides the child's *row*, not that unrelated chip).
+      expect(screen.queryByRole("button", { name: "Child" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
+    });
+
+    it("'show' mode: a root row with no children has no toggle button", () => {
+      render(
+        <TableView
+          properties={PROPS_WITH_SUBITEMS}
+          rows={[PARENT_ROW]}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={{ "parent-1:subitem": [] }}
+          ensureRelationLinks={vi.fn()}
+          setRelationLinks={vi.fn()}
+          subItemDisplayMode="show"
+        />
+      );
+      expect(screen.queryByRole("button", { name: /collapse|expand/i })).not.toBeInTheDocument();
+    });
+
+    it("'flattened' mode: renders every row at one level (no nesting/toggle), with a parent indicator on the sub-item", () => {
+      render(
+        <TableView
+          properties={PROPS_WITH_SUBITEMS}
+          rows={TREE_ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={{ "child-1:parentitem": [{ id: "parent-1", title: "Parent" }] }}
+          ensureRelationLinks={vi.fn()}
+          setRelationLinks={vi.fn()}
+          subItemDisplayMode="flattened"
+        />
+      );
+
+      expect(screen.getByRole("button", { name: "Parent" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Child" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /collapse|expand/i })).not.toBeInTheDocument();
+      expect(screen.getByText(/↳ Parent/)).toBeInTheDocument();
+    });
+
+    it("with no sub-item display mode set, renders flat with no tree/indicator controls at all", () => {
+      render(
+        <TableView
+          properties={PROPS_WITH_SUBITEMS}
+          rows={TREE_ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={relationLinksFor([{ id: "child-1", title: "Child" }])}
+          ensureRelationLinks={vi.fn()}
+          setRelationLinks={vi.fn()}
+        />
+      );
+      expect(screen.queryByRole("button", { name: /collapse|expand/i })).not.toBeInTheDocument();
+      expect(screen.queryByText(/↳/)).not.toBeInTheDocument();
     });
   });
 });

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import type { Group, ViewResponse } from "@/lib/database/types";
+import type { Group, RelatedRow, ViewResponse } from "@/lib/database/types";
 
 // ListView (task-17) navigates via next/navigation's useRouter — outside a
 // real Next.js app router tree (as here, a plain RTL render) that throws
@@ -23,6 +23,9 @@ const mockHook: {
   loading: boolean;
   error: string | null;
   updateCell: ReturnType<typeof vi.fn>;
+  relationLinks: Record<string, RelatedRow[]>;
+  ensureRelationLinks: ReturnType<typeof vi.fn>;
+  setRelationLinks: ReturnType<typeof vi.fn>;
   createView: ReturnType<typeof vi.fn>;
   updateView: ReturnType<typeof vi.fn>;
   refetch: ReturnType<typeof vi.fn>;
@@ -67,6 +70,9 @@ const mockHook: {
   loading: false,
   error: null,
   updateCell: vi.fn(),
+  relationLinks: {},
+  ensureRelationLinks: vi.fn(),
+  setRelationLinks: vi.fn(),
   createView: vi.fn(),
   updateView: vi.fn(),
   refetch: vi.fn(),
@@ -247,5 +253,62 @@ describe("DatabaseShell", () => {
     expect(mockHook.refetch).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
+  });
+
+  it("renders the database settings menu button for an editable (ordinary) database", () => {
+    render(<DatabaseShell databaseId="db-1" />);
+    expect(screen.getByRole("button", { name: "Database settings" })).toBeInTheDocument();
+  });
+
+  it("hides the database settings menu entirely for the read-only All Notes source (not merely disabled)", () => {
+    mockHook.dataSource = { ...(mockHook.dataSource as Record<string, unknown>), is_virtual: true };
+    render(<DatabaseShell databaseId="db-1" />);
+    expect(screen.queryByRole("button", { name: "Database settings" })).not.toBeInTheDocument();
+    mockHook.dataSource = { ...(mockHook.dataSource as Record<string, unknown>), is_virtual: false };
+  });
+
+  it("threads relationLinks/ensureRelationLinks/setRelationLinks and the active view's subtasks display mode down to TableView", async () => {
+    mockHook.views = [
+      {
+        id: "v1",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Table view",
+        icon: null,
+        type: "table",
+        config: { subtasks: { display_mode: "flattened" } },
+        filter: null,
+        sorts: [],
+        is_locked: false,
+        position: 0,
+      },
+    ];
+    mockHook.properties = [
+      ...mockHook.properties,
+      {
+        id: "p-sub",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        key: "subitem",
+        name: "Sub-item",
+        type: "relation",
+        config: { relation_id: "rel-1", side: "forward", system: "sub_item", target_data_source_id: "ds-1" },
+        description: null,
+        storage: "jsonb",
+        column_name: null,
+        result_type: null,
+        is_volatile: false,
+        position: 2,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+    ];
+    mockHook.relationLinks = { "row-1:subitem": [] };
+
+    render(<DatabaseShell databaseId="db-1" />);
+
+    // A relation column renders via RelationCell, which calls
+    // ensureRelationLinks on mount — proof the prop actually reached
+    // TableView rather than being silently dropped along the way.
+    expect(mockHook.ensureRelationLinks).toHaveBeenCalledWith("row-1", "subitem");
   });
 });
