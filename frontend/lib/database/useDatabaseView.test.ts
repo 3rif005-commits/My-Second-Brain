@@ -201,6 +201,94 @@ describe("useDatabaseView", () => {
     });
   });
 
+  it("updateCell: merges a PATCH response's shifted_rows into the other row's properties, without a refetch (M7 combined-review Important finding 2)", async () => {
+    // Regression test: the backend's PATCH .../rows/{note_id} returns
+    // `shifted_rows` when a dependency date-shift cascade moves other rows
+    // as a side effect of this write (task-21-brief.md §4), so the client
+    // can apply them without a refetch. Before this fix, `RowResponse`
+    // didn't declare the field and `updateCell` only ever read `id`/
+    // `properties` off the PATCH response — the cascade happened correctly
+    // server-side (task B's date really did move) but row-2 stayed
+    // visibly stale in `rows` until a full reload, since an ungrouped
+    // Table view (this test's `TABLE_VIEW`) never re-queries after a write.
+    const rowsWithDates: DatabaseRow[] = [
+      {
+        id: "row-1",
+        properties: {
+          titleKey: { type: "title", title: "First" },
+          due: { type: "date", date: { start: "2026-01-01T00:00:00+00:00", end: null, time_zone: null } },
+        },
+      },
+      {
+        id: "row-2",
+        properties: {
+          titleKey: { type: "title", title: "Second" },
+          due: { type: "date", date: { start: "2026-01-02T00:00:00+00:00", end: null, time_zone: null } },
+        },
+      },
+    ];
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+      if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({ rows: rowsWithDates }));
+      }
+      if (url === "/api/db/data-sources/ds-1/rows/row-1" && init?.method === "PATCH") {
+        return Promise.resolve(
+          jsonResponse({
+            id: "row-1",
+            properties: {
+              titleKey: { type: "title", title: "First" },
+              due: { type: "date", date: { start: "2026-01-08T00:00:00+00:00", end: null, time_zone: null } },
+            },
+            shifted_rows: [
+              {
+                id: "row-2",
+                properties: {
+                  due: { type: "date", date: { start: "2026-01-09T00:00:00+00:00", end: null, time_zone: null } },
+                },
+              },
+            ],
+          })
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current.rows).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.updateCell("row-1", "due", {
+        type: "date",
+        date: { start: "2026-01-08T00:00:00+00:00", end: null, time_zone: null },
+      });
+    });
+
+    // No extra query fetch — this is an ungrouped (table) view, so the
+    // shift must be applied from the PATCH response directly, not by a
+    // second `POST .../query` round trip.
+    const queryCalls = fetchMock.mock.calls.filter(([url]) => url === "/api/db/data-sources/ds-1/query");
+    expect(queryCalls).toHaveLength(1); // only the initial load
+
+    const row1 = result.current.rows.find((r) => r.id === "row-1");
+    const row2 = result.current.rows.find((r) => r.id === "row-2");
+    expect(row1?.properties.due).toEqual({
+      type: "date",
+      date: { start: "2026-01-08T00:00:00+00:00", end: null, time_zone: null },
+    });
+    // The shifted row's date actually updates...
+    expect(row2?.properties.due).toEqual({
+      type: "date",
+      date: { start: "2026-01-09T00:00:00+00:00", end: null, time_zone: null },
+    });
+    // ...and only the shifted property is touched — the rest of row-2's
+    // properties (a ShiftedRow carries only the one date property that
+    // moved, not a full row) survive the merge untouched.
+    expect(row2?.properties.titleKey).toEqual({ type: "title", title: "Second" });
+  });
+
   it("updateCell: rolls back and toasts on a 500", async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
@@ -446,6 +534,81 @@ describe("useDatabaseView", () => {
       (url as string).includes("/relations/")
     ).length;
     expect(relationCallsAfter).toBe(relationCallsBefore); // cached — no second fetch
+  });
+
+  it("ensureRelationLinksBulk: fetches every requested row's links in ONE request and caches each under its own key (M7 combined-review Important finding 3)", async () => {
+    // Regression test for the N+1 fix: TableView's sub-item pre-fetch used
+    // to call ensureRelationLinks once per visible row — one HTTP request
+    // per row. ensureRelationLinksBulk must issue exactly one request for
+    // however many row ids are asked about, hitting the bulk endpoint
+    // task 20's list_links_bulk was built for and task 21 originally never
+    // exposed.
+    const bulkCalls: unknown[] = [];
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+      if (url === "/api/db/data-sources/ds-1/query") return Promise.resolve(jsonResponse({ rows: ROWS }));
+      if (url === "/api/db/data-sources/ds-1/relations/subitem/links/bulk" && init?.method === "POST") {
+        bulkCalls.push(JSON.parse(init.body as string));
+        return Promise.resolve(
+          jsonResponse({
+            links: {
+              "row-1": [{ id: "row-9", title: "Child" }],
+              "row-2": [],
+            },
+          })
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.ensureRelationLinksBulk(["row-1", "row-2"], "subitem");
+    });
+
+    expect(bulkCalls).toEqual([{ row_ids: ["row-1", "row-2"] }]);
+    expect(result.current.relationLinks["row-1:subitem"]).toEqual([{ id: "row-9", title: "Child" }]);
+    // Present as an empty array, not absent — same "every requested id is a
+    // key" contract as the backend's list_links_bulk.
+    expect(result.current.relationLinks["row-2:subitem"]).toEqual([]);
+
+    const bulkCallCount = fetchMock.mock.calls.filter(([url]) => (url as string).includes("/links/bulk")).length;
+    expect(bulkCallCount).toBe(1); // one request for both rows, not two
+  });
+
+  it("ensureRelationLinksBulk: only requests ids that aren't already cached", async () => {
+    const bulkCalls: unknown[] = [];
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+      if (url === "/api/db/data-sources/ds-1/query") return Promise.resolve(jsonResponse({ rows: ROWS }));
+      if (url === "/api/db/data-sources/ds-1/relations/subitem/links/bulk" && init?.method === "POST") {
+        const body = JSON.parse(init.body as string);
+        bulkCalls.push(body);
+        return Promise.resolve(
+          jsonResponse({ links: Object.fromEntries(body.row_ids.map((id: string) => [id, []])) })
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.ensureRelationLinksBulk(["row-1"], "subitem");
+    });
+    expect(bulkCalls).toEqual([{ row_ids: ["row-1"] }]);
+
+    await act(async () => {
+      await result.current.ensureRelationLinksBulk(["row-1", "row-2"], "subitem");
+    });
+    // row-1 was already cached from the first call — only row-2 is asked
+    // about the second time.
+    expect(bulkCalls).toEqual([{ row_ids: ["row-1"] }, { row_ids: ["row-2"] }]);
   });
 
   it("setRelationLinks: applies optimistically, PUTs {row_ids}, then reconciles with the server response", async () => {

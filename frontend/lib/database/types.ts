@@ -155,9 +155,29 @@ export interface RowsResponse {
   rows: DatabaseRow[];
 }
 
+/** One row moved by a Milestone 7 dependency date-shift cascade — mirrors
+ * `backend/models/database.py`'s `ShiftedRow` exactly. `properties` carries
+ * only the one date property that moved, wrapped the same §3.3 way as any
+ * other property value, so it merges into `DatabaseRow.properties` with the
+ * same shape `updateCell` already handles for an ordinary write. */
+export interface ShiftedRow {
+  id: string;
+  properties: Record<string, PropertyValue>;
+}
+
 export interface RowResponse {
   id: string;
   properties: Record<string, PropertyValue>;
+  /** M7 combined-review Important finding 2: `PATCH .../rows/{note_id}`
+   * returns this so a dependency cascade (edit row A's date, watch row B
+   * move) can update the client without a refetch — non-`null`/non-`undefined`
+   * only when this write triggered a cascade that actually moved rows.
+   * `undefined` (the response omits the key entirely, since the backend's
+   * `shifted_rows: list[ShiftedRow] | None = None` serialises an unset
+   * `None` the same as an absent key over JSON) and `null` (an explicit
+   * `None`) are both "no cascade" — `useDatabaseView`'s `updateCell` must
+   * treat them the same. */
+  shifted_rows?: ShiftedRow[] | null;
 }
 
 export interface RowPropertyUpdate {
@@ -218,6 +238,14 @@ export interface RelatedRow {
 
 export interface RelationLinksResponse {
   rows: RelatedRow[];
+}
+
+/** `POST .../relations/{property_key}/links/bulk` (M7 combined-review
+ * Important finding 3, the N+1 fix) — one entry per requested row id, keyed
+ * by that row's own id, `[]` (not an absent key) for a row with no links.
+ * Mirrors `backend/models/database.py`'s `RelationLinksBulkResponse`. */
+export interface RelationLinksBulkResponse {
+  links: Record<string, RelatedRow[]>;
 }
 
 /** `services.db.relations.DATE_SHIFT_MODES` verbatim — task-21-brief.md/

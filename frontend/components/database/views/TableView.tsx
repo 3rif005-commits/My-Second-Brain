@@ -64,8 +64,17 @@ interface TableViewProps {
   // crashing.
   /** useDatabaseView's relation-links cache, keyed by `${rowId}:${propertyKey}`. */
   relationLinks?: Record<string, RelatedRow[]>;
-  /** useDatabaseView's `ensureRelationLinks` — lazily warms the cache above. */
+  /** useDatabaseView's `ensureRelationLinks` — lazily warms the cache above
+   * for a single row/property (used by `RelationCell`'s own per-cell mount). */
   ensureRelationLinks?: (rowId: string, propertyKey: string) => void;
+  /** useDatabaseView's `ensureRelationLinksBulk` — warms the cache above for
+   * every visible row's sub-item links in one request (M7 combined-review
+   * Important finding 3: the sub-item pre-fetch effect below used to call
+   * `ensureRelationLinks` once per row, one HTTP request per row). Optional,
+   * same "older/other caller just gets a degraded but non-crashing
+   * behaviour" convention as the other three relation props — falls back to
+   * the one-request-per-row loop when omitted. */
+  ensureRelationLinksBulk?: (rowIds: string[], propertyKey: string) => void;
   /** useDatabaseView's `setRelationLinks` — commits an add/remove. */
   setRelationLinks?: (rowId: string, propertyKey: string, rows: RelatedRow[]) => void | Promise<void>;
   /** The active view's `config.subtasks.display_mode` (task-22-brief.md
@@ -115,6 +124,7 @@ export function TableView({
   refetchRows,
   relationLinks,
   ensureRelationLinks,
+  ensureRelationLinksBulk,
   setRelationLinks,
   subItemDisplayMode,
 }: TableViewProps) {
@@ -152,16 +162,31 @@ export function TableView({
   // who's a root/parent/child *before* any row renders) — not on individual
   // cell mount the way an ordinary relation column's cells do. Keyed to
   // `rows`'s identity (changes once per `loadRows()` completion) and the
-  // mode/property, deliberately NOT to `ensureRelationLinks`'s own identity
-  // (which changes on every single cache write — see useDatabaseView.ts's
-  // comment on why) or this effect would re-issue a full "already cached,
-  // no-op" pass for every row on every individual fetch's completion.
+  // mode/property, deliberately NOT to `ensureRelationLinksBulk`'s/
+  // `ensureRelationLinks`'s own identity (which changes on every single
+  // cache write — see useDatabaseView.ts's comment on why) or this effect
+  // would re-issue a full "already cached, no-op" pass on every fetch's
+  // completion.
+  //
+  // M7 combined-review Important finding 3: this used to call
+  // `ensureRelationLinks` once per row in a loop — one HTTP request per
+  // visible row for a single sub-item column, even though
+  // `services.db.relations.list_links_bulk` (built by task 20 explicitly
+  // to avoid exactly this) existed unused. `ensureRelationLinksBulk` (one
+  // request for the whole page) is now preferred; the per-row loop is a
+  // fallback only for a caller that hasn't wired it through yet.
   useEffect(() => {
-    if (!ensureRelationLinks) return;
-    if (subItemDisplayMode === "show" && subItemForwardProp) {
-      for (const row of rows) ensureRelationLinks(row.id, subItemForwardProp.key);
-    } else if (subItemDisplayMode === "flattened" && subItemReverseProp) {
-      for (const row of rows) ensureRelationLinks(row.id, subItemReverseProp.key);
+    const key =
+      subItemDisplayMode === "show"
+        ? subItemForwardProp?.key
+        : subItemDisplayMode === "flattened"
+          ? subItemReverseProp?.key
+          : undefined;
+    if (!key) return;
+    if (ensureRelationLinksBulk) {
+      ensureRelationLinksBulk(rows.map((row) => row.id), key);
+    } else if (ensureRelationLinks) {
+      for (const row of rows) ensureRelationLinks(row.id, key);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, subItemDisplayMode, subItemForwardProp?.key, subItemReverseProp?.key]);

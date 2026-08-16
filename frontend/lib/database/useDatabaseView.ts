@@ -23,6 +23,7 @@ import type {
   PropertyResponse,
   PropertyValue,
   RelatedRow,
+  RelationLinksBulkResponse,
   RelationLinksResponse,
   RowResponse,
   ViewResponse,
@@ -186,7 +187,17 @@ export function useDatabaseView(databaseId: string) {
    * transient failure is common enough to not be worth toasting loudly
    * over, and a real outage will surface again on the next interaction (or
    * `refetch()`) rather than justifying open-ended retries inside a single
-   * cell edit. */
+   * cell edit.
+   *
+   * M7 combined-review Important finding 2: `updated.shifted_rows` (a
+   * dependency date-shift cascade's side effect, task-21-brief.md §4) used
+   * to be silently dropped here -- the backend computed it correctly and
+   * returned it, but nothing on this side ever read the field, so a
+   * cascaded row (task B's date, moved because task A's date moved) stayed
+   * visibly stale in an ungrouped Table view until a full reload. Each
+   * `ShiftedRow.properties` carries only the one date property that moved
+   * (not a full row), so it's *merged* into that row's existing
+   * `properties`, not a wholesale replace. */
   async function updateCell(rowId: string, propertyKey: string, value: PropertyValue | null) {
     if (!dataSource) return;
     const previousRows = rows;
@@ -220,8 +231,15 @@ export function useDatabaseView(databaseId: string) {
 
     // The write itself is done and confirmed at this point — nothing below
     // this line rolls it back.
+    const shiftedById = new Map((updated.shifted_rows ?? []).map((s) => [s.id, s.properties]));
     setRows((prev) =>
-      prev.map((row) => (row.id === updated.id ? { id: updated.id, properties: updated.properties } : row))
+      prev.map((row) => {
+        if (row.id === updated.id) return { id: updated.id, properties: updated.properties };
+        const shifted = shiftedById.get(row.id);
+        // Merge, not replace: a ShiftedRow only ever carries the one date
+        // property the cascade moved, not the row's other properties.
+        return shifted ? { ...row, properties: { ...row.properties, ...shifted } } : row;
+      })
     );
 
     if (wasGrouped) {
@@ -261,6 +279,48 @@ export function useDatabaseView(databaseId: string) {
         if (!res.ok) throw new Error(await errorMessage(res));
         const data: RelationLinksResponse = await res.json();
         setRelationLinksState((prev) => ({ ...prev, [key]: data.rows }));
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : "Could not load related rows", "error");
+      }
+    },
+    [dataSource, relationLinks, showToast]
+  );
+
+  /** Bulk form of `ensureRelationLinks` above — `POST .../relations/
+   * {property_key}/links/bulk` (M7 combined-review Important finding 3:
+   * the N+1 fix). `TableView`'s sub-item tree pre-fetch used to call
+   * `ensureRelationLinks` once per visible row, issuing one HTTP request
+   * per row even though `services.db.relations.list_links_bulk` (built by
+   * task 20 for exactly this) was sitting there unused. This warms the
+   * same `relationLinks` cache, same key shape, same "cached entries are a
+   * no-op" contract — only the ids not already cached are actually
+   * requested, and only one request is made regardless of how many ids
+   * that is (up to the backend's own `_BULK_RELATION_ROW_IDS_LIMIT`). A
+   * no-op for an empty `rowIds` (nothing to ask about) rather than an
+   * empty-body request. */
+  const ensureRelationLinksBulk = useCallback(
+    async (rowIds: string[], propertyKey: string) => {
+      if (!dataSource) return;
+      const missing = rowIds.filter((rowId) => !(relationCacheKey(rowId, propertyKey) in relationLinks));
+      if (missing.length === 0) return;
+      try {
+        const res = await fetch(
+          `/api/db/data-sources/${dataSource.id}/relations/${propertyKey}/links/bulk`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ row_ids: missing }),
+          }
+        );
+        if (!res.ok) throw new Error(await errorMessage(res));
+        const data: RelationLinksBulkResponse = await res.json();
+        setRelationLinksState((prev) => {
+          const next = { ...prev };
+          for (const [rowId, rows] of Object.entries(data.links)) {
+            next[relationCacheKey(rowId, propertyKey)] = rows;
+          }
+          return next;
+        });
       } catch (e) {
         showToast(e instanceof Error ? e.message : "Could not load related rows", "error");
       }
@@ -380,6 +440,7 @@ export function useDatabaseView(databaseId: string) {
     updateCell,
     relationLinks,
     ensureRelationLinks,
+    ensureRelationLinksBulk,
     setRelationLinks,
     createView,
     updateView,

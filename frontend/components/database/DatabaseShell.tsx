@@ -33,6 +33,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     updateCell,
     relationLinks,
     ensureRelationLinks,
+    ensureRelationLinksBulk,
     setRelationLinks,
     createView,
     updateView,
@@ -109,6 +110,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             refetchRows={refetchRows}
             relationLinks={relationLinks}
             ensureRelationLinks={ensureRelationLinks}
+            ensureRelationLinksBulk={ensureRelationLinksBulk}
             setRelationLinks={setRelationLinks}
             subItemDisplayMode={getSubtaskDisplayMode(activeView.config)}
           />

@@ -2,16 +2,20 @@
 // display mode (task-22-brief.md §3, research §3.4). Pure and separately
 // testable from any rendering concerns.
 //
-// task-21's committed router exposes no bulk relation-links endpoint —
-// `services/db/relations.py`'s own `list_links_bulk` exists (its docstring
-// even anticipates exactly this "one row's tree" use case) but no
-// `routers/databases.py` handler calls it (confirmed: no "bulk" substring
-// anywhere in that file). The only legal way to learn a row's children
-// through the committed API is the per-row `GET .../relations/{property_key}`
-// endpoint, so building a tree for N visible rows costs N requests — see
-// task-22-report.md for the full writeup. This function itself takes the
-// already-fetched answers (`childIdsOf`) rather than fetching anything, so
-// it doesn't care how many requests it took to assemble them.
+// task-21's originally committed router exposed no bulk relation-links
+// endpoint — `services/db/relations.py`'s own `list_links_bulk` existed
+// (its docstring even anticipated exactly this "one row's tree" use case)
+// but no `routers/databases.py` handler called it, so building a tree for
+// N visible rows cost N requests. The M7 combined review caught this
+// (Important finding 3) and it was fixed in the same review's fix wave:
+// `POST .../relations/{property_key}/links/bulk` now exists, and
+// `TableView`'s pre-fetch effect calls it (via `useDatabaseView`'s
+// `ensureRelationLinksBulk`) instead of looping — see task-22-report.md
+// (reconstructed after the fact, since task 22's own implementer never
+// wrote one) for the full writeup, including this finding. This function
+// itself takes the already-fetched answers (`childIdsOf`) rather than
+// fetching anything, so it doesn't care how many requests it took to
+// assemble them.
 import type { DatabaseRow } from "./types";
 
 export interface SubItemTreeEntry {

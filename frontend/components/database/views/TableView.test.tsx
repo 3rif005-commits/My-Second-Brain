@@ -459,6 +459,76 @@ describe("TableView", () => {
       expect(screen.getByText(/↳ Parent/)).toBeInTheDocument();
     });
 
+    it("'show' mode: pre-fetches sub-item links via ensureRelationLinksBulk (ONE call for all visible rows), not one ensureRelationLinks call per row (M7 combined-review Important finding 3)", () => {
+      const ensureRelationLinksBulk = vi.fn();
+      // `ensureRelationLinks` is deliberately omitted here: TableView only
+      // wires a relation column up to a live RelationCell (which calls
+      // `ensureRelationLinks` itself, on mount, for its own single-cell
+      // load — unrelated to this pre-fetch effect) when BOTH
+      // `ensureRelationLinks` and `setRelationLinks` are provided. Omitting
+      // it isolates what THIS effect calls from what the per-cell
+      // RelationCell components for the sub-item/parent-item columns
+      // would otherwise also call, which would make a bare call-count
+      // assertion meaningless.
+      render(
+        <TableView
+          properties={PROPS_WITH_SUBITEMS}
+          rows={TREE_ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={relationLinksFor([{ id: "child-1", title: "Child" }])}
+          ensureRelationLinksBulk={ensureRelationLinksBulk}
+          subItemDisplayMode="show"
+        />
+      );
+
+      expect(ensureRelationLinksBulk).toHaveBeenCalledTimes(1);
+      expect(ensureRelationLinksBulk).toHaveBeenCalledWith(["parent-1", "child-1"], "subitem");
+    });
+
+    it("'flattened' mode: pre-fetches via ensureRelationLinksBulk using the reverse (parent item) property key", () => {
+      const ensureRelationLinksBulk = vi.fn();
+      render(
+        <TableView
+          properties={PROPS_WITH_SUBITEMS}
+          rows={TREE_ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={{ "child-1:parentitem": [{ id: "parent-1", title: "Parent" }] }}
+          ensureRelationLinksBulk={ensureRelationLinksBulk}
+          subItemDisplayMode="flattened"
+        />
+      );
+
+      expect(ensureRelationLinksBulk).toHaveBeenCalledWith(["parent-1", "child-1"], "parentitem");
+    });
+
+    it("falls back to one ensureRelationLinks call per row when ensureRelationLinksBulk is omitted (older/other caller)", () => {
+      const ensureRelationLinks = vi.fn();
+      // `setRelationLinks` is deliberately omitted (same reasoning as
+      // above, inverted): without it, `renderCellValue`'s relationExtras
+      // stay `undefined` for the sub-item/parent-item columns too, so no
+      // RelationCell mounts to make its own independent `ensureRelationLinks`
+      // calls — the only calls left are this effect's own per-row
+      // fallback loop, which is exactly what this test asserts the shape
+      // of.
+      render(
+        <TableView
+          properties={PROPS_WITH_SUBITEMS}
+          rows={TREE_ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={relationLinksFor([{ id: "child-1", title: "Child" }])}
+          ensureRelationLinks={ensureRelationLinks}
+          subItemDisplayMode="show"
+        />
+      );
+
+      expect(ensureRelationLinks).toHaveBeenCalledWith("parent-1", "subitem");
+      expect(ensureRelationLinks).toHaveBeenCalledWith("child-1", "subitem");
+      expect(ensureRelationLinks).toHaveBeenCalledTimes(2);
+    });
+
     it("with no sub-item display mode set, renders flat with no tree/indicator controls at all", () => {
       render(
         <TableView
