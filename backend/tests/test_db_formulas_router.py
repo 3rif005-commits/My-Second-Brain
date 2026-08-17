@@ -416,6 +416,111 @@ async def test_query_rows_merges_materialised_formula_value(client):
     assert rows[row_id]["properties"][formula["key"]]["number"] == 6.0
 
 
+async def test_query_rows_can_filter_and_sort_by_a_formula_property(client):
+    """M8 combined review, Critical finding.
+
+    Spec §7.3's stated payoff for materialising is that "formulas and
+    rollups filter and sort in SQL exactly like stored values". Every layer
+    beneath this endpoint implemented that correctly, but `query_rows`
+    built its `PropertyLookup`s without `result_type`/`is_volatile`, so a
+    filter or sort naming a formula key 400'd with "has no filterable
+    operators" / "has no SQL shape" for EVERY formula and rollup property.
+
+    The reason it shipped: `test_db_computed_query.py`'s filter/sort tests
+    construct `PropertyLookup(..., result_type="number")` by hand and drive
+    `QueryBuilder` directly, so they never exercise the router's own
+    construction site. This test goes through the real HTTP endpoint
+    instead, which is the only thing that would have caught it -- exactly
+    the same lesson as the `db_row_props.computed` column never being
+    SELECTed (task-28-report.md's defect 2).
+    """
+    db = await _create_database(client)
+    ds_id = db["data_source"]["id"]
+    price = (await _create_property(client, ds_id, "Price", "number")).json()
+    formula = (
+        await _create_property(
+            client, ds_id, "Doubled", "formula", config={"expression": 'prop("Price") * 2'}
+        )
+    ).json()
+
+    # Three rows with Price 1/2/3 -> Doubled 2/4/6.
+    row_ids = []
+    for price_value in (1.0, 2.0, 3.0):
+        row_id = await _create_row(client, ds_id)
+        await client.patch(
+            f"/db/data-sources/{ds_id}/rows/{row_id}",
+            json={
+                "property_key": price["key"],
+                "value": {"type": "number", "number": price_value},
+            },
+        )
+        row_ids.append(row_id)
+
+    # FILTER: Doubled > 3 must return exactly the Price=2 and Price=3 rows.
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={
+            "filter": {
+                "type": "condition",
+                "property": formula["key"],
+                "operator": "greater_than",
+                "value": 3,
+            }
+        },
+    )
+    assert res.status_code == 200, res.text
+    got = {r["id"] for r in res.json()["rows"]}
+    assert got == {row_ids[1], row_ids[2]}, (
+        "filtering by a materialised formula returned the wrong rows"
+    )
+
+    # SORT: descending by Doubled must be 6, 4, 2.
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={"sorts": [{"property": formula["key"], "direction": "desc"}]},
+    )
+    assert res.status_code == 200, res.text
+    ordered = [
+        r["properties"][formula["key"]]["number"] for r in res.json()["rows"]
+    ]
+    assert ordered == [6.0, 4.0, 2.0], f"sort by formula gave {ordered}"
+
+
+async def test_query_rows_rejects_filtering_by_a_volatile_formula(client):
+    """The other half of the same wiring: `is_volatile` must arrive too.
+
+    A volatile formula is never materialised (spec §7.4), so it has no SQL
+    value to filter on. Task 27 deliberately did not build spec §7.4's
+    compute-then-filter fallback, so the contract is a clean 400 naming
+    volatility -- never silently wrong rows. Before the fix this returned
+    the WRONG error (result_type=None rather than volatility), and after a
+    naive fix that passed only `result_type` it would have tried to filter
+    a column that is guaranteed empty.
+    """
+    db = await _create_database(client)
+    ds_id = db["data_source"]["id"]
+    volatile = (
+        await _create_property(
+            client, ds_id, "Age", "formula", config={"expression": "now()"}
+        )
+    ).json()
+    assert volatile["is_volatile"] is True, "precondition: now() marks the formula volatile"
+
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={
+            "filter": {
+                "type": "condition",
+                "property": volatile["key"],
+                "operator": "is_not_empty",
+                "value": None,
+            }
+        },
+    )
+    assert res.status_code == 400, res.text
+    assert "volatile" in res.json()["detail"].lower(), res.text
+
+
 # ---------------------------------------------------------------------------
 # The M7/M8 composition: a date write that both shifts dependents AND
 # invalidates a formula on the shifted row.

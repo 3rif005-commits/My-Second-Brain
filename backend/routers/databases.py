@@ -830,7 +830,8 @@ async def query_rows(
 
         prop_rows = await conn.fetch(
             """
-            SELECT key, type, storage, config FROM db_properties
+            SELECT key, type, storage, config, result_type, is_volatile
+            FROM db_properties
             WHERE data_source_id = $1 AND user_id = $2
             """,
             data_source_id,
@@ -851,6 +852,25 @@ async def query_rows(
                 # unconditionally rather than gating on `r["type"] ==
                 # "relation"` first.
                 relation=relation_ref_from_config(r["config"]),
+                # Milestone 8 combined review, Critical: the exact same
+                # omission as the Milestone 7 one above, one milestone later
+                # and at this same construction site. Task 27 built
+                # `PropertyLookup.result_type`/`is_volatile`,
+                # `properties/computed.py`'s Formula/Rollup descriptors and
+                # `operators.py`'s RESULT_TYPE_OPERATORS, and all of it works
+                # — but this dict never populated the two fields, so every
+                # formula/rollup property arrived here with the dataclass
+                # defaults (result_type=None, is_volatile=False) and every
+                # filter or sort naming one 400'd with "has no filterable
+                # operators"/"has no SQL shape". That made spec §7.3's whole
+                # stated payoff ("formulas and rollups filter and sort in SQL
+                # exactly like stored values") unreachable through
+                # POST .../query — the only endpoint that compiles filters —
+                # for every formula and rollup property, while passing every
+                # test beneath it, because the service-layer tests build
+                # PropertyLookup by hand.
+                result_type=r["result_type"],
+                is_volatile=r["is_volatile"],
             )
             for r in prop_rows
         }
