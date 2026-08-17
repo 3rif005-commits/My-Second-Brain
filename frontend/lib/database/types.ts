@@ -72,6 +72,22 @@ export interface DatabaseDetailResponse {
   views: ViewResponse[];
 }
 
+/** `GET /db/databases` (commit 397ba23, task-31) — every database this user
+ * owns plus the one data source Milestone 2 always creates for it. Powers
+ * the relation-target and rollup-source pickers (task-31 Part 1/3), which
+ * need "which database?" without paying for each one's full property/view
+ * list (`DatabaseDetailResponse`) the way `GET /db/databases/{id}` returns.
+ * The built-in All Notes virtual source is never included — it has no
+ * `db_databases` row and cannot be a relation target. */
+export interface DatabaseSummary {
+  database: DatabaseResponse;
+  data_source: DataSourceResponse;
+}
+
+export interface DatabaseListResponse {
+  databases: DatabaseSummary[];
+}
+
 /** JSON mirror of `services.db.query.grouping.GroupBySpec` (task-15's
  * `QueryRequest.group_by`/`sub_group_by`, and the shape stored verbatim at
  * `ViewResponse.config.group_by`/`config.sub_group_by` — spec §10's "config

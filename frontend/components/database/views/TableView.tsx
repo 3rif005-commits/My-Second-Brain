@@ -24,7 +24,7 @@
 // here. No virtualization (@tanstack/react-virtual) either — not needed for
 // this milestone's scope; worth adding if a data source's row count becomes
 // a real performance problem.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createColumnHelper,
   flexRender,
@@ -33,7 +33,15 @@ import {
 } from "@tanstack/react-table";
 import { useToast } from "@/app/providers";
 import { KNOWN_PROPERTY_TYPES, findSystemRelationProperty } from "@/lib/database/types";
-import type { DatabaseRow, PropertyResponse, PropertyValue, RelatedRow, SubtaskDisplayMode } from "@/lib/database/types";
+import type {
+  DatabaseListResponse,
+  DatabaseRow,
+  DatabaseSummary,
+  PropertyResponse,
+  PropertyValue,
+  RelatedRow,
+  SubtaskDisplayMode,
+} from "@/lib/database/types";
 import { renderCellValue } from "../cells/renderCellValue";
 import { buildSubItemTree } from "@/lib/database/subItemTree";
 
@@ -89,11 +97,18 @@ interface TableViewProps {
 const columnHelper = createColumnHelper<DatabaseRow>();
 
 // The 7 non-title KNOWN_PROPERTY_TYPES this UI has a real cell component
-// for. `title` is deliberately excluded — every database already has
-// exactly one title property (created automatically by `POST
-// /db/databases`, Milestone 2), and a second title property isn't a concept
-// this app's schema (or Notion's) models. Labels are this form's own, since
-// KNOWN_PROPERTY_TYPES only carries the wire `type` strings.
+// for, plus "relation" (task-31 Part 1). `title` is deliberately excluded —
+// every database already has exactly one title property (created
+// automatically by `POST /db/databases`, Milestone 2), and a second title
+// property isn't a concept this app's schema (or Notion's) models. Labels
+// are this form's own, since KNOWN_PROPERTY_TYPES only carries the wire
+// `type` strings.
+//
+// task-31: M7/M8 shipped complete, tested engines (relation/formula/rollup)
+// that were unreachable for creation through this exact list — it only
+// carried the 7 basic types, so a user could build none of the three.
+// "relation" is added here; "formula"/"rollup" are Parts 2/3 of the same
+// task, landing in later commits.
 const ADDABLE_PROPERTY_TYPES: { value: string; label: string }[] = [
   { value: "rich_text", label: "Text" },
   { value: "number", label: "Number" },
@@ -102,6 +117,7 @@ const ADDABLE_PROPERTY_TYPES: { value: string; label: string }[] = [
   { value: "status", label: "Status" },
   { value: "date", label: "Date" },
   { value: "checkbox", label: "Checkbox" },
+  { value: "relation", label: "Relation" },
 ];
 
 /** Best-effort message extraction from a failed POST, matching the pattern
@@ -136,6 +152,19 @@ export function TableView({
   const [propertySubmitting, setPropertySubmitting] = useState(false);
   const [propertyFormError, setPropertyFormError] = useState<string | null>(null);
   const [rowSubmitting, setRowSubmitting] = useState(false);
+  // task-31 Part 1: relation-only fields, collected by the same inline
+  // add-property form rather than a parallel one. `databases` is fetched
+  // lazily (only once the user actually picks "Relation" — no reason to pay
+  // for `GET /db/databases` on every ordinary "add a Text property") from
+  // `GET /db/databases` (commit 397ba23), which is what a relation's target
+  // picker enumerates. Self-relations (target == this data source) are
+  // legal and are NOT filtered out of this list — the current database is
+  // just another entry the user owns.
+  const [databases, setDatabases] = useState<DatabaseSummary[] | null>(null);
+  const [databasesLoading, setDatabasesLoading] = useState(false);
+  const [targetDataSourceId, setTargetDataSourceId] = useState("");
+  const [twoWay, setTwoWay] = useState(true);
+  const [reverseName, setReverseName] = useState("");
   // Sub-item "show" mode's expand/collapse state (task-22-brief.md §3) —
   // every row starts expanded (empty set), matching Notion's own default.
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
@@ -271,7 +300,52 @@ export function TableView({
     setPropertyName("");
     setPropertyType(ADDABLE_PROPERTY_TYPES[0].value);
     setPropertyFormError(null);
+    setTargetDataSourceId("");
+    setTwoWay(true);
+    setReverseName("");
   }
+
+  // Lazy-loads `GET /db/databases` (commit 397ba23) the first time the user
+  // actually picks "Relation" in the type dropdown — not on every "Add
+  // property" open, which would pay for the fetch even for an ordinary Text
+  // property. `databases` is cached for the lifetime of this mount (a
+  // brand-new database created *while* this form is open is an edge case
+  // not worth a refetch-on-every-keystroke for).
+  //
+  // Guarded by a REF, not by reading `databases`/`databasesLoading` state in
+  // this same effect's own deps: `setDatabasesLoading(true)` below is itself
+  // a dependency-changing write, which would re-run this effect on the very
+  // next commit — the effect's own cleanup would then set `cancelled = true`
+  // before the in-flight fetch (issued by the FIRST run) ever resolves,
+  // silently dropping `setDatabases(...)` forever and leaving the dropdown
+  // stuck on "Loading databases…". A ref sidesteps that self-cancellation:
+  // it's set synchronously, is not a reactive dependency, and survives
+  // across the resulting re-render untouched.
+  const databasesFetchStarted = useRef(false);
+  useEffect(() => {
+    if (propertyType !== "relation" || databasesFetchStarted.current) return;
+    databasesFetchStarted.current = true;
+    let cancelled = false;
+    setDatabasesLoading(true);
+    fetch("/api/db/databases")
+      .then(async (res) => {
+        if (!res.ok) throw new Error(await errorMessage(res));
+        const data: DatabaseListResponse = await res.json();
+        if (!cancelled) setDatabases(data.databases);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          showToast(err instanceof Error ? err.message : "Could not load databases", "error");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDatabasesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propertyType]);
 
   async function handleAddPropertySubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -279,12 +353,38 @@ export function TableView({
     setPropertySubmitting(true);
     setPropertyFormError(null);
     try {
-      const res = await fetch(`/api/db/data-sources/${dataSourceId}/properties`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: propertyName.trim() || "Property", type: propertyType }),
-      });
-      if (!res.ok) throw new Error(await errorMessage(res));
+      // task-31 Part 1: relation properties are NOT created through the
+      // generic `POST .../properties` endpoint — that would mint a
+      // property with no `relation_id`/`side` in config, which
+      // `relation_ref_from_config` rejects and every filter on it would
+      // then 400 on (supabase/migrations/015_relations.sql's header).
+      // `POST .../relations` is the only route that produces a valid pair.
+      if (propertyType === "relation") {
+        if (!targetDataSourceId) {
+          throw new Error("Choose a target database");
+        }
+        if (twoWay && !reverseName.trim()) {
+          throw new Error("Reverse property name is required for a two-way relation");
+        }
+        const res = await fetch(`/api/db/data-sources/${dataSourceId}/relations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: propertyName.trim() || "Relation",
+            target_data_source_id: targetDataSourceId,
+            two_way: twoWay,
+            reverse_name: twoWay ? reverseName.trim() : null,
+          }),
+        });
+        if (!res.ok) throw new Error(await errorMessage(res));
+      } else {
+        const res = await fetch(`/api/db/data-sources/${dataSourceId}/properties`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: propertyName.trim() || "Property", type: propertyType }),
+        });
+        if (!res.ok) throw new Error(await errorMessage(res));
+      }
       resetPropertyForm();
       await refetch?.();
     } catch (err) {
@@ -357,6 +457,44 @@ export function TableView({
                           </option>
                         ))}
                       </select>
+                      {propertyType === "relation" && (
+                        <>
+                          <select
+                            aria-label="Target database"
+                            value={targetDataSourceId}
+                            onChange={(e) => setTargetDataSourceId(e.target.value)}
+                            className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                          >
+                            <option value="">
+                              {databasesLoading ? "Loading databases…" : "Choose a database…"}
+                            </option>
+                            {databases?.map((d) => (
+                              <option key={d.data_source.id} value={d.data_source.id}>
+                                {d.database.title || "Untitled"}
+                                {d.data_source.id === dataSourceId ? " (this database)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                          <label className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                            <input
+                              type="checkbox"
+                              aria-label="Two-way relation"
+                              checked={twoWay}
+                              onChange={(e) => setTwoWay(e.target.checked)}
+                            />
+                            Two-way
+                          </label>
+                          {twoWay && (
+                            <input
+                              aria-label="Reverse property name"
+                              value={reverseName}
+                              onChange={(e) => setReverseName(e.target.value)}
+                              placeholder="Reverse property name"
+                              className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                            />
+                          )}
+                        </>
+                      )}
                       <button
                         type="submit"
                         disabled={propertySubmitting}

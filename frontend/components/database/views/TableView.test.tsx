@@ -171,7 +171,7 @@ describe("TableView", () => {
       expect(screen.getByLabelText(/add property/i)).toBeInTheDocument();
     });
 
-    it("offers exactly the 7 non-title KNOWN_PROPERTY_TYPES in its type picker", async () => {
+    it("offers the 7 non-title KNOWN_PROPERTY_TYPES plus relation in its type picker (task-31 Part 1)", async () => {
       const user = userEvent.setup();
       render(
         <TableView
@@ -186,9 +186,9 @@ describe("TableView", () => {
       await user.click(screen.getByLabelText(/add property/i));
       const select = screen.getByLabelText(/property type/i) as HTMLSelectElement;
       const values = Array.from(select.options).map((o) => o.value);
-      expect(values).toEqual(KNOWN_PROPERTY_TYPES.filter((t) => t !== "title"));
+      expect(values).toEqual([...KNOWN_PROPERTY_TYPES.filter((t) => t !== "title"), "relation"]);
       expect(values).not.toContain("title");
-      expect(values).toHaveLength(7);
+      expect(values).toHaveLength(8);
     });
 
     it("submitting POSTs {name, type} to the properties endpoint, then refetches", async () => {
@@ -220,6 +220,213 @@ describe("TableView", () => {
       );
       const [, init] = fetchMock.mock.calls[0];
       expect(JSON.parse(init.body as string)).toEqual({ name: "Priority", type: "select" });
+    });
+  });
+
+  describe("Add relation property (task-31 Part 1)", () => {
+    const DATABASES_RESPONSE = {
+      databases: [
+        {
+          database: { id: "db-1", title: "This Database" },
+          data_source: { id: "ds-1" },
+        },
+        {
+          database: { id: "db-2", title: "Other Database" },
+          data_source: { id: "ds-2" },
+        },
+      ],
+    };
+
+    it("fetches GET /api/db/databases and offers every database (including this one, for self-relations) once Relation is picked", async () => {
+      const user = userEvent.setup();
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(DATABASES_RESPONSE));
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.selectOptions(screen.getByLabelText(/property type/i), "relation");
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/db/databases"));
+      await screen.findByRole("option", { name: /other database/i });
+      const targetSelect = screen.getByLabelText(/target database/i);
+      const optionLabels = Array.from((targetSelect as HTMLSelectElement).options).map((o) => o.textContent);
+      // Self-relation (target == the current data source, ds-1) must be
+      // offerable, not filtered out (task-31-brief.md §"Self-relations").
+      expect(optionLabels.some((l) => l?.includes("This Database") && l?.includes("this database"))).toBe(true);
+      expect(optionLabels.some((l) => l?.includes("Other Database"))).toBe(true);
+    });
+
+    it("two-way defaults on and shows a reverse-name field; unchecking it hides the field", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(DATABASES_RESPONSE)));
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.selectOptions(screen.getByLabelText(/property type/i), "relation");
+      await screen.findByRole("option", { name: /other database/i });
+
+      const twoWayCheckbox = screen.getByLabelText(/two-way/i) as HTMLInputElement;
+      expect(twoWayCheckbox.checked).toBe(true);
+      expect(screen.getByLabelText(/reverse property name/i)).toBeInTheDocument();
+
+      await user.click(twoWayCheckbox);
+      expect(screen.queryByLabelText(/reverse property name/i)).not.toBeInTheDocument();
+    });
+
+    it("submitting a two-way relation POSTs {name, target_data_source_id, two_way, reverse_name} to the relations endpoint, then refetches", async () => {
+      const user = userEvent.setup();
+      const refetch = vi.fn().mockResolvedValue(undefined);
+      const fetchMock = vi.fn().mockImplementation((url: string) => {
+        if (url === "/api/db/databases") return Promise.resolve(jsonResponse(DATABASES_RESPONSE));
+        return Promise.resolve(jsonResponse({ forward: { id: "prop-rel" }, reverse: { id: "prop-rev" } }, 201));
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={refetch}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.type(screen.getByLabelText(/property name/i), "Related tasks");
+      await user.selectOptions(screen.getByLabelText(/property type/i), "relation");
+      await screen.findByRole("option", { name: /other database/i });
+      await user.selectOptions(screen.getByLabelText(/target database/i), "ds-2");
+      await user.type(screen.getByLabelText(/reverse property name/i), "Related from");
+      await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+      await waitFor(() => expect(refetch).toHaveBeenCalled());
+      const relationsCall = fetchMock.mock.calls.find(([url]) => url === "/api/db/data-sources/ds-1/relations");
+      expect(relationsCall).toBeDefined();
+      const [, init] = relationsCall!;
+      expect(init).toMatchObject({ method: "POST" });
+      expect(JSON.parse(init.body as string)).toEqual({
+        name: "Related tasks",
+        target_data_source_id: "ds-2",
+        two_way: true,
+        reverse_name: "Related from",
+      });
+    });
+
+    it("submitting a one-way relation sends two_way: false and reverse_name: null, without requiring a reverse name", async () => {
+      const user = userEvent.setup();
+      const refetch = vi.fn().mockResolvedValue(undefined);
+      const fetchMock = vi.fn().mockImplementation((url: string) => {
+        if (url === "/api/db/databases") return Promise.resolve(jsonResponse(DATABASES_RESPONSE));
+        return Promise.resolve(jsonResponse({ forward: { id: "prop-rel" }, reverse: null }, 201));
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={refetch}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.type(screen.getByLabelText(/property name/i), "Blocking");
+      await user.selectOptions(screen.getByLabelText(/property type/i), "relation");
+      await screen.findByRole("option", { name: /other database/i });
+      await user.selectOptions(screen.getByLabelText(/target database/i), "ds-2");
+      await user.click(screen.getByLabelText(/two-way/i));
+      await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+      await waitFor(() => expect(refetch).toHaveBeenCalled());
+      const relationsCall = fetchMock.mock.calls.find(([url]) => url === "/api/db/data-sources/ds-1/relations");
+      expect(JSON.parse(relationsCall![1].body as string)).toEqual({
+        name: "Blocking",
+        target_data_source_id: "ds-2",
+        two_way: false,
+        reverse_name: null,
+      });
+    });
+
+    it("self-relation: choosing this data source as the target is allowed and POSTs target_data_source_id equal to dataSourceId", async () => {
+      const user = userEvent.setup();
+      const refetch = vi.fn().mockResolvedValue(undefined);
+      const fetchMock = vi.fn().mockImplementation((url: string) => {
+        if (url === "/api/db/databases") return Promise.resolve(jsonResponse(DATABASES_RESPONSE));
+        return Promise.resolve(jsonResponse({ forward: { id: "prop-rel" }, reverse: { id: "prop-rev" } }, 201));
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={refetch}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.type(screen.getByLabelText(/property name/i), "Sub-tasks");
+      await user.selectOptions(screen.getByLabelText(/property type/i), "relation");
+      await screen.findByRole("option", { name: /other database/i });
+      await user.selectOptions(screen.getByLabelText(/target database/i), "ds-1");
+      await user.type(screen.getByLabelText(/reverse property name/i), "Parent task");
+      await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+      await waitFor(() => expect(refetch).toHaveBeenCalled());
+      const relationsCall = fetchMock.mock.calls.find(([url]) => url === "/api/db/data-sources/ds-1/relations");
+      expect(JSON.parse(relationsCall![1].body as string)).toMatchObject({
+        target_data_source_id: "ds-1",
+      });
+    });
+
+    it("does not submit without a chosen target database, and shows an error instead", async () => {
+      const user = userEvent.setup();
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(DATABASES_RESPONSE));
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.selectOptions(screen.getByLabelText(/property type/i), "relation");
+      await screen.findByRole("option", { name: /other database/i });
+      await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+      expect(await screen.findByText(/choose a target database/i)).toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        "/api/db/data-sources/ds-1/relations",
+        expect.anything()
+      );
     });
   });
 
