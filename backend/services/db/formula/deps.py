@@ -24,6 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from . import ast as A
+from .lexer import FormulaSyntaxError
 from .parser import parse
 
 __all__ = [
@@ -180,7 +181,26 @@ def build_graph(properties: list[PropertyDef]) -> Graph:
             tree = p.formula_tree
             if tree is None and p.formula_source:
                 local_names = names_by_ds.get(p.data_source_id, {})
-                tree = parse(p.formula_source, property_names=local_names.keys())
+                try:
+                    tree = parse(p.formula_source, property_names=local_names.keys())
+                except FormulaSyntaxError:
+                    # Task 28 fix (found while wiring recompute.validate_save
+                    # into the property-save router): this module's own
+                    # docstring already promises "an unparseable... formula
+                    # has no known references -- build_graph does not raise
+                    # on this," but the code only delivered that for an
+                    # ABSENT formula_source (the `and p.formula_source`
+                    # guard above) -- a PRESENT-but-garbage source (a
+                    # formula that saved despite a syntax error, research
+                    # §1.9's own documented behaviour, or a formula that
+                    # parsed fine when saved and stopped parsing after some
+                    # later, unrelated schema change) reached `parse()`
+                    # uncaught and crashed every subsequent
+                    # `validate_save`/`recompute_full` pass with a raw
+                    # `FormulaSyntaxError` instead of just contributing no
+                    # edges for that one property. Bringing the code in line
+                    # with its own documented contract, not a new policy.
+                    tree = None
             if tree is not None:
                 local_names = names_by_ds.get(p.data_source_id, {})
                 for ref_name in referenced_properties(tree):

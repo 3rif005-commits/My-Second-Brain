@@ -32,9 +32,12 @@ from models.database import (
     DatabaseResponse,
     DataSourceResponse,
     DependencySettingsUpdate,
+    FormulaValidateRequest,
+    FormulaValidateResponse,
+    FormulaValidationIssue,
     GroupResult,
     PropertyCreate,
-    PropertyRename,
+    PropertyUpdate,
     PropertyResponse,
     QueryRequest,
     QueryResponse,
@@ -55,10 +58,16 @@ from models.database import (
     ViewUpdate,
 )
 from routers.notes import get_user_id
+from services.db import recompute
+from services.db import rollup as rollup_service
 from services.db.connection import get_conn
+from services.db.formula import FormulaCycleError, FormulaSyntaxError
+from services.db.formula import check as check_formula
+from services.db.formula import parse as parse_formula
 from services.db.keys import mint_key
 from services.db.properties.base import REGISTRY
 from services.db.properties.columns import COLUMN_BACKED
+from services.db.properties.computed import ComputedConfig
 from services.db.query import ast
 from services.db.query import grouping
 from services.db.query.builder import QueryBuilder
@@ -100,6 +109,19 @@ _KEY_MINT_ATTEMPTS = 5
 # params, "load more" UI) is explicitly Milestone 3+ scope — this is just a
 # hard cap, not a feature.
 _ROWS_LIMIT = 500
+
+# Milestone 8 (task-28-brief.md §1): "a malformed expression is the NORMAL
+# case for the validate endpoint (a formula editor calls it per keystroke)...
+# protect the server anyway: cap expression length." Task 23's own
+# `MAX_PARSE_DEPTH` already bounds *nesting*, but a hostile/pathological flat
+# expression (e.g. a single 10MB string literal, or a wide `sum(1,1,1,...)`
+# call) costs lexer/parser/checker time proportional to length regardless of
+# nesting depth — this is the second, independent guard the brief asks for.
+# 5,000 characters is generous for anything a formula EDITOR would produce
+# (Notion's own formula UI has no documented length cap, but no real formula
+# in research's own worked examples approaches even 500 chars) while keeping
+# a single validate call's cost bounded and constant-ish.
+_MAX_FORMULA_EXPRESSION_LENGTH = 5_000
 
 # M7 combined-review Important finding 3: caps `POST .../relations/
 # {property_key}/links/bulk`'s `row_ids` body -- a distinct limit from
@@ -205,6 +227,67 @@ def _decode_ordinary_row(record: asyncpg.Record) -> dict[str, Any]:
     }
 
 
+async def _fetch_computed_by_row(
+    conn: asyncpg.Connection, user_id: str, data_source_id: str, note_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    """Bulk-fetches `db_row_props.computed` for exactly the rows a listing/
+    query endpoint is about to return (task-28-brief.md §4). Neither
+    `list_rows`'s own hand-rolled SQL nor `services/db/query/builder.py`'s
+    `QueryBuilder._columns()` (Task 27, outside this task's file scope --
+    `services.db.query.builder`/`compiler` are listed among the "committed
+    code you build on," not code to modify) ever selects `computed` -- so
+    without this, a materialised formula/rollup value would filter and sort
+    correctly (Task 27's own end-to-end tests prove that) but never actually
+    reach a client to render at all, which would make `FormulaCell` a
+    component with nothing real to ever display in a live pass. A second
+    bulk query -- not a join spliced into `QueryBuilder`'s fragment -- keeps
+    this entirely inside this router's own file, and mirrors the same
+    "N+1 killer, one extra round trip" shape `get_relation_links_bulk`
+    already established here.
+
+    Returns `{}` for `note_ids == []` without a round trip. A row absent
+    from the result, or present with an empty dict, both mean "no
+    materialised formula/rollup values for this row" -- `_merge_computed_
+    into_rows` treats them identically."""
+    if not note_ids:
+        return {}
+    rows = await conn.fetch(
+        """
+        SELECT note_id, computed FROM db_row_props
+        WHERE user_id = $1 AND data_source_id = $2 AND note_id = ANY($3::uuid[])
+        """,
+        user_id, data_source_id, note_ids,
+    )
+    return {str(r["note_id"]): (r["computed"] or {}) for r in rows}
+
+
+def _merge_computed_into_rows(
+    rows: list[dict[str, Any]], computed_by_id: dict[str, dict[str, Any]]
+) -> None:
+    """Merges each row's materialised formula/rollup values (already §3.3-
+    wrapper-shaped, `rollup.computed_wrapper`'s own output) into its
+    `properties` dict, keyed by property key exactly like every stored
+    property -- `RowsResponse`'s own docstring promises a generic renderer
+    can always do `row["properties"][property.key]`, and this is what makes
+    that promise true for formula/rollup keys too, not just stored ones. A
+    key collision with a stored property is structurally impossible (`db_
+    properties.key` is unique per data source -- migration 014's `UNIQUE
+    (data_source_id, key)` -- and a computed value is only ever written
+    under a formula/rollup property's OWN key), so this is a plain dict
+    merge, never a conflict to resolve. A volatile formula's key is simply
+    never a key of `computed_by_id[row_id]` at all (`recompute.py` never
+    writes one) -- there is nothing to merge for it, which is exactly "what
+    Task 27's query path actually returns" for one (task-28-brief.md §4):
+    nothing. `FormulaCell` renders a distinct muted state for that case
+    client-side rather than this endpoint inventing a live value spec
+    §7.4's per-request evaluation path (still unbuilt -- inherited flagged
+    gap from Task 27's own report) would be needed to compute correctly."""
+    for row in rows:
+        extra = computed_by_id.get(row["id"])
+        if extra:
+            row["properties"] = {**row["properties"], **extra}
+
+
 def _row(record: asyncpg.Record) -> dict[str, Any]:
     """`dict(record)` with every `uuid.UUID` value stringified — asyncpg
     decodes `uuid` columns to `uuid.UUID` objects, but every `*Response`
@@ -228,6 +311,156 @@ def _parse_uuid_or_404(value: str, what: str) -> str:
     except ValueError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"{what} not found")
     return value
+
+
+def _is_uuid(value: Any) -> bool:
+    """Same format check as `_parse_uuid_or_404`, but for a value nested
+    inside a request BODY (a rollup's `config.target_data_source_id`) rather
+    than a path param — a bad body value is a 400 (the request itself is
+    malformed), never a 404 (which means "well-formed request, nothing
+    there")."""
+    if not isinstance(value, str):
+        return False
+    try:
+        uuid_lib.UUID(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _line_col(source: str, pos: int) -> tuple[int, int]:
+    """0-based character offset -> 1-based `(line, col)`, matching exactly
+    `services/db/formula/lexer.py`'s own `_Scanner` convention (`col` resets
+    to 1 right after a newline) — `FormulaSyntaxError` already carries
+    line/col computed this way; `FormulaTypeError` (typecheck.py) carries
+    only `pos`, so `validate_formula` derives the same pair here rather than
+    inventing a second, possibly-divergent convention. `pos` is clamped into
+    `[0, len(source)]` first — a `pos` one past the end of the source (e.g.
+    an error at EOF) is legitimate and must not `IndexError`."""
+    pos = max(0, min(pos, len(source)))
+    line = source.count("\n", 0, pos) + 1
+    last_newline = source.rfind("\n", 0, pos)
+    col = pos - last_newline if last_newline != -1 else pos + 1
+    return line, col
+
+
+async def _validate_and_prepare_computed_property(
+    conn: asyncpg.Connection,
+    user_id: str,
+    data_source_id: str,
+    prop_type: str,
+    config: dict[str, Any],
+) -> tuple[str | None, bool]:
+    """Save-time validation for a `formula`/`rollup` property's `config`,
+    shared by `create_property` and `update_property` (task-28-brief.md §2).
+    Returns `(result_type, is_volatile)` to store on `db_properties` —
+    raises `HTTPException(400, ...)` for exactly the things the brief calls
+    a hard rejection (a malformed rollup definition), and NEVER for a
+    formula that merely fails to parse or type-check.
+
+    That asymmetry is deliberate, not an oversight: research §1.9, quoted
+    verbatim in the brief, "a formula with errors can still be saved... the
+    property will display nothing" — `recompute.py`'s own `_compute_formula`
+    already has to handle an unparseable/mistyped SAVED expression (a schema
+    change after the fact can invalidate a previously-fine formula) by
+    degrading every row to `{"type":"unsupported"}` rather than crashing a
+    recompute pass, so a save-time reject here would only be enforcing, at
+    the front door, an invariant the engine already has to tolerate being
+    violated everywhere else. Only a dependency **cycle** (`FormulaCycleError`,
+    checked by the caller via `recompute.validate_save`, not here — this
+    function has no view of the whole graph, only one property's config) and
+    a malformed **rollup** definition (no AST, no "still displays something
+    sensible" fallback the way an unparseable formula has) are hard
+    rejections.
+    """
+    try:
+        parsed_config = ComputedConfig(**config)
+    except ValidationError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"invalid {prop_type} config: {exc}") from exc
+
+    if prop_type == "formula":
+        expression = parsed_config.expression
+        if not expression or not expression.strip():
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "formula property requires a non-empty config.expression"
+            )
+        if len(expression) > _MAX_FORMULA_EXPRESSION_LENGTH:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"expression exceeds the {_MAX_FORMULA_EXPRESSION_LENGTH}-character limit",
+            )
+        prop_rows = await conn.fetch(
+            "SELECT name, type FROM db_properties WHERE data_source_id = $1 AND user_id = $2",
+            data_source_id, user_id,
+        )
+        names_to_types = {r["name"]: r["type"] for r in prop_rows}
+        try:
+            tree = parse_formula(expression, property_names=names_to_types.keys())
+        except FormulaSyntaxError:
+            # Save-time reject is deliberately NOT done here -- see this
+            # function's own docstring. `result_type`/`is_volatile` are
+            # simply unknown for an expression that never parsed.
+            return None, False
+        result = check_formula(tree, properties=names_to_types)
+        return result.type.value, result.is_volatile
+
+    if prop_type == "rollup":
+        relation_key = parsed_config.relation_key
+        target_ds_id = parsed_config.target_data_source_id
+        target_key = parsed_config.target_key
+        function = parsed_config.function
+        if not (relation_key and target_ds_id and target_key and function):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "rollup requires config.relation_key, config.target_data_source_id, "
+                "config.target_key, and config.function",
+            )
+        if function not in rollup_service.ROLLUP_FUNCTIONS:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"unknown rollup function: {function!r} (must be one of the 22 documented "
+                "functions -- research §3.7)",
+            )
+        if not _is_uuid(target_ds_id):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "config.target_data_source_id is not a valid id")
+
+        rel_row = await conn.fetchrow(
+            "SELECT type, config FROM db_properties WHERE data_source_id = $1 AND user_id = $2 AND key = $3",
+            data_source_id, user_id, relation_key,
+        )
+        if rel_row is None or rel_row["type"] != "relation":
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"config.relation_key {relation_key!r} is not a relation property on this data source",
+            )
+        rel_config = rel_row["config"] or {}
+        if str(rel_config.get("target_data_source_id") or "") != str(target_ds_id):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"config.target_data_source_id must match relation {relation_key!r}'s own target "
+                f"({rel_config.get('target_data_source_id')!r})",
+            )
+        target_row = await conn.fetchrow(
+            "SELECT type, result_type FROM db_properties WHERE data_source_id = $1 AND user_id = $2 AND key = $3",
+            target_ds_id, user_id, target_key,
+        )
+        if target_row is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"config.target_key {target_key!r} does not exist on the target data source",
+            )
+        # rollup.py's own decided-here scope boundary (task-27-report.md
+        # judgement call 5): a relation target has no single materialised
+        # value to aggregate over, except for `count`, which never reads a
+        # target value at all.
+        if target_row["type"] == "relation" and function != "count":
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "a rollup cannot target a relation property, except with function='count'",
+            )
+        return rollup_service.ROLLUP_RESULT_TYPE[function].value, False
+
+    return None, False
 
 
 def _all_notes_database(user_id: str) -> DatabaseDetailResponse:
@@ -487,6 +720,10 @@ async def list_rows(
         _ROWS_LIMIT,
     )
     rows = [_decode_ordinary_row(r) for r in row_rows]
+    computed_by_id = await _fetch_computed_by_row(
+        conn, user_id, data_source_id, [r["id"] for r in rows]
+    )
+    _merge_computed_into_rows(rows, computed_by_id)
     return RowsResponse(rows=rows)
 
 
@@ -644,6 +881,17 @@ async def query_rows(
     records = await conn.fetch(frag.sql, *frag.params)
     decode = _decode_all_notes_row if all_notes else _decode_ordinary_row
     rows = [decode(r) for r in records]
+    if not all_notes:
+        # Milestone 8 (task-28-brief.md §4): merged in BEFORE grouping below,
+        # not after -- a Board view's `group_by`/`sub_group_by` can itself
+        # name a formula/rollup key (`grouping.group_rows` only ever sees
+        # this already-built `rows` list), so a materialised value has to be
+        # present here for that to group correctly too, not just for the
+        # ungrouped response shape.
+        computed_by_id = await _fetch_computed_by_row(
+            conn, user_id, data_source_id, [r["id"] for r in rows]
+        )
+        _merge_computed_into_rows(rows, computed_by_id)
 
     if body.group_by is None:
         return QueryResponse(rows=rows)
@@ -761,6 +1009,16 @@ async def create_row(
             data_source_id,
             user_id,
         )
+        # Milestone 8 (task-28-brief.md §3): "row write (update_row_property,
+        # create_row) -> incremental recompute of that row." A brand-new row
+        # has no stored properties yet, so most formulas will materialise to
+        # EMPTY/omitted -- but a formula with no property references at all
+        # (e.g. a constant expression, or one that only calls `context(...)`)
+        # still needs a value the instant the row exists, not "whenever some
+        # unrelated write happens to touch it." Inside the same transaction
+        # as the insert, matching the brief's "if recompute raises, the
+        # write rolls back" standing instruction.
+        await recompute.recompute_row(conn, user_id, data_source_id, str(row["note_id"]))
     return RowResponse(id=str(row["note_id"]), properties=row["properties"])
 
 
@@ -997,8 +1255,40 @@ async def update_row_property(
                                 )
                                 for shifted_id, window in changes.items()
                             ]
+
+        # Milestone 8 (task-28-brief.md §3): recompute this row -- and, if
+        # the M7 cascade above moved any OTHER rows, each of those too --
+        # inside THIS SAME transaction. "If recompute raises, the whole
+        # write rolls back": a row whose stored value and computed value
+        # disagree is worse than a failed write, the identical standing
+        # instruction the cascade above already follows. A shifted row's
+        # own date property changed just as surely as this row's did, and a
+        # formula directly referencing that property (not through a rollup
+        # -- `recompute_row`'s own propagation already walks `db_
+        # relation_links` via rollups, a DIFFERENT path than this
+        # dependency-relation cascade) only gets recomputed by calling
+        # `recompute_row` for THAT row id explicitly.
+        written = await recompute.recompute_row(conn, user_id, data_source_id, note_id)
+        for shifted in shifted_rows or []:
+            await recompute.recompute_row(conn, user_id, data_source_id, shifted.id)
+
+    # `written` (this row's own freshly materialised formula/rollup values)
+    # merges into the response the same way `_merge_computed_into_rows`
+    # does for a listing/query -- so the client's optimistic-update cache
+    # (`useDatabaseView.ts`'s `updateCell`, which replaces `row.properties`
+    # wholesale with this response's `properties`) reflects a dependent
+    # formula's new value immediately, without a refetch. `row["properties"]`
+    # (the STORED column) never itself carries a formula/rollup key, so this
+    # is a plain merge, never a real conflict -- same reasoning as `_merge_
+    # computed_into_rows`'s own docstring. A `None` entry (the value is now
+    # EMPTY, spec §3.3's "absent key" convention) is simply omitted, which
+    # is also correct for dropping a key that used to have a value.
+    merged_properties = {
+        **row["properties"],
+        **{k: v for k, v in written.items() if v is not None},
+    }
     return RowResponse(
-        id=str(row["note_id"]), properties=row["properties"], shifted_rows=shifted_rows
+        id=str(row["note_id"]), properties=merged_properties, shifted_rows=shifted_rows
     )
 
 
@@ -1033,6 +1323,20 @@ async def create_property(
     if body.type not in REGISTRY:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unknown property type: {body.type!r}")
 
+    # Milestone 8 (task-28-brief.md §2): formula/rollup need real validation
+    # at save time -- computed BEFORE the key-mint loop below since neither
+    # depends on the (not yet minted) key, and there's no reason to redo it
+    # on a UniqueViolationError retry. Raises HTTPException(400) itself for
+    # the things that are genuine hard rejections (see this function's own
+    # docstring); a formula that merely fails to parse/typecheck returns
+    # `(None, False)` rather than raising, and still saves.
+    result_type: str | None = None
+    is_volatile = False
+    if body.type in ("formula", "rollup"):
+        result_type, is_volatile = await _validate_and_prepare_computed_property(
+            conn, user_id, data_source_id, body.type, body.config
+        )
+
     for _ in range(_KEY_MINT_ATTEMPTS):
         key = mint_key()
         try:
@@ -1043,19 +1347,27 @@ async def create_property(
             # transaction (not just this statement), and every subsequent
             # attempt — including ones with a fresh, non-colliding key —
             # would fail with "current transaction is aborted" instead of
-            # actually retrying.
+            # actually retrying. The cycle check and full recompute below
+            # (Milestone 8) also live inside this same per-attempt
+            # transaction: a save that turns out to close a dependency
+            # cycle must undo the INSERT that revealed it, and a recompute
+            # that somehow raised must not leave a property behind whose
+            # config and materialised values disagree (task-28-brief.md §3's
+            # "if recompute raises, the write rolls back," applied here to
+            # a property save instead of a row write).
             async with conn.transaction():
                 row = await conn.fetchrow(
                     """
                     INSERT INTO db_properties
                         (data_source_id, user_id, key, name, type, config, description,
-                         storage, position)
+                         storage, position, result_type, is_volatile)
                     VALUES
                         ($1, $2, $3, $4, $5, $6, $7, 'jsonb',
                          COALESCE(
                             (SELECT MAX(position) + 1 FROM db_properties
                              WHERE data_source_id = $1 AND user_id = $2),
-                            0))
+                            0),
+                         $8, $9)
                     RETURNING *
                     """,
                     data_source_id,
@@ -1065,7 +1377,22 @@ async def create_property(
                     body.type,
                     body.config,
                     body.description,
+                    result_type,
+                    is_volatile,
                 )
+                if body.type in ("formula", "rollup"):
+                    try:
+                        await recompute.validate_save(conn, user_id)
+                    except FormulaCycleError as exc:
+                        raise HTTPException(
+                            status.HTTP_400_BAD_REQUEST,
+                            f"saving this {body.type} would create a dependency cycle: {exc}",
+                        ) from exc
+                    # A brand-new formula/rollup has no materialised values
+                    # at all yet -- without this it would show empty until
+                    # an unrelated row write happened to touch it
+                    # (task-28-brief.md §2).
+                    await recompute.recompute_full(conn, user_id)
         except asyncpg.UniqueViolationError:
             continue
         return PropertyResponse(**_row(row))
@@ -1073,29 +1400,78 @@ async def create_property(
 
 
 @router.patch("/properties/{property_id}", response_model=PropertyResponse)
-async def rename_property(
+async def update_property(
     property_id: str,
-    body: PropertyRename,
+    body: PropertyUpdate,
     user_id: str = Depends(get_user_id),
     conn: asyncpg.Connection = Depends(get_conn),
 ) -> PropertyResponse:
-    """Renaming only ever touches `name`. Never touches `key`, and — since
-    it never touches `db_row_props` at all — every row's JSONB is
-    byte-identical before and after (spec §4.2: "Rename is
-    metadata-only.\")."""
+    """`name` alone is metadata-only (spec §4.2: "Rename is metadata-only") --
+    never touches `key`, and — since it never touches `db_row_props` at all
+    for a name-only edit — every row's JSONB is byte-identical before and
+    after.
+
+    `config` (Milestone 8, task-28-brief.md §2's "creating AND updating"):
+    the only way to edit an existing formula's expression or an existing
+    rollup's relation/target/function after creation. Applies the exact same
+    `_validate_and_prepare_computed_property` + `recompute.validate_save`
+    (cycle rejection) + `recompute.recompute_full` sequence `create_property`
+    uses — a changed expression's old materialised values are exactly as
+    stale the instant the expression changes as a brand-new property's are.
+    `config` is a silent pass-through, unvalidated, for every other property
+    type (this endpoint has never validated `config` shape for non-computed
+    types and doesn't start now — matches `ViewUpdate`'s identical stance
+    for its own JSONB columns)."""
     property_id = _parse_uuid_or_404(property_id, "property")
-    row = await conn.fetchrow(
+    current = await conn.fetchrow(
         """
-        UPDATE db_properties SET name = $1
-        WHERE id = $2 AND user_id = $3
-        RETURNING *
+        SELECT data_source_id, type, config, result_type, is_volatile
+        FROM db_properties WHERE id = $1 AND user_id = $2
         """,
-        body.name,
         property_id,
         user_id,
     )
-    if row is None:
+    if current is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "property not found")
+
+    config = current["config"]
+    result_type = current["result_type"]
+    is_volatile = current["is_volatile"]
+    needs_recompute = False
+    if body.config is not None:
+        config = body.config
+        if current["type"] in ("formula", "rollup"):
+            result_type, is_volatile = await _validate_and_prepare_computed_property(
+                conn, user_id, str(current["data_source_id"]), current["type"], body.config
+            )
+            needs_recompute = True
+
+    async with conn.transaction():
+        row = await conn.fetchrow(
+            """
+            UPDATE db_properties
+            SET name = COALESCE($1, name), config = $2, result_type = $3, is_volatile = $4
+            WHERE id = $5 AND user_id = $6
+            RETURNING *
+            """,
+            body.name,
+            config,
+            result_type,
+            is_volatile,
+            property_id,
+            user_id,
+        )
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "property not found")
+        if needs_recompute:
+            try:
+                await recompute.validate_save(conn, user_id)
+            except FormulaCycleError as exc:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"saving this {current['type']} would create a dependency cycle: {exc}",
+                ) from exc
+            await recompute.recompute_full(conn, user_id)
     return PropertyResponse(**_row(row))
 
 
@@ -1121,6 +1497,100 @@ async def delete_property(
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "property not found")
         await sweep_property_from_views(conn, user_id, str(row["data_source_id"]), row["key"])
+
+
+@router.post(
+    "/data-sources/{data_source_id}/formulas/validate",
+    response_model=FormulaValidateResponse,
+)
+async def validate_formula(
+    data_source_id: str,
+    body: FormulaValidateRequest,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> FormulaValidateResponse:
+    """Spec §7.1's exact, deliberately narrow contract: parse errors, the
+    inferred result type, and the referenced properties -- nothing else.
+    There is no evaluate-this-formula-for-me endpoint (a second evaluator,
+    in TS, in the browser, is exactly the divergence spec §7.1 rejects at
+    length) -- `FormulaEditor` calls only this.
+
+    **A malformed expression is the NORMAL case here, not an error**: a
+    formula editor calls this on every keystroke, so a syntax error is
+    always a 200 with `valid: false`, never a 400 (task-28-brief.md §1). A
+    missing/unknown data source is still a 404 -- that's a genuinely
+    different kind of wrong request (there's no schema to check the
+    expression's property references against at all), not something a
+    formula editor would ever hit by typing.
+    """
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "formulas are not supported on the All Notes virtual source",
+        )
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    ds_row = await conn.fetchrow(
+        "SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2", data_source_id, user_id
+    )
+    if ds_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    # Debounce is the client's job (task-28-brief.md §1), but the server is
+    # protected anyway: cap expression length (a hostile/pathological flat
+    # expression costs lexer/parser/checker time proportional to length
+    # regardless of nesting depth) and reuse Task 23's own `MAX_PARSE_DEPTH`
+    # (enforced inside `parse_formula` itself, not duplicated here) -- "a 200
+    # that takes 30 seconds is a denial vector."
+    if len(body.expression) > _MAX_FORMULA_EXPRESSION_LENGTH:
+        return FormulaValidateResponse(
+            valid=False,
+            errors=[
+                FormulaValidationIssue(
+                    message=f"expression exceeds the {_MAX_FORMULA_EXPRESSION_LENGTH}-character limit",
+                    pos=0,
+                    line=1,
+                    col=1,
+                )
+            ],
+        )
+
+    prop_rows = await conn.fetch(
+        "SELECT key, name, type FROM db_properties WHERE data_source_id = $1 AND user_id = $2",
+        data_source_id,
+        user_id,
+    )
+    names_to_types = {r["name"]: r["type"] for r in prop_rows}
+    names_to_keys = {r["name"]: r["key"] for r in prop_rows}
+
+    try:
+        tree = parse_formula(body.expression, property_names=names_to_types.keys())
+    except FormulaSyntaxError as exc:
+        # `parse()`'s own docstring: "raises FormulaSyntaxError for any
+        # malformed input and nothing else" -- exactly the contract this
+        # endpoint depends on to never 500 on bad input.
+        return FormulaValidateResponse(
+            valid=False,
+            errors=[
+                FormulaValidationIssue(message=exc.message, pos=exc.pos, line=exc.line, col=exc.col)
+            ],
+        )
+
+    result = check_formula(tree, properties=names_to_types)
+    referenced_keys = sorted(
+        names_to_keys[name] for name in result.referenced if name in names_to_keys
+    )
+    errors = []
+    for e in result.errors:
+        line, col = _line_col(body.expression, e.pos)
+        errors.append(FormulaValidationIssue(message=e.message, pos=e.pos, line=line, col=col))
+
+    return FormulaValidateResponse(
+        valid=not errors,
+        errors=errors,
+        result_type=result.type.value,
+        referenced_properties=referenced_keys,
+        is_volatile=result.is_volatile,
+    )
 
 
 @router.post(

@@ -66,8 +66,29 @@ class PropertyCreate(BaseModel):
     description: str | None = None
 
 
-class PropertyRename(BaseModel):
-    name: str
+class PropertyUpdate(BaseModel):
+    """`PATCH /db/properties/{property_id}` body. `name` alone is metadata-only
+    (spec §4.2: "Rename is metadata-only") — unchanged from this endpoint's
+    original `PropertyRename` shape (renamed here, task-28-brief.md §2, since
+    it now does more than rename).
+
+    `config` is new (Milestone 8, Task 28): the only way to edit an existing
+    formula's expression or an existing rollup's relation/target/function
+    after creation — `create_property` accepts `config` only at creation
+    time, and until this task nothing let it be changed afterward. Router-side
+    (`routers.databases.update_property`) applies the *same* save-time
+    validation `create_property` does for a `formula`/`rollup` property
+    (parse + typecheck the expression, or validate the rollup's relation/
+    target/function; reject a dependency cycle with its path) and the same
+    post-save full recompute — a formula's old materialised values are just
+    as stale the instant its expression changes as they are on first save.
+    `config` is a silent no-op for every other property type (this endpoint
+    has never validated `config` shape for non-computed types, matching
+    `ViewUpdate`'s identical "pass-through, unvalidated" stance for its own
+    JSONB columns, and does not start now)."""
+
+    name: str | None = None
+    config: dict[str, Any] | None = None
 
 
 class PropertyResponse(BaseModel):
@@ -378,3 +399,68 @@ class DependencySettingsUpdate(BaseModel):
     date_shift_mode: str | None = None
     avoid_weekends: bool | None = None
     date_property_key: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Milestone 8 (task-28): formula validate endpoint.
+# ---------------------------------------------------------------------------
+
+
+class FormulaValidateRequest(BaseModel):
+    """`POST /db/data-sources/{data_source_id}/formulas/validate` body
+    (spec §7.1 — the frontend's *only* formula surface; there is no
+    evaluate-this-for-me endpoint, so a formula editor calls this on every
+    keystroke). `expression` is capped server-side
+    (`routers.databases._MAX_FORMULA_EXPRESSION_LENGTH`) before it ever
+    reaches the parser — a malformed OR pathologically long expression is
+    the *normal* case here, not an error, so this endpoint always answers
+    200; see `FormulaValidateResponse`."""
+
+    expression: str
+
+
+class FormulaValidationIssue(BaseModel):
+    """One parse or type error, positioned the same way `services.db.
+    formula.lexer.FormulaSyntaxError`/`typecheck.FormulaTypeError` already
+    are — 0-based `pos` plus 1-based `line`/`col` so a `FormulaEditor` can
+    underline the exact offending character, matching research §1.9's "a
+    formula editor showing one error at a time is miserable" (this is why
+    `FormulaValidateResponse.errors` is always the *full* list, not just
+    the first)."""
+
+    message: str
+    pos: int
+    line: int
+    col: int
+
+
+class FormulaValidateResponse(BaseModel):
+    """Spec §7.1's exact contract: parse errors, the inferred result type,
+    and the referenced properties — nothing else. `valid` is `False` for
+    both a syntax error (the parser never produced a tree) and a type
+    error (the tree parsed, but `services.db.formula.typecheck.check`
+    reported at least one `FormulaTypeError`) — this endpoint's `valid`
+    does NOT predict whether a save will succeed: research §1.9 / this
+    task's brief §2 draw a hard line between the two, and only a
+    dependency CYCLE (which this endpoint cannot detect — cycle detection
+    needs the full cross-property graph `create_property`/`update_property`
+    build at save time, not one expression in isolation) is a genuine
+    save-time rejection. `result_type`/`referenced_properties`/
+    `is_volatile` are still populated even when `valid` is `False` (the
+    checker keeps going after an error, `deps.referenced_properties()` and
+    the volatility walk don't depend on the checker succeeding at all) —
+    a formula editor can show "this looks like it'll be a Number" right
+    next to the error list.
+
+    `referenced_properties` is **keys**, not names, even though a formula
+    itself references properties by name (Task 24's `check()`/`deps.
+    referenced_properties()` both work in names) — the frontend deals in
+    keys everywhere else (`PropertyResponse.key`, `RowsResponse.rows[i].
+    properties`), so this endpoint resolves name -> key before answering,
+    the one place that translation happens for this whole feature."""
+
+    valid: bool
+    errors: list[FormulaValidationIssue] = []
+    result_type: str | None = None
+    referenced_properties: list[str] = []
+    is_volatile: bool = False
