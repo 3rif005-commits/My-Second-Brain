@@ -56,6 +56,8 @@ from models.database import (
     ViewCreate,
     ViewResponse,
     ViewUpdate,
+    DatabaseListResponse,
+    DatabaseSummary,
 )
 from routers.notes import get_user_id
 from services.db import recompute
@@ -598,6 +600,85 @@ async def create_database(
         data_source=DataSourceResponse(**_row(ds_row), is_virtual=False),
         properties=[PropertyResponse(**_row(prop_row))],
         views=[ViewResponse(**_row(view_row))],
+    )
+
+
+@router.get("/databases", response_model=DatabaseListResponse)
+async def list_databases(
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> DatabaseListResponse:
+    """Every database this user owns, newest first, each with the one data
+    source Milestone 2 creates for it.
+
+    This endpoint was missing until now, and its absence was load-bearing in
+    two places rather than merely inconvenient: a relation property's target
+    picker and a rollup's source picker both have to offer "which database?",
+    and neither could be built without a way to enumerate them. It is also
+    why a database was previously only reachable by remembering its URL --
+    `POST /db/databases` navigated straight to the new one and nothing ever
+    listed them again.
+
+    The built-in All Notes virtual source (spec §6) is deliberately NOT
+    included: it has no `db_databases` row, it cannot be a relation target
+    (it has no `db_row_props` rows to link to, and `create_property` already
+    rejects it outright), and a picker offering it would only produce a
+    guaranteed 400. Callers that want it address it by its well-known
+    `all-notes` id, exactly as they do today.
+
+    One query, not one-per-database: the join is what keeps a workspace with
+    fifty databases from becoming fifty round trips, the same N+1 reasoning
+    `list_links_bulk` exists for on the relations side.
+    """
+    rows = await conn.fetch(
+        """
+        SELECT
+            d.id            AS d_id,
+            d.user_id       AS d_user_id,
+            d.title         AS d_title,
+            d.description   AS d_description,
+            d.icon          AS d_icon,
+            d.cover_url     AS d_cover_url,
+            d.is_inline     AS d_is_inline,
+            d.parent_note_id AS d_parent_note_id,
+            d.is_locked     AS d_is_locked,
+            d.position      AS d_position,
+            d.created_at    AS d_created_at,
+            d.updated_at    AS d_updated_at,
+            d.deleted_at    AS d_deleted_at,
+            s.id            AS s_id,
+            s.database_id   AS s_database_id,
+            s.user_id       AS s_user_id,
+            s.name          AS s_name,
+            s.system_kind   AS s_system_kind,
+            s.position      AS s_position,
+            s.created_at    AS s_created_at
+        FROM db_databases d
+        JOIN LATERAL (
+            SELECT * FROM db_data_sources
+            WHERE database_id = d.id AND user_id = d.user_id
+            ORDER BY position, created_at
+            LIMIT 1
+        ) s ON TRUE
+        WHERE d.user_id = $1 AND d.deleted_at IS NULL
+        ORDER BY d.updated_at DESC, d.created_at DESC
+        LIMIT $2
+        """,
+        user_id,
+        _ROWS_LIMIT,
+    )
+    return DatabaseListResponse(
+        databases=[
+            DatabaseSummary(
+                database=DatabaseResponse(
+                    **{k[2:]: _jsonify(v) for k, v in r.items() if k.startswith("d_")}
+                ),
+                data_source=DataSourceResponse(
+                    **{k[2:]: _jsonify(v) for k, v in r.items() if k.startswith("s_")}
+                ),
+            )
+            for r in rows
+        ]
     )
 
 

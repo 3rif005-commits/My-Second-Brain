@@ -147,6 +147,24 @@ class ViewUpdate(BaseModel):
     position: int | None = None
 
 
+class DatabaseSummary(BaseModel):
+    """One entry in `GET /db/databases` — a database plus the single data
+    source Milestone 2 always creates for it (spec §3.1).
+
+    Deliberately NOT `DatabaseDetailResponse`: a picker listing every
+    database does not need each one's full property and view lists, and
+    fetching them would be N+1 queries for data nothing renders. Callers
+    that need the detail already have `GET /db/databases/{id}`.
+    """
+
+    database: DatabaseResponse
+    data_source: DataSourceResponse
+
+
+class DatabaseListResponse(BaseModel):
+    databases: list[DatabaseSummary]
+
+
 class DatabaseDetailResponse(BaseModel):
     """The shape returned by `POST /db/databases` and `GET
     /db/databases/{database_id}` for both real and virtual databases."""

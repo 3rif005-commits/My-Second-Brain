@@ -931,3 +931,45 @@ def test_every_query_in_views_service_has_a_user_id_scope_predicate():
     assert len(statements) >= 2, "expected to find the views service's SQL statements"
     for stmt in statements:
         _assert_has_scope_predicate(stmt)
+
+
+# ---------------------------------------------------------------------------
+# GET /db/databases (list) -- added for the relation/rollup target pickers,
+# which could not be built without a way to enumerate databases.
+# ---------------------------------------------------------------------------
+
+
+async def test_list_databases_returns_each_database_with_its_data_source(client):
+    a = await _create_database(client, "Alpha")
+    b = await _create_database(client, "Beta")
+
+    res = await client.get("/db/databases")
+    assert res.status_code == 200, res.text
+    body = res.json()["databases"]
+
+    by_id = {e["database"]["id"]: e for e in body}
+    assert a["database"]["id"] in by_id
+    assert b["database"]["id"] in by_id
+    # Each entry carries the data source a picker needs to target.
+    assert by_id[a["database"]["id"]]["data_source"]["id"] == a["data_source"]["id"]
+    assert by_id[b["database"]["id"]]["data_source"]["id"] == b["data_source"]["id"]
+    assert {e["database"]["title"] for e in body} >= {"Alpha", "Beta"}
+
+
+async def test_list_databases_excludes_all_notes_and_soft_deleted(client, db_conn, test_user):
+    created = await _create_database(client, "Gamma")
+    db_id = created["database"]["id"]
+
+    res = await client.get("/db/databases")
+    assert db_id in {e["database"]["id"] for e in res.json()["databases"]}
+    # The All Notes virtual source has no db_databases row and must never be
+    # offered as a relation target (create_property rejects it outright).
+    assert "all-notes" not in {e["database"]["id"] for e in res.json()["databases"]}
+
+    await db_conn.execute(
+        "UPDATE db_databases SET deleted_at = now() WHERE id = $1 AND user_id = $2",
+        db_id,
+        test_user,
+    )
+    res = await client.get("/db/databases")
+    assert db_id not in {e["database"]["id"] for e in res.json()["databases"]}
