@@ -74,6 +74,60 @@ def _dt(y: int, m: int, d: int) -> datetime:
     return datetime(y, m, d, tzinfo=UTC)
 
 
+async def test_relation_chip_title_reflects_a_title_written_through_the_api(client):
+    """Found by the M7/M8 live click-through; invisible to every prior test.
+
+    A database row IS a note, so its name lives in two places: the
+    `title`-typed property in db_row_props.properties, and `notes.title`.
+    `_fetch_related_rows` reads the latter. `update_row_property` used to
+    write only the former, so every relation chip in the real UI rendered
+    "Untitled" regardless of what the row was called.
+
+    Note this test deliberately does NOT use the `_create_row` helper's
+    direct `UPDATE notes SET title = ...`: that helper is precisely what
+    masked the bug, by supplying the state the product path failed to
+    write. The title here is set the way a user sets it -- by PATCHing the
+    title property through the endpoint.
+    """
+    db = await _create_database(client, "Tasks")
+    ds_id = db["data_source"]["id"]
+
+    # The title property every database is seeded with (Milestone 2).
+    props = (await client.get(f"/db/databases/{db['database']['id']}")).json()["properties"]
+    title_key = next(p["key"] for p in props if p["type"] == "title")
+
+    res = await client.post(f"/db/data-sources/{ds_id}/rows")
+    parent_id = res.json()["id"]
+    res = await client.post(f"/db/data-sources/{ds_id}/rows")
+    child_id = res.json()["id"]
+
+    for row_id, name in ((parent_id, "Parent row"), (child_id, "Child row")):
+        r = await client.patch(
+            f"/db/data-sources/{ds_id}/rows/{row_id}",
+            json={"property_key": title_key, "value": {"type": "title", "title": name}},
+        )
+        assert r.status_code == 200, r.text
+
+    sub = await client.post(f"/db/data-sources/{ds_id}/sub-items", json={})
+    assert sub.status_code == 201, sub.text
+    forward_key = sub.json()["forward"]["key"]
+
+    link = await client.post(
+        f"/db/data-sources/{ds_id}/rows/{parent_id}/relations/{forward_key}/links",
+        json={"row_id": child_id},
+    )
+    assert link.status_code in (200, 201), link.text
+
+    got = await client.get(
+        f"/db/data-sources/{ds_id}/rows/{parent_id}/relations/{forward_key}"
+    )
+    assert got.status_code == 200, got.text
+    rows = got.json()["rows"]
+    assert [r["title"] for r in rows] == ["Child row"], (
+        f"relation chip title should be the row's real title, got {rows}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # POST /db/data-sources/{data_source_id}/relations
 # ---------------------------------------------------------------------------

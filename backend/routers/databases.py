@@ -1203,6 +1203,41 @@ async def update_row_property(
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "row not found")
 
+        # Found by the Milestone 7/8 live click-through, and invisible to the
+        # whole test suite: a database row IS a note, and its human-readable
+        # name therefore lives in TWO places -- the `title`-typed property in
+        # `db_row_props.properties` (what the table's Title column renders)
+        # and `notes.title` (what every OTHER surface renders: the sidebar,
+        # search, and -- the reason this was caught -- the titles
+        # `_fetch_related_rows` returns for relation chips). Writing the
+        # property never touched `notes.title`, so every relation chip in the
+        # UI read "Untitled" no matter what the row was actually called,
+        # for every relation on every database.
+        #
+        # Why no test caught it: `tests/test_db_relations_router.py`'s
+        # `_create_row` helper sets `notes.title` itself with a direct
+        # `UPDATE notes SET title = ...`, bypassing this endpoint entirely.
+        # The fixture supplied exactly the state the product path failed to
+        # write, so the assertions passed against data the app could never
+        # actually produce.
+        #
+        # Kept inside the same transaction as the property write: the two
+        # copies of the title must not be able to disagree. A cleared title
+        # (`body.value is None`) falls back to 'Untitled', matching what
+        # `create_row` seeds a fresh note with rather than writing an empty
+        # string that would render as a blank row everywhere else.
+        if prop_row["type"] == "title":
+            new_title = (body.value or {}).get("title") or "Untitled"
+            await conn.execute(
+                """
+                UPDATE notes SET title = $1, updated_at = now()
+                WHERE id = $2 AND user_id = $3
+                """,
+                new_title,
+                note_id,
+                user_id,
+            )
+
         # Milestone 7 dependency date-shift cascade (task-21-brief.md §4).
         # Only even considered for a successful write to a `date` property
         # where both the old and the new value have a usable `start` --
