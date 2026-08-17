@@ -312,6 +312,36 @@ _VOLATILE_FUNCTIONS = frozenset({"now", "today"})
 # not found.
 _COMPARABLE = frozenset({FType.NUMBER, FType.BOOLEAN, FType.DATE})
 
+# M8 combined-review finding (fix wave, "Important"): research §1.8's own
+# worked example -- `1932.substring(0,2) == "19"` -- is a documented Number-
+# receiver-on-a-string-method coercion, and `functions/string.py`'s
+# `_as_string_receiver` (Task 25) already implements it at RUNTIME. This
+# checker never agreed: `substring`'s signature declares its first
+# parameter `STRING`, `_matches`/`unify` has no NUMBER->STRING path, so
+# `1932.substring(0,2)` failed type-checking despite being legal, documented
+# behaviour. Fixed here by mirroring Task 25's runtime EXACTLY rather than
+# inventing a second rule: the exact set of names that call
+# `_as_string_receiver` on their first (dot-notation RECEIVER) argument --
+# `join`'s first argument is a List, not a receiver-coerced String (its
+# separator, position 1, is coerced too, but see the scope note below), and
+# `length`/`format`/`formatNumber` never call `_as_string_receiver` at all.
+#
+# Deliberately NARROW, matching this finding's own instruction: only the
+# RECEIVER (argument 0) coerces here, and only Number/Boolean -> String --
+# NOT a blanket coercion. `functions/string.py` also happens to coerce a
+# handful of OTHER positions for a few of these names (`contains`'s needle,
+# `padStart`/`padEnd`'s fill, `split`'s separator, `link`'s url) -- those
+# are left type-strict here, same as before this fix: research documents
+# exactly one worked example, on the receiver, and extending further would
+# be inventing coverage nothing asks for. `functions/regex.py`'s
+# `test`/`match`/`replace`/`replaceAll` implement a SEPARATE, already-
+# distinct coercion rule (research's own different table row) and are
+# intentionally untouched by this fix.
+_STRING_RECEIVER_COERCIBLE = frozenset({
+    "substring", "contains", "lower", "upper", "repeat", "trim",
+    "padStart", "padEnd", "split", "link", "style", "unstyle",
+})
+
 
 def _accepts(t: FType, allowed: frozenset[FType]) -> bool:
     """`t` satisfies a fixed set of allowed types if it is literally one of
@@ -807,6 +837,22 @@ class _Checker:
         scope: dict[str, FType],
     ) -> FType:
         arg_types = [self.check(a, scope) for a in args]
+        if (
+            name in _STRING_RECEIVER_COERCIBLE
+            and arg_types
+            and arg_types[0] in (FType.NUMBER, FType.BOOLEAN)
+        ):
+            # The Number/Boolean-receiver-on-a-string-method coercion
+            # (`_STRING_RECEIVER_COERCIBLE`'s own docstring) -- rewrite the
+            # CHECKED type of the receiver position to STRING, matching
+            # what `_as_string_receiver` actually produces at runtime,
+            # before running the normal overload match below. Works
+            # identically for the dot form (`1932.substring(...)`, where
+            # `_check_method_call` already folded the receiver into
+            # position 0) and the bare-call form
+            # (`substring(1932, ...)`), since both reach this function with
+            # the receiver-equivalent argument at index 0.
+            arg_types = [FType.STRING, *arg_types[1:]]
         candidates = [ov for ov in spec.overloads if _arity_matches(ov, len(args))]
         if not candidates:
             ranges = ", ".join(

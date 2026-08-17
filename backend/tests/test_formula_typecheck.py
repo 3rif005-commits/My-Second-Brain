@@ -393,10 +393,54 @@ def test_dot_form_and_call_form_agree_length():
 
 
 def test_dot_form_reports_error_at_written_position():
-    # `5.trim()` -- trim requires a String; dot form should error exactly
-    # like the call form would, positioned at the written dot-call.
-    r = _check("5.trim()")
+    # `[1,2].trim()` -- trim requires a String, and a List receiver has no
+    # coercion path (Number/Boolean receivers DO coerce as of the M8 fix
+    # wave -- see test_number_receiver_coerces_to_string_for_string_methods
+    # below, which is why this test no longer uses `5.trim()`). Dot form
+    # should error exactly like the call form would, positioned at the
+    # written dot-call.
+    r = _check("[1,2].trim()")
     assert r.errors
+
+
+def test_number_receiver_coerces_to_string_for_string_methods():
+    # research §1.8, official: 1932.substring(0,2) == "19". M8 combined
+    # review finding: Task 25's runtime already implements this
+    # (functions/string.py's `_as_string_receiver`) but Task 24's checker
+    # never agreed, so this legal formula failed to type-check. Fixed to
+    # match the runtime exactly (typecheck.py's `_STRING_RECEIVER_
+    # COERCIBLE`).
+    r = _check("1932.substring(0,2)")
+    assert r.errors == []
+    assert r.type == FType.STRING
+
+
+def test_boolean_receiver_also_coerces_to_string():
+    # `_as_string_receiver` coerces both Number AND Boolean receivers --
+    # the checker mirrors both, not just the Number case research's one
+    # worked example happens to use.
+    r = _check("true.upper()")
+    assert r.errors == []
+    assert r.type == FType.STRING
+
+
+def test_number_receiver_coercion_is_scoped_to_the_receiver_position_only():
+    # `contains`'s SECOND argument (the needle) is coerced by
+    # functions/string.py's runtime too, but this fix deliberately does not
+    # extend the checker there -- research documents exactly one worked
+    # example (a RECEIVER), and this finding's own instruction was to scope
+    # the fix to that, not invent a blanket Number/Boolean->String
+    # coercion. A non-receiver Number argument still errors.
+    r = _check('contains("hello", 5)')
+    assert r.errors != []
+
+
+def test_number_receiver_coercion_does_not_extend_to_regex_functions():
+    # functions/regex.py documents a separate, already-distinct Number/
+    # Boolean->String coercion rule (research's own different table row for
+    # test/match/replace/replaceAll) -- untouched by this fix.
+    r = _check('test(42, "^4")')
+    assert r.errors != []
 
 
 def test_dot_form_if_three_combined_args_is_conditional_equivalent():

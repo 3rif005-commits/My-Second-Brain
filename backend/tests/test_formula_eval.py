@@ -358,12 +358,16 @@ class TestPropAndDotNotation:
         )
 
     def test_number_receiver_dot_method_coerces_to_string(self):
-        # research §1.8, official: 1932.substring(0,2) == "19". Note this
-        # currently FAILS Task 24's type checker (a gap flagged in this
-        # task's report) -- evaluated directly here without going through
-        # check() first, exactly as the brief instructs ("make sure the
-        # runtime actually implements it").
-        assert _eval("1932.substring(0,2)") == "19"
+        # research §1.8, official: 1932.substring(0,2) == "19". Originally
+        # exercised the runtime side alone because Task 24's type checker
+        # rejected this formula (a gap flagged in Task 25's report, since
+        # fixed in the M8 combined-review fix wave -- see
+        # test_formula_typecheck.py's
+        # test_number_receiver_coerces_to_string_for_string_methods). Now
+        # asserts both sides agree, via `_eval_checked`.
+        value, errors = _eval_checked("1932.substring(0,2)")
+        assert value == "19"
+        assert errors == []
 
     def test_dot_prop_resolves_against_current_row_regardless_of_receiver(self):
         # Task 24's ruling (report judgment call #2), carried into the
