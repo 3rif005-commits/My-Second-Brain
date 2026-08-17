@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { MessageSquare, Upload, Plus, LogOut, PanelLeftClose, Trash2, RotateCcw, ChevronDown, ChevronRight, Search, Star, Clock, Sun, Moon, LayoutGrid, Table2, DatabaseIcon } from "lucide-react";
 import { useTheme, useToast } from "@/app/providers";
@@ -56,6 +56,38 @@ export function Sidebar({
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
 
+  // task-31 follow-up: the databases a user owns, listed in the sidebar.
+  // `GET /db/databases` only exists as of commit 397ba23 -- before it, a
+  // database was reachable ONLY by remembering its URL, because
+  // `handleNewDatabase` below navigates straight to the new one and nothing
+  // ever listed them again. That was the gap this section closes.
+  //
+  // Fetched here rather than through a `useDatabases()` hook alongside
+  // `useNotes()`/`useCollections()`: those wrap Supabase-client queries
+  // against tables this user's JWT can read directly, whereas databases are
+  // only reachable through the FastAPI proxy (tenancy for db_* lives in the
+  // query builder, not RLS -- spec §8.3). A one-off fetch here matches how
+  // `handleNewDatabase` already talks to that API and avoids implying a
+  // symmetry with the note hooks that does not exist.
+  const [databases, setDatabases] = useState<{ id: string; title: string; icon: string | null }[]>([]);
+
+  const loadDatabases = useCallback(async () => {
+    try {
+      const res = await fetch("/api/db/databases");
+      if (!res.ok) return; // a sidebar list is not worth a toast on failure
+      const data: {
+        databases: { database: { id: string; title: string; icon: string | null } }[];
+      } = await res.json();
+      setDatabases(data.databases.map((entry) => entry.database));
+    } catch {
+      // Deliberately silent: the rest of the sidebar must still render.
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDatabases();
+  }, [loadDatabases]);
+
   const favoritedNotes = notes.filter((n) => n.is_favorited);
   const recentNotes = notes
     .filter((n) => n.last_viewed_at)
@@ -90,6 +122,9 @@ export function Sidebar({
         throw new Error(body?.detail || body?.error || `Request failed (${res.status})`);
       }
       const data: { database: { id: string } } = await res.json();
+      // Refresh the list so the new database appears in the section below
+      // rather than only being reachable via the navigation that follows.
+      loadDatabases();
       navigate(`/brain/db/${data.database.id}`);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not create database", "error");
@@ -231,6 +266,32 @@ export function Sidebar({
               >
                 <span className="shrink-0 text-xs leading-none">{note.icon || "📄"}</span>
                 <span className="truncate">{note.title || "Untitled"}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Databases — see `loadDatabases` above for why this list could not
+            exist until GET /db/databases shipped. */}
+        {databases.length > 0 && (
+          <div className="mb-3">
+            <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
+              <DatabaseIcon size={9} />
+              Databases
+            </div>
+            {databases.map((db) => (
+              <button
+                key={db.id}
+                onClick={() => navigate(`/brain/db/${db.id}`)}
+                aria-current={pathname === `/brain/db/${db.id}` ? "page" : undefined}
+                className={`w-full flex items-center gap-1.5 px-3 py-1 rounded-md text-xs transition-colors text-left ${
+                  pathname === `/brain/db/${db.id}`
+                    ? "bg-indigo-500/15 text-indigo-300"
+                    : "text-slate-400 hover:text-slate-100 hover:bg-white/5"
+                }`}
+              >
+                <span className="shrink-0 text-xs leading-none">{db.icon || "🗄️"}</span>
+                <span className="truncate">{db.title || "Untitled Database"}</span>
               </button>
             ))}
           </div>
