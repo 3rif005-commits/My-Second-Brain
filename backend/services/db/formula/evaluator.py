@@ -29,7 +29,7 @@ from typing import Mapping
 
 from . import ast as A
 from . import functions
-from .values import EMPTY, Date, FValue, as_number, stringify, truthy
+from .values import EMPTY, Date, FValue, Page, as_number, stringify, truthy
 
 __all__ = ["EvalContext", "evaluate", "FormulaEvalError"]
 
@@ -78,23 +78,31 @@ class EvalContext:
       see `_eval_bare_id`. `None` for any caller that doesn't supply it
       (every test in this package that isn't specifically about `id()`),
       in which case `id()` is `EMPTY`, never a fabricated id.
-    - `depth_budget`/relation-hop tracking (Task 26): the relation-
-      traversal depth cap (spec §7.3, capped at 3) is a MATERIALISATION
-      concern -- Task 27's job, not this evaluator's, because nothing
-      inside `evaluate()` itself chases a relation hop (`_eval_prop`
-      always resolves `.prop("Name")` against `ctx.properties` -- THIS
-      row's own values -- regardless of what the receiver evaluates to,
-      Task 24's own committed ruling, inherited unchanged; see
-      `_eval_prop`'s docstring). This class exposes the typed CONTRACT
-      Task 27 needs (`with_relation_hop`, `depth_exceeded`) without this
-      task inventing a caller for it, since no code path in this task's
-      four categories actually performs a hop.
+    - `related_properties` (M8 combined review fix wave, Important finding):
+      `{page_id: {property_name: FValue}}` for every page this evaluation
+      pass might need to resolve a relation-hop `.prop()` call against --
+      pre-loaded, SYNCHRONOUSLY, by the caller (`recompute.py`) before
+      `evaluate()` ever runs, exactly like `now`. `evaluate()` itself
+      stays synchronous and DB-free; this field is how a receiver that
+      evaluates to a `Page` gets real data without `_eval_prop` reaching
+      out to the database mid-walk. Empty by default (every test in this
+      package that isn't specifically about relation-hop `.prop()`).
+    - `depth_budget`/relation-hop tracking (Task 26, WIRED UP by this fix):
+      the relation-traversal depth cap (spec §7.3, capped at 3).
+      `_eval_prop`'s dot form now actually calls `with_relation_hop()` for
+      every receiver that evaluates to a `Page` -- see that function's own
+      docstring for the fix and why `EvalContext` needed a SHARED, mutable
+      hop counter (not just a `replace()`-derived immutable field) to make
+      consumption accumulate correctly across a NESTED chain of dot-prop
+      calls, which are ordinary recursive `evaluate()` calls over the same
+      `ctx` object, not a re-threaded one.
     """
 
     properties: Mapping[str, FValue]
     now: datetime
     scope: Mapping[str, FValue] = field(default_factory=dict)
     page_id: str | None = None
+    related_properties: Mapping[str, Mapping[str, FValue]] = field(default_factory=dict)
     depth_budget: int = 3
     # A one-element-when-tripped mutable box, deliberately NOT a plain
     # `bool` field -- `EvalContext` is frozen, and `with_relation_hop`
@@ -105,6 +113,27 @@ class EvalContext:
     # mutable accumulator, not a copy-on-write field" pattern, adapted for
     # a frozen dataclass instead of a stateful visitor object.
     _depth_exceeded_flag: list[bool] = field(default_factory=list)
+    # The SAME "shared mutable box, carried by identity through replace()"
+    # idea as `_depth_exceeded_flag` above, applied to the remaining-hop
+    # COUNT itself. This is not cosmetic: a chain like
+    # `current.prop("A").prop("B").prop("C")` is THREE nested `_eval_prop`
+    # calls, each evaluating its own receiver via a plain recursive
+    # `evaluate(receiver, ctx)` call over the SAME `ctx` object (no
+    # `with_binding`/rebind happens between them) -- if `with_relation_hop`
+    # only returned a new, decremented `EvalContext` without a caller ever
+    # using it (this evaluator's `_eval_prop` doesn't recurse into
+    # `evaluate()` with a hopped context; it resolves the property directly
+    # from `related_properties`), every nested call would independently see
+    # the SAME starting `depth_budget` and the cap could never actually be
+    # reached, no matter how long the chain -- a mutable box, populated
+    # once in `__post_init__` from the constructor's `depth_budget` and
+    # then decremented in place, is what makes consumption by an INNER call
+    # visible to an OUTER one evaluated afterwards on the same `ctx`.
+    _hops_remaining: list[int] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self._hops_remaining:  # only on first real construction, see field's own comment
+            self._hops_remaining.append(self.depth_budget)
 
     def with_binding(self, name: str, value: FValue) -> "EvalContext":
         new_scope = dict(self.scope)
@@ -112,22 +141,29 @@ class EvalContext:
         return replace(self, scope=new_scope)
 
     def with_relation_hop(self) -> "EvalContext | None":
-        """For a future caller (Task 27's materialisation pass) about to
-        evaluate a formula on a page reached through one relation hop.
-        Returns a new `EvalContext` with `depth_budget` decremented by
-        one, or `None` when the budget is already exhausted -- the
-        brief's own contract: "when it hits zero, return EMPTY and set a
-        flag on the context that Task 27 turns into the
-        `{"type":"unsupported"}` sentinel" (research §1.9/§4.6's own API
-        marker for a formula that "depends on too many related pages").
-        The caller's responsibility, not this method's: use `EMPTY` as
-        that hop's contribution when this returns `None`, and check
-        `depth_exceeded` once the whole pass finishes to decide whether to
-        surface `unsupported` instead of a real value. Never raises."""
-        if self.depth_budget <= 0:
+        """Called by `_eval_prop` for every relation-hop `.prop()` call
+        (a dot-form call whose receiver evaluates to a `Page`). Returns a
+        new `EvalContext` reflecting the decremented budget, or `None`
+        when the budget is already exhausted -- the brief's own contract:
+        "when it hits zero, return EMPTY and set a flag on the context
+        that recompute.py turns into the `{"type":"unsupported"}`
+        sentinel" (research §1.9/§4.6's own API marker for a formula that
+        "depends on too many related pages"). The caller's responsibility,
+        not this method's: use `EMPTY` as that hop's contribution when
+        this returns `None`, and check `depth_exceeded` once the whole
+        pass finishes to decide whether to surface `unsupported` instead
+        of a real value. Never raises.
+
+        The returned context's own `depth_budget` field is kept in sync
+        with the shared counter purely for readability/introspection (e.g.
+        a debugger or a future caller that DOES want to recurse into
+        `evaluate()` with it) -- the actual enforcement is the shared
+        `_hops_remaining` box, per that field's own comment."""
+        if self._hops_remaining[0] <= 0:
             self._depth_exceeded_flag.append(True)
             return None
-        return replace(self, depth_budget=self.depth_budget - 1)
+        self._hops_remaining[0] -= 1
+        return replace(self, depth_budget=self._hops_remaining[0])
 
     @property
     def depth_exceeded(self) -> bool:
@@ -386,7 +422,7 @@ def _eval_method_call(node: A.MethodCall, ctx: EvalContext) -> FValue:
     `prop`/`context`/`let`/`lets` are NOT a mechanical `f(receiver, *args)`
     rewrite; every other name is."""
     if node.name == "prop":
-        return _eval_prop(node.args, ctx)
+        return _eval_prop_dot(node.receiver, node.args, ctx)
     if node.name == "context":
         evaluate(node.receiver, ctx)  # for any nested side-effect-free evaluation only
         return _eval_context(node.args, ctx)
@@ -447,31 +483,93 @@ def _eval_call(name: str, arg_nodes: list[A.Node], ctx: EvalContext) -> FValue:
     return _invoke(name, arg_values)
 
 
-def _eval_prop(args: list[A.Node], ctx: EvalContext) -> FValue:
-    """`prop("Name")` (bare) and `receiver.prop("Name")` (dot form).
-    Mirrors Task 24's own ruling (`typecheck._check_prop_call`'s
-    docstring, its report's judgment call #2) EXACTLY: both resolve
-    "Name" against `ctx.properties` -- THIS row's own property values --
-    regardless of what `receiver` evaluates to. The receiver is not even
-    evaluated here: Task 24 already established that a dependent-typed
-    resolution (knowing which OTHER data source's schema a `Page`-typed
-    receiver belongs to) is not something this system can determine
-    without cross-database schema tracking research gives no basis for,
-    and the SAME limitation applies at runtime for the identical reason --
-    the row's `ctx.properties` dict is this ONE data source's values, not
-    a resolver that can chase a relation to a different row. This is
-    correct for the common case (`current.Status` inside a self-relation
-    traversal, where related rows share a schema) and, for a genuinely
-    cross-database dot-prop reference, returns whatever THIS row happens
-    to have under that name (or EMPTY if it has nothing under that name)
-    rather than the OTHER row's value -- a real, narrow, documented
-    limitation carried forward from Task 24, not a new one introduced
-    here."""
+def _prop_name(args: list[A.Node]) -> str | None:
+    """The single string-literal argument every `prop("Name")` call
+    (bare or dot form) requires, or `None` for a malformed, post-typecheck
+    call shape (wrong arity, a non-literal, a non-string literal) -- never
+    raises; the caller turns `None` into `EMPTY`, per this module's
+    standing "never raise on malformed input" rule."""
     if len(args) != 1 or not isinstance(args[0], A.Literal) or not isinstance(
         args[0].value, str
     ):
+        return None
+    return args[0].value
+
+
+def _eval_prop(args: list[A.Node], ctx: EvalContext) -> FValue:
+    """Bare `prop("Name")`: always resolves "Name" against `ctx.
+    properties` -- THIS row's own property values. Unaffected by the
+    relation-hop fix below (`_eval_prop_dot`) -- a bare call has no
+    receiver to chase in the first place."""
+    name = _prop_name(args)
+    if name is None:
         return EMPTY  # malformed prop() call, post-typecheck; never raise
-    return ctx.properties.get(args[0].value, EMPTY)
+    return ctx.properties.get(name, EMPTY)
+
+
+def _eval_prop_dot(receiver_node: A.Node, args: list[A.Node], ctx: EvalContext) -> FValue:
+    """`receiver.prop("Name")` (dot form) -- the M8 combined-review fix
+    (Important finding): `receiver` IS now evaluated, and when it comes
+    back a `Page` (research §3.8's own documented idiom, `prop("Tasks").
+    filter(current.prop("Status") != "Done")` -- `current` is bound to
+    each related `Page` in turn by `_eval_higher_order_call`), "Name" is
+    resolved against `ctx.related_properties[page.id]` -- that RELATED
+    row's own values -- not `ctx.properties`, THIS row's.
+
+    This corrects a real bug, not a re-derivation of Task 24's ruling: the
+    previous version of this function ignored `receiver` entirely and
+    always read `ctx.properties`, so `current.prop("Status")` inside a
+    `.filter(...)` silently read the SAME (wrong) row's Status for every
+    element instead of each related row's -- reproduced empirically, no
+    exception, just a silently wrong answer for the language's own
+    documented example. The docstring this function used to carry
+    defended that as inherited from `typecheck._check_prop_call`'s
+    identical-looking ruling, but the two are NOT the same problem:
+    `typecheck.py` operates on the AST alone, before any row exists, and
+    genuinely cannot know which data source's *schema* a `Page`-typed
+    receiver belongs to (no dependent typing -- a real, still-standing
+    static-analysis limit, untouched by this fix). At RUNTIME, by
+    contrast, `receiver` has already been evaluated down to a concrete
+    `Page(id=...)` -- not a schema, a VALUE, carrying exactly the lookup
+    key (`.id`) needed to fetch that row's real data. "Cannot know the
+    schema" and "cannot know the value" are different problems; only the
+    first is a genuine limitation.
+
+    Every relation hop this resolution takes is METERED via `ctx.
+    with_relation_hop()` (spec §7.3's depth-3 cap), consumed regardless of
+    whether `related_properties` actually has an entry for `receiver.id`
+    (a hop two levels deep, past what the caller pre-loaded, still costs
+    budget on its way to an honest EMPTY -- never a silent free pass past
+    the cap). When the budget is already exhausted, `with_relation_hop()`
+    returns `None`, `ctx.depth_exceeded` flips true (shared across the
+    whole evaluation, `EvalContext._hops_remaining`'s own docstring), and
+    this returns `EMPTY` -- never raises; `recompute.py` turns
+    `depth_exceeded` into the `{"type":"unsupported"}` sentinel once the
+    whole pass finishes, exactly like the other two materialisation
+    limits.
+
+    For a receiver that evaluates to anything OTHER than a `Page`
+    (typecheck.py places no such restriction on the receiver -- see its
+    own docstring -- so this is reachable with valid, type-checked input,
+    e.g. a `List`/`Number`/`String` receiver from a formula with no real
+    relation in it at all): there is no related row to chase, so this
+    keeps the OLD behaviour of resolving against `ctx.properties` -- THIS
+    row's own values -- unchanged. That old behaviour was only ever wrong
+    for the Page case (silently reading the wrong ROW); for a non-Page
+    receiver there is no "other row" to have gotten wrong in the first
+    place, so nothing here needed fixing, and changing it would only
+    invent a new, undocumented meaning for a shape research never
+    describes."""
+    receiver = evaluate(receiver_node, ctx)
+    name = _prop_name(args)
+    if name is None:
+        return EMPTY  # malformed prop() call, post-typecheck; never raise
+    if not isinstance(receiver, Page):
+        return ctx.properties.get(name, EMPTY)  # unchanged non-Page fallback, see docstring
+    hopped = ctx.with_relation_hop()
+    if hopped is None:
+        return EMPTY  # budget exhausted; ctx.depth_exceeded is now set
+    return ctx.related_properties.get(receiver.id, {}).get(name, EMPTY)
 
 
 def _eval_context(args: list[A.Node], ctx: EvalContext) -> FValue:

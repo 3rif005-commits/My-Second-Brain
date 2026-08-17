@@ -391,6 +391,95 @@ class TestPropAndDotNotation:
 
 
 # ---------------------------------------------------------------------------
+# M8 combined-review fix wave: receiver.prop("Name") actually chases a
+# relation hop when the receiver evaluates to a Page (evaluator._eval_prop_
+# dot). The bug this replaces: the dot form ignored `receiver` entirely and
+# always read ctx.properties (THIS row's own values) -- research §3.8's own
+# documented idiom, `prop("Tasks").filter(current.prop("Status") != "Done")`,
+# therefore compared every element against the CURRENT row's Status instead
+# of each related row's, silently -- no exception, just a wrong filter
+# result. These two tests fail against the pre-fix `_eval_prop` (confirmed
+# by temporarily reverting evaluator.py and re-running this file): the first
+# because both pages would resolve to ctx.properties's single "Status"
+# value instead of their own distinct ones; the second because the pre-fix
+# dot form never calls `with_relation_hop()` at all, so `depth_exceeded`
+# could never become true through real dot-prop evaluation.
+# ---------------------------------------------------------------------------
+
+
+class TestRelationHopDotProp:
+    def test_dot_prop_resolves_each_related_page_to_its_OWN_value(self):
+        # Two Pages, DIFFERENT values under the same property name --
+        # exactly the shape a `.filter(current.prop("Status") != "Done")`
+        # walk over a real relation produces. Each element's `.prop(...)`
+        # must resolve against ITS OWN related row, not the current row's
+        # (nor the other element's).
+        page1, page2 = Page(id="p1"), Page(id="p2")
+        properties = {"Tasks": [page1, page2]}
+        related_properties = {
+            "p1": {"Status": "Done"},
+            "p2": {"Status": "Todo"},
+        }
+        tree = parse('prop("Tasks").map(current.prop("Status"))', property_names=["Tasks"])
+        ctx = EvalContext(properties=properties, now=make_now(), related_properties=related_properties)
+        assert evaluate(tree, ctx) == ["Done", "Todo"]
+
+    def test_dot_prop_receiver_ignores_the_current_rows_own_clashing_value(self):
+        # The current row ALSO has a "Status" property (a different value
+        # from either related page's) -- proves the resolution really did
+        # switch away from `ctx.properties` for a Page receiver, rather
+        # than coincidentally matching it.
+        page = Page(id="p1")
+        properties = {"Tasks": [page], "Status": "Current Row Value"}
+        related_properties = {"p1": {"Status": "Related Row Value"}}
+        tree = parse(
+            'prop("Tasks").map(current.prop("Status"))', property_names=["Tasks", "Status"]
+        )
+        ctx = EvalContext(properties=properties, now=make_now(), related_properties=related_properties)
+        assert evaluate(tree, ctx) == ["Related Row Value"]
+
+    def test_dot_prop_chain_trips_the_depth_3_budget_and_sets_depth_exceeded(self):
+        # A chain of 4 relation-hop dot-prop calls (default depth_budget=3,
+        # spec §7.3): p0 -> p1 -> p2 -> p3 -> p4, each hop resolving via
+        # `ctx.related_properties`. The first 3 hops succeed (consuming the
+        # whole budget); the 4th finds it exhausted and must yield EMPTY
+        # with `ctx.depth_exceeded` set, never a fabricated 4th-hop value
+        # and never a raise.
+        properties = {"Start": Page(id="p0")}
+        related_properties = {
+            "p0": {"Next": Page(id="p1")},
+            "p1": {"Next": Page(id="p2")},
+            "p2": {"Next": Page(id="p3")},
+            "p3": {"Next": Page(id="p4")},
+        }
+        tree = parse(
+            'prop("Start").prop("Next").prop("Next").prop("Next").prop("Next")',
+            property_names=["Start"],
+        )
+        ctx = EvalContext(properties=properties, now=make_now(), related_properties=related_properties)
+        result = evaluate(tree, ctx)
+        assert result is EMPTY
+        assert ctx.depth_exceeded is True
+
+    def test_dot_prop_chain_of_exactly_3_hops_stays_within_budget(self):
+        # The mirror image of the above: exactly 3 hops (the cap itself)
+        # must NOT trip depth_exceeded and must resolve to the real value.
+        properties = {"Start": Page(id="p0")}
+        related_properties = {
+            "p0": {"Next": Page(id="p1")},
+            "p1": {"Next": Page(id="p2")},
+            "p2": {"Next": "leaf value"},
+        }
+        tree = parse(
+            'prop("Start").prop("Next").prop("Next").prop("Next")',
+            property_names=["Start"],
+        )
+        ctx = EvalContext(properties=properties, now=make_now(), related_properties=related_properties)
+        assert evaluate(tree, ctx) == "leaf value"
+        assert ctx.depth_exceeded is False
+
+
+# ---------------------------------------------------------------------------
 # EvalContext.now: captured once, threaded, never re-derived
 # ---------------------------------------------------------------------------
 
