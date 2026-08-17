@@ -27,6 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import ValidationError
 
 from models.database import (
+    AggregationSpec,
     DatabaseCreate,
     DatabaseDetailResponse,
     DatabaseResponse,
@@ -70,6 +71,7 @@ from services.db.keys import mint_key
 from services.db.properties.base import REGISTRY
 from services.db.properties.columns import COLUMN_BACKED
 from services.db.properties.computed import ComputedConfig
+from services.db.query import aggregations
 from services.db.query import ast
 from services.db.query import grouping
 from services.db.query.builder import QueryBuilder
@@ -831,18 +833,62 @@ def _resolve_group_label(
     return default_label
 
 
+def _resolve_aggregates(
+    rows: list[dict[str, Any]],
+    properties: dict[str, PropertyLookup],
+    specs: list[AggregationSpec],
+) -> dict[str, Any]:
+    """Milestone 10 (task-32): the first HTTP caller of Milestone 4's `aggregations.
+    aggregate(rows, lookup, aggregator)` -- one `{spec.key: value}` entry per
+    `AggregationSpec`, computed over `rows` (a group's own rows, a subgroup's own rows, or
+    (ungrouped) the whole filtered/sorted result set -- callers decide which `rows` this
+    is, this function never re-derives it).
+
+    `property_key` existence against this request's `properties` lookup is checked here
+    (not inside `aggregate()`, which only ever receives an already-resolved `PropertyLookup
+    | None` and has no dict to check against) -- same "unknown property key -> 400" message
+    shape `group_by`/`sub_group_by` already use a few lines below in `query_rows`, reused
+    verbatim rather than inventing a new one. `aggregate()`'s own `ValueError`s (unknown
+    aggregator name, an aggregator that requires a `property_key` but got none, or a
+    aggregator applied to the wrong property type) are converted to the same
+    `HTTPException(400, str(exc))` pattern -- never a silently-dropped clause or a 500,
+    the same standard `filter`/`sorts`/`group_by` already enforce in this handler."""
+    result: dict[str, Any] = {}
+    for spec in specs:
+        lookup: PropertyLookup | None = None
+        if spec.property_key is not None:
+            lookup = properties.get(spec.property_key)
+            if lookup is None:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, f"unknown property key: {spec.property_key!r}"
+                )
+        try:
+            result[spec.key] = aggregations.aggregate(rows, lookup, spec.aggregator)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return result
+
+
 def _group_to_result(
     group: grouping.Group,
     prop_type: str,
     config: dict[str, Any],
     sub_lookup: PropertyLookup | None,
     sub_config: dict[str, Any],
+    properties: dict[str, PropertyLookup],
+    agg_specs: list[AggregationSpec],
 ) -> GroupResult:
     """`grouping.Group` -> the JSON-serializable `GroupResult` (models/database.py),
     resolving this group's label and -- one level down, per task-15-brief.md §1.6 -- every
     subgroup's label too. Never recurses past that: `sub_group()` itself only ever
     produces two levels (a subgroup's own `.subgroups` is always `None`), so a subgroup is
-    built inline here rather than through a second call to this function."""
+    built inline here rather than through a second call to this function.
+
+    `aggregates` (task-32) is computed the same way at both levels -- `_resolve_aggregates`
+    against *this* group's/subgroup's own `rows`, never the parent's -- and left `None`
+    (not `{}`) whenever `agg_specs` is empty, so `response_model_exclude_none=True` on the
+    route drops the key entirely and every pre-existing grouped-query test that never sends
+    `aggregations` keeps a byte-identical response."""
     subgroups = None
     if group.subgroups is not None:
         assert sub_lookup is not None  # sub_group_by was set whenever subgroups exist
@@ -853,6 +899,7 @@ def _group_to_result(
                 row_count=len(sg.rows),
                 rows=sg.rows,
                 subgroups=None,
+                aggregates=_resolve_aggregates(sg.rows, properties, agg_specs) if agg_specs else None,
             )
             for sg in group.subgroups
         ]
@@ -862,6 +909,7 @@ def _group_to_result(
         row_count=len(group.rows),
         rows=group.rows,
         subgroups=subgroups,
+        aggregates=_resolve_aggregates(group.rows, properties, agg_specs) if agg_specs else None,
     )
 
 
@@ -960,10 +1008,47 @@ async def query_rows(
         # so this widens that one query rather than issuing a second round-trip per group.
         configs = {r["key"]: (r["config"] or {}) for r in prop_rows}
 
+    if body.aggregations:
+        # Validate every spec up front, before the DB round trip below -- same
+        # fail-fast-on-a-malformed-request spirit as parsing filter/sorts/group_by in the
+        # try block right after this. Calling with `rows=[]` still exercises
+        # `_resolve_aggregates`'s property-key-existence check AND `aggregate()`'s own
+        # unknown-aggregator / needs-a-property-key / wrong-property-type ValueErrors --
+        # every one of those guards runs before touching row content (aggregations.py's
+        # own guard-clause-first structure), so an empty row list validates exactly the
+        # same specs a real row list would, without a second, differently-shaped
+        # validation path to keep in sync. This also 400s a bad spec on a grouped query
+        # that happens to produce zero groups, which the per-group computation below
+        # would otherwise never reach.
+        _resolve_aggregates([], properties, body.aggregations)
+
+    # Ungrouped + aggregations: a Chart's Number-mode aggregate must reflect the whole
+    # filtered/sorted result set, not the one page `rows` returns (task-32-brief.md §2) --
+    # so this fetch is *not* clipped to `body.page_size`/`body.offset` the way every other
+    # query on this endpoint is. Grouped queries are unaffected and keep today's
+    # page_size-bounded fetch (the brief scopes the "full set" requirement to the
+    # ungrouped case only).
+    compute_full_set = body.group_by is None and bool(body.aggregations)
+
     try:
         filter_node = ast.parse_filter(body.filter)
         sorts = [ast.SortSpec(**s) for s in body.sorts]
-        pagination = ast.Pagination(page_size=body.page_size, offset=body.offset)
+        # Always validated (ge=1/le=200 on page_size, ge=0 on offset) regardless of which
+        # `pagination` actually drives the SQL fetch below -- `compute_full_set` changes
+        # what gets fetched, never whether `body.page_size`/`body.offset` themselves are
+        # still range-checked the same as every other request through this endpoint.
+        requested_pagination = ast.Pagination(page_size=body.page_size, offset=body.offset)
+        pagination = (
+            # bypasses `ast.Pagination`'s own `Field(le=200)` (a per-request UI-page
+            # ceiling, not a "give me everything for a chart" one) via `model_construct`
+            # -- deliberate here: the value is our own trusted constant, not user input, so
+            # skipping validation is safe. Reuses `_ROWS_LIMIT` (this file's existing
+            # "generous cap for a personal single-user KB" fetch bound, defined above)
+            # rather than inventing a second, near-duplicate cap with the same rationale.
+            ast.Pagination.model_construct(page_size=_ROWS_LIMIT, offset=0)
+            if compute_full_set
+            else requested_pagination
+        )
         builder = QueryBuilder(
             user_id=user_id,
             data_source_id=None if all_notes else data_source_id,
@@ -995,7 +1080,17 @@ async def query_rows(
         _merge_computed_into_rows(rows, computed_by_id)
 
     if body.group_by is None:
-        return QueryResponse(rows=rows)
+        if not body.aggregations:
+            return QueryResponse(rows=rows)
+        # `rows` here is the full filtered/sorted set (up to `_ROWS_LIMIT`), fetched with
+        # `compute_full_set`'s unbounded pagination above -- aggregate over all of it, then
+        # slice out the page the client actually asked for in Python, reproducing exactly
+        # what `LIMIT body.page_size OFFSET body.offset` would have produced in SQL (same
+        # deterministic `ORDER BY ..., n.id ASC` either way) so `rows`' own shape in the
+        # response is unchanged by this branch existing.
+        aggregates = _resolve_aggregates(rows, properties, body.aggregations)
+        page_rows = rows[body.offset : body.offset + body.page_size]
+        return QueryResponse(rows=page_rows, aggregates=aggregates)
 
     group_key = body.group_by.get("property_key")
     group_lookup = properties.get(group_key) if group_key is not None else None
@@ -1034,7 +1129,10 @@ async def query_rows(
     group_config = configs.get(group_key, {})
     return QueryResponse(
         groups=[
-            _group_to_result(g, group_lookup.type, group_config, sub_lookup, sub_config)
+            _group_to_result(
+                g, group_lookup.type, group_config, sub_lookup, sub_config,
+                properties, body.aggregations,
+            )
             for g in groups
         ]
     )

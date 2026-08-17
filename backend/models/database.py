@@ -223,6 +223,26 @@ class RowResponse(BaseModel):
     shifted_rows: list[ShiftedRow] | None = None
 
 
+class AggregationSpec(BaseModel):
+    """One y-axis (or Chart Number-mode) calculation request inside `QueryRequest.
+    aggregations` (Milestone 10, task-32): a thin JSON wrapper around Milestone 4's
+    `services.db.query.aggregations.aggregate(rows, lookup, aggregator)` -- the 20-function
+    calculation engine that until this task had zero HTTP callers. `key` is caller-chosen
+    (e.g. "y" for a Chart's single y-axis series) and purely a label: the router never
+    inspects it, just echoes it back verbatim as the matching key in `GroupResult.
+    aggregates`/`QueryResponse.aggregates`. `aggregator` is deliberately an open `str`, not
+    a closed enum -- same reasoning as `ViewCreate.type` elsewhere in this file: the router
+    (not Pydantic) rejects a name outside `aggregations._VALID_AGGREGATORS` with a 400, so a
+    future 21st aggregator never needs a model change here. `property_key` is `None` only
+    when `aggregator == "count"` -- the one property-independent aggregator (`aggregate()`'s
+    own contract, research §I.5.1); every other aggregator requires it, and the router
+    converts `aggregate()`'s own `ValueError` for a missing/mismatched one into a 400."""
+
+    key: str
+    property_key: str | None = None
+    aggregator: str
+
+
 class QueryRequest(BaseModel):
     """`POST /db/data-sources/{data_source_id}/query` body (task-15, wiring up Milestone
     3's filter/sort compiler and Milestone 4's grouping to an HTTP endpoint for the first
@@ -244,6 +264,11 @@ class QueryRequest(BaseModel):
     offset: int = 0
     group_by: dict[str, Any] | None = None
     sub_group_by: dict[str, Any] | None = None
+    # Milestone 10 (task-32): zero or more y-axis/Number-mode calculations for a Chart
+    # view -- see `AggregationSpec` above and `GroupResult.aggregates`/`QueryResponse.
+    # aggregates` below. `[]` (not `None`) matches `sorts`' own "absent means empty list,
+    # not a tri-state" convention immediately above.
+    aggregations: list[AggregationSpec] = []
 
 
 class GroupResult(BaseModel):
@@ -257,13 +282,24 @@ class GroupResult(BaseModel):
 
     `subgroups` is `None` whenever no `sub_group_by` was requested, and — same as
     `grouping.Group` — always `None` on a subgroup itself (sub-grouping is exactly two
-    levels, never three)."""
+    levels, never three).
+
+    `aggregates` (Milestone 10, task-32) is `None` — not `{}` — whenever the request's
+    `QueryRequest.aggregations` was empty, the load-bearing case for backward
+    compatibility: `response_model_exclude_none=True` on the route then drops the key
+    entirely (verified empirically, not assumed, to recurse into every nested `GroupResult`
+    too — see the task's own test asserting this), so every pre-existing caller that never
+    sends `aggregations` gets byte-identical JSON to before this field existed. When
+    non-empty, it's one `{spec.key: value}` entry per `QueryRequest.aggregations` entry,
+    computed from *this* group's own `rows` (and, for a subgroup entry, that subgroup's own
+    `rows` — never the parent group's)."""
 
     key: str
     label: str
     row_count: int
     rows: list[dict[str, Any]]
     subgroups: list["GroupResult"] | None = None
+    aggregates: dict[str, Any] | None = None
 
 
 GroupResult.model_rebuild()
@@ -276,10 +312,18 @@ class QueryResponse(BaseModel):
     entirely rather than sent as an explicit `null`: `body.group_by is None` ->
     `{"rows": [...]}` (byte-identical shape to `RowsResponse`, spec's own "this endpoint is
     a superset of list_rows, not a replacement"); `body.group_by` set -> `{"groups":
-    [...]}`."""
+    [...]}`.
+
+    `aggregates` (Milestone 10, task-32) is the ungrouped-case counterpart of `GroupResult.
+    aggregates`: `None` (dropped from the JSON by exclude_none, same as today) whenever
+    `QueryRequest.aggregations` was empty or `body.group_by` was set (aggregates then live
+    per-group instead, never duplicated up here); otherwise one `{spec.key: value}` dict
+    computed over the *entire filtered/sorted row set* the query matched -- Chart's
+    Number-type mode (a single scalar, no x-axis) -- not just the one page `rows` returns."""
 
     rows: list[dict[str, Any]] | None = None
     groups: list[GroupResult] | None = None
+    aggregates: dict[str, Any] | None = None
 
 
 class ViewCreate(BaseModel):

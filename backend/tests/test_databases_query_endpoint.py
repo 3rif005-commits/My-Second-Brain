@@ -433,6 +433,221 @@ async def test_sub_group_by_produces_two_level_nested_shape(client, db_conn, tes
 
 
 # ---------------------------------------------------------------------------
+# aggregations (Milestone 10, task-32): wiring `aggregations.aggregate()` (the
+# 20-function calculation engine Milestone 4 built, zero HTTP callers until now) into
+# this endpoint for a Chart view's y-axis / Number-mode value.
+# ---------------------------------------------------------------------------
+
+async def test_aggregations_sum_per_group_matches_hand_computed_sum(client, db_conn, test_user):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    status_prop = await _create_property(client, ds_id, "Status", "select")
+    estimate_prop = await _create_property(client, ds_id, "Estimate", "number")
+
+    await _insert_row(db_conn, test_user, ds_id, {
+        status_prop["key"]: {"type": "select", "select": "todo"},
+        estimate_prop["key"]: {"type": "number", "number": 3},
+    })
+    await _insert_row(db_conn, test_user, ds_id, {
+        status_prop["key"]: {"type": "select", "select": "todo"},
+        estimate_prop["key"]: {"type": "number", "number": 5},
+    })
+    await _insert_row(db_conn, test_user, ds_id, {
+        status_prop["key"]: {"type": "select", "select": "done"},
+        estimate_prop["key"]: {"type": "number", "number": 10},
+    })
+
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={
+            "group_by": {"property_key": status_prop["key"]},
+            "aggregations": [{"key": "y", "property_key": estimate_prop["key"], "aggregator": "sum"}],
+        },
+    )
+    assert res.status_code == 200, res.text
+    by_key = {g["key"]: g for g in res.json()["groups"]}
+    assert by_key["todo"]["aggregates"] == {"y": 8}  # hand-computed: 3 + 5
+    assert by_key["done"]["aggregates"] == {"y": 10}
+
+
+async def test_aggregations_count_without_property_key_works(client, db_conn, test_user):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    status_prop = await _create_property(client, ds_id, "Status", "select")
+    await _insert_row(db_conn, test_user, ds_id, {status_prop["key"]: {"type": "select", "select": "todo"}})
+    await _insert_row(db_conn, test_user, ds_id, {status_prop["key"]: {"type": "select", "select": "todo"}})
+
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={"aggregations": [{"key": "n", "aggregator": "count"}]},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["aggregates"] == {"n": 2}
+
+
+async def test_aggregations_count_with_property_key_still_works(client, db_conn, test_user):
+    # aggregate()'s own contract (aggregations.py): `count` ignores `lookup` entirely, so
+    # a caller supplying a (valid) property_key alongside "count" must not 400.
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    status_prop = await _create_property(client, ds_id, "Status", "select")
+    await _insert_row(db_conn, test_user, ds_id, {status_prop["key"]: {"type": "select", "select": "todo"}})
+
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={"aggregations": [{"key": "n", "property_key": status_prop["key"], "aggregator": "count"}]},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["aggregates"] == {"n": 1}
+
+
+async def test_aggregations_unsupported_aggregator_is_400_not_500(client):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={"aggregations": [{"key": "y", "aggregator": "bogus"}]},
+    )
+    assert res.status_code == 400
+
+
+async def test_aggregations_unknown_property_key_is_400(client):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={"aggregations": [{"key": "y", "property_key": "ghost", "aggregator": "sum"}]},
+    )
+    assert res.status_code == 400
+
+
+async def test_aggregations_two_level_nested_with_sub_group_by(client, db_conn, test_user):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    status_prop = await _create_property(client, ds_id, "Status", "select")
+    priority_prop = await _create_property(client, ds_id, "Priority", "select")
+    estimate_prop = await _create_property(client, ds_id, "Estimate", "number")
+
+    await _insert_row(db_conn, test_user, ds_id, {
+        status_prop["key"]: {"type": "select", "select": "todo"},
+        priority_prop["key"]: {"type": "select", "select": "high"},
+        estimate_prop["key"]: {"type": "number", "number": 2},
+    })
+    await _insert_row(db_conn, test_user, ds_id, {
+        status_prop["key"]: {"type": "select", "select": "todo"},
+        priority_prop["key"]: {"type": "select", "select": "high"},
+        estimate_prop["key"]: {"type": "number", "number": 4},
+    })
+    await _insert_row(db_conn, test_user, ds_id, {
+        status_prop["key"]: {"type": "select", "select": "todo"},
+        priority_prop["key"]: {"type": "select", "select": "low"},
+        estimate_prop["key"]: {"type": "number", "number": 9},
+    })
+
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={
+            "group_by": {"property_key": status_prop["key"]},
+            "sub_group_by": {"property_key": priority_prop["key"]},
+            "aggregations": [{"key": "y", "property_key": estimate_prop["key"], "aggregator": "sum"}],
+        },
+    )
+    assert res.status_code == 200, res.text
+    groups = res.json()["groups"]
+    todo = next(g for g in groups if g["key"] == "todo")
+    assert todo["aggregates"] == {"y": 15}  # 2 + 4 + 9 -- the WHOLE top-level group
+    sub_by_key = {sg["key"]: sg for sg in todo["subgroups"]}
+    assert sub_by_key["high"]["aggregates"] == {"y": 6}  # 2 + 4 -- just this subgroup
+    assert sub_by_key["low"]["aggregates"] == {"y": 9}
+
+
+async def test_aggregations_ungrouped_reflects_full_filtered_set_not_just_first_page(
+    client, db_conn, test_user
+):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    estimate_prop = await _create_property(client, ds_id, "Estimate", "number")
+
+    total_rows = 8
+    for _ in range(total_rows):
+        await _insert_row(
+            db_conn, test_user, ds_id, {estimate_prop["key"]: {"type": "number", "number": 1}}
+        )
+
+    small_page_size = 3
+    assert small_page_size < total_rows  # the assertion below is only meaningful if this holds
+
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={
+            "page_size": small_page_size,
+            "aggregations": [{"key": "y", "property_key": estimate_prop["key"], "aggregator": "sum"}],
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert len(body["rows"]) == small_page_size  # `rows` is still paginated as normal
+    assert body["aggregates"] == {"y": total_rows}  # but the aggregate covers every row, not page 1
+
+
+async def test_aggregations_ungrouped_still_validates_out_of_range_page_size(client):
+    # The full-filtered-set fetch above bypasses `ast.Pagination`'s own `le=200` cap for
+    # the *SQL fetch it issues*, but `body.page_size`/`body.offset` themselves must stay
+    # just as validated as any other request through this endpoint -- regression check for
+    # the "aggregations short-circuits pagination validation entirely" failure shape.
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={"page_size": 999, "aggregations": [{"key": "n", "aggregator": "count"}]},
+    )
+    assert res.status_code == 400, res.text
+
+
+async def test_aggregations_absent_from_request_leaves_the_key_entirely_absent(
+    client, db_conn, test_user
+):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    status_prop = await _create_property(client, ds_id, "Status", "select")
+    await _insert_row(db_conn, test_user, ds_id, {status_prop["key"]: {"type": "select", "select": "todo"}})
+
+    ungrouped_res = await client.post(f"/db/data-sources/{ds_id}/query", json={})
+    assert ungrouped_res.status_code == 200, ungrouped_res.text
+    assert "aggregates" not in ungrouped_res.json()
+
+    grouped_res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={"group_by": {"property_key": status_prop["key"]}},
+    )
+    assert grouped_res.status_code == 200, grouped_res.text
+    for g in grouped_res.json()["groups"]:
+        assert "aggregates" not in g
+
+
+async def test_aggregation_tenancy_scopes_to_current_user(client, db_conn, test_user):
+    # Same technique `test_all_notes_query_scopes_to_current_user_excludes_others_notes`
+    # (above) already uses for the plain rows list -- aggregation happens in Python over
+    # rows the compiler already scoped, so this should be structurally guaranteed, but
+    # assert it directly rather than only assuming it (task-32-brief.md's own instruction).
+    other_user = str(uuid.uuid4())
+    await db_conn.execute(
+        "INSERT INTO auth.users (id, email) VALUES ($1, $2)", other_user, f"{other_user}@t.local"
+    )
+    await db_conn.execute("INSERT INTO notes (user_id, title) VALUES ($1, 'Theirs')", other_user)
+    await db_conn.execute("INSERT INTO notes (user_id, title) VALUES ($1, 'Mine')", test_user)
+
+    res = await client.post(
+        f"/db/data-sources/{ALL_NOTES_ID}/query",
+        json={"aggregations": [{"key": "n", "aggregator": "count"}]},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["aggregates"] == {"n": 1}  # only the current user's note is counted
+
+
+# ---------------------------------------------------------------------------
 # POST .../views: minimal view creation.
 # ---------------------------------------------------------------------------
 
