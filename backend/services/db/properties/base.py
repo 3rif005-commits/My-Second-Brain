@@ -112,6 +112,18 @@ class SqlContext:
     a bound user_id into the count subquery `query/compiler.py`'s
     `compile_sorts` must build for a relation sort (task-20-report.md's
     judgement-call list).
+
+    `result_type` (Milestone 8, Task 27) is the FType string (`"number"`,
+    `"string"`, ...) a `type == "formula"`/`"rollup"` property's
+    `db_properties.result_type` carries -- the one piece of per-PROPERTY
+    identity `properties/computed.py`'s `Formula`/`Rollup` descriptors need
+    that `key`/`alias`/`storage` alone can't supply, mirroring exactly why
+    `relation` was added in Milestone 7 (Relation's SQL also depends on
+    per-property identity, not just its type key). `None` for every other
+    type, and for a formula/rollup property whose `result_type` hasn't been
+    set yet (not yet type-checked/saved) -- `Formula`/`Rollup`'s own
+    `_value_sql` treats that as "no SQL shape", the same as an
+    unfilterable List/Person/Page result.
     """
 
     key: str
@@ -120,6 +132,7 @@ class SqlContext:
     relation: RelationRef | None = None
     row_id_expr: str = "n.id"
     user_id: str = ""
+    result_type: str | None = None
 
 
 # `keys.mint_key` mints 8 base62 characters; the bound is loose so a test or
@@ -357,6 +370,7 @@ from .scalar import Number, UniqueId  # noqa: E402
 from .choice import Select, MultiSelect, Status  # noqa: E402
 from .temporal import Date, CreatedTime, LastEditedTime  # noqa: E402
 from .relation import Relation  # noqa: E402
+from .computed import Formula, Rollup  # noqa: E402
 
 _RICH_OVERRIDES: dict[str, PropertyType] = {
     "number": Number(),
@@ -368,6 +382,12 @@ _RICH_OVERRIDES: dict[str, PropertyType] = {
     "created_time": CreatedTime(),
     "last_edited_time": LastEditedTime(),
     "relation": Relation(),
+    # Milestone 8 (Task 27): result-type-dispatched SQL extraction/ordering
+    # over `computed`, replacing `_GenericProperty`'s placeholder handling
+    # (which pointed at `properties` under a literal "formula"/"rollup"
+    # key -- wrong column, wrong key, never exercised until this task).
+    "formula": Formula(),
+    "rollup": Rollup(),
 }
 
 REGISTRY: dict[str, PropertyType] = {

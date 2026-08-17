@@ -45,6 +45,24 @@ class PropertyLookup:
     # Relation.sql_order both treat that as "unusable", never "fall back to
     # JSONB" (there is no JSONB copy to fall back to).
     relation: RelationRef | None = None
+    # Milestone 8 (Task 27): only meaningful when `type` is "formula"/
+    # "rollup" -- `db_properties.result_type`, threaded into `SqlContext`
+    # so `properties/computed.py`'s `Formula`/`Rollup` descriptors and
+    # `operators.py`'s `RESULT_TYPE_OPERATORS` can dispatch on it. `None`
+    # for every other type, and for a formula/rollup property that hasn't
+    # been type-checked/saved yet.
+    result_type: str | None = None
+    # Milestone 8 (Task 27): `db_properties.is_volatile` -- a formula
+    # referencing now()/today() is never materialised (spec §7.4), so it
+    # has no SQL-filterable/sortable value at all; `_compile_node`/
+    # `compile_sorts` reject a filter/sort attempt on one with a clear
+    # `FilterValidationError` naming volatility as the reason (see their
+    # own docstrings for why the compute-then-filter path spec §7.4
+    # describes is a DEFERRED half of this task, not implemented here).
+    # Always `False` for a non-formula property (rollups are never
+    # volatile -- only a formula's own expression can reference
+    # now()/today()).
+    is_volatile: bool = False
 
 
 def _resolve_alias(lookup: PropertyLookup, row_alias: str) -> str:
@@ -140,14 +158,40 @@ def _compile_node(
     lookup = properties.get(node.property)
     if lookup is None:
         raise FilterValidationError(f"unknown property key: {node.property!r}")
+    _reject_volatile(lookup, node.property)
     ctx = SqlContext(
         key=lookup.key,
         alias=_resolve_alias(lookup, alias),
         storage=lookup.storage,
         relation=lookup.relation,
         user_id=user_id,
+        result_type=lookup.result_type,
     )
     return compile_condition(lookup.type, ctx, node.operator, node.value, user_id=user_id)
+
+
+def _reject_volatile(lookup: PropertyLookup, property_key: str) -> None:
+    """Milestone 8 (Task 27), spec §7.4: a volatile formula (`now()`/
+    `today()`) is never materialised, so it has NO value in `computed` for
+    SQL to read at all -- filtering/sorting by one cannot use an index "by
+    construction" (spec's own wording). Spec §7.4 describes a compute-
+    then-filter fallback path (evaluate in Python over the rows being
+    returned, capped at the 10,000-row query limit, `request_status:
+    "incomplete"` past it) -- **deliberately NOT implemented here**,
+    flagged loudly rather than silently guessed at: this task's brief
+    offers rejection as the acceptable fallback when the compute-then-
+    filter path is more than one task can carry, and explicitly prefers a
+    clean error over ever silently returning wrong rows. A caller that
+    needs the real spec §7.4 behaviour has to build it on top of this
+    rejection (a future task) -- what happens here is a correct, honest
+    400, not a correct-looking-but-wrong result set."""
+    if lookup.type in ("formula", "rollup") and lookup.is_volatile:
+        raise FilterValidationError(
+            f"property {property_key!r} is a volatile formula (references now()/today()) "
+            "and cannot be filtered or sorted in SQL -- its value is never materialised "
+            "(spec §7.4). The compute-then-filter fallback spec §7.4 describes is not "
+            "implemented; see task-27-report.md."
+        )
 
 
 def compile_filter(
@@ -220,14 +264,31 @@ def compile_sorts(
             raise FilterValidationError(f"unknown property key: {sort.property!r}")
         if lookup.type not in REGISTRY:
             raise FilterValidationError(f"{lookup.type!r} is not a sortable property type")
+        _reject_volatile(lookup, sort.property)
         ctx = SqlContext(
             key=lookup.key,
             alias=_resolve_alias(lookup, alias),
             storage=lookup.storage,
             relation=lookup.relation,
             user_id=user_id,
+            result_type=lookup.result_type,
         )
-        frag = REGISTRY[lookup.type].sql_order(ctx, sort.direction)
+        try:
+            frag = REGISTRY[lookup.type].sql_order(ctx, sort.direction)
+        except ValueError as exc:
+            # Milestone 8 (Task 27): a formula/rollup with no SQL-shaped
+            # result_type (unset, or List/Person/Page -- research §4.6/
+            # §4.7) has no `RESULT_TYPE_OPERATORS`-style PRE-check the way
+            # compile_condition's formula/rollup branch does (there is no
+            # "operator" concept for a bare sort), so `Formula`/`Rollup.
+            # sql_order` is the first thing that notices and raises a
+            # plain `ValueError`. Re-raised as `FilterValidationError` here
+            # so it reaches a router as a 400, not an uncaught 500 -- the
+            # same "every bad-input path in this module gives the same
+            # exception type" contract every other branch already keeps.
+            raise FilterValidationError(
+                f"property {sort.property!r} cannot be sorted: {exc}"
+            ) from exc
         shifted = renumber(frag, offset)
         parts.append(shifted.sql)
         params.extend(shifted.params)

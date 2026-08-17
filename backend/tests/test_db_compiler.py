@@ -191,15 +191,41 @@ def test_compile_sorts_unresolvable_registry_type_raises_filter_validation_error
         compile_sorts([SortSpec(property="x", direction="asc")], bogus_lookup, user_id="u-1", alias="p")
 
 
-def test_compile_sorts_accepts_formula_and_rollup_types_unlike_compile_filter():
+def test_compile_sorts_accepts_place_and_button_types_unlike_compile_filter():
     # Deliberate asymmetry with compile_filter (see compiler.py's
-    # compile_sorts docstring): formula/rollup/place/button are absent from
-    # TYPE_OPERATORS (not filterable pre-Milestone-8, or never filterable),
-    # but all 4 still have a working REGISTRY entry, so sorting by one is
-    # not rejected here.
-    lookup = {"f": PropertyLookup(type="formula", storage="jsonb", key="a1b2c3d4")}
-    frag = compile_sorts([SortSpec(property="f", direction="asc")], lookup, user_id="u-1", alias="p")
+    # compile_sorts docstring): place/button are absent from TYPE_OPERATORS
+    # entirely (never filterable), but both still have a working generic
+    # REGISTRY entry, so sorting by one is not rejected here.
+    lookup = {"pl": PropertyLookup(type="place", storage="jsonb", key="a1b2c3d4")}
+    frag = compile_sorts([SortSpec(property="pl", direction="asc")], lookup, user_id="u-1", alias="p")
     assert frag.sql
+
+
+def test_compile_sorts_accepts_a_result_typed_formula_or_rollup(monkeypatch):
+    # Milestone 8 (Task 27): formula/rollup ARE sortable once `result_type`
+    # is known -- the asymmetry with compile_filter that survives this
+    # task is place/button (above), not formula/rollup any more.
+    for prop_type in ("formula", "rollup"):
+        lookup = {
+            "f": PropertyLookup(type=prop_type, storage="jsonb", key="a1b2c3d4", result_type="number")
+        }
+        frag = compile_sorts([SortSpec(property="f", direction="asc")], lookup, user_id="u-1", alias="p")
+        assert frag.sql
+        assert "computed" in frag.sql
+
+
+def test_compile_sorts_rejects_a_formula_with_no_sql_shaped_result_type():
+    # No result_type set at all (property not yet type-checked/saved), and
+    # a List-typed result -- neither has a SQL shape (research §4.6/§4.7).
+    # compile_sorts has no `RESULT_TYPE_OPERATORS`-style PRE-check for this
+    # the way compile_condition's formula/rollup branch does (there is no
+    # "operator" concept for a bare sort) -- `Formula.sql_order` itself
+    # raises a plain `ValueError`, which compile_sorts wraps into
+    # `FilterValidationError` so it still reaches a router as a 400.
+    for result_type in (None, "list", "person", "page"):
+        lookup = {"f": PropertyLookup(type="formula", storage="jsonb", key="a1b2c3d4", result_type=result_type)}
+        with pytest.raises(FilterValidationError):
+            compile_sorts([SortSpec(property="f", direction="asc")], lookup, user_id="u-1", alias="p")
 
 
 # ---------------------------------------------------------------------------

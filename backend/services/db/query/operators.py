@@ -29,6 +29,7 @@ from .ast import FilterValidationError
 
 __all__ = [
     "TYPE_OPERATORS",
+    "RESULT_TYPE_OPERATORS",
     "FilterValidationError",
     "coerce_value",
     "compile_condition",
@@ -146,6 +147,40 @@ TYPE_OPERATORS: dict[str, dict[str, Operator]] = {
     type_key: {op.name: op for op in ops}
     for type_keys, ops in _FAMILIES.items()
     for type_key in type_keys
+}
+
+
+# ---------------------------------------------------------------------------
+# 2.1b Milestone 8 (Task 27): formula/rollup, dispatched by RESULT_TYPE
+# ---------------------------------------------------------------------------
+#
+# `formula`/`rollup` deliberately do NOT become new keys in `TYPE_OPERATORS`
+# above (`test_formula_rollup_place_button_excluded` still holds, unchanged,
+# after this task) -- a flat `dict[str, Operator]` keyed by PROPERTY TYPE
+# cannot represent an operator set that depends on `result_type`, a
+# per-PROPERTY value (`db_properties.result_type`), because the SAME
+# operator name (`equals`) needs a DIFFERENT `arg_type` depending on it
+# ("num" for a number-typed formula, "str" for a string-typed one, ...) --
+# a single dict entry can only ever hold one `Operator` per name. This is a
+# genuinely different table, keyed by RESULT TYPE (an FType string) instead
+# of property type, reusing the EXACT SAME `Operator` tuples every other
+# family above already uses -- no new `arg_type`s invented, so a
+# number-typed formula gets literally `_NUMBER_OPS`, not a lookalike copy.
+#
+# Research §4.6/§4.7 (quoted at length in `properties/computed.py`'s module
+# docstring) is why exactly these four keys and no others: Notion's own
+# formula API only ever surfaces `boolean`/`date`/`number`/`string` as a
+# filterable/sortable result type -- List/Person/Page have no dedicated API
+# result type and no documented filter object at all. `compile_condition`
+# below raises `FilterValidationError` for any other `result_type`
+# (including `None`, `"list"`, `"person"`, `"page"`, `"empty"`, `"unknown"`)
+# -- the same "type not in operators table -> 400" signal every other
+# unfilterable type in this module already gives, never a silent no-op.
+RESULT_TYPE_OPERATORS: dict[str, dict[str, Operator]] = {
+    "string": {op.name: op for op in _TEXT_OPS},
+    "number": {op.name: op for op in _NUMBER_OPS},
+    "boolean": {op.name: op for op in _CHECKBOX_OPS},
+    "date": {op.name: op for op in _DATE_OPS},
 }
 
 
@@ -546,9 +581,21 @@ def compile_condition(
     4. Emit a parameterised SqlFragment. `sql` numbers its own params from $1 relative to
        `params` — same convention as `SqlFragment` itself; Task 12's compiler renumbers.
     """
-    type_ops = TYPE_OPERATORS.get(prop_type)
-    if type_ops is None:
-        raise FilterValidationError(f"{prop_type!r} has no filterable operators")
+    if prop_type in ("formula", "rollup"):
+        # Milestone 8 (Task 27): dispatch by RESULT_TYPE, not by
+        # prop_type -- see RESULT_TYPE_OPERATORS's own module-level
+        # comment for why a flat TYPE_OPERATORS entry can't express this.
+        type_ops = RESULT_TYPE_OPERATORS.get(ctx.result_type)
+        if type_ops is None:
+            raise FilterValidationError(
+                f"{prop_type!r} property with result_type={ctx.result_type!r} has no "
+                "filterable operators -- only string/number/boolean/date results are "
+                "filterable (research §4.6/§4.7)"
+            )
+    else:
+        type_ops = TYPE_OPERATORS.get(prop_type)
+        if type_ops is None:
+            raise FilterValidationError(f"{prop_type!r} has no filterable operators")
     operator = type_ops.get(operator_name)
     if operator is None:
         raise FilterValidationError(
@@ -571,6 +618,33 @@ def compile_condition(
     # every other family uses below has no room for.
     if prop_type == "relation":
         sql, params = _relation_filter_sql(operator_name, ctx, value, user_id=user_id)
+        return SqlFragment(sql=sql, params=params)
+
+    if prop_type in ("formula", "rollup"):
+        # Milestone 8 (Task 27): reuse the EXACT SAME per-shape SQL
+        # builders every other family above uses -- dispatched on
+        # `ctx.result_type` instead of `prop_type`, since that's what
+        # actually determines the value's shape for a materialised
+        # formula/rollup (the top validation above already guarantees
+        # `ctx.result_type` is one of these four, or this branch would
+        # never have been reached). `properties/computed.py`'s
+        # `Formula`/`Rollup.sql_extract` reads `computed`, not
+        # `properties` -- the only difference from every other type's
+        # extraction hop, and it is entirely inside `sql_extract` itself,
+        # invisible here.
+        e = REGISTRY[prop_type].sql_extract(ctx).sql
+        if ctx.result_type == "string":
+            sql, params = _text_scalar_sql(operator_name, e, value)
+        elif ctx.result_type == "number":
+            sql, params = _number_scalar_sql(operator_name, e, value)
+        elif ctx.result_type == "boolean":
+            sql, params = _bool_scalar_sql(operator_name, e, value)
+        elif ctx.result_type == "date":
+            sql, params = _date_scalar_sql(operator_name, ctx, e, value)
+        else:
+            raise AssertionError(  # pragma: no cover -- RESULT_TYPE_OPERATORS gate above
+                f"unreachable: result_type {ctx.result_type!r} passed the operator gate"
+            )
         return SqlFragment(sql=sql, params=params)
 
     e = REGISTRY[prop_type].sql_extract(ctx).sql

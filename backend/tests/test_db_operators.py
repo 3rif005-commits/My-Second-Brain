@@ -20,6 +20,7 @@ from services.db.query.ast import (
 )
 from services.db.properties.base import SqlContext, SqlFragment
 from services.db.query.operators import (
+    RESULT_TYPE_OPERATORS,
     TYPE_OPERATORS,
     coerce_value,
     compile_condition,
@@ -110,12 +111,46 @@ def test_pagination_rejects_page_size_over_200():
 # --- The operator matrix ---------------------------------------------------
 
 
-def test_total_operator_pair_count_is_131():
+def test_type_operators_pair_count_is_still_131():
+    # Unchanged by Milestone 8 (Task 27): TYPE_OPERATORS itself gains no
+    # new keys for formula/rollup (see RESULT_TYPE_OPERATORS's own module
+    # comment for why a flat per-TYPE dict can't represent an operator set
+    # that depends on a per-PROPERTY result_type). This is the M3 count,
+    # preserved exactly, not "the whole matrix" any more -- see the next
+    # two tests for the surface Task 27 actually added.
     assert sum(len(v) for v in TYPE_OPERATORS.values()) == 131
 
 
+def test_result_type_operators_pair_count_is_32():
+    # The genuinely NEW operator-matrix surface this task adds: string(8)
+    # + number(8) + boolean(2) + date(14) = 32, reusing the EXACT SAME
+    # Operator tuples TYPE_OPERATORS's own text/number/checkbox/date
+    # families already use (no new arg_types invented).
+    assert sum(len(v) for v in RESULT_TYPE_OPERATORS.values()) == 32
+    assert set(RESULT_TYPE_OPERATORS) == {"string", "number", "boolean", "date"}
+
+
+def test_combined_operator_pair_total_is_163_not_131():
+    # The brief's own instruction: "Adding formula/rollup changes [the
+    # count]. Update the number and say so." 131 (TYPE_OPERATORS, M3,
+    # unchanged) + 32 (RESULT_TYPE_OPERATORS, new) = 163 is the real total
+    # reachable operator-pair surface after this task -- flagged here
+    # explicitly rather than only in the two tests above, so a reviewer
+    # diffing this file sees the number the brief asked for directly.
+    total = sum(len(v) for v in TYPE_OPERATORS.values()) + sum(
+        len(v) for v in RESULT_TYPE_OPERATORS.values()
+    )
+    assert total == 163
+
+
 @pytest.mark.parametrize("excluded", ["formula", "rollup", "place", "button"])
-def test_formula_rollup_place_button_excluded(excluded):
+def test_formula_rollup_place_button_excluded_from_type_operators(excluded):
+    # Still true after Task 27, for an evolved reason for formula/rollup
+    # specifically: it used to be "M3 couldn't know their result type at
+    # all"; now it is "even knowing it, a flat dict keyed by property TYPE
+    # can't express an operator set that depends on result_type, a
+    # per-PROPERTY value" -- see RESULT_TYPE_OPERATORS, the table that
+    # actually carries their operators now.
     assert excluded not in TYPE_OPERATORS
 
 
@@ -305,6 +340,65 @@ def test_compile_condition_unknown_type_raises():
 def test_compile_condition_unknown_operator_raises():
     with pytest.raises(OpFilterValidationError):
         compile_condition("title", _ctx_for("title"), "greater_than", "x", user_id="u-1")
+
+
+# --- Milestone 8 (Task 27): formula/rollup, dispatched by result_type ------
+
+
+def _ctx_for_result_type(result_type: str) -> SqlContext:
+    return SqlContext(key="a1b2c3d4", alias="p", storage="jsonb", result_type=result_type)
+
+
+@pytest.mark.parametrize("prop_type", ["formula", "rollup"])
+@pytest.mark.parametrize(
+    "result_type,operator_name,sample",
+    [
+        (result_type, operator_name, sample)
+        for result_type, ops in RESULT_TYPE_OPERATORS.items()
+        for operator_name, operator in ops.items()
+        for sample in _ARG_TYPE_SAMPLE_VALUES[operator.arg_type]
+    ],
+)
+def test_compile_condition_covers_the_result_type_matrix(prop_type, result_type, operator_name, sample):
+    frag = compile_condition(
+        prop_type, _ctx_for_result_type(result_type), operator_name, sample, user_id="u-1"
+    )
+    assert isinstance(frag, SqlFragment)
+    assert "p.computed" in frag.sql
+    for value in frag.params:
+        if isinstance(value, str) and value:
+            assert value not in frag.sql
+
+
+@pytest.mark.parametrize("prop_type", ["formula", "rollup"])
+def test_compile_condition_formula_rollup_with_no_result_type_raises(prop_type):
+    with pytest.raises(OpFilterValidationError):
+        compile_condition(prop_type, _ctx_for_result_type(None), "equals", "x", user_id="u-1")
+
+
+@pytest.mark.parametrize("prop_type", ["formula", "rollup"])
+@pytest.mark.parametrize("result_type", ["list", "person", "page", "unknown", "empty"])
+def test_compile_condition_formula_rollup_unfilterable_result_type_raises(prop_type, result_type):
+    # research §4.6/§4.7: Notion's own formula API has no list/person/page
+    # result type and no filter object for any of them either.
+    with pytest.raises(OpFilterValidationError):
+        compile_condition(prop_type, _ctx_for_result_type(result_type), "is_empty", None, user_id="u-1")
+
+
+def test_compile_condition_number_formula_uses_the_number_scalar_sql_shape():
+    frag = compile_condition(
+        "formula", _ctx_for_result_type("number"), "greater_than", 10, user_id="u-1"
+    )
+    assert "computed -> 'a1b2c3d4' ->> 'number'" in frag.sql
+    assert "::double precision" in frag.sql
+    assert frag.sql.strip().endswith("> $1")
+
+
+def test_compile_condition_date_rollup_uses_the_date_scalar_sql_shape():
+    frag = compile_condition(
+        "rollup", _ctx_for_result_type("date"), "before", "2026-08-10", user_id="u-1"
+    )
+    assert "computed -> 'a1b2c3d4' -> 'date' ->> 'start'" in frag.sql
 
 
 def test_native_array_topics_uses_array_operators():

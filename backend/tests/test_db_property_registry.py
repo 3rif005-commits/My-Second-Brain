@@ -62,7 +62,16 @@ def test_registry_entries_satisfy_property_type_protocol(key):
     assert isinstance(prop.is_empty(None), bool)
 
     ops = prop.operators()
-    assert isinstance(ops, dict) and ops  # at least one operator per type
+    assert isinstance(ops, dict)
+    if key not in ("formula", "rollup"):
+        assert ops  # at least one operator per type
+    # else: Milestone 8 (Task 27) -- formula/rollup's filter-operator set
+    # depends on the PROPERTY's own `result_type`, not just its `type`, so
+    # a flat per-type `.operators()` dict can't represent it (a single
+    # entry can't hold "equals" with three different arg_types at once).
+    # The real dispatch lives in query/operators.py's RESULT_TYPE_OPERATORS
+    # (see that module's own comment); `.operators()` here is legitimately
+    # empty, only satisfying the PropertyType protocol's shape.
     assert all(isinstance(name, str) for name in ops)
 
     aggs = prop.aggregations()
@@ -74,7 +83,10 @@ def test_registry_entries_satisfy_property_type_protocol(key):
     # Relation.coerce_write is a hard failure for *every* input, None
     # included, not a silent accept. See test_relation_coerce_write_
     # always_raises below for the dedicated positive assertion.
-    if key == "relation":
+    # "formula"/"rollup" (task-27-brief.md, Milestone 8): the identical
+    # posture -- services/db/recompute.py is the only legal writer of a
+    # materialised value, so coerce_write is a hard failure here too.
+    if key in ("relation", "formula", "rollup"):
         with pytest.raises(ValueError):
             prop.coerce_write(None)
     else:
@@ -149,8 +161,13 @@ def test_number_order_uses_the_same_indexable_expression():
 # "relation" is excluded (task-20-brief.md §2): Milestone 7 repointed it
 # entirely away from JSONB, so REGISTRY["relation"].sql_extract has nothing
 # to extract and raises rather than returning a bare-wrapper-shaped
-# fragment -- see test_relation_sql_extract_raises below.
-@pytest.mark.parametrize("key", sorted(REAL_TYPE_KEYS - {"relation"}))
+# fragment -- see test_relation_sql_extract_raises below. "formula"/
+# "rollup" are excluded for the analogous Milestone 8 (Task 27) reason:
+# their sql_extract needs `ctx.result_type` (a bare SqlContext with none
+# set raises, by design -- see test_computed_sql_extract_requires_a_
+# result_type below), so a shared "extract with no type context" sweep
+# doesn't apply to them the way it does to every other type.
+@pytest.mark.parametrize("key", sorted(REAL_TYPE_KEYS - {"relation", "formula", "rollup"}))
 def test_no_type_extracts_the_bare_wrapper_object(key):
     """`properties -> 'key'` alone is the §3.3 wrapper (`{"type": ...,
     "<type>": ...}`), not a value: unindexable, and orders by jsonb key
@@ -167,6 +184,49 @@ def test_relation_sql_extract_raises():
     # copy to point at in either direction.
     with pytest.raises(ValueError):
         REGISTRY["relation"].sql_extract(SqlContext(key="a1b2c3d4", alias="p"))
+
+
+@pytest.mark.parametrize("key", ["formula", "rollup"])
+def test_computed_sql_extract_requires_a_result_type(key):
+    with pytest.raises(ValueError):
+        REGISTRY[key].sql_extract(SqlContext(key="a1b2c3d4", alias="p"))
+
+
+@pytest.mark.parametrize("key", ["formula", "rollup"])
+@pytest.mark.parametrize("result_type", ["list", "person", "page", "unknown", "empty"])
+def test_computed_sql_extract_raises_for_unfilterable_result_types(key, result_type):
+    # research §4.6/§4.7: Notion's own formula API has no list/person/page
+    # result type and no filter object for them either.
+    with pytest.raises(ValueError):
+        REGISTRY[key].sql_extract(SqlContext(key="a1b2c3d4", alias="p", result_type=result_type))
+
+
+def test_computed_sql_extract_reads_computed_not_properties():
+    frag = REGISTRY["formula"].sql_extract(
+        SqlContext(key="a1b2c3d4", alias="p", result_type="number")
+    )
+    assert "p.computed" in frag.sql
+    assert "properties" not in frag.sql
+    assert "'a1b2c3d4'" in frag.sql
+    assert "'number'" in frag.sql
+
+
+def test_computed_sql_extract_date_projects_start():
+    frag = REGISTRY["rollup"].sql_extract(
+        SqlContext(key="a1b2c3d4", alias="p", result_type="date")
+    )
+    assert "'date'" in frag.sql and "'start'" in frag.sql
+
+
+def test_computed_sql_order_matches_extract_shape():
+    order = REGISTRY["formula"].sql_order(
+        SqlContext(key="a1b2c3d4", alias="p", result_type="number"), "asc"
+    )
+    extract = REGISTRY["formula"].sql_extract(
+        SqlContext(key="a1b2c3d4", alias="p", result_type="number")
+    )
+    assert order.sql.startswith(extract.sql)
+    assert order.sql.endswith("ASC NULLS LAST")
 
 
 def test_date_sorts_on_start_not_the_whole_date_object():
