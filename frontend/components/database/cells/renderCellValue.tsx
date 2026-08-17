@@ -31,6 +31,7 @@ import { DateCell } from "./DateCell";
 import { CheckboxCell } from "./CheckboxCell";
 import { GenericCell } from "./GenericCell";
 import { RelationCell } from "./RelationCell";
+import { FormulaCell } from "./FormulaCell";
 
 /** Milestone 7's relation cell needs data `CellProps<V>` (value/editable/
  * onChange) has no room for — its value never travels through `onChange`
@@ -104,6 +105,13 @@ export function renderCellValue(
           onLinksChange={relation.onLinksChange}
         />
       );
+    case "formula":
+    case "rollup":
+      // Milestone 8 (task-28-brief.md §4): always read-only, regardless of
+      // `editable` — there is exactly one legal writer of a computed value
+      // (services/db/recompute.py), so `editable`/`onChange` are simply not
+      // meaningful here, unlike every CellProps<V>-based cell above.
+      return <FormulaCell property={property} value={value} />;
     default:
       return <GenericCell value={value as UnknownValue | undefined} />;
   }

@@ -299,6 +299,63 @@ export function findSystemRelationProperty(
   );
 }
 
+// ── Milestone 8: formula/rollup computed values and the validate endpoint ──
+// Mirrors backend/services/db/properties/computed.py's `COMPUTED_VALUE_
+// SHAPES` and backend/services/db/recompute.py's `_encode_fvalue` (spec
+// §7.3). A materialised formula/rollup value is deliberately a DIFFERENT
+// wrapper family from `PropertyValue` above, not a reuse of it: the
+// discriminant is the formula's own `result_type` (`db_properties.
+// result_type`, one of "string"/"number"/"boolean"/"date" — research
+// §4.6/§4.7's "lossy 4-of-7 projection"), not a `db_properties.type` string,
+// and `boolean`/`string`/`date` all use different inner keys than the
+// stored `checkbox`/`rich_text`/`date` wrappers do (a computed Date has no
+// `time_zone` key at all). Kept OUT of the `PropertyValue` union on purpose
+// — a `type: "date"` member here with a shape that omits `time_zone` would
+// make every existing `DateValue` narrowing site (DateCell, etc.) lie about
+// what fields are actually present. Only `ComputedCell` ever reads this
+// type, cast at the one place `renderCellValue` hands it a raw
+// `PropertyValue | undefined` for a `formula`/`rollup` property.
+export interface ComputedNumberValue { type: "number"; number: number | null }
+export interface ComputedBooleanValue { type: "boolean"; boolean: boolean | null }
+export interface ComputedStringValue { type: "string"; string: string | null }
+export interface ComputedDateValue {
+  type: "date";
+  date: { start: string; end: string | null } | null;
+}
+/** research §B.1 ("depend[s] on excessive related pages or nested
+ * formulas") / spec §7.3: the formula-depth-15, relation-traversal-depth-3,
+ * or 10,000-row fan-out limit was hit. A REAL, documented Notion UI state
+ * (shipped 2026-08-05), never an error and never a blank cell — see
+ * `ComputedCell`. */
+export interface ComputedUnsupportedValue { type: "unsupported" }
+
+export type ComputedValue =
+  | ComputedNumberValue
+  | ComputedBooleanValue
+  | ComputedStringValue
+  | ComputedDateValue
+  | ComputedUnsupportedValue;
+
+/** Mirrors `backend/models/database.py`'s `FormulaValidationIssue`/
+ * `FormulaValidateResponse` exactly — `POST .../formulas/validate`'s entire
+ * response shape (spec §7.1: parse errors, inferred result type, referenced
+ * property keys, nothing else — there is no evaluate-this-formula-for-me
+ * endpoint). */
+export interface FormulaValidationIssue {
+  message: string;
+  pos: number;
+  line: number;
+  col: number;
+}
+
+export interface FormulaValidateResponse {
+  valid: boolean;
+  errors: FormulaValidationIssue[];
+  result_type: string | null;
+  referenced_properties: string[];
+  is_volatile: boolean;
+}
+
 /** The 8 property `type` strings this UI has a dedicated cell component for. */
 export const KNOWN_PROPERTY_TYPES = [
   "title",

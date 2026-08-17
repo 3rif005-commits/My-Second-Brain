@@ -12,7 +12,8 @@ import { DateCell } from "./DateCell";
 import { CheckboxCell } from "./CheckboxCell";
 import { GenericCell } from "./GenericCell";
 import { RelationCell } from "./RelationCell";
-import type { PropertyResponse, RelatedRow } from "@/lib/database/types";
+import { FormulaCell } from "./FormulaCell";
+import type { PropertyResponse, PropertyValue, RelatedRow } from "@/lib/database/types";
 
 describe("TitleCell", () => {
   it("renders read-only, with no input, when not editable", () => {
@@ -386,5 +387,108 @@ describe("RelationCell", () => {
       />
     );
     expect(screen.getByText("—")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FormulaCell (Milestone 8, task-28) — always read-only, both "formula" and
+// "rollup" property types share this one component.
+// ---------------------------------------------------------------------------
+
+function formulaProperty(overrides: Partial<PropertyResponse> = {}): PropertyResponse {
+  return {
+    id: "p-formula",
+    data_source_id: "ds-1",
+    user_id: "user-1",
+    key: "doubled",
+    name: "Doubled",
+    type: "formula",
+    config: { expression: 'prop("Price") * 2' },
+    description: null,
+    storage: "jsonb",
+    column_name: null,
+    result_type: "number",
+    is_volatile: false,
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+describe("FormulaCell", () => {
+  it("renders a materialised number value", () => {
+    render(
+      <FormulaCell
+        property={formulaProperty()}
+        value={{ type: "number", number: 42 } as unknown as PropertyValue}
+      />
+    );
+    expect(screen.getByText("42")).toBeInTheDocument();
+  });
+
+  it("renders an em-dash for an absent (never-computed / EMPTY) value", () => {
+    render(<FormulaCell property={formulaProperty()} value={undefined} />);
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it('renders {"type":"unsupported"} as a muted "Too complex to calculate", never blank or raw JSON', () => {
+    render(
+      <FormulaCell
+        property={formulaProperty()}
+        value={{ type: "unsupported" } as unknown as PropertyValue}
+      />
+    );
+    expect(screen.getByText("Too complex to calculate")).toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+    expect(screen.queryByText(/"type"/)).not.toBeInTheDocument();
+    // The tooltip names the actual limits, not a generic "error".
+    expect(screen.getByText("Too complex to calculate")).toHaveAttribute(
+      "title",
+      expect.stringMatching(/depth 15|traversal depth 3|10,000/)
+    );
+  });
+
+  it("renders a distinct muted state for a volatile formula's (always-absent) value, not a plain em-dash", () => {
+    render(
+      <FormulaCell
+        property={formulaProperty({ is_volatile: true, result_type: "date" })}
+        value={undefined}
+      />
+    );
+    expect(screen.getByText("Live formula")).toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+  });
+
+  it("renders a rollup's materialised value identically to a formula's", () => {
+    render(
+      <FormulaCell
+        property={formulaProperty({ type: "rollup", result_type: "number", config: {} })}
+        value={{ type: "number", number: 7 } as unknown as PropertyValue}
+      />
+    );
+    expect(screen.getByText("7")).toBeInTheDocument();
+  });
+
+  it("a rollup is never treated as volatile even with is_volatile somehow set", () => {
+    // Defensive: is_volatile is documented formula-only, but the component
+    // gates on property.type === "formula" too, not just the flag.
+    render(
+      <FormulaCell
+        property={formulaProperty({ type: "rollup", is_volatile: true })}
+        value={undefined}
+      />
+    );
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText("Live formula")).not.toBeInTheDocument();
+  });
+
+  it("renders a boolean result as Yes/No, not true/false", () => {
+    render(
+      <FormulaCell
+        property={formulaProperty({ result_type: "boolean" })}
+        value={{ type: "boolean", boolean: true } as unknown as PropertyValue}
+      />
+    );
+    expect(screen.getByText("Yes")).toBeInTheDocument();
   });
 });
