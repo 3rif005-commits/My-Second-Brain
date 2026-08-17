@@ -236,10 +236,13 @@ async def test_formula_depth_15_becomes_unsupported(db_conn, test_user):
 async def test_depth_exceeded_context_flag_becomes_unsupported(db_conn, test_user, monkeypatch):
     """Directly exercises `_compute_formula`'s handling of `EvalContext.
     depth_exceeded` by simulating (via a monkeypatched `evaluate`) a
-    relation hop chain that exhausts the budget -- see recompute.py's
-    `_compute_formula` docstring for why this cannot be triggered through
-    a real formula today (a real, flagged gap inherited from Tasks
-    24-26's evaluator.py, out of this task's file scope)."""
+    relation hop chain that exhausts the budget -- a fast, deterministic
+    unit of `_compute_formula`'s own EMPTY/UNSUPPORTED bookkeeping,
+    independent of how many real `.prop()` dot-hops it would actually take
+    to exhaust it (since the M8 combined-review fix wave, a real formula
+    genuinely can: see test_formula_eval.py's `TestRelationHopDotProp` for
+    that, and `test_recompute_row_dot_prop_reads_the_related_rows_value`
+    below for one real relation hop resolving correctly end-to-end)."""
     ds = await _make_data_source(db_conn, test_user)
     await _insert_property(
         db_conn, test_user, ds, "fKey", "Whatever", "formula",
@@ -262,6 +265,92 @@ async def test_depth_exceeded_context_flag_becomes_unsupported(db_conn, test_use
     await recompute.recompute_full(db_conn, test_user)
     computed = await _row_computed(db_conn, note)
     assert computed["fKey"] == recompute.UNSUPPORTED
+
+
+# ===========================================================================
+# 4b. Relation-hop dot-prop (`current.prop("Name")`) reads the RELATED
+#     row's value -- the M8 combined-review fix wave, end-to-end through
+#     `_build_related_properties` and `evaluator._eval_prop_dot`.
+# ===========================================================================
+
+
+async def test_full_pass_dot_prop_reads_each_related_rows_own_status(db_conn, test_user):
+    """research §3.8's own documented idiom: `prop("Tasks").filter(current.
+    prop("Status") != "Done")`. The owner row is given its OWN "Status"
+    property, deliberately absent from either related row's schema-sharing
+    intent (this is a self-relation -- both data sources are literally the
+    SAME data source), so the pre-fix bug (every `current.prop("Status")`
+    silently reading the OWNER's Status instead of each element's) and the
+    fix disagree on the answer: pre-fix, every element compares the SAME
+    owner value against "Done" (all-pass or all-fail, regardless of the
+    related rows' real Status); fixed, only the genuinely-not-"Done"
+    related rows count. Owner has no "Status" property of its own at all
+    (EMPTY != "Done" is true, general EMPTY-propagation rule's five
+    exceptions -- `unequal` is one -- so the pre-fix bug would count ALL
+    THREE related rows as open, not the correct two)."""
+    ds = await _make_data_source(db_conn, test_user, name="Tasks")
+    forward, _ = await relations.create_relation_pair(
+        db_conn, test_user, data_source_id=ds, name="Subtasks",
+        target_data_source_id=ds, two_way=False,  # self-relation: the documented common case
+    )
+    ref = relations.relation_ref_from_config(forward["config"])
+    await _insert_property(db_conn, test_user, ds, "statusKey", "Status", "select")
+    await _insert_property(
+        db_conn, test_user, ds, "fKey", "OpenCount", "formula",
+        config=_formula_config(
+            'prop("Subtasks").filter(current.prop("Status") != "Done").count()'
+        ),
+        result_type="number",
+    )
+
+    owner = await _insert_note(db_conn, test_user)
+    await _insert_row(db_conn, test_user, ds, owner)  # deliberately no "Status" of its own
+
+    done = await _insert_note(db_conn, test_user)
+    await _insert_row(db_conn, test_user, ds, done, properties={"statusKey": {"type": "select", "select": "Done"}})
+    todo1 = await _insert_note(db_conn, test_user)
+    await _insert_row(db_conn, test_user, ds, todo1, properties={"statusKey": {"type": "select", "select": "Todo"}})
+    todo2 = await _insert_note(db_conn, test_user)
+    await _insert_row(db_conn, test_user, ds, todo2, properties={"statusKey": {"type": "select", "select": "Todo"}})
+    await relations.set_links(db_conn, test_user, ref, owner, [done, todo1, todo2])
+
+    await recompute.recompute_full(db_conn, test_user)
+    computed = await _row_computed(db_conn, owner)
+    assert computed["fKey"] == {"type": "number", "number": 2.0}  # todo1 + todo2, NOT all 3
+
+
+async def test_recompute_row_dot_prop_reads_the_related_rows_value(db_conn, test_user):
+    """The identical scenario, through the INCREMENTAL path (`recompute_
+    row`) instead of a full pass -- `_build_related_properties` is called
+    fresh per row there (recompute.py's own docstring on why it is not
+    cached across the incremental cascade), a separate code path from
+    `recompute_full`'s `related_ctx_by_ds` cache worth covering on its
+    own."""
+    ds = await _make_data_source(db_conn, test_user, name="Tasks")
+    forward, _ = await relations.create_relation_pair(
+        db_conn, test_user, data_source_id=ds, name="Subtasks",
+        target_data_source_id=ds, two_way=False,
+    )
+    ref = relations.relation_ref_from_config(forward["config"])
+    await _insert_property(db_conn, test_user, ds, "statusKey", "Status", "select")
+    await _insert_property(
+        db_conn, test_user, ds, "fKey", "OpenCount", "formula",
+        config=_formula_config(
+            'prop("Subtasks").filter(current.prop("Status") != "Done").count()'
+        ),
+        result_type="number",
+    )
+
+    owner = await _insert_note(db_conn, test_user)
+    await _insert_row(db_conn, test_user, ds, owner)
+    done = await _insert_note(db_conn, test_user)
+    await _insert_row(db_conn, test_user, ds, done, properties={"statusKey": {"type": "select", "select": "Done"}})
+    todo = await _insert_note(db_conn, test_user)
+    await _insert_row(db_conn, test_user, ds, todo, properties={"statusKey": {"type": "select", "select": "Todo"}})
+    await relations.set_links(db_conn, test_user, ref, owner, [done, todo])
+
+    written = await recompute.recompute_row(db_conn, test_user, ds, owner)
+    assert written["fKey"] == {"type": "number", "number": 1.0}  # only `todo`
 
 
 # ===========================================================================

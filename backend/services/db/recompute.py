@@ -24,9 +24,10 @@ its own call site, restated here as an index):
    `order` sequence by both `recompute_full` and `recompute_row`).
 3. The three limits -- formula depth 15 (`FORMULA_DEPTH_LIMIT`, via Task
    24's `deps.max_reference_depth`), relation traversal depth 3
-   (`EvalContext.depth_budget`, Task 26's contract -- see
-   `_compute_formula`'s docstring for a real, flagged gap in how far that
-   contract currently reaches), propagation/fan-out 10,000 rows
+   (`EvalContext.depth_budget`, Task 26's contract, genuinely reachable
+   through a real formula since the M8 combined-review fix wave --
+   `_build_related_properties` supplies the data, `evaluator._eval_prop_
+   dot` consumes it), propagation/fan-out 10,000 rows
    (`ROLLUP_FANOUT_LIMIT`) -- each produce `UNSUPPORTED` with no partial
    value.
 4. Volatile formulas (`db_properties.is_volatile`) are skipped entirely by
@@ -448,6 +449,89 @@ async def _stored_values_for_rows(
     return ctx
 
 
+async def _build_related_properties(
+    conn: asyncpg.Connection,
+    user_id: str,
+    row_ids: list[str],
+    stored_ctx: dict[str, dict[str, fvalues.FValue]],
+    relation_props: list[asyncpg.Record],
+    all_records: list[asyncpg.Record],
+) -> dict[str, dict[str, fvalues.FValue]]:
+    """`{page_id: {property_name: FValue}}` for every page `row_ids`
+    reaches through ONE of this data source's relation properties -- the
+    exact map `evaluator.EvalContext.related_properties` needs so a
+    `.prop()` dot-form call whose receiver evaluates to a `Page`
+    (`current.prop("Status")` inside `prop("Tasks").filter(...)`, research
+    §3.8's own documented idiom) can resolve against the RELATED row's
+    values instead of `ctx.properties` (see evaluator.py's `_eval_prop_dot`
+    -- the fix this function's caller exists to feed).
+
+    Reuses `_stored_values_for_rows` -- the SAME batched-fetch primitive
+    `_ensure_ds_loaded`/`_recompute_row_with_state` already call for a
+    row's OWN properties -- once per TARGET data source. `relation_props`'
+    own `config["target_data_source_id"]` (set at relation-creation time by
+    `relations.create_relation_pair`/`_insert_relation_property`, never
+    re-derived here) is what makes a genuinely cross-data-source relation
+    work identically to a self-relation, with no special-casing: `stored_
+    ctx` already holds each relation property's linked pages (as
+    `list[Page]`, decoded by `_stored_values_for_rows` itself) for
+    `row_ids`, grouped here by which data source they belong to, then
+    fetched with one `_stored_values_for_rows` call per target data source
+    -- `all_records` (== `_GraphState.records`, spanning every data source
+    this user owns, per `_load_all_properties`'s own docstring) supplies
+    that target data source's own stored/relation property DEFINITIONS,
+    so decoding its rows needs no separate schema-lookup path either.
+
+    A DELIBERATE, narrower-than-`depth_budget=3` scope, not an oversight:
+    only pages ONE hop away from `row_ids` are populated. A `.prop()` dot
+    chain that hops a SECOND relation on an already-related page
+    (`current.prop("OtherRelation").prop("X")`) finds no entry for that
+    third page in the returned map and `_eval_prop_dot` degrades to EMPTY
+    for it -- gracefully, per its own contract, never wrong data, just
+    absent for a hop this pass did not pre-fetch. Always fresh (never
+    reused from an already-built `stored_ctx`, even for a self-relation
+    where that might sometimes already hold the answer): `recompute_row`'s
+    incremental pass only ever loads ONE row's own `stored_ctx` entry, so
+    an optimisation that special-cased "self-relation reuses the caller's
+    stored_ctx" would behave differently between a full pass (where it
+    might coincidentally see a related row's already-computed formula
+    value) and an incremental one (where it never could) -- a confusing,
+    hard-to-reason-about inconsistency avoided here by always doing one
+    fresh, STORED-properties-only fetch, uniformly. The corollary, an
+    honest documented limitation: a related row's own COMPUTED
+    (formula/rollup) property is never visible through a dot-hop, in
+    either pass -- `_stored_values_for_rows` decodes STORED properties
+    only (its own docstring), by construction."""
+    if not row_ids or not relation_props:
+        return {}
+
+    records_by_ds: dict[str, list[asyncpg.Record]] = {}
+    for r in all_records:
+        records_by_ds.setdefault(str(r["data_source_id"]), []).append(r)
+
+    page_ids_by_target_ds: dict[str, set[str]] = {}
+    for p in relation_props:
+        target_ds = (p["config"] or {}).get("target_data_source_id")
+        if not target_ds:
+            continue
+        target_ds = str(target_ds)
+        for rid in row_ids:
+            for pg in stored_ctx.get(rid, {}).get(p["name"], []) or []:
+                if isinstance(pg, fvalues.Page):
+                    page_ids_by_target_ds.setdefault(target_ds, set()).add(pg.id)
+
+    related: dict[str, dict[str, fvalues.FValue]] = {}
+    for target_ds, page_ids in page_ids_by_target_ds.items():
+        target_records = records_by_ds.get(target_ds, [])
+        target_stored = [r for r in target_records if r["type"] not in ("formula", "rollup", "relation")]
+        target_relation = [r for r in target_records if r["type"] == "relation"]
+        fetched = await _stored_values_for_rows(
+            conn, user_id, target_ds, sorted(page_ids), target_stored, target_relation
+        )
+        related.update(fetched)
+    return related
+
+
 # ---------------------------------------------------------------------------
 # 5. Materialising one property, for a batch of its own rows
 # ---------------------------------------------------------------------------
@@ -458,40 +542,32 @@ async def _compute_formula(
     data_source_id: str,
     row_ids: list[str],
     stored_ctx: dict[str, dict[str, fvalues.FValue]],
+    related_properties: dict[str, dict[str, fvalues.FValue]],
     names_by_ds: dict[str, dict[str, str]],
     now: datetime,
 ) -> tuple[dict[str, fvalues.FValue], dict[str, dict[str, Any] | None]]:
     """Evaluates ONE formula property for every row in `row_ids`, using
     `stored_ctx[row_id]` (already merged with every dependency's value,
-    since the caller processes properties in topological order). Returns
-    `(values, writes)`: `values` are `FValue`s for merging back into
-    `stored_ctx` (so a LATER formula referencing this one gets a real
-    value, not a re-parse); `writes[row_id] is None` means "omit the key"
-    (the row's value is `EMPTY`, spec §3.3's absent-key convention),
-    otherwise it is a ready-to-write `computed` wrapper.
+    since the caller processes properties in topological order) and
+    `related_properties` (`_build_related_properties`'s own return value --
+    every page ONE relation hop away from `row_ids`, own docstring for the
+    full contract). Returns `(values, writes)`: `values` are `FValue`s for
+    merging back into `stored_ctx` (so a LATER formula referencing this one
+    gets a real value, not a re-parse); `writes[row_id] is None` means
+    "omit the key" (the row's value is `EMPTY`, spec §3.3's absent-key
+    convention), otherwise it is a ready-to-write `computed` wrapper.
 
-    **A real, flagged gap inherited from Tasks 24-26, not introduced
-    here**: the relation-traversal-depth-3 contract (`EvalContext.
-    depth_budget`/`with_relation_hop`/`depth_exceeded`) is built and
-    exposed (Task 26's report, judgment call #23: "enforcing the cap is
-    Task 27's job"), and THIS function does honour it correctly on ITS
-    side -- it builds every `EvalContext` with the default `depth_budget=3`
-    and checks `ctx.depth_exceeded` after evaluating, turning it into
-    `UNSUPPORTED` exactly like the other two limits. But nothing inside
-    the currently-committed `evaluator.py` ever actually CALLS `with_
-    relation_hop()`: Task 24's own committed ruling (`_check_prop_call`'s
-    docstring, reaffirmed by Task 26) is that `.prop("Name")` ALWAYS
-    resolves against `ctx.properties` -- THIS row's own values -- "the
-    receiver is not even evaluated", regardless of what a relation-typed
-    receiver would otherwise suggest. `evaluator.py` is out of this task's
-    file scope (the brief lists it among Tasks 23-26's "complete" engine).
-    So the relation-traversal-depth-3 limit's ENFORCEMENT SIDE (this
-    function) is real and tested (directly, by constructing an
-    already-exhausted `EvalContext` and calling `with_relation_hop()`), but
-    its TRIGGER side does not exist anywhere in the committed formula
-    language surface today -- a formula genuinely cannot chase a relation
-    hop far enough to exhaust the budget. Flagged in this task's report as
-    a finding, not silently glossed over."""
+    The relation-traversal-depth-3 contract (`EvalContext.depth_budget`/
+    `with_relation_hop`/`depth_exceeded`) is honoured exactly as before --
+    every `EvalContext` built here still gets the default `depth_budget=3`
+    and `ctx.depth_exceeded` is still checked after evaluating, turning it
+    into `UNSUPPORTED` exactly like the other two limits (formula depth 15,
+    rollup fan-out 10,000). What changed (M8 combined-review fix wave): the
+    evaluator's `.prop()` dot-form now genuinely calls `with_relation_hop()`
+    for a `Page`-typed receiver, so this limit is reachable through a real
+    formula for the first time -- see `evaluator._eval_prop_dot`'s own
+    docstring for the fix, and `_build_related_properties`'s for how this
+    function now supplies the data that fix reads."""
     source = (rec["config"] or {}).get("expression") or ""
     property_names = names_by_ds.get(data_source_id, {}).values()
     values: dict[str, fvalues.FValue] = {}
@@ -514,7 +590,9 @@ async def _compute_formula(
 
     result_type = rec["result_type"]
     for rid in row_ids:
-        eval_ctx = evaluator.EvalContext(properties=stored_ctx[rid], now=now, page_id=rid)
+        eval_ctx = evaluator.EvalContext(
+            properties=stored_ctx[rid], now=now, page_id=rid, related_properties=related_properties,
+        )
         fv = evaluator.evaluate(tree, eval_ctx)
         if eval_ctx.depth_exceeded:
             values[rid] = fvalues.EMPTY
@@ -605,6 +683,7 @@ async def _materialise_node(
     row_ids: list[str],
     graph: Graph,
     stored_ctx: dict[str, dict[str, fvalues.FValue]],
+    related_properties: dict[str, dict[str, fvalues.FValue]],
     by_node: dict[GraphNode, asyncpg.Record],
     names_by_ds: dict[str, dict[str, str]],
     now: datetime,
@@ -616,7 +695,11 @@ async def _materialise_node(
     UNIFORMLY for both formula and rollup properties (spec §9: "rollups ...
     are capped by the same depth limits") before ever calling
     `_compute_formula`/`_compute_rollup_property` -- an over-depth property
-    gets NO evaluation attempt at all, matching "no partial value"."""
+    gets NO evaluation attempt at all, matching "no partial value".
+    `related_properties` (`_build_related_properties`'s return value, own
+    docstring) is threaded through to `_compute_formula` only -- a rollup's
+    own evaluation never touches `evaluator.EvalContext` at all, it goes
+    straight through `rollup.py`."""
     if not row_ids:
         return None
     if rec["type"] == "formula" and rec["is_volatile"]:
@@ -627,7 +710,9 @@ async def _materialise_node(
         values = {rid: fvalues.EMPTY for rid in row_ids}
         writes = {rid: dict(UNSUPPORTED) for rid in row_ids}
     elif rec["type"] == "formula":
-        values, writes = await _compute_formula(rec, data_source_id, row_ids, stored_ctx, names_by_ds, now)
+        values, writes = await _compute_formula(
+            rec, data_source_id, row_ids, stored_ctx, related_properties, names_by_ds, now
+        )
     else:
         values, writes = await _compute_rollup_property(conn, user_id, rec, data_source_id, row_ids, by_node)
 
@@ -740,6 +825,7 @@ async def recompute_full(
     state = await _load_graph_state(conn, user_id)
 
     stored_ctx: dict[str, dict[str, fvalues.FValue]] = {}
+    related_ctx_by_ds: dict[str, dict[str, dict[str, fvalues.FValue]]] = {}
     row_ids_by_ds: dict[str, list[str]] = {}
     stats = RecomputeStats()
 
@@ -760,6 +846,12 @@ async def recompute_full(
             r for r in state.records if str(r["data_source_id"]) == ds_id and r["type"] == "relation"
         ]
         stored_ctx.update(await _stored_values_for_rows(conn, user_id, ds_id, row_ids, stored_props, relation_props))
+        # Built AFTER stored_ctx.update() above -- _build_related_properties
+        # reads each relation property's already-decoded list[Page] values
+        # out of stored_ctx (own docstring).
+        related_ctx_by_ds[ds_id] = await _build_related_properties(
+            conn, user_id, row_ids, stored_ctx, relation_props, state.records
+        )
 
     for node in state.order:
         ds_id, key = node
@@ -772,7 +864,8 @@ async def recompute_full(
         await _ensure_ds_loaded(ds_id)
         row_ids = row_ids_by_ds[ds_id]
         result = await _materialise_node(
-            conn, user_id, rec, ds_id, row_ids, state.graph, stored_ctx, state.by_node, state.names_by_ds, now,
+            conn, user_id, rec, ds_id, row_ids, state.graph, stored_ctx, related_ctx_by_ds[ds_id],
+            state.by_node, state.names_by_ds, now,
         )
         if result is None:
             continue
@@ -867,6 +960,17 @@ async def _recompute_row_with_state(
     stored_ctx = await _stored_values_for_rows(
         conn, user_id, data_source_id, [row_id], stored_props, relation_props
     )
+    # Built AFTER _stored_values_for_rows above -- reads this row's
+    # already-decoded relation-property list[Page] values out of stored_ctx
+    # (_build_related_properties's own docstring). Re-derived per row here
+    # (rather than cached across the cascade like recompute_full's
+    # `related_ctx_by_ds`) -- an incremental pass only ever touches a
+    # handful of rows per write, and `visited`/`budget` already bound the
+    # cascade's total size; the per-row cost of one extra fetch is not
+    # worth a second cache to keep in sync with `stored_ctx`'s.
+    related_properties = await _build_related_properties(
+        conn, user_id, [row_id], stored_ctx, relation_props, state.records
+    )
 
     written: dict[str, dict[str, Any] | None] = {}
     for node in state.order:
@@ -877,7 +981,8 @@ async def _recompute_row_with_state(
         if rec is None or rec["type"] not in ("formula", "rollup"):
             continue
         result = await _materialise_node(
-            conn, user_id, rec, ds_id, [row_id], state.graph, stored_ctx, state.by_node, state.names_by_ds, now,
+            conn, user_id, rec, ds_id, [row_id], state.graph, stored_ctx, related_properties,
+            state.by_node, state.names_by_ds, now,
         )
         if result is None:
             continue
