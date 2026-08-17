@@ -339,6 +339,104 @@ describe("TableView", () => {
     });
   });
 
+  describe("relation N+1 fix (task-31 Part 4)", () => {
+    // Live-verified bug this reproduces the shape of: 58 relation requests
+    // for a two-row table. Before this fix, TableView's own pre-fetch
+    // effect only ever warmed ONE relation column (whichever sub-item
+    // property matched the active display mode) — every OTHER relation
+    // column had no bulk pre-fetch at all, so each of ITS cells fell back
+    // to one `ensureRelationLinks` HTTP request per row: for M relation
+    // columns and N rows, that's O(N×M) requests, growing with the row
+    // count. The fix warms every relation column via
+    // `ensureRelationLinksBulk` — exactly one call per column (M calls
+    // total), each a single request covering every row id, regardless of
+    // how many rows there are: O(M), not O(N×M).
+    function manyRelationProps(count: number): PropertyResponse[] {
+      return Array.from({ length: count }, (_, i) =>
+        prop({
+          key: `rel${i}`,
+          name: `Relation ${i}`,
+          type: "relation",
+          position: 100 + i,
+          config: { relation_id: `rel-pair-${i}`, side: "forward", target_data_source_id: "ds-2" },
+        })
+      );
+    }
+
+    function manyRows(count: number): DatabaseRow[] {
+      return Array.from({ length: count }, (_, i) => ({
+        id: `row-${i}`,
+        properties: { title: { type: "title", title: `Row ${i}` } },
+      }));
+    }
+
+    it("issues exactly M ensureRelationLinksBulk calls (one per relation column) for N rows and M relation columns — NOT N×M", () => {
+      const M = 4;
+      const N = 12;
+      const relationProps = manyRelationProps(M);
+      const rows = manyRows(N);
+      const ensureRelationLinksBulk = vi.fn();
+
+      render(
+        <TableView
+          properties={[...PROPERTIES, ...relationProps]}
+          rows={rows}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={{}}
+          ensureRelationLinksBulk={ensureRelationLinksBulk}
+        />
+      );
+
+      // Exactly M calls (one per relation column) — a call count that
+      // would have been N×M = 48 before this fix (one per row per
+      // column, via each cell's own `ensureRelationLinks`), or even just
+      // 0 (no pre-fetch at all) for any non-sub-item relation column,
+      // leaving those N×M requests to individual cell mounts instead. A
+      // test that merely checked "data appears" would pass either way —
+      // this asserts the actual request-count shape.
+      expect(ensureRelationLinksBulk).toHaveBeenCalledTimes(M);
+      const allRowIds = rows.map((r) => r.id);
+      for (let i = 0; i < M; i++) {
+        expect(ensureRelationLinksBulk).toHaveBeenCalledWith(allRowIds, `rel${i}`);
+      }
+    });
+
+    it("stays at exactly M calls even as N grows — proves the call count is independent of row count", () => {
+      const M = 3;
+      const relationProps = manyRelationProps(M);
+      const ensureRelationLinksBulkSmall = vi.fn();
+      const ensureRelationLinksBulkLarge = vi.fn();
+
+      const { unmount } = render(
+        <TableView
+          properties={[...PROPERTIES, ...relationProps]}
+          rows={manyRows(2)}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={{}}
+          ensureRelationLinksBulk={ensureRelationLinksBulkSmall}
+        />
+      );
+      expect(ensureRelationLinksBulkSmall).toHaveBeenCalledTimes(M);
+      unmount();
+
+      render(
+        <TableView
+          properties={[...PROPERTIES, ...relationProps]}
+          rows={manyRows(50)}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={{}}
+          ensureRelationLinksBulk={ensureRelationLinksBulkLarge}
+        />
+      );
+      // Same M, 25x the rows — an O(N×M) implementation would call this 25x
+      // more; an O(M) one calls it exactly the same number of times.
+      expect(ensureRelationLinksBulkLarge).toHaveBeenCalledTimes(M);
+    });
+  });
+
   describe("sub-item nesting (task-22)", () => {
     const SUBITEM_FORWARD = prop({
       key: "subitem",
@@ -459,7 +557,7 @@ describe("TableView", () => {
       expect(screen.getByText(/↳ Parent/)).toBeInTheDocument();
     });
 
-    it("'show' mode: pre-fetches sub-item links via ensureRelationLinksBulk (ONE call for all visible rows), not one ensureRelationLinks call per row (M7 combined-review Important finding 3)", () => {
+    it("pre-fetches sub-item links (both forward AND reverse columns) via ensureRelationLinksBulk, not one ensureRelationLinks call per row (M7 combined-review Important finding 3, generalized by task-31 Part 4)", () => {
       const ensureRelationLinksBulk = vi.fn();
       // `ensureRelationLinks` is deliberately omitted here: TableView only
       // wires a relation column up to a live RelationCell (which calls
@@ -470,6 +568,11 @@ describe("TableView", () => {
       // RelationCell components for the sub-item/parent-item columns
       // would otherwise also call, which would make a bare call-count
       // assertion meaningless.
+      //
+      // task-31 Part 4: this effect no longer gates on `subItemDisplayMode`
+      // at all — it warms EVERY relation column (here: both "subitem" and
+      // "parentitem", since both are `type: "relation"` properties), so
+      // both fire regardless of which (if any) display mode is active.
       render(
         <TableView
           properties={PROPS_WITH_SUBITEMS}
@@ -482,28 +585,12 @@ describe("TableView", () => {
         />
       );
 
-      expect(ensureRelationLinksBulk).toHaveBeenCalledTimes(1);
+      expect(ensureRelationLinksBulk).toHaveBeenCalledTimes(2);
       expect(ensureRelationLinksBulk).toHaveBeenCalledWith(["parent-1", "child-1"], "subitem");
-    });
-
-    it("'flattened' mode: pre-fetches via ensureRelationLinksBulk using the reverse (parent item) property key", () => {
-      const ensureRelationLinksBulk = vi.fn();
-      render(
-        <TableView
-          properties={PROPS_WITH_SUBITEMS}
-          rows={TREE_ROWS}
-          editable={true}
-          onCellChange={vi.fn()}
-          relationLinks={{ "child-1:parentitem": [{ id: "parent-1", title: "Parent" }] }}
-          ensureRelationLinksBulk={ensureRelationLinksBulk}
-          subItemDisplayMode="flattened"
-        />
-      );
-
       expect(ensureRelationLinksBulk).toHaveBeenCalledWith(["parent-1", "child-1"], "parentitem");
     });
 
-    it("falls back to one ensureRelationLinks call per row when ensureRelationLinksBulk is omitted (older/other caller)", () => {
+    it("falls back to one ensureRelationLinks call per row per relation column when ensureRelationLinksBulk is omitted (older/other caller)", () => {
       const ensureRelationLinks = vi.fn();
       // `setRelationLinks` is deliberately omitted (same reasoning as
       // above, inverted): without it, `renderCellValue`'s relationExtras
@@ -526,7 +613,9 @@ describe("TableView", () => {
 
       expect(ensureRelationLinks).toHaveBeenCalledWith("parent-1", "subitem");
       expect(ensureRelationLinks).toHaveBeenCalledWith("child-1", "subitem");
-      expect(ensureRelationLinks).toHaveBeenCalledTimes(2);
+      expect(ensureRelationLinks).toHaveBeenCalledWith("parent-1", "parentitem");
+      expect(ensureRelationLinks).toHaveBeenCalledWith("child-1", "parentitem");
+      expect(ensureRelationLinks).toHaveBeenCalledTimes(4);
     });
 
     it("with no sub-item display mode set, renders flat with no tree/indicator controls at all", () => {

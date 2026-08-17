@@ -158,38 +158,52 @@ export function TableView({
     [orderedProperties]
   );
 
-  // Pre-fetch every visible row's sub-item links up front (needed to know
-  // who's a root/parent/child *before* any row renders) — not on individual
-  // cell mount the way an ordinary relation column's cells do. Keyed to
-  // `rows`'s identity (changes once per `loadRows()` completion) and the
-  // mode/property, deliberately NOT to `ensureRelationLinksBulk`'s/
-  // `ensureRelationLinks`'s own identity (which changes on every single
-  // cache write — see useDatabaseView.ts's comment on why) or this effect
-  // would re-issue a full "already cached, no-op" pass on every fetch's
-  // completion.
+  // Every relation-type property on this data source (task-31 Part 4) —
+  // ordinary relations AND the sub-item/dependency system pairs alike, since
+  // all of them are plain `type: "relation"` properties that get their own
+  // column/RelationCell. Used below to bulk-warm the WHOLE relationLinks
+  // cache for the whole page in one pass, not just the one sub-item column
+  // the pre-task version singled out.
+  const relationPropertyKeys = useMemo(
+    () => orderedProperties.filter((p) => p.type === "relation").map((p) => p.key),
+    [orderedProperties]
+  );
+
+  // Pre-fetch every visible row's links for EVERY relation column up front,
+  // not on individual cell mount the way each RelationCell's own effect
+  // still separately does. Keyed to `rows`'s identity (changes once per
+  // `loadRows()` completion) and the joined set of relation keys,
+  // deliberately NOT to `ensureRelationLinksBulk`'s/`ensureRelationLinks`'s
+  // own identity (which changes on every single cache write — see
+  // useDatabaseView.ts's comment on why) or this effect would re-issue a
+  // full "already cached, no-op" pass on every fetch's completion.
   //
-  // M7 combined-review Important finding 3: this used to call
-  // `ensureRelationLinks` once per row in a loop — one HTTP request per
-  // visible row for a single sub-item column, even though
-  // `services.db.relations.list_links_bulk` (built by task 20 explicitly
-  // to avoid exactly this) existed unused. `ensureRelationLinksBulk` (one
-  // request for the whole page) is now preferred; the per-row loop is a
-  // fallback only for a caller that hasn't wired it through yet.
+  // task-31 Part 4 (live-verified: 58 relation requests for a two-row
+  // table): this used to warm the cache for ONLY whichever single sub-item
+  // property matched the active `subItemDisplayMode` (M7 combined-review
+  // Important finding 3) — every OTHER relation column (an ordinary
+  // "Blocking"/"Related" property, or the sub-item property when no
+  // display mode is even set) had no bulk pre-fetch at all, leaving each of
+  // ITS cells to fall back to one `ensureRelationLinks` HTTP request per
+  // row (task-20's `list_links_bulk`/`ensureRelationLinksBulk` sat unused
+  // for exactly the columns that needed it most). Generalizing to every
+  // relation column folds the old sub-item-only pre-fetch into this same
+  // mechanism — `subItemDisplayMode`/`subItemForwardProp`/
+  // `subItemReverseProp` no longer gate what gets warmed here (they're
+  // still used below for the tree/flattened-mode rendering itself).
   useEffect(() => {
-    const key =
-      subItemDisplayMode === "show"
-        ? subItemForwardProp?.key
-        : subItemDisplayMode === "flattened"
-          ? subItemReverseProp?.key
-          : undefined;
-    if (!key) return;
+    if (relationPropertyKeys.length === 0) return;
+    const rowIds = rows.map((row) => row.id);
+    if (rowIds.length === 0) return;
     if (ensureRelationLinksBulk) {
-      ensureRelationLinksBulk(rows.map((row) => row.id), key);
+      for (const key of relationPropertyKeys) ensureRelationLinksBulk(rowIds, key);
     } else if (ensureRelationLinks) {
-      for (const row of rows) ensureRelationLinks(row.id, key);
+      for (const key of relationPropertyKeys) {
+        for (const row of rows) ensureRelationLinks(row.id, key);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, subItemDisplayMode, subItemForwardProp?.key, subItemReverseProp?.key]);
+  }, [rows, relationPropertyKeys.join("|")]);
 
   const treeEntries = useMemo(() => {
     if (subItemDisplayMode !== "show" || !subItemForwardProp || !relationLinks) return null;
