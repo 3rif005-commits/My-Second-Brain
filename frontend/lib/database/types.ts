@@ -372,6 +372,27 @@ export interface FormulaValidateResponse {
   is_volatile: boolean;
 }
 
+/** Mirrors `backend/services/db/rollup.py`'s `ROLLUP_FUNCTIONS` verbatim —
+ * task-31-brief.md §3: "fetch/mirror that list, do not invent one." There is
+ * no dedicated endpoint that returns this list; it's small, fixed, and
+ * documented (research §3.7's 22 functions, NOT the research document's own
+ * 24 -- `count_per_group`/`percent_per_group` are excluded server-side too,
+ * see that module's own comment), so mirroring it here is the same
+ * trade-off `DATE_SHIFT_MODES` above already made for
+ * `services.db.relations.DATE_SHIFT_MODES`. A future rename on the backend
+ * side won't silently drift here since `test_rollup.py` pins the backend's
+ * own set equality against `aggregations.py` — this array is simply
+ * expected to be kept in lockstep by hand. */
+export const ROLLUP_FUNCTIONS = [
+  "average", "checked", "count", "count_values", "date_range",
+  "earliest_date", "empty", "latest_date", "max", "median", "min",
+  "not_empty", "percent_checked", "percent_empty", "percent_not_empty",
+  "percent_unchecked", "range", "show_original", "show_unique", "sum",
+  "unchecked", "unique",
+] as const;
+
+export type RollupFunction = (typeof ROLLUP_FUNCTIONS)[number];
+
 /** The 8 property `type` strings this UI has a dedicated cell component for. */
 export const KNOWN_PROPERTY_TYPES = [
   "title",

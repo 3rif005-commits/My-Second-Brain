@@ -32,8 +32,9 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useToast } from "@/app/providers";
-import { KNOWN_PROPERTY_TYPES, findSystemRelationProperty } from "@/lib/database/types";
+import { KNOWN_PROPERTY_TYPES, ROLLUP_FUNCTIONS, findSystemRelationProperty } from "@/lib/database/types";
 import type {
+  DatabaseDetailResponse,
   DatabaseListResponse,
   DatabaseRow,
   DatabaseSummary,
@@ -44,6 +45,7 @@ import type {
 } from "@/lib/database/types";
 import { renderCellValue } from "../cells/renderCellValue";
 import { buildSubItemTree } from "@/lib/database/subItemTree";
+import { FormulaEditor } from "../FormulaEditor";
 
 interface TableViewProps {
   properties: PropertyResponse[];
@@ -107,8 +109,6 @@ const columnHelper = createColumnHelper<DatabaseRow>();
 // task-31: M7/M8 shipped complete, tested engines (relation/formula/rollup)
 // that were unreachable for creation through this exact list — it only
 // carried the 7 basic types, so a user could build none of the three.
-// "relation" is added here; "formula"/"rollup" are Parts 2/3 of the same
-// task, landing in later commits.
 const ADDABLE_PROPERTY_TYPES: { value: string; label: string }[] = [
   { value: "rich_text", label: "Text" },
   { value: "number", label: "Number" },
@@ -118,6 +118,8 @@ const ADDABLE_PROPERTY_TYPES: { value: string; label: string }[] = [
   { value: "date", label: "Date" },
   { value: "checkbox", label: "Checkbox" },
   { value: "relation", label: "Relation" },
+  { value: "formula", label: "Formula" },
+  { value: "rollup", label: "Rollup" },
 ];
 
 /** Best-effort message extraction from a failed POST, matching the pattern
@@ -154,17 +156,37 @@ export function TableView({
   const [rowSubmitting, setRowSubmitting] = useState(false);
   // task-31 Part 1: relation-only fields, collected by the same inline
   // add-property form rather than a parallel one. `databases` is fetched
-  // lazily (only once the user actually picks "Relation" — no reason to pay
-  // for `GET /db/databases` on every ordinary "add a Text property") from
-  // `GET /db/databases` (commit 397ba23), which is what a relation's target
-  // picker enumerates. Self-relations (target == this data source) are
-  // legal and are NOT filtered out of this list — the current database is
-  // just another entry the user owns.
+  // lazily (only once the user actually picks "Relation" or "Rollup" — no
+  // reason to pay for `GET /db/databases` on every ordinary "add a Text
+  // property") from `GET /db/databases` (commit 397ba23), which is what a
+  // relation's target picker AND a rollup's target-property picker (Part 3,
+  // below — it needs to resolve the chosen relation's own target data
+  // source to a `database_id` before it can fetch that database's
+  // properties) both enumerate. Self-relations (target == this data source)
+  // are legal and are NOT filtered out of this list — the current database
+  // is just another entry the user owns.
   const [databases, setDatabases] = useState<DatabaseSummary[] | null>(null);
   const [databasesLoading, setDatabasesLoading] = useState(false);
   const [targetDataSourceId, setTargetDataSourceId] = useState("");
   const [twoWay, setTwoWay] = useState(true);
   const [reverseName, setReverseName] = useState("");
+  // task-31 Part 2: a formula property's only real field is its expression
+  // — `FormulaEditor` (Task 28) owns its own validation UI; this form only
+  // needs somewhere to hold the current draft between keystrokes and submit.
+  const [formulaExpression, setFormulaExpression] = useState("");
+  // task-31 Part 3: a rollup needs a relation property ON THIS data source
+  // to roll up through, a property on THAT relation's own target data
+  // source to aggregate, and one of the 22 documented functions.
+  // `target_data_source_id` is never chosen directly by the user — it's
+  // derived from the chosen relation's own `config.target_data_source_id`
+  // (the backend rejects any other value: `_validate_and_prepare_computed_
+  // property`'s "config.target_data_source_id must match relation's own
+  // target").
+  const [rollupRelationKey, setRollupRelationKey] = useState("");
+  const [rollupTargetKey, setRollupTargetKey] = useState("");
+  const [rollupFunction, setRollupFunction] = useState("");
+  const [targetProperties, setTargetProperties] = useState<PropertyResponse[] | null>(null);
+  const [targetPropertiesLoading, setTargetPropertiesLoading] = useState(false);
   // Sub-item "show" mode's expand/collapse state (task-22-brief.md §3) —
   // every row starts expanded (empty set), matching Notion's own default.
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
@@ -187,16 +209,20 @@ export function TableView({
     [orderedProperties]
   );
 
-  // Every relation-type property on this data source (task-31 Part 4) —
+  // Every relation-type property on this data source (task-31 Parts 3/4) —
   // ordinary relations AND the sub-item/dependency system pairs alike, since
   // all of them are plain `type: "relation"` properties that get their own
   // column/RelationCell. Used below to bulk-warm the WHOLE relationLinks
-  // cache for the whole page in one pass, not just the one sub-item column
-  // the pre-task version singled out.
-  const relationPropertyKeys = useMemo(
-    () => orderedProperties.filter((p) => p.type === "relation").map((p) => p.key),
+  // cache for the whole page in one pass (Part 4), AND as the rollup form's
+  // "which relation do you want to roll up through" dropdown (Part 3) — a
+  // rollup can only roll up through a relation that already exists on THIS
+  // data source, so an empty list here is exactly the "add a relation
+  // property first" case task-31-brief.md §3 calls out.
+  const relationProperties = useMemo(
+    () => orderedProperties.filter((p) => p.type === "relation"),
     [orderedProperties]
   );
+  const relationPropertyKeys = useMemo(() => relationProperties.map((p) => p.key), [relationProperties]);
 
   // Pre-fetch every visible row's links for EVERY relation column up front,
   // not on individual cell mount the way each RelationCell's own effect
@@ -303,14 +329,18 @@ export function TableView({
     setTargetDataSourceId("");
     setTwoWay(true);
     setReverseName("");
+    setFormulaExpression("");
+    setRollupRelationKey("");
+    setRollupTargetKey("");
+    setRollupFunction("");
   }
 
   // Lazy-loads `GET /db/databases` (commit 397ba23) the first time the user
-  // actually picks "Relation" in the type dropdown — not on every "Add
-  // property" open, which would pay for the fetch even for an ordinary Text
-  // property. `databases` is cached for the lifetime of this mount (a
-  // brand-new database created *while* this form is open is an edge case
-  // not worth a refetch-on-every-keystroke for).
+  // actually picks "Relation" or "Rollup" in the type dropdown — not on
+  // every "Add property" open, which would pay for the fetch even for an
+  // ordinary Text property. `databases` is cached for the lifetime of this
+  // mount (a brand-new database created *while* this form is open is an
+  // edge case not worth a refetch-on-every-keystroke for).
   //
   // Guarded by a REF, not by reading `databases`/`databasesLoading` state in
   // this same effect's own deps: `setDatabasesLoading(true)` below is itself
@@ -323,7 +353,12 @@ export function TableView({
   // across the resulting re-render untouched.
   const databasesFetchStarted = useRef(false);
   useEffect(() => {
-    if (propertyType !== "relation" || databasesFetchStarted.current) return;
+    if (
+      (propertyType !== "relation" && propertyType !== "rollup") ||
+      databasesFetchStarted.current
+    ) {
+      return;
+    }
     databasesFetchStarted.current = true;
     let cancelled = false;
     setDatabasesLoading(true);
@@ -346,6 +381,51 @@ export function TableView({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propertyType]);
+
+  // task-31 Part 3: once a rollup's relation is chosen, resolve that
+  // relation's own `config.target_data_source_id` to a `database_id` (via
+  // the `databases` list above) and fetch THAT database's properties for
+  // the "which property to aggregate" dropdown — `GET /db/databases/{id}`
+  // (Milestone 2) is the only endpoint that returns a data source's
+  // properties; there's no "properties by data_source_id" endpoint.
+  // Deliberately NOT guarded by a ref the way the `databases` fetch above
+  // is: this one legitimately needs to re-run every time the user picks a
+  // DIFFERENT relation (a new target), and neither `targetProperties` nor
+  // `targetPropertiesLoading` are in this effect's own deps, so there's no
+  // self-cancellation risk here the way there was above.
+  useEffect(() => {
+    setTargetProperties(null);
+    if (propertyType !== "rollup" || !rollupRelationKey || !databases) return;
+    const relationProp = orderedProperties.find(
+      (p) => p.type === "relation" && p.key === rollupRelationKey
+    );
+    const targetDsId =
+      typeof relationProp?.config?.target_data_source_id === "string"
+        ? (relationProp.config.target_data_source_id as string)
+        : undefined;
+    const targetDb = targetDsId ? databases.find((d) => d.data_source.id === targetDsId) : undefined;
+    if (!targetDb) return;
+    let cancelled = false;
+    setTargetPropertiesLoading(true);
+    fetch(`/api/db/databases/${targetDb.database.id}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(await errorMessage(res));
+        const data: DatabaseDetailResponse = await res.json();
+        if (!cancelled) setTargetProperties(data.properties);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          showToast(err instanceof Error ? err.message : "Could not load the target database's properties", "error");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTargetPropertiesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propertyType, rollupRelationKey, databases, orderedProperties]);
 
   async function handleAddPropertySubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -374,6 +454,65 @@ export function TableView({
             target_data_source_id: targetDataSourceId,
             two_way: twoWay,
             reverse_name: twoWay ? reverseName.trim() : null,
+          }),
+        });
+        if (!res.ok) throw new Error(await errorMessage(res));
+      } else if (propertyType === "formula") {
+        // task-31 Part 2, research §1.9 (quoted in task-31-brief.md §2): "a
+        // formula with errors can still be saved... the property will
+        // display nothing" — this deliberately does NOT gate on
+        // `FormulaEditor`'s own `valid` state, only on a non-empty
+        // expression (the one thing the backend hard-rejects regardless of
+        // parse/typecheck outcome). A dependency cycle is the other hard
+        // rejection, but that can only be discovered server-side (it needs
+        // the whole property graph) — its 400 message, which already
+        // carries the offending cycle path, surfaces as-is via
+        // `propertyFormError` below, same as every other save error here.
+        if (!formulaExpression.trim()) {
+          throw new Error("Formula expression is required");
+        }
+        const res = await fetch(`/api/db/data-sources/${dataSourceId}/properties`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: propertyName.trim() || "Formula",
+            type: "formula",
+            config: { expression: formulaExpression },
+          }),
+        });
+        if (!res.ok) throw new Error(await errorMessage(res));
+      } else if (propertyType === "rollup") {
+        if (!rollupRelationKey) {
+          throw new Error("Choose a relation property to roll up through");
+        }
+        if (!rollupTargetKey) {
+          throw new Error("Choose a property on the target database");
+        }
+        if (!rollupFunction) {
+          throw new Error("Choose a rollup function");
+        }
+        const relationProp = orderedProperties.find(
+          (p) => p.type === "relation" && p.key === rollupRelationKey
+        );
+        const targetDsId =
+          typeof relationProp?.config?.target_data_source_id === "string"
+            ? (relationProp.config.target_data_source_id as string)
+            : undefined;
+        if (!targetDsId) {
+          throw new Error("The chosen relation has no configured target database");
+        }
+        const res = await fetch(`/api/db/data-sources/${dataSourceId}/properties`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: propertyName.trim() || "Rollup",
+            type: "rollup",
+            config: {
+              relation_key: rollupRelationKey,
+              target_data_source_id: targetDsId,
+              target_key: rollupTargetKey,
+              function: rollupFunction,
+            },
           }),
         });
         if (!res.ok) throw new Error(await errorMessage(res));
@@ -492,6 +631,80 @@ export function TableView({
                               placeholder="Reverse property name"
                               className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                             />
+                          )}
+                        </>
+                      )}
+                      {propertyType === "formula" && dataSourceId && (
+                        // basis-full: FormulaEditor's textarea + validation
+                        // UI is too tall for the name/type row itself — this
+                        // wraps it onto its own line (the form is
+                        // `flex-wrap`), Add/Cancel following below it.
+                        // Deliberately NOT gated on `valid: true` (see the
+                        // submit handler's own comment) — FormulaEditor
+                        // renders its own error list so the user can see
+                        // why, but "Add" stays enabled either way.
+                        <div className="basis-full">
+                          <FormulaEditor
+                            dataSourceId={dataSourceId}
+                            expression={formulaExpression}
+                            onExpressionChange={setFormulaExpression}
+                          />
+                        </div>
+                      )}
+                      {propertyType === "rollup" && (
+                        <>
+                          {relationProperties.length === 0 ? (
+                            <span className="text-xs text-amber-600 dark:text-amber-400 basis-full">
+                              Add a relation property first — a rollup needs one to roll up through.
+                            </span>
+                          ) : (
+                            <>
+                              <select
+                                aria-label="Rollup relation"
+                                value={rollupRelationKey}
+                                onChange={(e) => {
+                                  setRollupRelationKey(e.target.value);
+                                  setRollupTargetKey("");
+                                }}
+                                className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                              >
+                                <option value="">Choose a relation…</option>
+                                {relationProperties.map((p) => (
+                                  <option key={p.key} value={p.key}>
+                                    {p.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                aria-label="Rollup target property"
+                                value={rollupTargetKey}
+                                onChange={(e) => setRollupTargetKey(e.target.value)}
+                                disabled={!rollupRelationKey}
+                                className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 disabled:opacity-40"
+                              >
+                                <option value="">
+                                  {targetPropertiesLoading ? "Loading properties…" : "Choose a property…"}
+                                </option>
+                                {targetProperties?.map((p) => (
+                                  <option key={p.key} value={p.key}>
+                                    {p.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                aria-label="Rollup function"
+                                value={rollupFunction}
+                                onChange={(e) => setRollupFunction(e.target.value)}
+                                className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                              >
+                                <option value="">Choose a function…</option>
+                                {ROLLUP_FUNCTIONS.map((fn) => (
+                                  <option key={fn} value={fn}>
+                                    {fn}
+                                  </option>
+                                ))}
+                              </select>
+                            </>
                           )}
                         </>
                       )}

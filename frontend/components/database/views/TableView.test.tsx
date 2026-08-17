@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TableView } from "./TableView";
-import { KNOWN_PROPERTY_TYPES } from "@/lib/database/types";
+import { KNOWN_PROPERTY_TYPES, ROLLUP_FUNCTIONS } from "@/lib/database/types";
 import type { DatabaseRow, PropertyResponse, RelatedRow } from "@/lib/database/types";
 
 function jsonResponse(body: unknown, status = 200) {
@@ -171,7 +171,7 @@ describe("TableView", () => {
       expect(screen.getByLabelText(/add property/i)).toBeInTheDocument();
     });
 
-    it("offers the 7 non-title KNOWN_PROPERTY_TYPES plus relation in its type picker (task-31 Part 1)", async () => {
+    it("offers the 7 non-title KNOWN_PROPERTY_TYPES plus relation/formula/rollup in its type picker (task-31)", async () => {
       const user = userEvent.setup();
       render(
         <TableView
@@ -186,9 +186,14 @@ describe("TableView", () => {
       await user.click(screen.getByLabelText(/add property/i));
       const select = screen.getByLabelText(/property type/i) as HTMLSelectElement;
       const values = Array.from(select.options).map((o) => o.value);
-      expect(values).toEqual([...KNOWN_PROPERTY_TYPES.filter((t) => t !== "title"), "relation"]);
+      expect(values).toEqual([
+        ...KNOWN_PROPERTY_TYPES.filter((t) => t !== "title"),
+        "relation",
+        "formula",
+        "rollup",
+      ]);
       expect(values).not.toContain("title");
-      expect(values).toHaveLength(8);
+      expect(values).toHaveLength(10);
     });
 
     it("submitting POSTs {name, type} to the properties endpoint, then refetches", async () => {
@@ -425,6 +430,279 @@ describe("TableView", () => {
       expect(await screen.findByText(/choose a target database/i)).toBeInTheDocument();
       expect(fetchMock).not.toHaveBeenCalledWith(
         "/api/db/data-sources/ds-1/relations",
+        expect.anything()
+      );
+    });
+  });
+
+  describe("Add formula property (task-31 Part 2)", () => {
+    function stubFetch() {
+      return vi.fn().mockImplementation((url: string) => {
+        if (typeof url === "string" && url.includes("/formulas/validate")) {
+          return Promise.resolve(
+            jsonResponse({
+              valid: false,
+              errors: [{ message: "unexpected token 'EOF'", pos: 1, line: 1, col: 2 }],
+              result_type: null,
+              referenced_properties: [],
+              is_volatile: false,
+            })
+          );
+        }
+        return Promise.resolve(jsonResponse({ id: "prop-formula" }, 201));
+      });
+    }
+
+    it("selecting Formula renders the FormulaEditor's expression textarea", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("fetch", stubFetch());
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.selectOptions(screen.getByLabelText(/property type/i), "formula");
+      expect(screen.getByRole("textbox", { name: /formula expression/i })).toBeInTheDocument();
+    });
+
+    it("submits {type: \"formula\", config: {expression}} to the properties endpoint even while the expression still has parse errors -- the Create button is NOT gated on valid: true (research §1.9)", async () => {
+      const user = userEvent.setup();
+      const refetch = vi.fn().mockResolvedValue(undefined);
+      const fetchMock = stubFetch();
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={refetch}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.type(screen.getByLabelText(/property name/i), "Total");
+      await user.selectOptions(screen.getByLabelText(/property type/i), "formula");
+      // A deliberately unparseable expression -- the validate endpoint
+      // (stubbed above) reports it invalid, and this test does NOT wait for
+      // that response before submitting, proving Add works regardless.
+      await user.type(screen.getByRole("textbox", { name: /formula expression/i }), 'prop("Price") *');
+      await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+      await waitFor(() => expect(refetch).toHaveBeenCalled());
+      const propsCall = fetchMock.mock.calls.find(([url]) => url === "/api/db/data-sources/ds-1/properties");
+      expect(propsCall).toBeDefined();
+      expect(JSON.parse(propsCall![1].body as string)).toEqual({
+        name: "Total",
+        type: "formula",
+        config: { expression: 'prop("Price") *' },
+      });
+    });
+
+    it("does not submit an empty expression, and shows an error instead", async () => {
+      const user = userEvent.setup();
+      const fetchMock = stubFetch();
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.selectOptions(screen.getByLabelText(/property type/i), "formula");
+      await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+      expect(await screen.findByText(/formula expression is required/i)).toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        "/api/db/data-sources/ds-1/properties",
+        expect.anything()
+      );
+    });
+
+    it("surfaces a dependency-cycle rejection's message verbatim", async () => {
+      const user = userEvent.setup();
+      const fetchMock = vi.fn().mockImplementation((url: string) => {
+        if (typeof url === "string" && url.includes("/formulas/validate")) {
+          return Promise.resolve(
+            jsonResponse({ valid: true, errors: [], result_type: "number", referenced_properties: [], is_volatile: false })
+          );
+        }
+        return Promise.resolve(
+          jsonResponse({ detail: "saving this formula would create a dependency cycle: A -> B -> A" }, 400)
+        );
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.selectOptions(screen.getByLabelText(/property type/i), "formula");
+      await user.type(screen.getByRole("textbox", { name: /formula expression/i }), 'prop("B")');
+      await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+      expect(await screen.findByText(/dependency cycle: A -> B -> A/i)).toBeInTheDocument();
+    });
+  });
+
+  describe("Add rollup property (task-31 Part 3)", () => {
+    const RELATION_PROP = prop({
+      key: "related",
+      name: "Related tasks",
+      type: "relation",
+      position: 9,
+      config: { relation_id: "rel-1", side: "forward", target_data_source_id: "ds-2" },
+    });
+    const PROPS_WITH_RELATION = [...PROPERTIES, RELATION_PROP];
+
+    const DATABASES_RESPONSE = {
+      databases: [
+        { database: { id: "db-1", title: "This Database" }, data_source: { id: "ds-1" } },
+        { database: { id: "db-2", title: "Other Database" }, data_source: { id: "ds-2" } },
+      ],
+    };
+    const TARGET_DETAIL_RESPONSE = {
+      database: { id: "db-2" },
+      data_source: { id: "ds-2" },
+      properties: [
+        prop({ key: "target_title", name: "Title", type: "title" }),
+        prop({ key: "target_num", name: "Amount", type: "number" }),
+      ],
+      views: [],
+    };
+
+    function stubFetch() {
+      return vi.fn().mockImplementation((url: string) => {
+        if (url === "/api/db/databases") return Promise.resolve(jsonResponse(DATABASES_RESPONSE));
+        if (url === "/api/db/databases/db-2") return Promise.resolve(jsonResponse(TARGET_DETAIL_RESPONSE));
+        return Promise.resolve(jsonResponse({ id: "prop-rollup" }, 201));
+      });
+    }
+
+    it('says "add a relation property first" instead of offering an empty dropdown when this data source has no relation properties', async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("fetch", stubFetch());
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.selectOptions(screen.getByLabelText(/property type/i), "rollup");
+      expect(screen.getByText(/add a relation property first/i)).toBeInTheDocument();
+      expect(screen.queryByLabelText(/rollup relation/i)).not.toBeInTheDocument();
+    });
+
+    it("the function dropdown offers exactly the 22 ROLLUP_FUNCTIONS", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("fetch", stubFetch());
+      render(
+        <TableView
+          properties={PROPS_WITH_RELATION}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.selectOptions(screen.getByLabelText(/property type/i), "rollup");
+      const select = screen.getByLabelText(/rollup function/i) as HTMLSelectElement;
+      const values = Array.from(select.options).map((o) => o.value).filter(Boolean);
+      expect(values).toEqual([...ROLLUP_FUNCTIONS]);
+      expect(values).toHaveLength(22);
+    });
+
+    it("choosing a relation fetches the target database's properties for the target-property dropdown, and submitting POSTs the full computed config", async () => {
+      const user = userEvent.setup();
+      const refetch = vi.fn().mockResolvedValue(undefined);
+      const fetchMock = stubFetch();
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TableView
+          properties={PROPS_WITH_RELATION}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={refetch}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.type(screen.getByLabelText(/property name/i), "Total Amount");
+      await user.selectOptions(screen.getByLabelText(/property type/i), "rollup");
+      await user.selectOptions(screen.getByLabelText(/rollup relation/i), "related");
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/db/databases/db-2"));
+      await user.selectOptions(await screen.findByLabelText(/rollup target property/i), "target_num");
+      await user.selectOptions(screen.getByLabelText(/rollup function/i), "sum");
+      await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+      await waitFor(() => expect(refetch).toHaveBeenCalled());
+      const propsCall = fetchMock.mock.calls.find(([url]) => url === "/api/db/data-sources/ds-1/properties");
+      expect(propsCall).toBeDefined();
+      expect(JSON.parse(propsCall![1].body as string)).toEqual({
+        name: "Total Amount",
+        type: "rollup",
+        config: {
+          relation_key: "related",
+          target_data_source_id: "ds-2",
+          target_key: "target_num",
+          function: "sum",
+        },
+      });
+    });
+
+    it("does not submit without a chosen target property or function, and shows an error instead", async () => {
+      const user = userEvent.setup();
+      const fetchMock = stubFetch();
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(
+        <TableView
+          properties={PROPS_WITH_RELATION}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetch={vi.fn()}
+        />
+      );
+      await user.click(screen.getByLabelText(/add property/i));
+      await user.selectOptions(screen.getByLabelText(/property type/i), "rollup");
+      await user.selectOptions(screen.getByLabelText(/rollup relation/i), "related");
+      await user.click(screen.getByRole("button", { name: /^add$/i }));
+
+      expect(await screen.findByText(/choose a property on the target database/i)).toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        "/api/db/data-sources/ds-1/properties",
         expect.anything()
       );
     });
