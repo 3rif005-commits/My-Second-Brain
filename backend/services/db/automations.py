@@ -717,7 +717,14 @@ async def _execute_and_record_error(
     action-chain exception is caught, logged ... always, for visibility/debugging, but
     is_active is left untouched") -- never re-raised, so this automation's failure
     can't roll back the caller's own, already-good transaction, and can't stop the next
-    due automation in the same run."""
+    due automation in the same run.
+
+    A SUCCESSFUL run clears a stale `last_error` from some earlier failed run --
+    decision 10 doesn't rule on this explicitly, but "last_error" naming the error from
+    the automation's most recent run (not "the most recent error it ever had, even
+    three successful runs ago") is the only reading that keeps the field meaningful as
+    a live health signal rather than a permanent, increasingly-stale scar. Flagged in
+    task-38-report.md as a judgment call beyond decision 10's own text."""
     try:
         async with conn.transaction():
             await execute_action_chain(
@@ -730,6 +737,15 @@ async def _execute_and_record_error(
             WHERE id = $2 AND user_id = $3
             """,
             str(exc)[:2000],
+            automation_id,
+            user_id,
+        )
+    else:
+        await conn.execute(
+            """
+            UPDATE db_automations SET last_error = NULL, updated_at = now()
+            WHERE id = $1 AND user_id = $2 AND last_error IS NOT NULL
+            """,
             automation_id,
             user_id,
         )

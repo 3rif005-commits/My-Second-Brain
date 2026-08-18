@@ -818,3 +818,20 @@ async def test_a_failing_automation_does_not_stop_another_due_automation(client,
         "SELECT last_error FROM db_automations WHERE id = $1", failing_id
     )
     assert failing_row["last_error"] is not None
+
+
+async def test_a_successful_run_clears_a_stale_last_error(client, db_conn, test_user):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    automation_id = await _insert_automation(
+        db_conn, test_user, ds_id,
+        triggers=[{"type": "page_added"}],
+        actions=[{"type": "send_notification", "message": "ok now"}],
+        last_error="a stale error from a previous run",
+    )
+
+    res = await client.post(f"/db/data-sources/{ds_id}/rows")
+    assert res.status_code == 201, res.text
+
+    row = await db_conn.fetchrow("SELECT last_error FROM db_automations WHERE id = $1", automation_id)
+    assert row["last_error"] is None
