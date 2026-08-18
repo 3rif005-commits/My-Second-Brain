@@ -91,6 +91,7 @@ from services.db.relations import (
     relation_ref_from_config,
     unlink,
 )
+from services.db.rows import create_row_core
 from services.db.views import sweep_property_from_views
 
 router = APIRouter(prefix="/db", tags=["databases"])
@@ -1173,6 +1174,9 @@ async def create_row(
     to `notes.id` — so this creates the underlying `notes` row first, then
     the `db_row_props` companion row referencing it, in one transaction:
     both succeed or neither does, the same pattern as `create_database`.
+    The transactional core lives in `services/db/rows.py`'s
+    `create_row_core` (task-37 extraction) — this handler is now just the
+    data-source ownership check plus a thin dispatch.
 
     Minimal version: an untitled note with empty `properties` (`{}`, the
     column default — spec §3.3: "Absent key ≡ empty," so an empty
@@ -1197,44 +1201,7 @@ async def create_row(
     if ds_row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
 
-    async with conn.transaction():
-        note_row = await conn.fetchrow(
-            """
-            INSERT INTO notes (user_id, title)
-            VALUES ($1, 'Untitled')
-            RETURNING id
-            """,
-            user_id,
-        )
-        # Review round 2, minor finding: without an explicit position, every
-        # created row defaults to 0 (migration 014), so list_rows's
-        # `ORDER BY position` is an unbroken tie among them and rows can
-        # visibly reshuffle between GETs once 2+ exist. Append to the end.
-        row = await conn.fetchrow(
-            """
-            INSERT INTO db_row_props (note_id, data_source_id, user_id, position)
-            VALUES ($1, $2, $3,
-                    COALESCE(
-                        (SELECT MAX(position) + 1 FROM db_row_props
-                         WHERE data_source_id = $2 AND user_id = $3),
-                        0))
-            RETURNING note_id, properties
-            """,
-            note_row["id"],
-            data_source_id,
-            user_id,
-        )
-        # Milestone 8 (task-28-brief.md §3): "row write (update_row_property,
-        # create_row) -> incremental recompute of that row." A brand-new row
-        # has no stored properties yet, so most formulas will materialise to
-        # EMPTY/omitted -- but a formula with no property references at all
-        # (e.g. a constant expression, or one that only calls `context(...)`)
-        # still needs a value the instant the row exists, not "whenever some
-        # unrelated write happens to touch it." Inside the same transaction
-        # as the insert, matching the brief's "if recompute raises, the
-        # write rolls back" standing instruction.
-        await recompute.recompute_row(conn, user_id, data_source_id, str(row["note_id"]))
-    return RowResponse(id=str(row["note_id"]), properties=row["properties"])
+    return await create_row_core(conn, user_id, data_source_id)
 
 
 @router.patch("/data-sources/{data_source_id}/rows/{note_id}", response_model=RowResponse)
