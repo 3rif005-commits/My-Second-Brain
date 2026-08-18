@@ -218,8 +218,21 @@ async def run_button_actions(
     `confirmed` is set onto `ctx` before running — the caller (the router) builds
     `ctx` without needing to know about `confirmed` itself; this is the one seam where
     that request-body field actually reaches the action chain.
+
+    `ctx.allow_triggering_automations = True` (post-M12 live-check fix, controller-
+    added): unlike an automation's own action chain (which must never re-trigger
+    automations — the recursion guard `ActionContext`'s own docstring documents), a
+    BUTTON'S action chain legitimately should — research §J.6.7: "Buttons can trigger
+    database automations — unlike automations themselves ... A user clicking a button
+    that creates a page WILL trigger a database automation." Live-verified against the
+    running app before this fix that it was silently NOT happening (a button's
+    `add_page_to` created the row but the target data source's `page_added` automation
+    never fired); this is the one-line fix for that, set here so BOTH button surfaces
+    (property click, block click) get it for free without either router endpoint
+    needing to know about it.
     """
     ctx.confirmed = confirmed
+    ctx.allow_triggering_automations = True
     try:
         result = await execute_action_chain(conn, ctx, actions, allowed=allowed)
     except RequiresConfirmationError as exc:

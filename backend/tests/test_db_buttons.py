@@ -203,6 +203,54 @@ async def test_button_add_page_to_action_creates_a_row(db_conn, test_user):
     assert after == before + 1
 
 
+async def test_button_add_page_to_triggers_the_target_data_sources_own_automation(db_conn, test_user):
+    """Live-check fix (post-Task-42): research §J.6.7 — "Buttons can trigger database
+    automations — unlike automations themselves ... A user clicking a button that
+    creates a page WILL trigger a database automation." Live-reproduced against the
+    running app before this fix: a button's `add_page_to` action created the row but
+    the target data source's own `page_added` automation never fired (`ActionContext.
+    allow_triggering_automations` didn't exist yet, so the 3 row-writing action
+    handlers unconditionally passed `trigger_automations=False`, the correct value for
+    an AUTOMATION's own chain but wrong for a BUTTON's). This is the direct opposite
+    assertion of `test_db_automations.py`'s
+    `test_add_page_to_does_not_trigger_the_target_data_sources_own_automations` (an
+    automation must never trigger another; a button must)."""
+    trigger_ds = await _make_data_source(db_conn, test_user, name="Trigger DS")
+    target_ds = await _make_data_source(db_conn, test_user, name="Target DS")
+    await _insert_property(db_conn, test_user, target_ds, "titleKey", "Name", "title")
+    row_id = await _make_row(db_conn, test_user, trigger_ds)
+
+    await db_conn.execute(
+        """
+        INSERT INTO db_automations
+            (data_source_id, user_id, name, is_active, trigger_combinator, triggers, actions)
+        VALUES ($1, $2, 'fires on button add_page_to', TRUE, 'any', $3, $4)
+        """,
+        target_ds,
+        test_user,
+        [{"type": "page_added"}],
+        [{"type": "send_notification", "message": "fired by button"}],
+    )
+
+    notifications_before = await db_conn.fetchval(
+        "SELECT count(*) FROM db_notifications WHERE user_id = $1", test_user
+    )
+    ctx = _ctx(db_conn, test_user, trigger_ds, row_id)
+    await buttons_service.run_button_actions(
+        db_conn, ctx,
+        [{
+            "type": "add_page_to", "data_source_id": target_ds,
+            "properties": {"titleKey": {"type": "title", "title": "New page"}},
+        }],
+        allowed=buttons_service.BUTTON_ACTIONS, confirmed=False,
+    )
+
+    notifications_after = await db_conn.fetchval(
+        "SELECT count(*) FROM db_notifications WHERE user_id = $1", test_user
+    )
+    assert notifications_after == notifications_before + 1
+
+
 async def test_button_edit_pages_in_trigger_row_writes_the_trigger_row(db_conn, test_user):
     ds_id = await _make_data_source(db_conn, test_user)
     await _insert_property(db_conn, test_user, ds_id, "statusKey", "Status", "status")

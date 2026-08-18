@@ -46,17 +46,19 @@ export interface UseButtonClickResult {
   cancelConfirm: () => void;
 }
 
-/** Judgment call (flagged in task-42-report.md): the brief's decision 4 text
- * literally names `router.push(\`/brain/${note_id}\`)` for `kind: "note"` —
- * this is the plain note-view route used by NoteTree/SearchModal/
- * BacklinksPanel/BlockEditor's own @mention click handler (the last of
- * which lives in the exact same editor tree a button BLOCK is registered
- * into). A competing precedent exists too (`lib/database/useOpenNote.ts` ->
- * `/brain/workspace/${noteId}`, used by every M6 database view's "open"
- * affordance) — the brief's literal text was followed here rather than
- * useOpenNote's workspace variant. */
+/** Combined M12 review's Finding 4 (Minor), controller-fixed: the brief's
+ * decision 4 text literally named `router.push(\`/brain/${note_id}\`)` for
+ * `kind: "note"`, but `/brain/[noteId]` and `/brain/workspace/[noteId]` are
+ * two distinct, separately-rendered pages (verified live — not a redirect
+ * alias), so this was a genuine route inconsistency, not just a comment.
+ * A button's `open_page_or_url` target is configured from a database
+ * automation/button context, the same context `lib/database/useOpenNote.ts`
+ * already serves for every M6 database view's "open" affordance
+ * (`/brain/workspace/${noteId}`) — aligned to that established convention
+ * for consistency rather than the brief's literal (but contextually
+ * mismatched) text. */
 function noteHref(noteId: string): string {
-  return `/brain/${noteId}`;
+  return `/brain/workspace/${noteId}`;
 }
 
 export function useButtonClick({ postClick, onInsertBlocks }: UseButtonClickOptions): UseButtonClickResult {

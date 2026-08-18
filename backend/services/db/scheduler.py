@@ -108,6 +108,13 @@ async def _tick() -> None:
     logged and swallowed, matching the plan's "one process, no distributed
     system" reasoning: a missed tick is retried automatically 60 seconds
     later.
+
+    The two passes (templates, automations) are isolated from each other
+    (combined M12 review's Finding 3, controller-added): they were
+    previously both inside one try/except, so a template-pass exception
+    would skip that tick's automations pass too, and vice versa. Each is
+    unrelated due-work with its own retry-next-tick posture, so one
+    failing must not withhold the other from running this same tick.
     """
     try:
         pool = await get_pool()
@@ -116,8 +123,14 @@ async def _tick() -> None:
         return
     try:
         async with pool.acquire() as conn:
-            await _tick_templates(conn)
-            await automations_service._tick_automations(conn)
+            try:
+                await _tick_templates(conn)
+            except Exception:
+                logger.exception("scheduler tick: templates pass failed")
+            try:
+                await automations_service._tick_automations(conn)
+            except Exception:
+                logger.exception("scheduler tick: automations pass failed")
     except Exception:
         logger.exception("scheduler tick failed")
 

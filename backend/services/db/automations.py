@@ -295,7 +295,25 @@ class ActionContext:
     `show_confirmation` flow -- `services/db/buttons.py`'s own handler); `client_actions:
     list[dict]` (decision 7, mutated in place the same way `variables` is, collecting
     `open_page_or_url`/`insert_blocks`'s resolve-only results for the caller to return to
-    a future frontend)."""
+    a future frontend).
+
+    `allow_triggering_automations` (post-M12 live-check fix, controller-added): the 3
+    action handlers that write rows (`edit_property`/`add_page_to`/`edit_pages_in`)
+    pass this straight through to `create_row_core`/`update_row_property_core`'s own
+    `trigger_automations` kwarg -- previously hardcoded `False` there unconditionally,
+    which correctly stopped an AUTOMATION's own actions from re-firing automations
+    (the documented recursion guard, `rows.py`'s module docstring), but ALSO silently
+    suppressed automations for BUTTONS routing through these same shared handlers --
+    contradicting research's own explicit, cited distinction: "Buttons can trigger
+    database automations -- unlike automations themselves ... A user clicking a button
+    that creates a page WILL trigger a database automation" (research §J.6.7). Verified
+    live against the running app before this fix: clicking a button configured with
+    `add_page_to` targeting a data source with its own `page_added` automation created
+    the row but never fired the automation (row count 2->3, notification count
+    unchanged). Defaults `False` so `run_automations_for_trigger`/`_tick_automations`
+    (this file's own two callers, both automation-initiated) are completely unaffected
+    -- neither sets this field, so the recursion guard holds exactly as before.
+    `services/db/buttons.py`'s `run_button_actions` sets it `True`."""
 
     conn: asyncpg.Connection
     user_id: str
@@ -306,6 +324,7 @@ class ActionContext:
     source: str = ""
     confirmed: bool = False
     client_actions: list[dict[str, Any]] = field(default_factory=list)
+    allow_triggering_automations: bool = False
 
 
 @dataclass(frozen=True)
@@ -561,7 +580,7 @@ async def _action_edit_property(action: dict[str, Any], ctx: ActionContext) -> N
         ctx.trigger_row_id,
         property_key,
         value,
-        trigger_automations=False,
+        trigger_automations=ctx.allow_triggering_automations,
     )
 
 
@@ -597,7 +616,8 @@ async def _action_add_page_to(action: dict[str, Any], ctx: ActionContext) -> Non
     from services.db.rows import create_row_core
 
     await create_row_core(
-        ctx.conn, ctx.user_id, target_ds, properties=resolved, trigger_automations=False
+        ctx.conn, ctx.user_id, target_ds, properties=resolved,
+        trigger_automations=ctx.allow_triggering_automations,
     )
 
 
@@ -631,7 +651,7 @@ async def _action_edit_pages_in(action: dict[str, Any], ctx: ActionContext) -> N
             row_id,
             property_key,
             value,
-            trigger_automations=False,
+            trigger_automations=ctx.allow_triggering_automations,
         )
 
 
