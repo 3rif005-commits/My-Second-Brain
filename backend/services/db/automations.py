@@ -282,24 +282,45 @@ class ActionContext:
     `send_notification` (decision 9) needs a `db_notifications.source` tag
     (`"automation:<id>"` here; Task 39's button surfaces will need their own, e.g.
     `"button:<property_key>"`) and nothing else in this dataclass says which. Flagged in
-    task-38-report.md as a necessary addition beyond decision 2's literal field list."""
+    task-38-report.md as a necessary addition beyond decision 2's literal field list.
+
+    Task 39 (buttons) widens this dataclass three ways, all purely additive --
+    every existing caller in THIS file (`run_automations_for_trigger`/`_tick_automations`)
+    always sets a real `str` for `trigger_data_source_id` and never touches the two new
+    fields, so it gets `confirmed=False`/`client_actions=[]` by default, unaffected:
+    `trigger_data_source_id` widens from `str` to `str | None` (a button BLOCK can live
+    on a plain note that is not a database row at all, task-39-brief.md decision 4 --
+    every existing action handler in this file that reads it was individually checked
+    against `None`, see task-39-report.md); `confirmed: bool` (decision 6, the two-phase
+    `show_confirmation` flow -- `services/db/buttons.py`'s own handler); `client_actions:
+    list[dict]` (decision 7, mutated in place the same way `variables` is, collecting
+    `open_page_or_url`/`insert_blocks`'s resolve-only results for the caller to return to
+    a future frontend)."""
 
     conn: asyncpg.Connection
     user_id: str
-    trigger_data_source_id: str
+    trigger_data_source_id: str | None
     trigger_row_id: str | None
     now: datetime
     variables: dict[str, Any] = field(default_factory=dict)
     source: str = ""
+    confirmed: bool = False
+    client_actions: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class ActionChainResult:
     """Returned by `execute_action_chain`. Kept minimal (decision 1 doesn't ask for
     more) -- callers/tests assert on the real side effects the actions perform (a
-    property changed, a row created, a notification row exists), not on this value."""
+    property changed, a row created, a notification row exists), not on this value.
+
+    `client_actions` (task-39-brief.md decision 7) is purely additive -- populated from
+    `ctx.client_actions` at the end of a chain run; every Task 38 caller's chain never
+    populates `ctx.client_actions` (no button-only handler is ever in `allowed` for a
+    database automation), so it stays `[]` for them, unaffected."""
 
     actions_run: int
+    client_actions: list[dict[str, Any]] = field(default_factory=list)
 
 
 ActionHandler = Callable[[dict[str, Any], ActionContext], Awaitable[None]]
@@ -342,7 +363,7 @@ async def execute_action_chain(
             raise UnknownActionError(f"unknown action type: {kind!r}")
         await handler(action, ctx)
         executed += 1
-    return ActionChainResult(actions_run=executed)
+    return ActionChainResult(actions_run=executed, client_actions=ctx.client_actions)
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +429,24 @@ async def _resolve(value: Any, ctx: ActionContext) -> Any:
             "this action references a formula, but this automation run has no trigger "
             "row to evaluate it against (an every_frequency-triggered automation has no "
             "page context)"
+        )
+    # task-39-brief.md decision 4: a button BLOCK's trigger_row_id can be set (a real
+    # note) while trigger_data_source_id is None (that note isn't a database row) --
+    # unlike a database automation, where trigger_row_id and trigger_data_source_id are
+    # always both-or-neither. Without this explicit guard, `_build_eval_context` below
+    # would still run (data_source_id=None matches no db_properties/db_row_props rows,
+    # so no asyncpg error), but would silently resolve the formula against an empty
+    # property set instead of raising -- correct-ish for a formula that only references
+    # `ctx.variables`, but silently wrong/confusing for one that references a real
+    # property name, and inconsistent with `edit_property`'s own clean ActionConfigError
+    # in the identical situation. Raising here uniformly, before that ambiguity can
+    # arise, keeps "no data source for a formula to resolve against" a single clean
+    # error rather than a data-dependent behavior.
+    if ctx.trigger_data_source_id is None:
+        raise ActionConfigError(
+            "this action references a formula, but this automation run has no data "
+            "source for its trigger row (a button block on a note that is not a "
+            "database row has no property context to evaluate a formula against)"
         )
     properties, related_properties, property_names = await _build_eval_context(
         ctx.conn, ctx.user_id, ctx.trigger_data_source_id, ctx.trigger_row_id
