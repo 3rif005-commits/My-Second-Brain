@@ -294,6 +294,33 @@ describe("InlineDatabaseTable", () => {
     expect(props.setRelationLinks).toBe(mockHook.setRelationLinks);
   });
 
+  it("stops mousemove/mouseup from bubbling past the scroll wrapper (BlockNote TableHandles collision)", () => {
+    // Live-reproduced bug: TableView renders a real HTML <table>/<td>, and
+    // BlockNote's own TableHandles extension listens for mousemove (on
+    // pmView.dom) and mouseup (on window) to detect hovering/clicking one of
+    // ITS OWN native table blocks' rows — it walks up from the event target
+    // looking for the first <td>/<th> ancestor and, finding this table's
+    // cells, crashes trying to read a "rows" shape off this "database"
+    // block instead. The wrapper must stop both events before they reach
+    // any ancestor, or every hover/click inside an inline table crashes the
+    // whole editor.
+    const { container } = render(<InlineDatabaseTable databaseId="db-1" viewId="v1" />);
+    const wrapper = container.querySelector(".overscroll-contain") as HTMLElement;
+    expect(wrapper).toBeTruthy();
+
+    const moveListener = vi.fn();
+    document.addEventListener("mousemove", moveListener);
+    wrapper.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+    expect(moveListener).not.toHaveBeenCalled();
+    document.removeEventListener("mousemove", moveListener);
+
+    const upListener = vi.fn();
+    document.addEventListener("mouseup", upListener);
+    wrapper.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    expect(upListener).not.toHaveBeenCalled();
+    document.removeEventListener("mouseup", upListener);
+  });
+
   it("derives subItemDisplayMode from the active view's config, matching DatabaseShell's table case", () => {
     mockHook.views = [
       {

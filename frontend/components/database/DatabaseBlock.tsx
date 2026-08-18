@@ -161,6 +161,43 @@ export function InlineDatabaseTable({ databaseId, viewId }: { databaseId: string
     }
   }, [viewId, activeViewId, views, setActiveViewId]);
 
+  // BlockNote's own TableHandles extension (@blocknote/core) listens for
+  // `mousemove` on the whole ProseMirror content DOM (pmView.dom) to detect
+  // hovering over one of ITS OWN native `table` blocks' rows/columns — it
+  // walks up from the hovered element looking for the first <td>/<th>/
+  // .tableWrapper ancestor (extensions/TableHandles/TableHandles.ts's `Pt`
+  // helper). TableView renders a real HTML <table>/<td> (TanStack Table),
+  // and this block is itself a ProseMirror node inside that same DOM tree —
+  // so hovering any inline table cell matches that walk-up immediately,
+  // resolves to THIS "database" block (whose content isn't table-shaped),
+  // and crashes with "Cannot read properties of undefined (reading 'rows')"
+  // (live-reproduced during this task's browser check on any mouse move
+  // over the inline table body). TableHandles' `mouseUpHandler` re-runs the
+  // identical `Pt`/crash path on every `mouseup` too (its own constructor
+  // wires `mouseUpHandler` to call `mouseMoveHandler(e)`) — bound on
+  // `window`, not `pmView.dom`, so a plain click on a cell (mousedown then
+  // mouseup) crashes it the same way, not just hovering. Stopping
+  // propagation for both native events at this wrapper — before they bubble
+  // past it — is the only way to prevent the collision; a React onMouseMove/
+  // onMouseUp prop is too late, since BlockNote's listeners are plain
+  // addEventListener calls on real DOM ancestors (pmView.dom, window) that
+  // fire during native bubbling before React's own root-delegated synthetic
+  // handlers ever run. Must run every render (hooks can't follow the early
+  // returns below); the `!el` guard makes it a no-op whenever this component
+  // is in a loading/error/null state with nothing mounted at the ref yet.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const stop = (e: MouseEvent) => e.stopPropagation();
+    el.addEventListener("mousemove", stop);
+    el.addEventListener("mouseup", stop);
+    return () => {
+      el.removeEventListener("mousemove", stop);
+      el.removeEventListener("mouseup", stop);
+    };
+  });
+
   if (loading && !database) {
     return (
       <div className="my-1 px-3 py-2 text-sm text-gray-400 dark:text-gray-500">Loading…</div>
@@ -193,7 +230,7 @@ export function InlineDatabaseTable({ databaseId, viewId }: { databaseId: string
        * virtualiser does not capture editor scroll" test case. No
        * virtualizer library involved (none exists anywhere in this
        * codebase's database views today), just a bounded-height wrapper. */}
-      <div className="max-h-96 overflow-auto overscroll-contain">
+      <div ref={scrollRef} className="max-h-96 overflow-auto overscroll-contain">
         {activeView?.type === "table" ? (
           <TableView
             properties={properties}
