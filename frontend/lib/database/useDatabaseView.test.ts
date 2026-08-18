@@ -7,7 +7,14 @@ vi.mock("@/app/providers", () => ({
 }));
 
 import { useDatabaseView } from "./useDatabaseView";
-import type { DatabaseDetailResponse, DatabaseRow, Group, RowTemplateResponse, ViewResponse } from "./types";
+import type {
+  AutomationResponse,
+  DatabaseDetailResponse,
+  DatabaseRow,
+  Group,
+  RowTemplateResponse,
+  ViewResponse,
+} from "./types";
 
 const TABLE_VIEW: ViewResponse = {
   id: "v1",
@@ -102,6 +109,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse({ rows: ROWS }));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -149,6 +157,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse({ rows: ROWS }));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -211,6 +220,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse({ rows: ROWS }));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -257,6 +267,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse({ rows: ROWS }));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -288,6 +299,7 @@ describe("useDatabaseView", () => {
         );
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -363,6 +375,7 @@ describe("useDatabaseView", () => {
         );
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -411,6 +424,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse({ detail: "internal error" }, 500));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -441,6 +455,7 @@ describe("useDatabaseView", () => {
         );
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -485,6 +500,7 @@ describe("useDatabaseView", () => {
         );
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -537,6 +553,7 @@ describe("useDatabaseView", () => {
         );
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -575,6 +592,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse(created, 201));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -609,6 +627,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse(patched));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -652,6 +671,7 @@ describe("useDatabaseView", () => {
           return Promise.resolve(jsonResponse({ rows: ROWS }));
         }
         if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([TEMPLATE]));
+        if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
         throw new Error(`unexpected fetch ${url}`);
       });
       vi.stubGlobal("fetch", fetchMock);
@@ -693,6 +713,7 @@ describe("useDatabaseView", () => {
           return Promise.resolve(jsonResponse(TEMPLATE, 201));
         }
         if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+        if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
         throw new Error(`unexpected fetch ${url}`);
       });
       vi.stubGlobal("fetch", fetchMock);
@@ -729,6 +750,7 @@ describe("useDatabaseView", () => {
           return Promise.resolve(jsonResponse({ rows: ROWS }));
         }
         if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([TEMPLATE]));
+        if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
         if (url === "/api/db/templates/tmpl-1" && init?.method === "PATCH") {
           return Promise.resolve(jsonResponse(updated));
         }
@@ -755,6 +777,7 @@ describe("useDatabaseView", () => {
           return Promise.resolve(jsonResponse({ rows: ROWS }));
         }
         if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([TEMPLATE]));
+        if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
         if (url === "/api/db/templates/tmpl-1" && init?.method === "PATCH") {
           return Promise.resolve(jsonResponse({ detail: "another default already exists" }, 400));
         }
@@ -783,6 +806,7 @@ describe("useDatabaseView", () => {
           return Promise.resolve(jsonResponse({ rows: ROWS }));
         }
         if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([TEMPLATE]));
+        if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
         if (url === "/api/db/templates/tmpl-1" && init?.method === "DELETE") {
           return Promise.resolve(new Response(null, { status: 204 }));
         }
@@ -809,6 +833,7 @@ describe("useDatabaseView", () => {
           return Promise.resolve(jsonResponse({ rows: ROWS }));
         }
         if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([TEMPLATE]));
+        if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
         if (url === "/api/db/templates/tmpl-1/instantiate" && init?.method === "POST") {
           return Promise.resolve(jsonResponse(createdRow));
         }
@@ -829,6 +854,201 @@ describe("useDatabaseView", () => {
     });
   });
 
+  // Milestone 12 (task-41): database automations. createAutomation/
+  // updateAutomation/deleteAutomation mirror createTemplate/updateTemplate/
+  // deleteTemplate above exactly (fetch, errorMessage on a failed response —
+  // thrown, not caught here — and local `automations` state updated on
+  // success).
+  describe("automations (task-41)", () => {
+    const AUTOMATION: AutomationResponse = {
+      id: "auto-1",
+      data_source_id: "ds-1",
+      user_id: "user-1",
+      name: "Weekly digest",
+      is_active: true,
+      last_error: null,
+      trigger_combinator: "any",
+      triggers: [],
+      view_id: null,
+      actions: [],
+      next_run_at: null,
+      position: 0,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    };
+
+    it("load(): fetches GET .../automations alongside the database detail and exposes it as `automations`", async () => {
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+        if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+        if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([AUTOMATION]));
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      expect(result.current.automations).toEqual([AUTOMATION]);
+    });
+
+    it("load(): skips GET .../automations entirely for the virtual All Notes source", async () => {
+      const virtualDetail: DatabaseDetailResponse = {
+        ...DETAIL,
+        data_source: { ...DETAIL.data_source, id: "all-notes", is_virtual: true },
+      };
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(virtualDetail));
+        if (url === "/api/db/data-sources/all-notes/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      expect(result.current.automations).toEqual([]);
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/automations"))).toBe(false);
+    });
+
+    it("createAutomation: POSTs {name, is_active: true, trigger_combinator: 'any', triggers: [], view_id: null, actions: []} and appends the result to `automations`", async () => {
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+        if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+        if (url === "/api/db/data-sources/ds-1/automations" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse(AUTOMATION, 201));
+        }
+        if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      let returned: AutomationResponse | undefined;
+      await act(async () => {
+        returned = await result.current.createAutomation("Weekly digest");
+      });
+
+      expect(returned).toEqual(AUTOMATION);
+      expect(result.current.automations).toEqual([AUTOMATION]);
+
+      const createCall = fetchMock.mock.calls.find(
+        ([url, i]) => url === "/api/db/data-sources/ds-1/automations" && (i as RequestInit)?.method === "POST"
+      );
+      expect(JSON.parse((createCall![1] as RequestInit).body as string)).toEqual({
+        name: "Weekly digest",
+        is_active: true,
+        trigger_combinator: "any",
+        triggers: [],
+        view_id: null,
+        actions: [],
+      });
+    });
+
+    it("updateAutomation: PATCHes .../automations/{id} and replaces the matching entry in `automations`", async () => {
+      const updated: AutomationResponse = { ...AUTOMATION, name: "Renamed" };
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+        if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+        if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([AUTOMATION]));
+        if (url === "/api/db/automations/auto-1" && init?.method === "PATCH") {
+          return Promise.resolve(jsonResponse(updated));
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.automations).toEqual([AUTOMATION]));
+
+      await act(async () => {
+        await result.current.updateAutomation("auto-1", { name: "Renamed" });
+      });
+
+      expect(result.current.automations).toEqual([updated]);
+      const patchCall = fetchMock.mock.calls.find(([url]) => url === "/api/db/automations/auto-1");
+      expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({ name: "Renamed" });
+    });
+
+    it("updateAutomation: throws (does not catch/toast internally) on a failed PATCH — same as updateTemplate", async () => {
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+        if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+        if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([AUTOMATION]));
+        if (url === "/api/db/automations/auto-1" && init?.method === "PATCH") {
+          return Promise.resolve(
+            jsonResponse({ detail: "an every_frequency trigger cannot be paired with any other trigger" }, 400)
+          );
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.automations).toEqual([AUTOMATION]));
+
+      await expect(
+        act(async () => {
+          await result.current.updateAutomation("auto-1", {
+            triggers: [
+              {
+                type: "every_frequency",
+                frequency: "daily",
+                interval: 1,
+                start_date: "2026-01-01",
+                time_of_day: "09:00",
+              },
+            ],
+          });
+        })
+      ).rejects.toThrow("an every_frequency trigger cannot be paired with any other trigger");
+      expect(showToast).not.toHaveBeenCalled();
+      expect(result.current.automations).toEqual([AUTOMATION]);
+    });
+
+    it("deleteAutomation: DELETEs .../automations/{id} and removes it from `automations`", async () => {
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+        if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+        if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([AUTOMATION]));
+        if (url === "/api/db/automations/auto-1" && init?.method === "DELETE") {
+          return Promise.resolve(new Response(null, { status: 204 }));
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.automations).toEqual([AUTOMATION]));
+
+      await act(async () => {
+        await result.current.deleteAutomation("auto-1");
+      });
+
+      expect(result.current.automations).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledWith("/api/db/automations/auto-1", { method: "DELETE" });
+    });
+  });
+
   it("ensureRelationLinks: fetches once, caches the result, and is a no-op on a second call for the same key", async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
@@ -837,6 +1057,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse({ rows: [{ id: "row-2", title: "Second" }] }));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -884,6 +1105,7 @@ describe("useDatabaseView", () => {
         );
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -918,6 +1140,7 @@ describe("useDatabaseView", () => {
         );
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -946,6 +1169,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse({ rows: [{ id: "row-2", title: "Second" }] }));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -975,6 +1199,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse({ detail: "cycle detected: a -> b -> a" }, 400));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -1003,6 +1228,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse({ rows: [{ id: "row-2", title: "Second" }] }));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -1035,6 +1261,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse({ rows: [{ id: "row-2", title: "Second" }] }));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -1073,6 +1300,7 @@ describe("useDatabaseView", () => {
         return Promise.resolve(jsonResponse({ rows: ROWS }));
       }
       if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);

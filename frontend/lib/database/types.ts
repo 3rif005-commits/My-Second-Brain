@@ -651,3 +651,213 @@ export interface RowTemplateResponse {
 export type RowTemplatePatch = Partial<
   Pick<RowTemplateResponse, "name" | "icon" | "properties" | "content" | "is_default" | "repeat_config">
 >;
+
+// ── Milestone 12 (task-41): database automations + notifications ──────────
+// Mirrors backend/models/database.py's AutomationCreate/AutomationUpdate/
+// AutomationResponse/NotificationResponse and services/db/automations.py's
+// own module docstring for the triggers/actions element shapes
+// (task-41-brief.md's "Backend API surface"/"Trigger shapes"/"Action
+// shapes" — the authoritative version lives on that backend module, not
+// re-derived here). `triggers`/`actions` stay untyped `list[Any]` JSONB on
+// the backend (only one save-time shape rule enforced there: an
+// `every_frequency` trigger must be the array's only entry) — the
+// discriminated unions below exist purely so THIS UI can build/render them
+// safely; a malformed/unknown-shaped entry from elsewhere would need a
+// runtime guard this file doesn't add (none of this task's own UI can
+// produce one).
+//
+// `send_mail_to`/`send_slack_notification_to` are deliberately NOT members
+// of `AutomationAction` below — spec §1's non-goals table, and the plan's
+// own M12 test case ("the UI says so rather than offering a dead control").
+// Omitting them from the TYPE, not just the rendered `<select>` options,
+// means nothing in this file can even construct one by accident.
+
+/** A `{"formula": "<source>"}` reference — `services/db/automations.py`'s
+ * `_is_formula_ref`'s exact shape (a dict with ONLY this one key). Every
+ * action/trigger config field that accepts either a literal value or a
+ * formula uses `PropertyValue | FormulaValueWrapper` (or, for
+ * `send_notification.message`, `string | FormulaValueWrapper`) — never a
+ * bare `string` formula source at the top level, which would be
+ * indistinguishable from a literal rich-text value. */
+export interface FormulaValueWrapper {
+  formula: string;
+}
+
+/** Any writable-property value OR a formula reference — the shape every
+ * `edit_property.value` / `add_page_to.properties.*` / `edit_pages_in.value`
+ * field takes. */
+export type ValueOrFormula = PropertyValue | FormulaValueWrapper;
+
+export const AUTOMATION_TRIGGER_TYPES = ["page_added", "property_edited", "every_frequency"] as const;
+export type AutomationTriggerType = (typeof AUTOMATION_TRIGGER_TYPES)[number];
+
+/** Decision 6 (task-41-brief.md): plain-language labels for these 4 raw
+ * enum values — never surfaced to the user verbatim. */
+export const PROPERTY_EDITED_CONDITIONS = [
+  "any_change",
+  "set_to",
+  "became_empty",
+  "became_non_empty",
+] as const;
+export type PropertyEditedCondition = (typeof PROPERTY_EDITED_CONDITIONS)[number];
+
+export const PROPERTY_EDITED_CONDITION_LABELS: Record<PropertyEditedCondition, string> = {
+  any_change: "Any change",
+  set_to: "Set to a specific value",
+  became_empty: "Becomes empty",
+  became_non_empty: "Becomes non-empty",
+};
+
+export interface PageAddedTrigger {
+  type: "page_added";
+}
+
+/** `value` is a plain literal wrapper, never a formula — `_trigger_entry_
+ * matches` compares it statically via `_inner_value`, it's never resolved
+ * through the formula evaluator (unlike every action-side value field
+ * above). Only meaningful (and only ever collected by this UI) when
+ * `condition === "set_to"`. */
+export interface PropertyEditedTrigger {
+  type: "property_edited";
+  property_key: string;
+  condition: PropertyEditedCondition;
+  value?: PropertyValue;
+}
+
+/** The ONLY entry in `triggers` when present (backend 400s otherwise, see
+ * `_validate_triggers`) — same schedule shape as row templates'
+ * `RepeatConfig` PLUS `end_date`, which templates don't have. */
+export interface EveryFrequencyTrigger {
+  frequency: RepeatFrequency;
+  type: "every_frequency";
+  interval: number;
+  weekdays?: number[];
+  /** "YYYY-MM-DD" */
+  start_date: string;
+  /** "HH:MM" */
+  time_of_day: string;
+  timezone?: string;
+  /** "YYYY-MM-DD", `null`/omitted for "never ends" — the one schedule field
+   * `RepeatConfig` doesn't have. */
+  end_date?: string | null;
+}
+
+export type AutomationTrigger = PageAddedTrigger | PropertyEditedTrigger | EveryFrequencyTrigger;
+
+export type AutomationTriggerCombinator = "any" | "all";
+
+export const AUTOMATION_ACTION_TYPES = [
+  "edit_property",
+  "add_page_to",
+  "edit_pages_in",
+  "send_notification",
+  "send_webhook",
+  "define_variables",
+] as const;
+export type AutomationActionType = (typeof AUTOMATION_ACTION_TYPES)[number];
+
+/** research §J.6.6: "edit the properties of pages in the database you are
+ * currently in" — always the trigger row, no `target` field of its own. */
+export interface EditPropertyAction {
+  type: "edit_property";
+  property_key: string;
+  value: ValueOrFormula;
+}
+
+/** research §J.6.6: "add a page to a database of your choosing, and edit
+ * the properties of that page." */
+export interface AddPageToAction {
+  type: "add_page_to";
+  data_source_id: string;
+  properties: Record<string, ValueOrFormula>;
+}
+
+/** Narrowed (task-38-brief.md decision 8) to ONE property_key/value pair —
+ * symmetric with `edit_property`'s own shape. `target` is `"trigger_row"`
+ * (Notion's "This page") or a `{variable_ref}` naming a prior
+ * `define_variables` action's page/page-list result — never a general
+ * filter-driven bulk edit. */
+export interface EditPagesInAction {
+  type: "edit_pages_in";
+  target: "trigger_row" | { variable_ref: string };
+  data_source_id: string;
+  property_key: string;
+  value: ValueOrFormula;
+}
+
+/** Decision 9 (task-38-brief.md): one `db_notifications` row. `link` is
+ * never set by this action in this milestone (Task 38's own "cheap future
+ * addition" note) — nothing in this UI needs to populate it. */
+export interface SendNotificationAction {
+  type: "send_notification";
+  message: string | FormulaValueWrapper;
+}
+
+/** Decision 7 (task-38-brief.md): `url` is LITERAL-ONLY, backend-enforced
+ * (`_action_send_webhook` rejects anything but a plain string) — never offer
+ * a formula toggle for this field. */
+export interface SendWebhookAction {
+  type: "send_webhook";
+  url: string;
+  payload?: Record<string, unknown>;
+}
+
+/** Decision 8 (task-38-brief.md): `formula` MAY be a bare literal
+ * (string/number/bool) instead of `{"formula": ...}` — the backend accepts
+ * either. This UI always sends `{"formula": ...}` (never a bare literal),
+ * matching Notion's own `∑` variable-definition UI (research §J.6.4) and
+ * task-41-brief.md's own reference facts: "defaulting every
+ * `define_variables` field to `FormulaEditor` is simpler." */
+export interface DefineVariablesAction {
+  type: "define_variables";
+  name: string;
+  formula: string | FormulaValueWrapper | number | boolean;
+}
+
+export type AutomationAction =
+  | EditPropertyAction
+  | AddPageToAction
+  | EditPagesInAction
+  | SendNotificationAction
+  | SendWebhookAction
+  | DefineVariablesAction;
+
+/** Mirrors `backend/models/database.py`'s `AutomationResponse` exactly. */
+export interface AutomationResponse {
+  id: string;
+  data_source_id: string;
+  user_id: string;
+  name: string;
+  is_active: boolean;
+  last_error: string | null;
+  trigger_combinator: AutomationTriggerCombinator;
+  triggers: AutomationTrigger[];
+  view_id: string | null;
+  actions: AutomationAction[];
+  next_run_at: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Fields `PATCH /db/automations/{id}` accepts — `last_error` is
+ * deliberately absent (system-written only, via a failing action chain,
+ * never a client PATCH — `AutomationUpdate`'s own docstring). */
+export type AutomationPatch = Partial<
+  Pick<
+    AutomationResponse,
+    "name" | "is_active" | "trigger_combinator" | "triggers" | "view_id" | "actions"
+  >
+>;
+
+/** Mirrors `backend/models/database.py`'s `NotificationResponse` exactly —
+ * `GET/PATCH /db/notifications` (Task 38's backend, already live). */
+export interface NotificationResponse {
+  id: string;
+  user_id: string;
+  message: string;
+  link: string | null;
+  source: string | null;
+  read_at: string | null;
+  created_at: string;
+}

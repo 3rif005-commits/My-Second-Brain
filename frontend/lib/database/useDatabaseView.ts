@@ -15,6 +15,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useToast } from "@/app/providers";
 import type {
+  AutomationPatch,
+  AutomationResponse,
   DatabaseDetailResponse,
   DatabaseRow,
   DatabaseResponse,
@@ -94,6 +96,12 @@ export function useDatabaseView(databaseId: string) {
   // `list_templates`) — same "is_virtual gates the write-shaped stuff" rule
   // `DatabaseShell.tsx`'s own `editable = !dataSource.is_virtual` follows.
   const [templates, setTemplates] = useState<RowTemplateResponse[]>([]);
+  // Milestone 12 (task-41): database automations. Fetched right alongside
+  // `templates` above, same `is_virtual` gate for the same reason (`GET
+  // .../automations` 404s on anything that doesn't `_parse_uuid_or_404` —
+  // routers/databases.py's `list_automations`, and the All Notes virtual
+  // source has no real `db_data_sources` row to own an automation).
+  const [automations, setAutomations] = useState<AutomationResponse[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -116,11 +124,17 @@ export function useDatabaseView(databaseId: string) {
 
       if (detail.data_source.is_virtual) {
         setTemplates([]);
+        setAutomations([]);
       } else {
         const templatesRes = await fetch(`/api/db/data-sources/${detail.data_source.id}/templates`);
         if (!templatesRes.ok) throw new Error(await errorMessage(templatesRes));
         const templatesData: RowTemplateResponse[] = await templatesRes.json();
         setTemplates(templatesData);
+
+        const automationsRes = await fetch(`/api/db/data-sources/${detail.data_source.id}/automations`);
+        if (!automationsRes.ok) throw new Error(await errorMessage(automationsRes));
+        const automationsData: AutomationResponse[] = await automationsRes.json();
+        setAutomations(automationsData);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
@@ -517,6 +531,53 @@ export function useDatabaseView(databaseId: string) {
     return await res.json();
   }
 
+  /** `POST /db/data-sources/{id}/automations` (task-38's backend, task-41's
+   * frontend) — mirrors `createTemplate` above exactly: a minimal body
+   * (decision 1, task-41-brief.md: "New creates immediately with a default
+   * name, then opens the editor in place"), `errorMessage` on failure
+   * (thrown, not caught — same as every other create* here), append to
+   * local `automations` on success. */
+  async function createAutomation(name: string): Promise<AutomationResponse> {
+    if (!dataSource) throw new Error("No data source loaded yet");
+    const res = await fetch(`/api/db/data-sources/${dataSource.id}/automations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, is_active: true, trigger_combinator: "any", triggers: [], view_id: null, actions: [] }),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res));
+    const created: AutomationResponse = await res.json();
+    setAutomations((prev) => [...prev, created]);
+    return created;
+  }
+
+  /** `PATCH /db/automations/{id}` — partial update, mirrors `updateTemplate`
+   * above. Used for every field `AutomationEditor` edits: name (debounced),
+   * `is_active` (immediately), and the whole `triggers`/`actions` arrays
+   * together per meaningful edit (task-41-brief.md decision 2's own "whole
+   * array together, not per-keystroke" rule). May reject with a 400 if
+   * `triggers` pairs an `every_frequency` entry with any other trigger
+   * (backend's own `_validate_triggers`) — left for the caller to catch and
+   * toast, same as `updateTemplate`'s own contract. */
+  async function updateAutomation(automationId: string, patch: AutomationPatch): Promise<AutomationResponse> {
+    const res = await fetch(`/api/db/automations/${automationId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res));
+    const updated: AutomationResponse = await res.json();
+    setAutomations((prev) => prev.map((a) => (a.id === automationId ? updated : a)));
+    return updated;
+  }
+
+  /** `DELETE /db/automations/{id}` — 204 No Content, nothing to parse on
+   * success (same as `deleteTemplate`). */
+  async function deleteAutomation(automationId: string): Promise<void> {
+    const res = await fetch(`/api/db/automations/${automationId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(await errorMessage(res));
+    setAutomations((prev) => prev.filter((a) => a.id !== automationId));
+  }
+
   return {
     database,
     dataSource,
@@ -541,6 +602,10 @@ export function useDatabaseView(databaseId: string) {
     updateTemplate,
     deleteTemplate,
     instantiateTemplate,
+    automations,
+    createAutomation,
+    updateAutomation,
+    deleteAutomation,
     refetch: load,
     // `load` only re-fetches database/properties/views — `loadRows`'s own
     // effect is keyed to activeView's id/type/filter/sorts/config, none of
