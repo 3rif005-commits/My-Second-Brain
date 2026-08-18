@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 from routers import notes, ingest, retrieval, internal, agent, agent_inline, agent_ingest, skills_api, mcp_api, note_sources, databases
 from services.db.connection import close_pool
+from services.db.scheduler import start_scheduler, stop_scheduler
 
 # ── Logging ─────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -20,7 +21,16 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Milestone 12 (task-37): the in-process job scheduler for repeating row
+    # templates (and, from Task 38, database automations). Started
+    # unconditionally, same posture as `databases.router` being included
+    # unconditionally below regardless of `database_rows_enabled` — a tick
+    # that can't reach the database (e.g. `DATABASE_URL` unset) logs and
+    # retries next interval rather than failing startup; see
+    # `services/db/scheduler.py`'s `_tick` docstring.
+    start_scheduler()
     yield
+    stop_scheduler()
     # Safe no-op if the database query engine's pool was never created
     # (database_rows_enabled defaults False, so this is normally the case).
     await close_pool()

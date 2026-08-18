@@ -1,17 +1,16 @@
 """Tests for `services/db/templates.py` + `routers/databases.py`'s template
 endpoints (Milestone 12, task-37): row template CRUD, `is_default`
 uniqueness, `instantiate_template`, `create_row`'s new default-template
-auto-apply, and `next_occurrence`'s pure date arithmetic. Scheduler-tick
-tests (`_tick_templates`) land in this same file in the next commit, once
-`services/db/scheduler.py` exists.
+auto-apply, `next_occurrence`'s pure date arithmetic, and the scheduler's
+`_tick_templates`.
 
 Runs against the local pgtest harness (localhost:55432) through the
 transaction-wrapped `db_conn`/`test_user` fixtures (`tests/conftest.py`),
 rolled back on teardown — same convention as every other Milestone 2+ test
 file in this suite. NEVER touches `core.config.settings.database_url` (the
 real Supabase project). No `datetime.now()` anywhere in the `next_occurrence`
-table — every reference instant is a fixed, hand-written `datetime(...)`,
-per task-37-brief.md's explicit instruction.
+table or the scheduler-tick tests — every reference instant is a fixed,
+hand-written `datetime(...)`, per task-37-brief.md's explicit instruction.
 """
 from __future__ import annotations
 
@@ -25,6 +24,7 @@ import pytest_asyncio
 from main import app
 from routers.notes import get_user_id
 from services.db.connection import get_conn
+from services.db.scheduler import _tick_templates
 from services.db.templates import (
     DuplicateDefaultTemplateError,
     create_template,
@@ -458,3 +458,80 @@ _UTC = timezone.utc
 )
 def test_next_occurrence_table(repeat_config, after, expected):
     assert next_occurrence(repeat_config, after) == expected
+
+
+# ===========================================================================
+# Scheduler tick
+# ===========================================================================
+
+
+async def test_tick_creates_a_row_and_advances_next_run_at_for_a_due_template(db_conn, test_user):
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "statusKey", "Status", "status")
+    past = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    repeat_config = {
+        "frequency": "daily", "interval": 1, "start_date": "2020-01-01", "time_of_day": "00:00",
+    }
+    template_id = await _insert_template(
+        db_conn, test_user, ds_id,
+        name="Daily standup",
+        properties={"statusKey": {"type": "status", "status": "todo"}},
+        repeat_config=repeat_config,
+        next_run_at=past,
+    )
+
+    row_count_before = await db_conn.fetchval("SELECT count(*) FROM db_row_props WHERE data_source_id = $1", ds_id)
+    created = await _tick_templates(db_conn)
+    row_count_after = await db_conn.fetchval("SELECT count(*) FROM db_row_props WHERE data_source_id = $1", ds_id)
+
+    assert created == 1
+    assert row_count_after == row_count_before + 1
+
+    new_next_run_at = await db_conn.fetchval(
+        "SELECT next_run_at FROM db_row_templates WHERE id = $1", template_id
+    )
+    assert new_next_run_at == next_occurrence(repeat_config, past)
+    assert new_next_run_at > past
+
+
+async def test_tick_does_not_touch_a_template_whose_next_run_at_is_in_the_future(db_conn, test_user):
+    ds_id = await _make_data_source(db_conn, test_user)
+    # A fixed far-future instant, not `datetime.now() + timedelta(...)` --
+    # task-37-brief.md is explicit that no scheduler-tick test may depend
+    # on the real clock. "Far future" only needs to be later than whenever
+    # this suite is ever run; 2999 comfortably clears that bar forever.
+    future = datetime(2999, 1, 1, tzinfo=timezone.utc)
+    repeat_config = {
+        "frequency": "daily", "interval": 1, "start_date": "2020-01-01", "time_of_day": "00:00",
+    }
+    template_id = await _insert_template(
+        db_conn, test_user, ds_id, repeat_config=repeat_config, next_run_at=future
+    )
+
+    row_count_before = await db_conn.fetchval("SELECT count(*) FROM db_row_props WHERE data_source_id = $1", ds_id)
+    created = await _tick_templates(db_conn)
+    row_count_after = await db_conn.fetchval("SELECT count(*) FROM db_row_props WHERE data_source_id = $1", ds_id)
+
+    assert created == 0
+    assert row_count_after == row_count_before
+    unchanged_next_run_at = await db_conn.fetchval(
+        "SELECT next_run_at FROM db_row_templates WHERE id = $1", template_id
+    )
+    assert unchanged_next_run_at == future
+
+
+async def test_tick_never_touches_a_non_repeating_template(db_conn, test_user):
+    ds_id = await _make_data_source(db_conn, test_user)
+    # repeat_config IS NULL (the normal non-repeating case) -- next_run_at
+    # should always be NULL too, but the tick must not crash even if it
+    # somehow isn't (defensive; the WHERE clause filters on repeat_config
+    # IS NOT NULL, not on next_run_at alone).
+    past = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    await _insert_template(db_conn, test_user, ds_id, repeat_config=None, next_run_at=past)
+
+    row_count_before = await db_conn.fetchval("SELECT count(*) FROM db_row_props WHERE data_source_id = $1", ds_id)
+    created = await _tick_templates(db_conn)
+    row_count_after = await db_conn.fetchval("SELECT count(*) FROM db_row_props WHERE data_source_id = $1", ds_id)
+
+    assert created == 0
+    assert row_count_after == row_count_before
