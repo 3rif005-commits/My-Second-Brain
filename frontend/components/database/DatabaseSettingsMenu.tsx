@@ -209,8 +209,8 @@ export function DatabaseSettingsMenu({
                 </label>
 
                 <p className="text-[10px] text-gray-400 dark:text-gray-500 pt-1 border-t border-gray-100 dark:border-gray-700">
-                  Dependency arrows only appear in the Timeline view, which isn&apos;t available yet —
-                  blocking/blocked-by relations already work as ordinary relation cells.
+                  Dependency arrows only appear in the Timeline view — enable arrows from any
+                  Timeline view&apos;s settings.
                 </p>
               </div>
             )}

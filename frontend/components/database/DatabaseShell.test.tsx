@@ -150,6 +150,21 @@ describe("DatabaseShell", () => {
     expect(screen.getByLabelText("View range")).toBeInTheDocument();
   });
 
+  it("renders TimelineView for a timeline-typed active view", () => {
+    mockHook.views = [
+      { id: "v8", data_source_id: "ds-1", user_id: "user-1", name: "Timeline", icon: null, type: "timeline", config: { date_property_id: "due" }, filter: null, sorts: [], is_locked: false, position: 0 },
+    ];
+    mockHook.activeViewId = "v8";
+    mockHook.properties = [
+      ...mockHook.properties,
+      { id: "p4", data_source_id: "ds-1", user_id: "user-1", key: "due", name: "Due", type: "date", config: {}, description: null, storage: "jsonb", column_name: null, result_type: null, is_volatile: false, position: 2, created_at: "2026-01-01T00:00:00Z" },
+    ];
+    render(<DatabaseShell databaseId="db-1" />);
+    // The Timeline view's own toolbar (zoom-level select) is a stable
+    // render signal that doesn't depend on the plotted rows' actual dates.
+    expect(screen.getByLabelText("Zoom level")).toBeInTheDocument();
+  });
+
   it("renders GalleryView for a gallery-typed active view", () => {
     mockHook.views = [
       { id: "v4", data_source_id: "ds-1", user_id: "user-1", name: "Gallery", icon: null, type: "gallery", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },

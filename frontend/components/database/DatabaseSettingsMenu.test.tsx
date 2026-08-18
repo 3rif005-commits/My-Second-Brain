@@ -231,7 +231,7 @@ describe("DatabaseSettingsMenu", () => {
       expect(JSON.parse(init.body as string)).toEqual({ date_property_key: "due" });
     });
 
-    it("shows a one-line hint that dependency arrows are timeline-only and not available yet", async () => {
+    it("shows a one-line hint that dependency arrows are timeline-only (task-34: Timeline view now exists)", async () => {
       const user = userEvent.setup();
       render(
         <DatabaseSettingsMenu
@@ -243,7 +243,10 @@ describe("DatabaseSettingsMenu", () => {
         />
       );
       await openMenu(user);
-      expect(screen.getByText(/timeline view, which isn.t available yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/dependency arrows only appear in the timeline view/i)).toBeInTheDocument();
+      // The old "isn't available yet" caveat must be gone now that Timeline
+      // is real (task-34-brief.md's whole reason for existing).
+      expect(screen.queryByText(/isn.t available yet/i)).not.toBeInTheDocument();
     });
   });
 });

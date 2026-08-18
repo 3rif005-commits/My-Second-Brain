@@ -14,8 +14,10 @@ interface ViewTabsProps {
   activeViewId: string;
   onSelect: (viewId: string) => void;
   /** Used to build the Board-creation "group by" dropdown — restricted to
-   * groupable types (select/status/multi_select) — and the Calendar-
-   * creation "date property" dropdown, restricted to `type === "date"`. */
+   * groupable types (select/status/multi_select) — and the Calendar/
+   * Timeline-creation "date property" dropdown (both require the same
+   * `date_property_id`, task-34-brief.md extending task-33's pattern),
+   * restricted to `type === "date"`. */
   properties: PropertyResponse[];
   onCreateView: (input: {
     name: string;
@@ -25,8 +27,9 @@ interface ViewTabsProps {
   }) => Promise<void>;
 }
 
-// The six view types this milestone supports creating (table/board —
-// Task 16; gallery/list/feed — Task 17; calendar — Task 33).
+// The seven view types this milestone supports creating (table/board —
+// Task 16; gallery/list/feed — Task 17; calendar — Task 33; timeline —
+// Task 34).
 const VIEW_TYPE_OPTIONS = [
   { value: "table", label: "Table" },
   { value: "board", label: "Board" },
@@ -34,6 +37,7 @@ const VIEW_TYPE_OPTIONS = [
   { value: "list", label: "List" },
   { value: "feed", label: "Feed" },
   { value: "calendar", label: "Calendar" },
+  { value: "timeline", label: "Timeline" },
 ] as const;
 
 export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateView }: ViewTabsProps) {
@@ -69,8 +73,12 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
   // Calendar mirrors Board's gate exactly (task-33-brief.md's ruling,
   // decided rather than guessing at calendar's undocumented empty-state
   // behaviour): require picking a date property before Create is enabled.
-  const calendarNeedsPropertyButHasNone = type === "calendar" && dateProperties.length === 0;
-  const calendarMissingSelection = type === "calendar" && !calendarNeedsPropertyButHasNone && !datePropertyKey;
+  // Timeline needs the identical required `date_property_id` (task-34-
+  // brief.md) — extended into the same boolean/condition rather than
+  // duplicated, since both types share one "Date property" picker below.
+  const isDateDrivenView = type === "calendar" || type === "timeline";
+  const calendarNeedsPropertyButHasNone = isDateDrivenView && dateProperties.length === 0;
+  const calendarMissingSelection = isDateDrivenView && !calendarNeedsPropertyButHasNone && !datePropertyKey;
   const canSubmit =
     !submitting &&
     !boardNeedsPropertyButHasNone &&
@@ -88,7 +96,7 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
         name: name.trim() || "New view",
         type,
         groupPropertyKey: type === "board" ? groupPropertyKey : undefined,
-        datePropertyKey: type === "calendar" ? datePropertyKey : undefined,
+        datePropertyKey: isDateDrivenView ? datePropertyKey : undefined,
       });
       resetForm();
     } catch (err) {
@@ -171,7 +179,7 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
               </select>
             ))}
 
-          {type === "calendar" &&
+          {isDateDrivenView &&
             (calendarNeedsPropertyButHasNone ? (
               <span className="text-xs text-amber-600 dark:text-amber-400">
                 no date property yet — add a Date property first
