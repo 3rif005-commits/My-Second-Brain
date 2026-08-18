@@ -1984,7 +1984,7 @@ async def update_view(
 # ---------------------------------------------------------------------------
 
 
-def _template_config_error_to_http(exc: Exception) -> HTTPException:
+def _template_error_to_http(exc: Exception) -> HTTPException:
     return HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
 
@@ -2007,7 +2007,9 @@ async def create_template(
 
     data_source_id = _parse_uuid_or_404(data_source_id, "data source")
     ds_row = await conn.fetchrow(
-        "SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2",
+        """
+        SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2
+        """,
         data_source_id,
         user_id,
     )
@@ -2017,7 +2019,7 @@ async def create_template(
     try:
         return await templates_service.create_template(conn, user_id, data_source_id, body)
     except (DuplicateDefaultTemplateError, TemplateConfigError) as exc:
-        raise _template_config_error_to_http(exc) from exc
+        raise _template_error_to_http(exc) from exc
 
 
 @router.get(
@@ -2031,7 +2033,9 @@ async def list_templates(
 ) -> list[RowTemplateResponse]:
     data_source_id = _parse_uuid_or_404(data_source_id, "data source")
     ds_row = await conn.fetchrow(
-        "SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2",
+        """
+        SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2
+        """,
         data_source_id,
         user_id,
     )
@@ -2052,7 +2056,7 @@ async def update_template(
     try:
         result = await templates_service.update_template(conn, user_id, template_id, body)
     except (DuplicateDefaultTemplateError, TemplateConfigError) as exc:
-        raise _template_config_error_to_http(exc) from exc
+        raise _template_error_to_http(exc) from exc
     if result is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "template not found")
     return result

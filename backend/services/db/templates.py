@@ -205,7 +205,7 @@ def _to_response(row: asyncpg.Record) -> RowTemplateResponse:
 async def create_template(
     conn: asyncpg.Connection, user_id: str, data_source_id: str, body: RowTemplateCreate
 ) -> RowTemplateResponse:
-    """Insert a new template. Raises `TemplateConfigError` if `repeat_config`
+    """Inserts a new template. Raises `TemplateConfigError` if `repeat_config`
     is present but malformed, `DuplicateDefaultTemplateError` if
     `is_default=True` collides with an existing default for this data
     source (both framework-free — the router maps them to a 400)."""
@@ -259,7 +259,9 @@ async def get_template(
     conn: asyncpg.Connection, user_id: str, template_id: str
 ) -> RowTemplateResponse | None:
     row = await conn.fetchrow(
-        "SELECT * FROM db_row_templates WHERE id = $1 AND user_id = $2",
+        """
+        SELECT * FROM db_row_templates WHERE id = $1 AND user_id = $2
+        """,
         template_id,
         user_id,
     )
@@ -300,7 +302,9 @@ async def update_template(
 
     if not updates:
         row = await conn.fetchrow(
-            "SELECT * FROM db_row_templates WHERE id = $1 AND user_id = $2",
+            """
+            SELECT * FROM db_row_templates WHERE id = $1 AND user_id = $2
+            """,
             template_id,
             user_id,
         )
@@ -326,7 +330,9 @@ async def update_template(
 
 async def delete_template(conn: asyncpg.Connection, user_id: str, template_id: str) -> bool:
     row = await conn.fetchrow(
-        "DELETE FROM db_row_templates WHERE id = $1 AND user_id = $2 RETURNING id",
+        """
+        DELETE FROM db_row_templates WHERE id = $1 AND user_id = $2 RETURNING id
+        """,
         template_id,
         user_id,
     )
@@ -364,7 +370,10 @@ async def instantiate_template(
     rather than duplicated here.
     """
     row = await conn.fetchrow(
-        "SELECT data_source_id, properties, content FROM db_row_templates WHERE id = $1 AND user_id = $2",
+        """
+        SELECT data_source_id, properties, content FROM db_row_templates
+        WHERE id = $1 AND user_id = $2
+        """,
         template_id,
         user_id,
     )
@@ -375,7 +384,9 @@ async def instantiate_template(
     existing_keys = {
         r["key"]
         for r in await conn.fetch(
-            "SELECT key FROM db_properties WHERE data_source_id = $1 AND user_id = $2",
+            """
+            SELECT key FROM db_properties WHERE data_source_id = $1 AND user_id = $2
+            """,
             data_source_id,
             user_id,
         )

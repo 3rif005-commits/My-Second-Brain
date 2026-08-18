@@ -14,8 +14,10 @@ hand-written `datetime(...)`, per task-37-brief.md's explicit instruction.
 """
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 import pytest
@@ -32,7 +34,16 @@ from services.db.templates import (
     instantiate_template,
     next_occurrence,
 )
-from models.database import RowTemplateCreate, RowTemplateUpdate
+from models.database import RowTemplateCreate
+
+# Same scope-predicate sweep `test_databases_router.py` runs over
+# routers/databases.py and services/db/views.py -- duplicated here (this
+# codebase's own "helpers duplicated per test file" convention, see
+# test_db_recompute.py's header comment) since this task moved a batch of
+# genuinely new SQL into services/db/templates.py that sweep doesn't touch.
+_SQL_KEYWORDS = ("SELECT", "INSERT", "UPDATE", "DELETE")
+_SCOPE_PREDICATE_RE = re.compile(r"user_id\s*=\s*\$\d+")
+_TEMPLATES_PATH = Path(__file__).parent.parent / "services" / "db" / "templates.py"
 
 
 # ===========================================================================
@@ -123,6 +134,38 @@ async def _other_user(db_conn) -> str:
         "INSERT INTO auth.users (id, email) VALUES ($1, $2)", other_user, f"{other_user}@t.local"
     )
     return other_user
+
+
+def _extract_sql_statements(path: Path) -> list[str]:
+    src = path.read_text()
+    blocks = re.findall(r'"""(.*?)"""', src, re.S)
+    statements = []
+    for b in blocks:
+        stripped = b.strip()
+        first_word = stripped.split(None, 1)[0].upper() if stripped else ""
+        if first_word in _SQL_KEYWORDS:
+            statements.append(b)
+    return statements
+
+
+def _assert_has_scope_predicate(stmt: str) -> None:
+    first_word = stmt.strip().split(None, 1)[0].upper()
+    if first_word == "INSERT":
+        assert re.search(r"\buser_id\b", stmt), f"INSERT never mentions user_id:\n{stmt}"
+        return
+    assert _SCOPE_PREDICATE_RE.search(stmt), f"query missing a real user_id = $N predicate:\n{stmt}"
+
+
+def test_every_query_in_templates_service_has_a_user_id_scope_predicate():
+    """Not `services/db/scheduler.py`: its one query (`_tick_templates`'s
+    due-work SELECT) is a deliberate, documented exception -- a
+    system-wide background job with no per-request `user_id` to scope by,
+    covered instead by this file's own scheduler-tick tests asserting it
+    only ever touches the one due template it's handed."""
+    statements = _extract_sql_statements(_TEMPLATES_PATH)
+    assert len(statements) >= 8, "expected to find templates.py's SQL statements"
+    for stmt in statements:
+        _assert_has_scope_predicate(stmt)
 
 
 # ===========================================================================
