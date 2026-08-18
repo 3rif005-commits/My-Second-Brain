@@ -31,6 +31,9 @@ from models.database import (
     AutomationCreate,
     AutomationResponse,
     AutomationUpdate,
+    ButtonBlockClickRequest,
+    ButtonClickRequest,
+    ButtonClickResponse,
     DatabaseCreate,
     DatabaseDetailResponse,
     DatabaseResponse,
@@ -68,10 +71,15 @@ from models.database import (
 )
 from routers.notes import get_user_id
 from services.db import automations as automations_service
+from services.db import buttons as buttons_service
 from services.db import notifications as notifications_service
 from services.db import recompute
 from services.db import rollup as rollup_service
-from services.db.automations import AutomationConfigError
+from services.db.automations import (
+    ActionConfigError,
+    ActionContext,
+    AutomationConfigError,
+)
 from services.db.connection import get_conn
 from services.db.formula import FormulaCycleError, FormulaSyntaxError
 from services.db.formula import check as check_formula
@@ -1980,6 +1988,180 @@ async def mark_notification_read(
     if result is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "notification not found")
     return result
+
+
+# ---------------------------------------------------------------------------
+# Milestone 12 (task-39): the two button click endpoints -- button PROPERTY and
+# button BLOCK, decision 5. `services/db/buttons.py` owns `BUTTON_ACTIONS`/
+# `BUTTON_BLOCK_ACTIONS`/`run_button_actions`; these handlers are thin HTTP seams:
+# parse/404 path params, look up whatever this surface needs to build an
+# `ActionContext`, call `run_button_actions`, map its typed exceptions to a 400 the
+# same way `_automation_error_to_http` does for `AutomationConfigError` above. Neither
+# endpoint uses task-38's `_execute_and_record_error`/SAVEPOINT/`last_error` machinery
+# (decision 5: a button click is a single, synchronous, user-initiated request with
+# no sibling actions in the same pass to protect) -- a real failure propagates as a
+# clean 400 the normal way.
+# ---------------------------------------------------------------------------
+
+
+def _button_error_to_http(exc: Exception) -> HTTPException:
+    return HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+
+
+@router.post(
+    "/data-sources/{data_source_id}/rows/{note_id}/buttons/{property_key}/click",
+    response_model=ButtonClickResponse,
+)
+async def click_button_property(
+    data_source_id: str,
+    note_id: str,
+    property_key: str,
+    body: ButtonClickRequest,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> ButtonClickResponse:
+    """Decision 5: `trigger_data_source_id` is always real here -- a button property
+    only exists on an actual data source, never on the All Notes virtual source (no
+    `db_properties` row exists for it at all). `allowed = BUTTON_ACTIONS` (8 -- no
+    `insert_blocks`: research §J.6.2/§25, a button PROPERTY has no "page" of its own
+    to insert blocks into the way a button BLOCK's host note does).
+
+    The row-ownership check below (`note_id` actually belongs to this data source and
+    user) is not literally named by decision 5's own text but mirrors
+    `update_row_property`'s identical check just above -- without it, a foreign/stale
+    `note_id` would only surface once an action in the chain that happens to touch the
+    row (e.g. `edit_property`) raised `services.db.rows.RowNotFoundError`, a type this
+    endpoint doesn't otherwise map, which would 500 instead of 404. Flagged in
+    task-39-report.md as a judgment call beyond decision 5's literal text.
+    """
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "buttons are not supported on the All Notes virtual source",
+        )
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    note_id = _parse_uuid_or_404(note_id, "row")
+
+    ds_row = await conn.fetchrow(
+        """
+        SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2
+        """,
+        data_source_id,
+        user_id,
+    )
+    if ds_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    prop_row = await conn.fetchrow(
+        """
+        SELECT type, config FROM db_properties
+        WHERE data_source_id = $1 AND user_id = $2 AND key = $3
+        """,
+        data_source_id,
+        user_id,
+        property_key,
+    )
+    if prop_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "property not found")
+    if prop_row["type"] != "button":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"property {property_key!r} is not a button"
+        )
+
+    row_exists = await conn.fetchrow(
+        """
+        SELECT note_id FROM db_row_props
+        WHERE note_id = $1 AND data_source_id = $2 AND user_id = $3
+        """,
+        note_id,
+        data_source_id,
+        user_id,
+    )
+    if row_exists is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "row not found")
+
+    actions = (prop_row["config"] or {}).get("actions") or []
+    ctx = ActionContext(
+        conn=conn,
+        user_id=user_id,
+        trigger_data_source_id=data_source_id,
+        trigger_row_id=note_id,
+        now=datetime.now(timezone.utc),
+        source=f"button:{property_key}",
+    )
+    try:
+        result = await buttons_service.run_button_actions(
+            conn, ctx, actions, allowed=buttons_service.BUTTON_ACTIONS, confirmed=body.confirmed,
+        )
+    except ActionConfigError as exc:
+        raise _button_error_to_http(exc) from exc
+
+    return ButtonClickResponse(
+        actions_run=result.actions_run,
+        requires_confirmation=result.requires_confirmation,
+        confirmation_message=result.confirmation_message,
+        client_actions=result.client_actions,
+    )
+
+
+@router.post("/buttons/block-click", response_model=ButtonClickResponse)
+async def click_button_block(
+    body: ButtonBlockClickRequest,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> ButtonClickResponse:
+    """Decision 5: a button BLOCK's action chain lives entirely in the block's own
+    BlockNote props (decision 3) -- no server-side storage to look up, so `actions`
+    travels in the request body directly. This is safe (not "client controls arbitrary
+    server execution") because the acting user is always the same user who authored
+    those actions into their own note's content in the first place -- the same trust
+    boundary this whole app already operates under (decision 3's own text).
+
+    `trigger_data_source_id` is resolved via decision 4's lookup
+    (`buttons_service.resolve_trigger_data_source_id`) -- `None` when `note_id` isn't a
+    database row at all. `allowed = BUTTON_BLOCK_ACTIONS` (9, includes
+    `insert_blocks`).
+    """
+    note_id = _parse_uuid_or_404(body.note_id, "note")
+
+    note_row = await conn.fetchrow(
+        """
+        SELECT id FROM notes WHERE id = $1 AND user_id = $2
+        """,
+        note_id,
+        user_id,
+    )
+    if note_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "note not found")
+
+    trigger_data_source_id = await buttons_service.resolve_trigger_data_source_id(
+        conn, user_id, note_id
+    )
+    ctx = ActionContext(
+        conn=conn,
+        user_id=user_id,
+        trigger_data_source_id=trigger_data_source_id,
+        trigger_row_id=note_id,
+        now=datetime.now(timezone.utc),
+        source=f"button:block:{note_id}",
+    )
+    try:
+        result = await buttons_service.run_button_actions(
+            conn,
+            ctx,
+            body.actions,
+            allowed=buttons_service.BUTTON_BLOCK_ACTIONS,
+            confirmed=body.confirmed,
+        )
+    except ActionConfigError as exc:
+        raise _button_error_to_http(exc) from exc
+
+    return ButtonClickResponse(
+        actions_run=result.actions_run,
+        requires_confirmation=result.requires_confirmation,
+        confirmation_message=result.confirmation_message,
+        client_actions=result.client_actions,
+    )
 
 
 # ---------------------------------------------------------------------------

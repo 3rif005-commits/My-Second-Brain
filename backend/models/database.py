@@ -669,3 +669,38 @@ class NotificationResponse(BaseModel):
     source: str | None = None
     read_at: datetime | None = None
     created_at: datetime
+
+
+class ButtonClickRequest(BaseModel):
+    """`POST /db/data-sources/{data_source_id}/rows/{note_id}/buttons/{property_key}/
+    click` body (task-39-brief.md decision 5). `confirmed` is decision 6's two-phase
+    flow: the first click omits it (defaults False); if the response comes back with
+    `requires_confirmation=True`, the caller re-POSTs the SAME request with
+    `confirmed: true` to actually run the chain past its `show_confirmation` action."""
+
+    confirmed: bool = False
+
+
+class ButtonBlockClickRequest(BaseModel):
+    """`POST /db/buttons/block-click` body (decision 5). A button BLOCK's action chain
+    lives entirely in the block's own BlockNote props (decision 3) — there is no
+    server-side storage for it to look up by id, so the actions array travels in the
+    request body directly. `actions` stays untyped `list[Any]` JSONB pass-through,
+    the same convention `AutomationCreate.actions` already uses."""
+
+    note_id: str
+    actions: list[Any] = []
+    confirmed: bool = False
+
+
+class ButtonClickResponse(BaseModel):
+    """Shared response shape for both click endpoints (decision 7). `client_actions`
+    entries (`open_page_or_url`'s `{"type": "open", ...}` / `insert_blocks`'s
+    `{"type": "insert_blocks", ...}`) are resolve-only instructions for a future
+    frontend (Task 42) to actually enact — this backend only produces them correctly,
+    never acts on them itself."""
+
+    actions_run: int
+    requires_confirmation: bool = False
+    confirmation_message: str | None = None
+    client_actions: list[dict[str, Any]] = []
