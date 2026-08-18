@@ -13,6 +13,7 @@ import { ListView } from "./views/ListView";
 import { FeedView } from "./views/FeedView";
 import { CalendarView } from "./views/CalendarView";
 import { TimelineView } from "./views/TimelineView";
+import { ChartView } from "./views/ChartView";
 import { ViewTabs } from "./ViewTabs";
 import { DatabaseSettingsMenu } from "./DatabaseSettingsMenu";
 
@@ -30,6 +31,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     setActiveViewId,
     rows,
     groups,
+    aggregates,
     loading,
     error,
     updateCell,
@@ -90,6 +92,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     type: string;
     groupPropertyKey?: string;
     datePropertyKey?: string;
+    chartConfig?: Record<string, unknown>;
   }) {
     const created = await createView(input.name, input.type);
     if (input.type === "board" && input.groupPropertyKey) {
@@ -105,6 +108,16 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     // new view never renders with a dangling/missing date property.
     if ((input.type === "calendar" || input.type === "timeline") && input.datePropertyKey) {
       await updateView(created.id, { config: { date_property_id: input.datePropertyKey } });
+    }
+    // Chart's creation-time required config (task-35-brief.md): same
+    // "create bare, then PATCH" mechanism as Board/Calendar/Timeline above,
+    // but the config itself (chart_type + y_axis + optionally x_axis/
+    // stack_by/hide_empty_groups) is assembled by ViewTabs.tsx's
+    // `ChartCreateFields` form (via `buildChartViewConfig`) rather than a
+    // single property key, since Chart's config is more involved than any
+    // of theirs.
+    if (input.type === "chart" && input.chartConfig) {
+      await updateView(created.id, { config: input.chartConfig });
     }
     setActiveViewId(created.id);
   }
@@ -205,13 +218,31 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             ensureRelationLinksBulk={ensureRelationLinksBulk}
           />
         );
+      case "chart":
+        // Read-only for data (research §9.8: "you can't edit database
+        // entries from chart view") — unlike every other case above, this
+        // one does NOT thread through `editable`/`onCellChange` at all:
+        // `editable` is forced `false` unconditionally (never the caller's
+        // real All-Notes-vs-ordinary state), and `onCellChange` isn't
+        // passed at all (ChartView's own prop is optional and, even when
+        // supplied directly in its own tests, is never reachable from any
+        // interaction — see ChartView.test.tsx).
+        return (
+          <ChartView
+            properties={properties}
+            config={activeView.config}
+            groups={groups}
+            aggregates={aggregates}
+            editable={false}
+          />
+        );
       default:
         // Task-15's own spirit for view *config* ("tolerates unknown...
         // drops them at read"), applied to view *type* rendering — every
         // type this milestone ships (table/board/gallery/list/feed/
-        // calendar/timeline) has a branch above; anything else (a stale/
-        // unknown string) is a plain message, never a crash or a blank
-        // screen.
+        // calendar/timeline/chart) has a branch above; anything else (a
+        // stale/unknown string) is a plain message, never a crash or a
+        // blank screen.
         return (
           <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500">
             This view type isn&apos;t supported yet.

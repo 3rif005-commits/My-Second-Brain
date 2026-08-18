@@ -107,13 +107,23 @@ export interface GroupBySpec {
 /** JSON mirror of `GroupResult` (task-15's `QueryResponse.groups[]`).
  * `subgroups` is `null`/absent unless `sub_group_by` was requested, and —
  * same as the backend `Group` dataclass — never present on a subgroup
- * itself (sub-grouping is exactly two levels). */
+ * itself (sub-grouping is exactly two levels).
+ *
+ * `aggregates` (Milestone 10, task-32) is `undefined`/`null` whenever the
+ * request's `aggregations` was empty (byte-identical to before that field
+ * existed — see `AggregationSpec`'s own docstring on the backend); when
+ * present it's one `{spec.key: value}` entry per requested aggregation,
+ * computed from *this* group's own rows (or, for a subgroup entry, that
+ * subgroup's own rows). Chart (task-35) is the first consumer — it always
+ * requests exactly one aggregation keyed `"y"`, so `aggregates?.y` is the
+ * bar/line-point/donut-slice value for that group. */
 export interface Group {
   key: string;
   label: string;
   row_count: number;
   rows: DatabaseRow[];
   subgroups: Group[] | null;
+  aggregates?: Record<string, number> | null;
 }
 
 /** The property types `services.db.query.grouping.group_rows` can group a
@@ -147,6 +157,64 @@ export function getSubGroupBySpec(config: Record<string, unknown>): GroupBySpec 
     return raw as GroupBySpec;
   }
   return undefined;
+}
+
+/** Task-35's generalization of `useDatabaseView.ts`'s `loadRows()`: instead
+ * of a growing pile of `if (activeView.type === X) body.foo = ...` branches
+ * bolted on next to each other, every view type that needs extra `/query`
+ * request fields beyond `filter`/`sorts` gets one entry point here, keyed
+ * on `view.type`. Board (task-16) sends `group_by`/`sub_group_by` verbatim
+ * from `config.group_by`/`config.sub_group_by` (already `GroupBySpec`-
+ * shaped, `property_key` and all). Chart (task-35) is a genuinely new
+ * translation, not a reuse: its own `config.x_axis`/`config.y_axis`/
+ * `config.stack_by` use Notion's own field name `property_id` (spec §10's
+ * "config follows Notion's own Views API verbatim"), which has to be
+ * renamed to `property_key` to match `GroupBySpec`/`AggregationSpec`'s own
+ * field name before it can ride in the same request body. Every other view
+ * type falls through to `{}` — byte-identical to before this function
+ * existed. */
+export function getQueryExtras(view: Pick<ViewResponse, "type" | "config">): Record<string, unknown> {
+  if (view.type === "board") {
+    const extras: Record<string, unknown> = {};
+    const groupBy = getGroupBySpec(view.config);
+    const subGroupBy = getSubGroupBySpec(view.config);
+    if (groupBy) extras.group_by = groupBy;
+    if (subGroupBy) extras.sub_group_by = subGroupBy;
+    return extras;
+  }
+
+  if (view.type === "chart") {
+    const extras: Record<string, unknown> = {};
+    const chartType = getChartType(view.config);
+    const yAxis = getChartYAxis(view.config);
+    if (yAxis) {
+      extras.aggregations = [
+        { key: "y", aggregator: yAxis.aggregator, property_key: yAxis.property_id },
+      ];
+    }
+    // "number" mode has no x-axis at all (a single scalar over every
+    // filtered/sorted row, computed ungrouped server-side) — see
+    // `AggregationSpec`'s "Chart's Number-type mode" docstring.
+    if (chartType !== "number") {
+      const xAxis = getChartXAxis(view.config);
+      if (xAxis) {
+        const groupBy: Record<string, unknown> = { property_key: xAxis.property_id };
+        if (xAxis.mode) groupBy.mode = xAxis.mode;
+        if (getChartHideEmptyGroups(view.config)) groupBy.hide_empty_groups = true;
+        extras.group_by = groupBy;
+
+        const stackBy = getChartStackBy(view.config);
+        if (stackBy) {
+          const subGroupBy: Record<string, unknown> = { property_key: stackBy.property_id };
+          if (stackBy.mode) subGroupBy.mode = stackBy.mode;
+          extras.sub_group_by = subGroupBy;
+        }
+      }
+    }
+    return extras;
+  }
+
+  return {};
 }
 
 /** One row's per-property values, keyed by `PropertyResponse.key`. Works for
@@ -409,4 +477,113 @@ export type KnownPropertyType = (typeof KNOWN_PROPERTY_TYPES)[number];
 
 export function isKnownPropertyType(type: string): type is KnownPropertyType {
   return (KNOWN_PROPERTY_TYPES as readonly string[]).includes(type);
+}
+
+// ── Milestone 10 (task-35): Chart view config ──────────────────────────────
+// Lives on the view's own opaque `config` JSONB (freeform, no schema change
+// — same as every other view's config), using Notion's own chart-config
+// field names verbatim (spec §10's stated principle) — `x_axis`/`y_axis`/
+// `stack_by` each carry `property_id`, NOT `property_key` the way `Group
+// BySpec`/`AggregationSpec` do; `getQueryExtras` above is the one place that
+// translates between the two when building a `/query` request. See research
+// §G.9 (~line 2626) for the full option matrix this task deliberately only
+// implements a slice of (see ChartView.tsx's own scope-cut comment).
+
+/** `"column"` = vertical bars, `"bar"` = horizontal bars — Notion's own
+ * naming is swapped from the intuitive reading (research's flagged gotcha).
+ * Get this backwards and every column/bar chart in the app renders
+ * sideways. */
+export const CHART_TYPES = ["column", "bar", "line", "donut", "number"] as const;
+export type ChartType = (typeof CHART_TYPES)[number];
+
+/** Mirrors `services.db.query.aggregations._VALID_AGGREGATORS` verbatim —
+ * same hand-kept-in-lockstep trade-off as `ROLLUP_FUNCTIONS` above. */
+export const CHART_Y_AXIS_AGGREGATORS = [
+  "count", "count_values", "sum", "average", "median", "min", "max", "range",
+  "unique", "empty", "not_empty", "percent_empty", "percent_not_empty",
+  "checked", "unchecked", "percent_checked", "percent_unchecked",
+  "earliest_date", "latest_date", "date_range",
+] as const;
+export type ChartYAxisAggregator = (typeof CHART_Y_AXIS_AGGREGATORS)[number];
+
+export type ChartGroupStyle = "normal" | "percent" | "side_by_side";
+
+/** `config.x_axis`/`config.stack_by`'s shape — a `GroupBySpec`-equivalent
+ * concept (research confirms Chart's x-axis IS a group-by), just spelled
+ * with Notion's own `property_id` key instead of this app's
+ * `GroupBySpec.property_key`. */
+export interface ChartAxisSpec {
+  property_id: string;
+  mode?: string;
+}
+
+/** `config.y_axis`'s shape. `property_id` is only omitted (or ignored) when
+ * `aggregator === "count"` — the one property-independent aggregator,
+ * mirroring `AggregationSpec.property_key`'s own "`None` only for count"
+ * contract on the backend. */
+export interface ChartYAxisSpec {
+  aggregator: string;
+  property_id?: string;
+}
+
+export interface ChartReferenceLine {
+  id: string;
+  value: number;
+  label: string;
+  color: string;
+  dash_style: "solid" | "dash";
+}
+
+export function getChartType(config: Record<string, unknown>): ChartType {
+  const raw = config.chart_type;
+  return typeof raw === "string" && (CHART_TYPES as readonly string[]).includes(raw)
+    ? (raw as ChartType)
+    : "column";
+}
+
+export function getChartXAxis(config: Record<string, unknown>): ChartAxisSpec | undefined {
+  const raw = config.x_axis;
+  if (raw && typeof raw === "object" && typeof (raw as Record<string, unknown>).property_id === "string") {
+    return raw as ChartAxisSpec;
+  }
+  return undefined;
+}
+
+export function getChartYAxis(config: Record<string, unknown>): ChartYAxisSpec | undefined {
+  const raw = config.y_axis;
+  if (raw && typeof raw === "object" && typeof (raw as Record<string, unknown>).aggregator === "string") {
+    return raw as ChartYAxisSpec;
+  }
+  return undefined;
+}
+
+/** `null` is a valid, common return here (no stacking configured) — kept
+ * distinct from `undefined` (a malformed/absent `config.stack_by`) the same
+ * way `relationLinks`' cache distinguishes "not fetched" from "fetched,
+ * empty" elsewhere in this codebase, though callers here only ever need to
+ * treat both as falsy ("no stack_by"). */
+export function getChartStackBy(config: Record<string, unknown>): ChartAxisSpec | undefined {
+  const raw = config.stack_by;
+  if (raw && typeof raw === "object" && typeof (raw as Record<string, unknown>).property_id === "string") {
+    return raw as ChartAxisSpec;
+  }
+  return undefined;
+}
+
+export function getChartGroupStyle(config: Record<string, unknown>): ChartGroupStyle {
+  const raw = config.group_style;
+  return raw === "percent" || raw === "side_by_side" ? raw : "normal";
+}
+
+export function getChartHideEmptyGroups(config: Record<string, unknown>): boolean {
+  return config.hide_empty_groups === true;
+}
+
+export function getChartReferenceLines(config: Record<string, unknown>): ChartReferenceLine[] {
+  const raw = config.reference_lines;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (l): l is ChartReferenceLine =>
+      l && typeof l === "object" && typeof l.id === "string" && typeof l.value === "number"
+  );
 }

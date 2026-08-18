@@ -28,7 +28,7 @@ import type {
   RowResponse,
   ViewResponse,
 } from "./types";
-import { getGroupBySpec, getSubGroupBySpec } from "./types";
+import { getQueryExtras } from "./types";
 
 /** Best-effort extraction of a human-readable message from a failed
  * fetch's body — FastAPI's HTTPException responses are `{"detail": "..."}`,
@@ -61,6 +61,14 @@ export function useDatabaseView(databaseId: string) {
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const [rows, setRows] = useState<DatabaseRow[]>([]);
   const [groups, setGroups] = useState<Group[] | null>(null);
+  // Milestone 10 (task-35): the ungrouped counterpart of `Group.aggregates`
+  // — populated only for a Chart view's "number" mode (no `group_by`, one
+  // scalar over the whole filtered/sorted row set). `null` whenever the
+  // active view's query had no `aggregations` or was grouped (aggregates
+  // then live per-group in `groups[].aggregates` instead, never duplicated
+  // here) — mirrors `QueryResponse.aggregates`'s own "`None` unless
+  // ungrouped + aggregations" contract.
+  const [aggregates, setAggregates] = useState<Record<string, number> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Milestone 7 (task-21/task-22): a relation property's value never lands
@@ -108,21 +116,19 @@ export function useDatabaseView(databaseId: string) {
 
   /** Runs `activeView`'s filter/sorts/group_by through `POST .../query`
    * and populates exactly one of `rows`/`groups`, mirroring the endpoint's
-   * own "exactly one of rows/groups" response contract (task-15). Only
-   * board views pass group_by/sub_group_by — every other view type queries
-   * ungrouped, same as the old unconditional `GET .../rows` did. */
+   * own "exactly one of rows/groups" response contract (task-15). Board and
+   * Chart (task-35) both need extra request fields beyond filter/sorts —
+   * `getQueryExtras` (types.ts) is the single dispatch point for that, so
+   * this function doesn't grow an `if (type === X)` branch per view type;
+   * every other view type gets `{}` back (byte-identical request body to
+   * before Chart existed). */
   const loadRows = useCallback(async () => {
     if (!dataSource || !activeView) return;
     const body: Record<string, unknown> = {
       filter: activeView.filter ?? null,
       sorts: activeView.sorts ?? [],
+      ...getQueryExtras(activeView),
     };
-    if (activeView.type === "board") {
-      const groupBy = getGroupBySpec(activeView.config);
-      const subGroupBy = getSubGroupBySpec(activeView.config);
-      if (groupBy) body.group_by = groupBy;
-      if (subGroupBy) body.sub_group_by = subGroupBy;
-    }
 
     const res = await fetch(`/api/db/data-sources/${dataSource.id}/query`, {
       method: "POST",
@@ -130,13 +136,16 @@ export function useDatabaseView(databaseId: string) {
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(await errorMessage(res));
-    const data: { rows?: DatabaseRow[]; groups?: Group[] } = await res.json();
+    const data: { rows?: DatabaseRow[]; groups?: Group[]; aggregates?: Record<string, number> } =
+      await res.json();
     if (data.groups) {
       setGroups(data.groups);
       setRows([]);
+      setAggregates(null);
     } else {
       setRows(data.rows ?? []);
       setGroups(null);
+      setAggregates(data.aggregates ?? null);
     }
   }, [dataSource, activeView]);
 
@@ -435,6 +444,7 @@ export function useDatabaseView(databaseId: string) {
     setActiveViewId,
     rows,
     groups,
+    aggregates,
     loading,
     error,
     updateCell,

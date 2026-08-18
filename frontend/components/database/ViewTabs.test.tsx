@@ -245,4 +245,104 @@ describe("ViewTabs", () => {
       datePropertyKey: "due",
     });
   });
+
+  const CHART_PROPERTIES = [
+    prop({ key: "status", name: "Status", type: "status" }),
+    prop({ key: "amount", name: "Amount", type: "number" }),
+  ];
+
+  it("creating a Chart view: Create stays disabled until chart_type's required fields (x_axis here) are filled in", async () => {
+    const user = userEvent.setup();
+    const onCreateView = vi.fn();
+    render(
+      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={CHART_PROPERTIES} onCreateView={onCreateView} />
+    );
+
+    await user.click(screen.getByText("+ New view"));
+    await user.selectOptions(screen.getByLabelText(/view type/i), "chart");
+
+    // Default chart_type is "column" (needs an x_axis) with y_axis
+    // defaulting to aggregator "count" (no property needed) — Create stays
+    // disabled until an x_axis property is picked.
+    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText(/x-axis property/i), "status");
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(onCreateView).toHaveBeenCalledWith({
+      name: "New view",
+      type: "chart",
+      groupPropertyKey: undefined,
+      datePropertyKey: undefined,
+      chartConfig: {
+        chart_type: "column",
+        y_axis: { aggregator: "count" },
+        x_axis: { property_id: "status" },
+        hide_empty_groups: false,
+      },
+    });
+  });
+
+  it("creating a 'Number' Chart view needs no x_axis, only a y_axis", async () => {
+    const user = userEvent.setup();
+    const onCreateView = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={CHART_PROPERTIES} onCreateView={onCreateView} />
+    );
+
+    await user.click(screen.getByText("+ New view"));
+    await user.selectOptions(screen.getByLabelText(/view type/i), "chart");
+    await user.selectOptions(screen.getByLabelText(/chart type/i), "number");
+
+    // count aggregator + no x_axis required for "number" -> already valid.
+    expect(screen.getByRole("button", { name: /^create$/i })).not.toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(onCreateView).toHaveBeenCalledWith({
+      name: "New view",
+      type: "chart",
+      groupPropertyKey: undefined,
+      datePropertyKey: undefined,
+      chartConfig: { chart_type: "number", y_axis: { aggregator: "count" } },
+    });
+  });
+
+  it("a non-'count' y_axis aggregator requires picking a y_axis property before Create is enabled", async () => {
+    const user = userEvent.setup();
+    const onCreateView = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={CHART_PROPERTIES} onCreateView={onCreateView} />
+    );
+
+    await user.click(screen.getByText("+ New view"));
+    await user.selectOptions(screen.getByLabelText(/view type/i), "chart");
+    await user.selectOptions(screen.getByLabelText(/chart type/i), "number");
+    await user.selectOptions(screen.getByLabelText(/y-axis aggregator/i), "sum");
+
+    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText(/y-axis property/i), "amount");
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(onCreateView).toHaveBeenCalledWith({
+      name: "New view",
+      type: "chart",
+      groupPropertyKey: undefined,
+      datePropertyKey: undefined,
+      chartConfig: { chart_type: "number", y_axis: { aggregator: "sum", property_id: "amount" } },
+    });
+  });
+
+  it("stack_by's picker does not appear when chart_type is 'donut'", async () => {
+    const user = userEvent.setup();
+    render(
+      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={CHART_PROPERTIES} onCreateView={vi.fn()} />
+    );
+
+    await user.click(screen.getByText("+ New view"));
+    await user.selectOptions(screen.getByLabelText(/view type/i), "chart");
+    await user.selectOptions(screen.getByLabelText(/chart type/i), "donut");
+
+    expect(screen.queryByLabelText(/stack by/i)).not.toBeInTheDocument();
+  });
 });

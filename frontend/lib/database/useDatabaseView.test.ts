@@ -166,6 +166,112 @@ describe("useDatabaseView", () => {
     expect(body.group_by).toEqual({ property_key: "status" });
   });
 
+  // Task-35 (Chart view): `getQueryExtras` (types.ts) is the single dispatch
+  // point `loadRows` now calls for both Board and Chart, translating Chart's
+  // Notion-named `config.x_axis`/`config.y_axis`/`config.stack_by`
+  // (`property_id`) into the `group_by`/`sub_group_by`/`aggregations`
+  // shapes `POST .../query` expects (`property_key`). ChartView.tsx itself
+  // is a pure `groups`/`aggregates`-props-driven component (same shape as
+  // BoardView) with no fetch logic of its own, so — same as the Board
+  // wiring test directly above — the actual request-building assertions
+  // belong here, next to the code that builds the request, not in
+  // ChartView.test.tsx.
+  it("switching to a Chart view (column/bar/line/donut) sends group_by (incl. hide_empty_groups), sub_group_by, and aggregations built from x_axis/y_axis/stack_by", async () => {
+    const CHART_VIEW: ViewResponse = {
+      id: "v3",
+      data_source_id: "ds-1",
+      user_id: "user-1",
+      name: "Chart",
+      icon: null,
+      type: "chart",
+      config: {
+        chart_type: "column",
+        x_axis: { property_id: "status" },
+        y_axis: { aggregator: "count" },
+        stack_by: { property_id: "titleKey" },
+        hide_empty_groups: true,
+      },
+      filter: null,
+      sorts: [],
+      is_locked: false,
+      position: 2,
+    };
+    const chartDetail = detail([TABLE_VIEW, CHART_VIEW]);
+    const GROUPS: Group[] = [
+      { key: "todo", label: "To do", row_count: 1, rows: [ROWS[0]], subgroups: null, aggregates: { y: 1 } },
+    ];
+
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(chartDetail));
+      if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+        const body = JSON.parse(init!.body as string);
+        if (body.group_by) return Promise.resolve(jsonResponse({ groups: GROUPS }));
+        return Promise.resolve(jsonResponse({ rows: ROWS }));
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current.rows).toHaveLength(2));
+
+    act(() => result.current.setActiveViewId("v3"));
+    await waitFor(() => expect(result.current.groups).not.toBeNull());
+    expect(result.current.groups).toEqual(GROUPS);
+    expect(result.current.aggregates).toBeNull();
+
+    const queryCalls = fetchMock.mock.calls.filter(([url]) => url === "/api/db/data-sources/ds-1/query");
+    const body = JSON.parse((queryCalls[queryCalls.length - 1][1] as RequestInit).body as string);
+    expect(body.group_by).toEqual({ property_key: "status", hide_empty_groups: true });
+    expect(body.sub_group_by).toEqual({ property_key: "titleKey" });
+    expect(body.aggregations).toEqual([{ key: "y", aggregator: "count", property_key: undefined }]);
+  });
+
+  it("switching to a Chart view with chart_type='number' sends no group_by/sub_group_by, and exposes the ungrouped `aggregates` (not `groups`)", async () => {
+    const NUMBER_CHART_VIEW: ViewResponse = {
+      id: "v4",
+      data_source_id: "ds-1",
+      user_id: "user-1",
+      name: "Total",
+      icon: null,
+      type: "chart",
+      config: { chart_type: "number", y_axis: { aggregator: "count" } },
+      filter: null,
+      sorts: [],
+      is_locked: false,
+      position: 3,
+    };
+    const numberDetail = detail([TABLE_VIEW, NUMBER_CHART_VIEW]);
+
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(numberDetail));
+      if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+        const body = JSON.parse(init!.body as string);
+        if (body.aggregations?.length && !body.group_by) {
+          return Promise.resolve(jsonResponse({ rows: ROWS, aggregates: { y: 2 } }));
+        }
+        return Promise.resolve(jsonResponse({ rows: ROWS }));
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await waitFor(() => expect(result.current.rows).toHaveLength(2));
+
+    act(() => result.current.setActiveViewId("v4"));
+    await waitFor(() => expect(result.current.aggregates).toEqual({ y: 2 }));
+    expect(result.current.groups).toBeNull();
+
+    const queryCalls = fetchMock.mock.calls.filter(([url]) => url === "/api/db/data-sources/ds-1/query");
+    const body = JSON.parse((queryCalls[queryCalls.length - 1][1] as RequestInit).body as string);
+    expect(body.group_by).toBeUndefined();
+    expect(body.sub_group_by).toBeUndefined();
+    expect(body.aggregations).toEqual([{ key: "y", aggregator: "count", property_key: undefined }]);
+  });
+
   it("updateCell: applies optimistically, then reconciles with the server response", async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));

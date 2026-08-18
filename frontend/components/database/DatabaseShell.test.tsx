@@ -20,6 +20,7 @@ const mockHook: {
   setActiveViewId: ReturnType<typeof vi.fn>;
   rows: unknown[];
   groups: Group[] | null;
+  aggregates: Record<string, number> | null;
   loading: boolean;
   error: string | null;
   updateCell: ReturnType<typeof vi.fn>;
@@ -67,6 +68,7 @@ const mockHook: {
   setActiveViewId: vi.fn(),
   rows: [{ id: "row-1", properties: { title: { type: "title", title: "First" } } }],
   groups: null,
+  aggregates: null,
   loading: false,
   error: null,
   updateCell: vi.fn(),
@@ -91,6 +93,7 @@ beforeEach(() => {
     { id: "v1", data_source_id: "ds-1", user_id: "user-1", name: "Table view", icon: null, type: "table", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },
   ];
   mockHook.groups = null;
+  mockHook.aggregates = null;
   // Reset in case a test (e.g. the "group by a Select property" test below)
   // appends to this array — `mockHook.properties` is otherwise a single
   // module-scoped object every test shares, so a mutation would otherwise
@@ -163,6 +166,56 @@ describe("DatabaseShell", () => {
     // The Timeline view's own toolbar (zoom-level select) is a stable
     // render signal that doesn't depend on the plotted rows' actual dates.
     expect(screen.getByLabelText("Zoom level")).toBeInTheDocument();
+  });
+
+  it("renders ChartView for a chart-typed active view", () => {
+    mockHook.views = [
+      {
+        id: "v9",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Chart",
+        icon: null,
+        type: "chart",
+        config: { chart_type: "column", x_axis: { property_id: "status" }, y_axis: { aggregator: "count" } },
+        filter: null,
+        sorts: [],
+        is_locked: false,
+        position: 0,
+      },
+    ];
+    mockHook.activeViewId = "v9";
+    mockHook.groups = [
+      { key: "todo", label: "To do", row_count: 1, rows: [], subgroups: null, aggregates: { y: 1 } },
+    ];
+    render(<DatabaseShell databaseId="db-1" />);
+    expect(screen.getByTestId("chart-view")).toBeInTheDocument();
+  });
+
+  it("forces editable={false} for ChartView regardless of the caller's own editable (dataSource) state — the one place this view type diverges from every other view's read/write gating", () => {
+    // is_virtual=false would make every OTHER view editable=true.
+    mockHook.dataSource = { ...(mockHook.dataSource as Record<string, unknown>), is_virtual: false };
+    mockHook.views = [
+      {
+        id: "v9",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Chart",
+        icon: null,
+        type: "chart",
+        config: { chart_type: "column", x_axis: { property_id: "status" }, y_axis: { aggregator: "count" } },
+        filter: null,
+        sorts: [],
+        is_locked: false,
+        position: 0,
+      },
+    ];
+    mockHook.activeViewId = "v9";
+    mockHook.groups = [
+      { key: "todo", label: "To do", row_count: 1, rows: [], subgroups: null, aggregates: { y: 1 } },
+    ];
+    render(<DatabaseShell databaseId="db-1" />);
+    expect(screen.getByTestId("chart-view")).toHaveAttribute("data-editable", "false");
   });
 
   it("renders GalleryView for a gallery-typed active view", () => {

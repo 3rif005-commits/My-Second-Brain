@@ -8,6 +8,13 @@
 import { useState } from "react";
 import type { PropertyResponse, ViewResponse } from "@/lib/database/types";
 import { GROUPABLE_PROPERTY_TYPES } from "@/lib/database/types";
+import {
+  ChartCreateFields,
+  DEFAULT_CHART_DRAFT,
+  buildChartViewConfig,
+  isChartConfigComplete,
+} from "./views/ChartView";
+import type { ChartDraftConfig } from "./views/ChartView";
 
 interface ViewTabsProps {
   views: ViewResponse[];
@@ -17,19 +24,23 @@ interface ViewTabsProps {
    * groupable types (select/status/multi_select) — and the Calendar/
    * Timeline-creation "date property" dropdown (both require the same
    * `date_property_id`, task-34-brief.md extending task-33's pattern),
-   * restricted to `type === "date"`. */
+   * restricted to `type === "date"`. Also handed to Chart-creation's own
+   * `ChartCreateFields` (task-35), which does its own filtering for its
+   * x_axis/stack_by (groupable types, same restriction as Board) and
+   * y_axis (any property) pickers. */
   properties: PropertyResponse[];
   onCreateView: (input: {
     name: string;
     type: string;
     groupPropertyKey?: string;
     datePropertyKey?: string;
+    chartConfig?: Record<string, unknown>;
   }) => Promise<void>;
 }
 
-// The seven view types this milestone supports creating (table/board —
+// The eight view types this milestone supports creating (table/board —
 // Task 16; gallery/list/feed — Task 17; calendar — Task 33; timeline —
-// Task 34).
+// Task 34; chart — Task 35).
 const VIEW_TYPE_OPTIONS = [
   { value: "table", label: "Table" },
   { value: "board", label: "Board" },
@@ -38,6 +49,7 @@ const VIEW_TYPE_OPTIONS = [
   { value: "feed", label: "Feed" },
   { value: "calendar", label: "Calendar" },
   { value: "timeline", label: "Timeline" },
+  { value: "chart", label: "Chart" },
 ] as const;
 
 export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateView }: ViewTabsProps) {
@@ -46,6 +58,7 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
   const [type, setType] = useState<string>("table");
   const [groupPropertyKey, setGroupPropertyKey] = useState("");
   const [datePropertyKey, setDatePropertyKey] = useState("");
+  const [chartDraft, setChartDraft] = useState<ChartDraftConfig>(DEFAULT_CHART_DRAFT);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -60,6 +73,7 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
     setType("table");
     setGroupPropertyKey("");
     setDatePropertyKey("");
+    setChartDraft(DEFAULT_CHART_DRAFT);
     setFormError(null);
   }
 
@@ -79,12 +93,19 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
   const isDateDrivenView = type === "calendar" || type === "timeline";
   const calendarNeedsPropertyButHasNone = isDateDrivenView && dateProperties.length === 0;
   const calendarMissingSelection = isDateDrivenView && !calendarNeedsPropertyButHasNone && !datePropertyKey;
+  // Chart (task-35): its own `canSubmit`-gated pattern, same standard as
+  // Board/Calendar/Timeline above — don't let a chart be created that would
+  // render nothing. `isChartConfigComplete` is the one source of truth for
+  // "is this draft submittable" (also unit-tested directly against
+  // `ChartDraftConfig` fixtures in ChartView.test.tsx), not re-derived here.
+  const chartMissingSelection = type === "chart" && !isChartConfigComplete(chartDraft);
   const canSubmit =
     !submitting &&
     !boardNeedsPropertyButHasNone &&
     !boardMissingSelection &&
     !calendarNeedsPropertyButHasNone &&
-    !calendarMissingSelection;
+    !calendarMissingSelection &&
+    !chartMissingSelection;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -97,6 +118,7 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
         type,
         groupPropertyKey: type === "board" ? groupPropertyKey : undefined,
         datePropertyKey: isDateDrivenView ? datePropertyKey : undefined,
+        chartConfig: type === "chart" ? buildChartViewConfig(chartDraft) : undefined,
       });
       resetForm();
     } catch (err) {
@@ -148,6 +170,7 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
               setType(e.target.value);
               setGroupPropertyKey("");
               setDatePropertyKey("");
+              setChartDraft(DEFAULT_CHART_DRAFT);
             }}
             className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
           >
@@ -199,6 +222,10 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
                 ))}
               </select>
             ))}
+
+          {type === "chart" && (
+            <ChartCreateFields properties={properties} value={chartDraft} onChange={setChartDraft} />
+          )}
 
           <button
             type="submit"
