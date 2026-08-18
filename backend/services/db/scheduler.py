@@ -14,6 +14,13 @@ This task wires up only the repeating-row-template half of the tick
 structured as a thin dispatcher over per-concern functions specifically so
 that addition doesn't require restructuring this module.
 
+(Task 38 update: `_tick_automations` itself lives in `services/db/automations.py`,
+not here — unlike `_tick_templates` above, its due-work handling needed enough
+automations-specific business logic (action-chain execution, `end_date` handling)
+that it belongs with the rest of that module's own automation logic. `_tick()`
+below just calls `automations_service._tick_automations(conn)`, the same shape
+`_tick_templates` already established for "one call per concern.")
+
 Runs outside any HTTP request, so it cannot reuse `services/db/connection.
 get_conn` (a FastAPI request-scoped dependency) — it acquires its own
 connection from the shared `get_pool()` each tick instead.
@@ -25,6 +32,7 @@ import logging
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from services.db import automations as automations_service
 from services.db import templates as templates_service
 from services.db.connection import get_pool
 
@@ -109,6 +117,7 @@ async def _tick() -> None:
     try:
         async with pool.acquire() as conn:
             await _tick_templates(conn)
+            await automations_service._tick_automations(conn)
     except Exception:
         logger.exception("scheduler tick failed")
 
