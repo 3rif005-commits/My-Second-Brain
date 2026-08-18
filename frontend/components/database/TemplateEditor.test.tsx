@@ -119,7 +119,7 @@ describe("TemplateEditor", () => {
     // `await user.click()`, and the intermediate state is never visible.
     const onUpdateTemplate = vi.fn(
       () =>
-        new Promise((_resolve, reject) => {
+        new Promise<RowTemplateResponse>((_resolve, reject) => {
           setTimeout(() => reject(new Error("another default already exists")), 20);
         })
     );
