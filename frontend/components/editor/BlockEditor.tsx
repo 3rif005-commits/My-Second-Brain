@@ -384,14 +384,22 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                     }),
                   }]
                 : [];
-              // Own "Database" group (rather than folding into "Interactive",
+              // Own "Databases" group (rather than folding into "Interactive",
               // which is really about the Knowledge Check quiz block above) —
               // a database is a distinct kind of thing from an interactive
               // block, and Notion's own slash menu gives databases their own
-              // section too.
+              // section too. Plural, deliberately distinct from the item's own
+              // "Database" title below: BlockNote's SuggestionMenu renders a
+              // group-label element keyed by `group` and each item element
+              // keyed by `title` in the same flat list (@blocknote/react's
+              // SuggestionMenu.tsx) — a group with exactly one item whose
+              // title equals the group name collides on that key ("two
+              // children with the same key, `Database`"), corrupting the
+              // menu's rendering. Live-reproduced during this task's browser
+              // check before this fix.
               const databaseItems = [{
                 title: "Database",
-                group: "Database",
+                group: "Databases",
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 icon: <span style={{ fontSize: 18 }}>🗄️</span> as any,
                 subtext: "Embed a new database in this note",
