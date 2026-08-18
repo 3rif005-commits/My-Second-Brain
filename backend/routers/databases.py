@@ -52,6 +52,9 @@ from models.database import (
     RelationPairResponse,
     RowPropertyUpdate,
     RowResponse,
+    RowTemplateCreate,
+    RowTemplateResponse,
+    RowTemplateUpdate,
     RowsResponse,
     ShiftedRow,
     ViewCreate,
@@ -92,6 +95,8 @@ from services.db.relations import (
     unlink,
 )
 from services.db.rows import create_row_core
+from services.db import templates as templates_service
+from services.db.templates import DuplicateDefaultTemplateError, TemplateConfigError
 from services.db.views import sweep_property_from_views
 
 router = APIRouter(prefix="/db", tags=["databases"])
@@ -1183,6 +1188,14 @@ async def create_row(
     properties object is a fully valid row, not a placeholder state).
     Per-property default values (spec §5's `PropertyType.default()`) are
     Milestone 3+ scope — not needed to unblock "a row exists to edit."
+
+    Milestone 12 (task-37-brief.md decision 3): if the data source has a
+    default template (`db_row_templates.is_default`), the new row is
+    instantiated FROM that template instead of created blank — this is
+    entirely server-side behavior enrichment, no request-shape change and
+    still a `RowResponse`. No default template -> today's exact blank-row
+    behavior, unchanged (that path is `create_row_core` with no
+    properties/content overrides, same as before this task).
     """
     if data_source_id == ALL_NOTES_ID:
         raise HTTPException(
@@ -1200,6 +1213,26 @@ async def create_row(
     )
     if ds_row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    default_template = await conn.fetchrow(
+        """
+        SELECT id FROM db_row_templates
+        WHERE data_source_id = $1 AND user_id = $2 AND is_default
+        """,
+        data_source_id,
+        user_id,
+    )
+    if default_template is not None:
+        result = await templates_service.instantiate_template(
+            conn, user_id, str(default_template["id"])
+        )
+        # instantiate_template only returns None for a template id that
+        # doesn't exist/isn't user_id's -- impossible here, since the id
+        # just came from a user_id-scoped SELECT on the very same
+        # connection one line above (no request boundary in between for a
+        # concurrent delete to land in).
+        assert result is not None
+        return result
 
     return await create_row_core(conn, user_id, data_source_id)
 
@@ -1939,6 +1972,123 @@ async def update_view(
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "view not found")
     return ViewResponse(**_row(row))
+
+
+# ---------------------------------------------------------------------------
+# Milestone 12 (task-37): row templates. `services/db/templates.py` owns the
+# actual queries and the clean-400-on-duplicate-default handling; these
+# endpoints are thin HTTP seams over it, following this file's own
+# conventions (`_parse_uuid_or_404`, an explicit data-source ownership
+# check before `create_template`, `DuplicateDefaultTemplateError` mapped to
+# a 400 the same way `_relation_error_to_http` maps `RelationError`).
+# ---------------------------------------------------------------------------
+
+
+def _template_config_error_to_http(exc: Exception) -> HTTPException:
+    return HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+
+
+@router.post(
+    "/data-sources/{data_source_id}/templates",
+    response_model=RowTemplateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_template(
+    data_source_id: str,
+    body: RowTemplateCreate,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RowTemplateResponse:
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "cannot add templates to the built-in All Notes source",
+        )
+
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    ds_row = await conn.fetchrow(
+        "SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2",
+        data_source_id,
+        user_id,
+    )
+    if ds_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    try:
+        return await templates_service.create_template(conn, user_id, data_source_id, body)
+    except (DuplicateDefaultTemplateError, TemplateConfigError) as exc:
+        raise _template_config_error_to_http(exc) from exc
+
+
+@router.get(
+    "/data-sources/{data_source_id}/templates",
+    response_model=list[RowTemplateResponse],
+)
+async def list_templates(
+    data_source_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> list[RowTemplateResponse]:
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    ds_row = await conn.fetchrow(
+        "SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2",
+        data_source_id,
+        user_id,
+    )
+    if ds_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    return await templates_service.list_templates(conn, user_id, data_source_id)
+
+
+@router.patch("/templates/{template_id}", response_model=RowTemplateResponse)
+async def update_template(
+    template_id: str,
+    body: RowTemplateUpdate,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RowTemplateResponse:
+    template_id = _parse_uuid_or_404(template_id, "template")
+    try:
+        result = await templates_service.update_template(conn, user_id, template_id, body)
+    except (DuplicateDefaultTemplateError, TemplateConfigError) as exc:
+        raise _template_config_error_to_http(exc) from exc
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "template not found")
+    return result
+
+
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_template(
+    template_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> None:
+    template_id = _parse_uuid_or_404(template_id, "template")
+    deleted = await templates_service.delete_template(conn, user_id, template_id)
+    if not deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "template not found")
+
+
+@router.post(
+    "/templates/{template_id}/instantiate",
+    response_model=RowResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def instantiate_template(
+    template_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> RowResponse:
+    """Applying a template at row-creation time only (task-37-brief.md's
+    "Out of scope": no "apply this template to an existing row" endpoint —
+    this app has no Notion-style erase_content/append distinction for
+    that)."""
+    template_id = _parse_uuid_or_404(template_id, "template")
+    result = await templates_service.instantiate_template(conn, user_id, template_id)
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "template not found")
+    return result
 
 
 # ---------------------------------------------------------------------------

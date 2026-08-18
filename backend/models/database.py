@@ -531,3 +531,70 @@ class FormulaValidateResponse(BaseModel):
     result_type: str | None = None
     referenced_properties: list[str] = []
     is_volatile: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Milestone 12 (task-37): row templates. Spec §3.2's `db_row_templates`
+# (migration 017) — `properties` captures pre-filled property VALUES (same
+# JSONB wrapper shape as `db_row_props.properties`), `content` captures the
+# page BODY (same shape as `notes.content`, BlockNote's own block array).
+# `repeat_config` is the shape task-37-brief.md decision 5 fixes exactly
+# (frequency/interval/weekdays/start_date/time_of_day/timezone) — not its
+# own nested Pydantic model, deliberately: same "polymorphic JSONB validated
+# by application code, not shape-checked by Pydantic" convention as
+# `ViewUpdate.config`/`filter`/`sorts` elsewhere in this file.
+# ---------------------------------------------------------------------------
+
+
+class RowTemplateCreate(BaseModel):
+    """`POST /db/data-sources/{data_source_id}/templates` body. `is_default`
+    lets a client mint a template as the data source's default in the same
+    call as creating it — `services/db/templates.py`'s `create_template`
+    turns a second `is_default=True` for the same data source into a clean
+    400 (migration 017's partial unique index), not a raw asyncpg 500."""
+
+    name: str = "Untitled template"
+    icon: str | None = None
+    properties: dict[str, Any] = {}
+    content: list[Any] = []
+    is_default: bool = False
+    repeat_config: dict[str, Any] | None = None
+
+
+class RowTemplateUpdate(BaseModel):
+    """`PATCH /db/templates/{template_id}` body. Only fields actually
+    present in the request get patched (`model_dump(exclude_unset=True)` in
+    the router) — same convention as `ViewUpdate`. `icon` and
+    `repeat_config` are migration 017's only nullable columns among these
+    fields, so an explicit `null` for either clears it (a cleared
+    `repeat_config` also clears `next_run_at` — no longer repeating); every
+    other field here (`name`/`properties`/`content`/`is_default`, all `NOT
+    NULL`) drops an explicit `null` as a no-op for that field rather than
+    reaching the database, matching `ViewUpdate`'s own
+    `_VIEW_NULLABLE_FIELDS` handling of the identical situation."""
+
+    name: str | None = None
+    icon: str | None = None
+    properties: dict[str, Any] | None = None
+    content: list[Any] | None = None
+    is_default: bool | None = None
+    repeat_config: dict[str, Any] | None = None
+
+
+class RowTemplateResponse(BaseModel):
+    """Mirrors `db_row_templates`'s columns 1:1 (this file's own
+    `Model(**_row(record))` convention)."""
+
+    id: str
+    data_source_id: str
+    user_id: str
+    name: str
+    icon: str | None = None
+    properties: dict[str, Any] = {}
+    content: list[Any] = []
+    is_default: bool = False
+    repeat_config: dict[str, Any] | None = None
+    next_run_at: datetime | None = None
+    position: int = 0
+    created_at: datetime
+    updated_at: datetime
