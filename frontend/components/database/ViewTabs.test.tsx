@@ -345,4 +345,34 @@ describe("ViewTabs", () => {
 
     expect(screen.queryByLabelText(/stack by/i)).not.toBeInTheDocument();
   });
+
+  // Live-click-through regression: found by creating a Timeline, then a
+  // Calendar, then a Chart view back to back in one running session (no page
+  // reload in between) -- the third Create button stayed permanently
+  // disabled. Root cause: resetForm() cleared every draft field but never
+  // reset `submitting` back to false after a successful onCreateView call,
+  // so `canSubmit`'s `!submitting` clause stayed false for the rest of the
+  // component's lifetime. Pre-existing since Milestone 6 (Task 16,
+  // fc906fb) -- every view type was affected, not just Chart; no prior test
+  // exercised a second creation in the same render.
+  it("Create is usable again after a successful creation -- a second view isn't permanently blocked by stale submitting state", async () => {
+    const user = userEvent.setup();
+    const onCreateView = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={onCreateView} />
+    );
+
+    await user.click(screen.getByText("+ New view"));
+    await user.type(screen.getByLabelText(/view name/i), "First");
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+    expect(onCreateView).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByText("+ New view"));
+    expect(screen.getByRole("button", { name: /^create$/i })).not.toBeDisabled();
+    await user.type(screen.getByLabelText(/view name/i), "Second");
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(onCreateView).toHaveBeenCalledTimes(2);
+    expect(onCreateView).toHaveBeenLastCalledWith({ name: "Second", type: "table", groupPropertyKey: undefined });
+  });
 });

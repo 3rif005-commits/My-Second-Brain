@@ -74,6 +74,7 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
     setGroupPropertyKey("");
     setDatePropertyKey("");
     setChartDraft(DEFAULT_CHART_DRAFT);
+    setSubmitting(false);
     setFormError(null);
   }
 
