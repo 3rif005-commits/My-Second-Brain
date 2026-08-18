@@ -107,7 +107,7 @@ def next_occurrence(repeat_config: dict[str, Any], after: datetime) -> datetime:
     seeding a freshly-(re)configured template's initial `next_run_at`
     (`after` = the anchor instant minus one second, so the anchor itself
     qualifies as "the next occurrence" when it's otherwise valid — see
-    `_seed_next_run_at` below) and the scheduler's tick, advancing past the
+    `seed_next_run_at` below) and the scheduler's tick, advancing past the
     `next_run_at` that was just fired (`after` = that same `next_run_at`).
 
     Monthly/yearly month-length overflow (e.g. a template anchored on Jan
@@ -178,12 +178,20 @@ def next_occurrence(repeat_config: dict[str, Any], after: datetime) -> datetime:
     raise TemplateConfigError(f"unknown repeat_config.frequency: {frequency!r}")
 
 
-def _seed_next_run_at(repeat_config: dict[str, Any]) -> datetime:
+def seed_next_run_at(repeat_config: dict[str, Any]) -> datetime:
     """The initial `next_run_at` for a template whose `repeat_config` was
     just set (on create, or via an update that (re)configures repeating) —
     the first valid occurrence at-or-after the schedule's own anchor
     (`start_date` + `time_of_day`), computed by asking `next_occurrence`
     for the first occurrence strictly after one second before the anchor.
+
+    Exported (no leading underscore, task-38-brief.md decision 3's own judgment call —
+    see task-38-report.md) so `services/db/automations.py`'s `_seed_automation_next_run_at`
+    can reuse it as-is for the `every_frequency` trigger's `next_run_at` seeding, rather
+    than forking a byte-identical copy of this function into a second module. Works
+    unchanged for that caller: an `every_frequency` trigger dict carries the same
+    `frequency`/`interval`/`weekdays`/`start_date`/`time_of_day`/`timezone` keys this
+    function reads (plus `end_date`, which it simply never looks at).
     """
     start_date = date.fromisoformat(repeat_config["start_date"])
     tod = _parse_time_of_day(repeat_config.get("time_of_day"))
@@ -209,7 +217,7 @@ async def create_template(
     is present but malformed, `DuplicateDefaultTemplateError` if
     `is_default=True` collides with an existing default for this data
     source (both framework-free — the router maps them to a 400)."""
-    next_run_at = _seed_next_run_at(body.repeat_config) if body.repeat_config else None
+    next_run_at = seed_next_run_at(body.repeat_config) if body.repeat_config else None
     try:
         row = await conn.fetchrow(
             """
@@ -297,7 +305,7 @@ async def update_template(
     }
     if "repeat_config" in updates:
         updates["next_run_at"] = (
-            _seed_next_run_at(updates["repeat_config"]) if updates["repeat_config"] else None
+            seed_next_run_at(updates["repeat_config"]) if updates["repeat_config"] else None
         )
 
     if not updates:

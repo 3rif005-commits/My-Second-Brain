@@ -28,6 +28,9 @@ from pydantic import ValidationError
 
 from models.database import (
     AggregationSpec,
+    AutomationCreate,
+    AutomationResponse,
+    AutomationUpdate,
     DatabaseCreate,
     DatabaseDetailResponse,
     DatabaseResponse,
@@ -37,6 +40,7 @@ from models.database import (
     FormulaValidateResponse,
     FormulaValidationIssue,
     GroupResult,
+    NotificationResponse,
     PropertyCreate,
     PropertyUpdate,
     PropertyResponse,
@@ -63,8 +67,11 @@ from models.database import (
     DatabaseSummary,
 )
 from routers.notes import get_user_id
+from services.db import automations as automations_service
+from services.db import notifications as notifications_service
 from services.db import recompute
 from services.db import rollup as rollup_service
+from services.db.automations import AutomationConfigError
 from services.db.connection import get_conn
 from services.db.formula import FormulaCycleError, FormulaSyntaxError
 from services.db.formula import check as check_formula
@@ -1843,6 +1850,135 @@ async def instantiate_template(
     result = await templates_service.instantiate_template(conn, user_id, template_id)
     if result is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "template not found")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Milestone 12 (task-38): database automations. `services/db/automations.py` owns the
+# actual queries, the action-chain executor and the every_frequency-exclusivity
+# validation; these endpoints are thin HTTP seams over it, following this file's own
+# conventions (`_parse_uuid_or_404`, an explicit data-source ownership check before
+# `create_automation`, `AutomationConfigError` mapped to a 400 the same way
+# `_template_error_to_http` maps templates.py's own config errors).
+# ---------------------------------------------------------------------------
+
+
+def _automation_error_to_http(exc: Exception) -> HTTPException:
+    return HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+
+
+@router.post(
+    "/data-sources/{data_source_id}/automations",
+    response_model=AutomationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_automation(
+    data_source_id: str,
+    body: AutomationCreate,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> AutomationResponse:
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "cannot add automations to the built-in All Notes source",
+        )
+
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    ds_row = await conn.fetchrow(
+        """
+        SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2
+        """,
+        data_source_id,
+        user_id,
+    )
+    if ds_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    try:
+        return await automations_service.create_automation(conn, user_id, data_source_id, body)
+    except AutomationConfigError as exc:
+        raise _automation_error_to_http(exc) from exc
+
+
+@router.get(
+    "/data-sources/{data_source_id}/automations",
+    response_model=list[AutomationResponse],
+)
+async def list_automations(
+    data_source_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> list[AutomationResponse]:
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    ds_row = await conn.fetchrow(
+        """
+        SELECT id FROM db_data_sources WHERE id = $1 AND user_id = $2
+        """,
+        data_source_id,
+        user_id,
+    )
+    if ds_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
+
+    return await automations_service.list_automations(conn, user_id, data_source_id)
+
+
+@router.patch("/automations/{automation_id}", response_model=AutomationResponse)
+async def update_automation(
+    automation_id: str,
+    body: AutomationUpdate,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> AutomationResponse:
+    automation_id = _parse_uuid_or_404(automation_id, "automation")
+    try:
+        result = await automations_service.update_automation(conn, user_id, automation_id, body)
+    except AutomationConfigError as exc:
+        raise _automation_error_to_http(exc) from exc
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "automation not found")
+    return result
+
+
+@router.delete("/automations/{automation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_automation(
+    automation_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> None:
+    automation_id = _parse_uuid_or_404(automation_id, "automation")
+    deleted = await automations_service.delete_automation(conn, user_id, automation_id)
+    if not deleted:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "automation not found")
+
+
+# ---------------------------------------------------------------------------
+# Milestone 12 (task-38): notifications -- the `send_notification` action's target
+# (decision 9). Minimal on purpose (decision 11): list + mark-one-read, no
+# bulk-mark-all-read.
+# ---------------------------------------------------------------------------
+
+
+@router.get("/notifications", response_model=list[NotificationResponse])
+async def list_notifications(
+    unread: bool = False,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> list[NotificationResponse]:
+    return await notifications_service.list_notifications(conn, user_id, unread_only=unread)
+
+
+@router.patch("/notifications/{notification_id}", response_model=NotificationResponse)
+async def mark_notification_read(
+    notification_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> NotificationResponse:
+    notification_id = _parse_uuid_or_404(notification_id, "notification")
+    result = await notifications_service.mark_read(conn, user_id, notification_id)
+    if result is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "notification not found")
     return result
 
 

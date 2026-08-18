@@ -24,12 +24,25 @@ layer, map to HTTP in the router" convention `services/db/templates.py`'s
 they already are framework-free, and the router already has a mapping seam
 (`_relation_error_to_http`) for them).
 
-(This commit is the extraction only, byte-identical to the pre-extraction inline
-`update_row_property` body, per task-38-brief.md decision 5's explicit gate: "re-run the
-FULL existing test suite before adding anything new." The `trigger_automations` hook
-these two functions grow next — `page_added` in `create_row_core`, `property_edited` in
-`update_row_property_core`, per decision 4 — lands in the following commit alongside
-`services/db/automations.py` itself.)
+Both `*_core` functions optionally fire Milestone 12 automations (task-38-brief.md
+decision 4) right after their own transactional work, inside the SAME transaction — a
+`page_added` hook in `create_row_core`, a `property_edited` hook in
+`update_row_property_core`. `trigger_automations` (default `True`) exists so
+`services/db/automations.py`'s own `add_page_to`/`edit_pages_in` action handlers — which
+call these same two functions to make an automation's OWN row writes happen — can pass
+`trigger_automations=False` and not re-fire automations from inside an automation's own
+action chain. This guard isn't spelled out by name in task-38-brief.md's decision list,
+but research §J.6.7 is explicit that Notion itself forbids exactly this ("Database
+automations can't be triggered by other automations ... A database automation creating a
+page in another database will not trigger a database automation"), and without it a
+chain of automations that write into each other's trigger conditions would recurse
+without bound — flagged in task-38-report.md as a judgment call beyond the brief's own
+ruling.
+
+`services/db/automations.py` is imported lazily (inside the two functions below, not at
+module level) to break an import cycle: `automations.py` imports `create_row_core`/
+`update_row_property_core` from this module for its own `add_page_to`/`edit_pages_in`
+action handlers, so this module cannot import `automations.py` at the top level too.
 """
 from __future__ import annotations
 
@@ -100,6 +113,7 @@ async def create_row_core(
     title: str = "Untitled",
     properties: dict[str, Any] | None = None,
     content: list[Any] | None = None,
+    trigger_automations: bool = True,
 ) -> RowResponse:
     """Create one row (a `notes` row + its `db_row_props` companion, spec Q2: "a database
     row IS a note") in one transaction, then recompute its formula/rollup properties inside
@@ -163,6 +177,16 @@ async def create_row_core(
         # -> incremental recompute of that row" -- inside the same transaction as the
         # insert. If recompute raises, the write rolls back.
         await recompute.recompute_row(conn, user_id, data_source_id, str(row["note_id"]))
+
+        # Milestone 12 (task-38-brief.md decision 4): `page_added` automations fire
+        # synchronously, inside this same transaction, right after this row's own
+        # transactional work -- see this module's docstring for `trigger_automations`.
+        if trigger_automations:
+            from services.db import automations as automations_service
+
+            await automations_service.run_automations_for_trigger(
+                conn, user_id, data_source_id, {"type": "page_added"}, str(row["note_id"])
+            )
     return RowResponse(id=str(row["note_id"]), properties=row["properties"])
 
 
@@ -173,12 +197,14 @@ async def update_row_property_core(
     note_id: str,
     property_key: str,
     value: Any,
+    *,
+    trigger_automations: bool = True,
 ) -> RowResponse:
     """Write a single property's value on a single row — extracted verbatim (task-38-
     brief.md decision 5) from `routers/databases.py`'s `update_row_property`, which is now
     a thin wrapper: parse/404 the path params, check data-source ownership, call this, map
     its typed exceptions to HTTP. See this module's docstring for the extraction's error-
-    handling convention.
+    handling convention and the `trigger_automations` kwarg.
 
     `value` is the full spec §3.3 wrapper (e.g. `{"type": "status", "status": "done"}`,
     matching what `GET .../rows` returns and what's actually stored) or `None` to
@@ -356,6 +382,24 @@ async def update_row_property_core(
         written = await recompute.recompute_row(conn, user_id, data_source_id, note_id)
         for shifted in shifted_rows or []:
             await recompute.recompute_row(conn, user_id, data_source_id, shifted.id)
+
+        # Milestone 12 (task-38-brief.md decision 4): `property_edited` automations fire
+        # synchronously, right after this row's own transactional work (including the M7
+        # cascade/recompute above), inside the SAME transaction -- see this module's
+        # docstring for `trigger_automations`. Reuses the `old_value` this function already
+        # fetched for the M7 cascade rather than a second read (decision 6).
+        if trigger_automations:
+            from services.db import automations as automations_service
+
+            await automations_service.run_automations_for_trigger(
+                conn,
+                user_id,
+                data_source_id,
+                {"type": "property_edited", "property_key": property_key},
+                note_id,
+                old_value=prop_row["old_value"],
+                new_value=value,
+            )
 
     # `written` (this row's own freshly materialised formula/rollup values) merges into the
     # response the same way `_merge_computed_into_rows` does for a listing/query. A `None`

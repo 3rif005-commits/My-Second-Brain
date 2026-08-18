@@ -598,3 +598,74 @@ class RowTemplateResponse(BaseModel):
     position: int = 0
     created_at: datetime
     updated_at: datetime
+
+
+class AutomationCreate(BaseModel):
+    """`POST /db/data-sources/{data_source_id}/automations` body. `triggers`/`actions`
+    stay untyped `list[Any]` JSONB pass-through (task-37's `repeat_config` convention,
+    reused here per task-38-brief.md's "What to build" section) — `services/db/
+    automations.py` validates the one save-time shape rule that matters (an
+    `every_frequency` trigger must be the trigger array's only entry, decision 3), not a
+    closed Pydantic model for every trigger/action variant. `next_run_at` is NOT settable
+    here — like `RowTemplateResponse.next_run_at`, it's derived from `triggers` by the
+    service layer, never accepted from the client."""
+
+    name: str = "Untitled automation"
+    is_active: bool = True
+    trigger_combinator: str = "any"
+    triggers: list[Any] = []
+    view_id: str | None = None
+    actions: list[Any] = []
+
+
+class AutomationUpdate(BaseModel):
+    """`PATCH /db/automations/{automation_id}` body. Only fields actually present in the
+    request get patched (`model_dump(exclude_unset=True)`, same convention as
+    `RowTemplateUpdate`). `view_id` is migration 017's only nullable column among these
+    fields, so an explicit `null` clears it (widens the automation back to "the whole data
+    source" — migration 017's own header comment); every other field here drops an
+    explicit `null` as a no-op. `last_error` is deliberately absent — task-38-brief.md
+    decision 10: it's system-written only (via a failing action chain), never a field a
+    client PATCHes directly."""
+
+    name: str | None = None
+    is_active: bool | None = None
+    trigger_combinator: str | None = None
+    triggers: list[Any] | None = None
+    view_id: str | None = None
+    actions: list[Any] | None = None
+
+
+class AutomationResponse(BaseModel):
+    """Mirrors `db_automations`'s columns 1:1 (this file's own `Model(**_row(record))`
+    convention)."""
+
+    id: str
+    data_source_id: str
+    user_id: str
+    name: str
+    is_active: bool = True
+    last_error: str | None = None
+    trigger_combinator: str = "any"
+    triggers: list[Any] = []
+    view_id: str | None = None
+    actions: list[Any] = []
+    next_run_at: datetime | None = None
+    position: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotificationResponse(BaseModel):
+    """Mirrors `db_notifications`'s columns 1:1 — the `send_notification` action's
+    target (task-38-brief.md decision 9). `source` is free text (e.g.
+    `"automation:<id>"`), not an FK (migration 017's header: survives the automation
+    being edited/deleted)."""
+
+    id: str
+    user_id: str
+    message: str
+    link: str | None = None
+    source: str | None = None
+    read_at: datetime | None = None
+    created_at: datetime
