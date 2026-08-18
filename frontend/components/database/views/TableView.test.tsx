@@ -191,9 +191,12 @@ describe("TableView", () => {
         "relation",
         "formula",
         "rollup",
+        // Milestone 12 (task-42): appended last, matching ADDABLE_PROPERTY_TYPES'
+        // own append-only convention for this list.
+        "button",
       ]);
       expect(values).not.toContain("title");
-      expect(values).toHaveLength(10);
+      expect(values).toHaveLength(11);
     });
 
     it("submitting POSTs {name, type} to the properties endpoint, then refetches", async () => {

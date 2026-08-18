@@ -861,3 +861,89 @@ export interface NotificationResponse {
   read_at: string | null;
   created_at: string;
 }
+
+// ── Milestone 12 (task-42): buttons — button property + button BlockNote block ──
+// Mirrors `services/db/buttons.py`'s `BUTTON_ACTIONS`/`BUTTON_BLOCK_ACTIONS`
+// (the 6 `AutomationAction` kinds above plus these 3 button-only kinds) and
+// `models/database.py`'s `ButtonClick{Request,Response}` shapes. Same
+// "send_mail_to/send_slack_notification_to deliberately NOT a member"
+// convention as `AutomationAction` above — this task's own action-type
+// dropdown(s) can only ever offer what these types allow.
+
+/** `services/db/buttons.py`'s `_action_show_confirmation`: `message` is a
+ * plain literal string, never resolved through `_resolve_text` the way every
+ * `AutomationAction` field above is — no formula toggle for this field. */
+export interface ShowConfirmationAction {
+  type: "show_confirmation";
+  message?: string;
+}
+
+/** `_action_open_page_or_url`: `target` is LITERAL-ONLY (the backend rejects
+ * a `{"formula": ...}`-shaped target outright) — exactly one of these two
+ * discriminated shapes. */
+export interface OpenPageOrUrlAction {
+  type: "open_page_or_url";
+  target: { kind: "url"; url: string } | { kind: "note"; note_id: string };
+}
+
+export const INSERT_BLOCKS_PLACEMENTS = [
+  "above_button",
+  "below_button",
+  "top_of_page",
+  "bottom_of_page",
+] as const;
+export type InsertBlocksPlacement = (typeof INSERT_BLOCKS_PLACEMENTS)[number];
+
+/** `_action_insert_blocks` — block-surface only (never legal in a button
+ * PROPERTY's `BUTTON_ACTIONS`, research §J.6.2/§25: a button property has no
+ * page of its own to insert blocks into). `blocks` is an opaque BlockNote
+ * block array the backend never interprets at all — this frontend is the
+ * only place that ever reads its contents (via `editor.insertBlocks`). */
+export interface InsertBlocksAction {
+  type: "insert_blocks";
+  blocks: unknown[];
+  placement: InsertBlocksPlacement;
+}
+
+/** The 8 action kinds a button PROPERTY's `config.actions` may contain
+ * (`services/db/buttons.py`'s `BUTTON_ACTIONS`) — the 6 `AutomationAction`
+ * kinds plus these 2. */
+export type ButtonAction = AutomationAction | ShowConfirmationAction | OpenPageOrUrlAction;
+
+/** The 9 action kinds a button BLOCK's `actionsJson` may contain
+ * (`BUTTON_BLOCK_ACTIONS`) — `ButtonAction` plus `insert_blocks`. */
+export type ButtonBlockAction = ButtonAction | InsertBlocksAction;
+
+export const BUTTON_ACTION_TYPES = [
+  ...AUTOMATION_ACTION_TYPES,
+  "show_confirmation",
+  "open_page_or_url",
+] as const;
+export type ButtonActionType = (typeof BUTTON_ACTION_TYPES)[number];
+
+export const BUTTON_BLOCK_ACTION_TYPES = [...BUTTON_ACTION_TYPES, "insert_blocks"] as const;
+export type ButtonBlockActionType = (typeof BUTTON_BLOCK_ACTION_TYPES)[number];
+
+/** `POST .../buttons/{property_key}/click` and `POST /db/buttons/block-click`'s
+ * shared `client_actions` entry shapes (decision 4/7 of task-39-brief.md). */
+export interface OpenClientAction {
+  type: "open";
+  kind: "url" | "note";
+  url?: string;
+  note_id?: string;
+}
+export interface InsertBlocksClientAction {
+  type: "insert_blocks";
+  blocks: unknown[];
+  placement: InsertBlocksPlacement;
+}
+export type ClientAction = OpenClientAction | InsertBlocksClientAction;
+
+/** Mirrors `backend/models/database.py`'s `ButtonClickResponse` exactly —
+ * the shared response shape for both click endpoints. */
+export interface ButtonClickResponse {
+  actions_run: number;
+  requires_confirmation: boolean;
+  confirmation_message: string | null;
+  client_actions: ClientAction[];
+}

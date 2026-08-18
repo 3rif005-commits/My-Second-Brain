@@ -48,6 +48,7 @@ import type {
 import { renderCellValue } from "../cells/renderCellValue";
 import { buildSubItemTree } from "@/lib/database/subItemTree";
 import { FormulaEditor } from "../FormulaEditor";
+import { ButtonPropertyConfigPopover } from "../ButtonPropertyConfigPopover";
 
 interface TableViewProps {
   properties: PropertyResponse[];
@@ -135,6 +136,11 @@ const ADDABLE_PROPERTY_TYPES: { value: string; label: string }[] = [
   { value: "relation", label: "Relation" },
   { value: "formula", label: "Formula" },
   { value: "rollup", label: "Rollup" },
+  // Milestone 12 (task-42): a valueless action-chain trigger (research §25 —
+  // "every row shows the same button"), not a data-carrying property like
+  // the 9 entries above — added last, matching the M7/M8 precedent's own
+  // append-only convention for this list.
+  { value: "button", label: "Button" },
 ];
 
 /** Best-effort message extraction from a failed POST, matching the pattern
@@ -307,7 +313,15 @@ export function TableView({
       orderedProperties.map((property) =>
         columnHelper.accessor((row) => row.properties[property.key], {
           id: property.key || property.id,
-          header: property.name,
+          // Milestone 12 (task-42) decision 2: a button-typed column's
+          // header becomes a clickable config-popover trigger; every other
+          // type keeps the plain string header unchanged.
+          header:
+            property.type === "button"
+              ? () => (
+                  <ButtonPropertyConfigPopover property={property} properties={orderedProperties} onSaved={refetch} />
+                )
+              : property.name,
           cell: (info) => {
             const rowId = info.row.original.id;
             const relationExtras =
@@ -319,17 +333,19 @@ export function TableView({
                       setRelationLinks(rowId, property.key, nextRows),
                   }
                 : undefined;
+            const buttonExtras = property.type === "button" ? { noteId: rowId } : undefined;
             return renderCellValue(
               property,
               info.getValue(),
               editable,
               (value) => onCellChange(rowId, property.key, value),
-              relationExtras
+              relationExtras,
+              buttonExtras
             );
           },
         })
       ),
-    [orderedProperties, editable, onCellChange, relationLinks, ensureRelationLinks, setRelationLinks]
+    [orderedProperties, editable, onCellChange, relationLinks, ensureRelationLinks, setRelationLinks, refetch]
   );
 
   const table = useReactTable({

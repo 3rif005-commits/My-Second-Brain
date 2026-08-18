@@ -32,6 +32,7 @@ import { CheckboxCell } from "./CheckboxCell";
 import { GenericCell } from "./GenericCell";
 import { RelationCell } from "./RelationCell";
 import { FormulaCell } from "./FormulaCell";
+import { ButtonCell } from "./ButtonCell";
 
 /** Milestone 7's relation cell needs data `CellProps<V>` (value/editable/
  * onChange) has no room for — its value never travels through `onChange`
@@ -48,12 +49,24 @@ export interface RelationCellHandlers {
   onLinksChange: (rows: RelatedRow[]) => void | Promise<void>;
 }
 
+/** Milestone 12 (task-42): a button property has no per-row `value` at all
+ * (research §25 — "every row shows the same button"), so the one thing it
+ * needs from a caller that `CellProps<V>`'s own `value`/`onChange` shape has
+ * no room for is which row (note) a click acts on. Same optional-6th-arg,
+ * graceful-fallback convention as `relation` above — a caller that omits it
+ * (any view besides TableView, not wired by this task) gets the existing
+ * read-only `GenericCell` fallback, not a crash. */
+export interface ButtonCellHandlers {
+  noteId: string;
+}
+
 export function renderCellValue(
   property: PropertyResponse,
   value: PropertyValue | undefined,
   editable: boolean,
   onChange: (value: PropertyValue | null) => void,
-  relation?: RelationCellHandlers
+  relation?: RelationCellHandlers,
+  button?: ButtonCellHandlers
 ) {
   switch (property.type) {
     case "title":
@@ -105,6 +118,9 @@ export function renderCellValue(
           onLinksChange={relation.onLinksChange}
         />
       );
+    case "button":
+      if (!button) return <GenericCell value={value as UnknownValue | undefined} />;
+      return <ButtonCell property={property} noteId={button.noteId} editable={editable} />;
     case "formula":
     case "rollup":
       // Milestone 8 (task-28-brief.md §4): always read-only, regardless of

@@ -160,7 +160,7 @@ const toggleBtnClass = (active: boolean) =>
  * debounced 600ms before committing (mirrors TemplateEditor's own
  * debounce precedent) — `FormulaEditor`'s own `debounceMs` only gates its
  * internal validate-fetch, not persistence. */
-function PropertyValueOrFormulaField({
+export function PropertyValueOrFormulaField({
   dataSourceId,
   property,
   value,
@@ -210,7 +210,7 @@ function PropertyValueOrFormulaField({
  * `send_notification.message` — task-41-brief.md's own named example of "a
  * plain text input where no richer editor exists" (this field isn't tied to
  * any property, so there's no cell component to reuse). */
-function TextOrFormulaField({
+export function TextOrFormulaField({
   dataSourceId,
   value,
   onCommit,
