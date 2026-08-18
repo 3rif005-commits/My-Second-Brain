@@ -137,4 +137,58 @@ describe("ViewTabs", () => {
       groupPropertyKey: "status",
     });
   });
+
+  it("when creating a Calendar view with no date property on the database, shows the plain message and disables Create — does not auto-invent a property", async () => {
+    const user = userEvent.setup();
+    const onCreateView = vi.fn();
+    render(
+      <ViewTabs
+        views={VIEWS}
+        activeViewId="v1"
+        onSelect={vi.fn()}
+        properties={[prop({ key: "notes", type: "rich_text" })]}
+        onCreateView={onCreateView}
+      />
+    );
+
+    await user.click(screen.getByText("+ New view"));
+    await user.selectOptions(screen.getByLabelText(/view type/i), "calendar");
+
+    expect(screen.getByText(/no date property yet — add a Date property first/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+    expect(onCreateView).not.toHaveBeenCalled();
+  });
+
+  it("creating a Calendar view with a date property available requires picking one, then passes it through", async () => {
+    const user = userEvent.setup();
+    const onCreateView = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ViewTabs
+        views={VIEWS}
+        activeViewId="v1"
+        onSelect={vi.fn()}
+        properties={[prop({ key: "due", name: "Due", type: "date" })]}
+        onCreateView={onCreateView}
+      />
+    );
+
+    await user.click(screen.getByText("+ New view"));
+    await user.selectOptions(screen.getByLabelText(/view type/i), "calendar");
+
+    // No property picked yet -> Create stays disabled (can't silently fall
+    // back to inventing/guessing one).
+    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText(/date property/i), "due");
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(onCreateView).toHaveBeenCalledWith({
+      name: "New view",
+      type: "calendar",
+      groupPropertyKey: undefined,
+      datePropertyKey: "due",
+    });
+  });
 });

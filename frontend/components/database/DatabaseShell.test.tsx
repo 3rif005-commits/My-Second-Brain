@@ -122,15 +122,32 @@ describe("DatabaseShell", () => {
 
   it("renders a plain placeholder — not a crash — for an unrecognized view type", () => {
     mockHook.views = [
-      // "calendar" (not yet built by any milestone) rather than "gallery" —
-      // Task 17 gives gallery/list/feed real branches below, so this test's
-      // own unrecognized-type example has to be one of the ones that
-      // actually stays unimplemented.
-      { id: "v3", data_source_id: "ds-1", user_id: "user-1", name: "Calendar", icon: null, type: "calendar", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },
+      // "__unsupported_test_type__" rather than "calendar" — Task 33 gives
+      // calendar a real branch below (and gallery/list/feed already have
+      // theirs from Task 17), so this test's own unrecognized-type example
+      // has to be a string that actually stays unimplemented, not a stale
+      // stand-in for a type that's since shipped.
+      { id: "v3", data_source_id: "ds-1", user_id: "user-1", name: "Unsupported", icon: null, type: "__unsupported_test_type__", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },
     ];
     mockHook.activeViewId = "v3";
     render(<DatabaseShell databaseId="db-1" />);
     expect(screen.getByText(/this view type isn.t supported yet/i)).toBeInTheDocument();
+  });
+
+  it("renders CalendarView for a calendar-typed active view", () => {
+    mockHook.views = [
+      { id: "v7", data_source_id: "ds-1", user_id: "user-1", name: "Calendar", icon: null, type: "calendar", config: { date_property_id: "due" }, filter: null, sorts: [], is_locked: false, position: 0 },
+    ];
+    mockHook.activeViewId = "v7";
+    mockHook.properties = [
+      ...mockHook.properties,
+      { id: "p4", data_source_id: "ds-1", user_id: "user-1", key: "due", name: "Due", type: "date", config: {}, description: null, storage: "jsonb", column_name: null, result_type: null, is_volatile: false, position: 2, created_at: "2026-01-01T00:00:00Z" },
+    ];
+    render(<DatabaseShell databaseId="db-1" />);
+    // The Calendar view's own toolbar (view-range select) is a stable
+    // render signal that doesn't depend on the visible month/week's actual
+    // day contents (which vary with the real current date).
+    expect(screen.getByLabelText("View range")).toBeInTheDocument();
   });
 
   it("renders GalleryView for a gallery-typed active view", () => {

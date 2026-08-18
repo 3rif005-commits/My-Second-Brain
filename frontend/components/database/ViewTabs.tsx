@@ -14,19 +14,26 @@ interface ViewTabsProps {
   activeViewId: string;
   onSelect: (viewId: string) => void;
   /** Used to build the Board-creation "group by" dropdown — restricted to
-   * groupable types (select/status/multi_select). */
+   * groupable types (select/status/multi_select) — and the Calendar-
+   * creation "date property" dropdown, restricted to `type === "date"`. */
   properties: PropertyResponse[];
-  onCreateView: (input: { name: string; type: string; groupPropertyKey?: string }) => Promise<void>;
+  onCreateView: (input: {
+    name: string;
+    type: string;
+    groupPropertyKey?: string;
+    datePropertyKey?: string;
+  }) => Promise<void>;
 }
 
-// The five view types this milestone supports creating (table/board —
-// Task 16; gallery/list/feed — Task 17).
+// The six view types this milestone supports creating (table/board —
+// Task 16; gallery/list/feed — Task 17; calendar — Task 33).
 const VIEW_TYPE_OPTIONS = [
   { value: "table", label: "Table" },
   { value: "board", label: "Board" },
   { value: "gallery", label: "Gallery" },
   { value: "list", label: "List" },
   { value: "feed", label: "Feed" },
+  { value: "calendar", label: "Calendar" },
 ] as const;
 
 export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateView }: ViewTabsProps) {
@@ -34,18 +41,21 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
   const [name, setName] = useState("");
   const [type, setType] = useState<string>("table");
   const [groupPropertyKey, setGroupPropertyKey] = useState("");
+  const [datePropertyKey, setDatePropertyKey] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const groupableProperties = properties.filter((p) =>
     (GROUPABLE_PROPERTY_TYPES as readonly string[]).includes(p.type)
   );
+  const dateProperties = properties.filter((p) => p.type === "date");
 
   function resetForm() {
     setCreating(false);
     setName("");
     setType("table");
     setGroupPropertyKey("");
+    setDatePropertyKey("");
     setFormError(null);
   }
 
@@ -56,7 +66,17 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
   // back to inventing one.
   const boardNeedsPropertyButHasNone = type === "board" && groupableProperties.length === 0;
   const boardMissingSelection = type === "board" && !boardNeedsPropertyButHasNone && !groupPropertyKey;
-  const canSubmit = !submitting && !boardNeedsPropertyButHasNone && !boardMissingSelection;
+  // Calendar mirrors Board's gate exactly (task-33-brief.md's ruling,
+  // decided rather than guessing at calendar's undocumented empty-state
+  // behaviour): require picking a date property before Create is enabled.
+  const calendarNeedsPropertyButHasNone = type === "calendar" && dateProperties.length === 0;
+  const calendarMissingSelection = type === "calendar" && !calendarNeedsPropertyButHasNone && !datePropertyKey;
+  const canSubmit =
+    !submitting &&
+    !boardNeedsPropertyButHasNone &&
+    !boardMissingSelection &&
+    !calendarNeedsPropertyButHasNone &&
+    !calendarMissingSelection;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,6 +88,7 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
         name: name.trim() || "New view",
         type,
         groupPropertyKey: type === "board" ? groupPropertyKey : undefined,
+        datePropertyKey: type === "calendar" ? datePropertyKey : undefined,
       });
       resetForm();
     } catch (err) {
@@ -118,6 +139,7 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
             onChange={(e) => {
               setType(e.target.value);
               setGroupPropertyKey("");
+              setDatePropertyKey("");
             }}
             className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
           >
@@ -142,6 +164,27 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
               >
                 <option value="">Group by…</option>
                 {groupableProperties.map((p) => (
+                  <option key={p.key} value={p.key}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            ))}
+
+          {type === "calendar" &&
+            (calendarNeedsPropertyButHasNone ? (
+              <span className="text-xs text-amber-600 dark:text-amber-400">
+                no date property yet — add a Date property first
+              </span>
+            ) : (
+              <select
+                aria-label="Date property"
+                value={datePropertyKey}
+                onChange={(e) => setDatePropertyKey(e.target.value)}
+                className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+              >
+                <option value="">Date property…</option>
+                {dateProperties.map((p) => (
                   <option key={p.key} value={p.key}>
                     {p.name}
                   </option>

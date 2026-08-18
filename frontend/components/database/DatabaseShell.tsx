@@ -11,6 +11,7 @@ import { BoardView } from "./views/BoardView";
 import { GalleryView } from "./views/GalleryView";
 import { ListView } from "./views/ListView";
 import { FeedView } from "./views/FeedView";
+import { CalendarView } from "./views/CalendarView";
 import { ViewTabs } from "./ViewTabs";
 import { DatabaseSettingsMenu } from "./DatabaseSettingsMenu";
 
@@ -83,13 +84,25 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
    * options, not status groups — matches how the Status column itself
    * already renders/edits, since status *groups* aren't configurable
    * anywhere in this UI yet). */
-  async function handleCreateView(input: { name: string; type: string; groupPropertyKey?: string }) {
+  async function handleCreateView(input: {
+    name: string;
+    type: string;
+    groupPropertyKey?: string;
+    datePropertyKey?: string;
+  }) {
     const created = await createView(input.name, input.type);
     if (input.type === "board" && input.groupPropertyKey) {
       const groupProperty = properties.find((p) => p.key === input.groupPropertyKey);
       const groupBy: Record<string, unknown> = { property_key: input.groupPropertyKey };
       if (groupProperty?.type === "status") groupBy.mode = "option";
       await updateView(created.id, { config: { group_by: groupBy } });
+    }
+    // Calendar's creation-time required config (task-33-brief.md): the
+    // identical shape as Board above — create bare, then PATCH the chosen
+    // date property into config.date_property_id before switching to it, so
+    // the new view never renders with a dangling/missing date property.
+    if (input.type === "calendar" && input.datePropertyKey) {
+      await updateView(created.id, { config: { date_property_id: input.datePropertyKey } });
     }
     setActiveViewId(created.id);
   }
@@ -164,11 +177,25 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             onConfigChange={(patch) => updateView(activeView.id, { config: { ...activeView.config, ...patch } })}
           />
         );
+      case "calendar":
+        return (
+          <CalendarView
+            properties={properties}
+            rows={rows}
+            editable={editable}
+            onCellChange={updateCell}
+            config={activeView.config}
+            onConfigChange={(patch) => updateView(activeView.id, { config: { ...activeView.config, ...patch } })}
+            dataSourceId={dataSourceId}
+            refetchRows={refetchRows}
+          />
+        );
       default:
         // Task-15's own spirit for view *config* ("tolerates unknown...
         // drops them at read"), applied to view *type* rendering — every
-        // type this milestone ships (table/board/gallery/list/feed) has a
-        // branch above; anything else (a future type, or a stale/unknown
+        // type this milestone ships (table/board/gallery/list/feed/
+        // calendar) has a branch above; anything else (a future type — e.g.
+        // Timeline, a sibling task in this same batch — or a stale/unknown
         // string) is a plain message, never a crash or a blank screen.
         return (
           <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500">
