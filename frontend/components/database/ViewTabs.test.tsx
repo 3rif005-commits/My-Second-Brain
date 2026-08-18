@@ -277,7 +277,11 @@ describe("ViewTabs", () => {
       chartConfig: {
         chart_type: "column",
         y_axis: { aggregator: "count" },
-        x_axis: { property_id: "status" },
+        // mode: "option" is required here because CHART_PROPERTIES' only
+        // groupable fixture is status-typed — services/db/query/grouping.py
+        // 400s a status group_by with no mode (live-click-through
+        // regression, see ChartView.test.tsx's matching coverage).
+        x_axis: { property_id: "status", mode: "option" },
         hide_empty_groups: false,
       },
     });

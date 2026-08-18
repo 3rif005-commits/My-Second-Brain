@@ -234,8 +234,22 @@ export function isChartConfigComplete(draft: ChartDraftConfig): boolean {
 /** Assembles the view's `config` JSONB from a completed draft — Notion's
  * own field names (`x_axis`/`y_axis`/`stack_by`, each carrying
  * `property_id`), per this task's "config shape" section. Only ever called
- * once `isChartConfigComplete` is true (ViewTabs.tsx's `canSubmit` gate). */
-export function buildChartViewConfig(draft: ChartDraftConfig): Record<string, unknown> {
+ * once `isChartConfigComplete` is true (ViewTabs.tsx's `canSubmit` gate).
+ *
+ * `properties` is used only to detect a `status`-typed x_axis/stack_by
+ * selection: `services/db/query/grouping.py`'s `group_rows` requires an
+ * explicit `mode="option"` for status grouping (no default), the same
+ * requirement Board's own group_by creation (`DatabaseShell.tsx`'s
+ * `handleCreateView`) already discovered and handles — mirrored here so a
+ * Chart grouped by Status doesn't 400 at query time. select/multi_select
+ * need no mode. Passing `properties=[]` (or omitting it) skips this
+ * detection, matching every other caller before this fix — never a fatal
+ * default, just a status grouping that would 400 the same way Board's did
+ * before Task 16 added its own check. */
+export function buildChartViewConfig(
+  draft: ChartDraftConfig,
+  properties: PropertyResponse[] = []
+): Record<string, unknown> {
   const config: Record<string, unknown> = {
     chart_type: draft.chart_type,
     y_axis:
@@ -244,10 +258,18 @@ export function buildChartViewConfig(draft: ChartDraftConfig): Record<string, un
         : { aggregator: draft.y_axis_aggregator, property_id: draft.y_axis_property_key },
   };
   if (draft.chart_type !== "number") {
-    config.x_axis = { property_id: draft.x_axis_property_key };
+    const xAxis: Record<string, unknown> = { property_id: draft.x_axis_property_key };
+    if (properties.find((p) => p.key === draft.x_axis_property_key)?.type === "status") {
+      xAxis.mode = "option";
+    }
+    config.x_axis = xAxis;
     config.hide_empty_groups = draft.hide_empty_groups;
     if (draft.chart_type !== "donut" && draft.stack_by_property_key) {
-      config.stack_by = { property_id: draft.stack_by_property_key };
+      const stackBy: Record<string, unknown> = { property_id: draft.stack_by_property_key };
+      if (properties.find((p) => p.key === draft.stack_by_property_key)?.type === "status") {
+        stackBy.mode = "option";
+      }
+      config.stack_by = stackBy;
     }
   }
   return config;

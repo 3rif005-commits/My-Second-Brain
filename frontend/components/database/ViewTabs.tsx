@@ -119,7 +119,7 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
         type,
         groupPropertyKey: type === "board" ? groupPropertyKey : undefined,
         datePropertyKey: isDateDrivenView ? datePropertyKey : undefined,
-        chartConfig: type === "chart" ? buildChartViewConfig(chartDraft) : undefined,
+        chartConfig: type === "chart" ? buildChartViewConfig(chartDraft, properties) : undefined,
       });
       resetForm();
     } catch (err) {

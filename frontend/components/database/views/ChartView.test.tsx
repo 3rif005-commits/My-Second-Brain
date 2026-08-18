@@ -189,6 +189,56 @@ describe("isChartConfigComplete / buildChartViewConfig", () => {
     });
     expect(config.stack_by).toBeUndefined();
   });
+
+  // Live-click-through regression: grouping a Chart by a Status property
+  // 400'd at query time -- services/db/query/grouping.py's group_rows
+  // requires an explicit mode="option" for status grouping (no default),
+  // and this function never set one. DatabaseShell.tsx's Board-creation
+  // special case already discovered and handles the identical requirement
+  // (`if (groupProperty?.type === "status") groupBy.mode = "option"`);
+  // this mirrors it for Chart's x_axis and stack_by.
+  it("sets mode='option' on x_axis when the selected property is status-typed, so grouping doesn't 400", () => {
+    const statusProp = prop({ key: "st1", name: "Status", type: "status" });
+    const selectProp = prop({ key: "sel1", name: "Priority", type: "select" });
+    const config = buildChartViewConfig(
+      { ...DEFAULT_CHART_DRAFT, chart_type: "column", x_axis_property_key: "st1" },
+      [statusProp, selectProp]
+    );
+    expect(config.x_axis).toEqual({ property_id: "st1", mode: "option" });
+  });
+
+  it("does not set mode on x_axis for select/multi_select — grouping.py needs none for those types", () => {
+    const selectProp = prop({ key: "sel1", name: "Priority", type: "select" });
+    const config = buildChartViewConfig(
+      { ...DEFAULT_CHART_DRAFT, chart_type: "column", x_axis_property_key: "sel1" },
+      [selectProp]
+    );
+    expect(config.x_axis).toEqual({ property_id: "sel1" });
+  });
+
+  it("sets mode='option' on stack_by too, when it's status-typed", () => {
+    const statusProp = prop({ key: "st1", name: "Status", type: "status" });
+    const selectProp = prop({ key: "sel1", name: "Priority", type: "select" });
+    const config = buildChartViewConfig(
+      {
+        ...DEFAULT_CHART_DRAFT,
+        chart_type: "column",
+        x_axis_property_key: "sel1",
+        stack_by_property_key: "st1",
+      },
+      [statusProp, selectProp]
+    );
+    expect(config.stack_by).toEqual({ property_id: "st1", mode: "option" });
+  });
+
+  it("omitting properties entirely (existing callers) never sets mode — backward compatible", () => {
+    const config = buildChartViewConfig({
+      ...DEFAULT_CHART_DRAFT,
+      chart_type: "column",
+      x_axis_property_key: "status",
+    });
+    expect(config.x_axis).toEqual({ property_id: "status" });
+  });
 });
 
 // ── Component tests: ChartCreateFields ─────────────────────────────────
