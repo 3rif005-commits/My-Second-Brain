@@ -11,6 +11,7 @@ import { createReactBlockSpec } from "@blocknote/react";
 import { NoteIdContext } from "../editor/noteIdContext";
 import { useDatabaseView } from "@/lib/database/useDatabaseView";
 import { TableView } from "./views/TableView";
+import { getSubtaskDisplayMode } from "@/lib/database/types";
 import type { DatabaseDetailResponse } from "@/lib/database/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -206,6 +207,7 @@ export function InlineDatabaseTable({ databaseId, viewId }: { databaseId: string
             ensureRelationLinks={ensureRelationLinks}
             ensureRelationLinksBulk={ensureRelationLinksBulk}
             setRelationLinks={setRelationLinks}
+            subItemDisplayMode={getSubtaskDisplayMode(activeView.config)}
           />
         ) : (
           // Scope cut (task-36-brief.md §3): no inline view-switcher tabs.

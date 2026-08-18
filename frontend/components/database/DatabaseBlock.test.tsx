@@ -294,6 +294,24 @@ describe("InlineDatabaseTable", () => {
     expect(props.setRelationLinks).toBe(mockHook.setRelationLinks);
   });
 
+  it("derives subItemDisplayMode from the active view's config, matching DatabaseShell's table case", () => {
+    mockHook.views = [
+      {
+        id: "v1",
+        type: "table",
+        name: "Table",
+        config: { subtasks: { display_mode: "flattened" } },
+        filter: null,
+        sorts: [],
+      },
+    ];
+
+    render(<InlineDatabaseTable databaseId="db-1" viewId="v1" />);
+
+    const props = tableViewSpy.mock.calls[0][0];
+    expect(props.subItemDisplayMode).toBe("flattened");
+  });
+
   it("switches to the block's viewId once it differs from and disagrees with the hook's activeViewId", () => {
     mockHook.views = [
       { id: "v1", type: "table", name: "Table", config: {}, filter: null, sorts: [] },
