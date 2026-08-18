@@ -11,21 +11,85 @@ for every existing caller (title stays `"Untitled"`, properties stays `{}`, cont
 and is owned by `user_id` (and, per task-37 decision 3, look up a default template),
 then call this.
 
-`update_row_property` (the sibling endpoint on the same table) was deliberately NOT
-extracted in this task — its transactional body is materially more complex (relation-type
-rejection, a wrapper-shape check, the Milestone 7 date-shift cascade, the same title-sync
-convention this module's own title handling below reuses) and has no out-of-HTTP caller
-yet. Task 38 will extract it when `add_page_to`/`edit_pages_in` (automation actions that
-edit an EXISTING row) actually need to call it without HTTP — see task-37-report.md.
+`update_row_property_core` (task-38-brief.md decision 5) is the same move applied to
+`update_row_property` — its full pre-transaction validation (relation-type rejection,
+wrapper-shape check) and transactional body (the Milestone 7 date-shift cascade, the
+title-sync block) moved here verbatim; `routers/databases.py`'s `update_row_property` is
+now a thin wrapper that does the data-source-ownership check, calls this, and maps its
+framework-free typed exceptions to HTTP (same "raise a typed exception in the service
+layer, map to HTTP in the router" convention `services/db/templates.py`'s
+`DuplicateDefaultTemplateError`/`TemplateConfigError` and `services/db/relations.py`'s
+`RelationError` already establish — `RelationError`/`ValueError` raised by
+`cascade_dependency_shift` below are deliberately NOT caught here, for the same reason:
+they already are framework-free, and the router already has a mapping seam
+(`_relation_error_to_http`) for them).
+
+(This commit is the extraction only, byte-identical to the pre-extraction inline
+`update_row_property` body, per task-38-brief.md decision 5's explicit gate: "re-run the
+FULL existing test suite before adding anything new." The `trigger_automations` hook
+these two functions grow next — `page_added` in `create_row_core`, `property_edited` in
+`update_row_property_core`, per decision 4 — lands in the following commit alongside
+`services/db/automations.py` itself.)
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 import asyncpg
 
-from models.database import RowResponse
+from models.database import RowResponse, ShiftedRow
 from services.db import recompute
+from services.db.relations import SHIFT_NEVER, cascade_dependency_shift, relation_ref_from_config
+
+
+class PropertyNotFoundError(Exception):
+    """`property_key` doesn't exist on this `data_source_id` (or isn't `user_id`'s) —
+    `update_row_property_core`'s router wrapper maps this to a 404, same status
+    `update_row_property` always returned for this case pre-extraction."""
+
+
+class RowNotFoundError(Exception):
+    """`note_id` doesn't exist under this `data_source_id` (or isn't `user_id`'s),
+    discovered when the UPDATE itself returns no row — including the original inline
+    handler's concurrent-delete race (a row deleted between the property lookup above and
+    the UPDATE below). Router wrapper maps this to a 404."""
+
+
+class RowPropertyValueError(ValueError):
+    """400-mapped config/shape problems, preserved byte-identical (same message text) from
+    `update_row_property`'s pre-extraction inline `HTTPException`s: a relation-typed
+    `property_key` (write it via the relations endpoints instead), a non-JSONB-backed
+    property, or a value wrapper whose `"type"` tag doesn't match the property's declared
+    type."""
+
+
+def _parse_date_start(value: Any) -> "datetime | None":
+    """Extracts just the `start` instant from a spec §3.3 date wrapper
+    (`{"type": "date", "date": {"start": ..., "end": ..., "time_zone": ...}}`) — the seam
+    where `update_row_property_core` computes the delta Milestone 7's dependency cascade
+    needs (task-21-brief.md §4). `None` for anything that isn't a usable start (a clear, a
+    wrapper missing `start`, a malformed value) — the caller treats that as "no cascade is
+    possible here", the same "no date -> not part of the shift graph" stance
+    `services.db.relations.cascade_dependency_shift`'s own docstring takes (task-20-
+    report.md judgement call 8). Moved here verbatim from `routers/databases.py` (task-38
+    extraction, decision 5) — same ISO normalisation as `services/db/relations.py`'s
+    private `_parse_iso`, duplicated rather than imported, per that module's own stated
+    discipline against reaching into another module's underscore-prefixed helpers."""
+    if not isinstance(value, dict):
+        return None
+    date = value.get("date")
+    if not isinstance(date, dict):
+        return None
+    start = date.get("start")
+    if not isinstance(start, str):
+        return None
+    normalised = start[:-1] + "+00:00" if start.endswith("Z") else start
+    try:
+        parsed = datetime.fromisoformat(normalised)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
 async def create_row_core(
@@ -100,3 +164,206 @@ async def create_row_core(
         # insert. If recompute raises, the write rolls back.
         await recompute.recompute_row(conn, user_id, data_source_id, str(row["note_id"]))
     return RowResponse(id=str(row["note_id"]), properties=row["properties"])
+
+
+async def update_row_property_core(
+    conn: asyncpg.Connection,
+    user_id: str,
+    data_source_id: str,
+    note_id: str,
+    property_key: str,
+    value: Any,
+) -> RowResponse:
+    """Write a single property's value on a single row — extracted verbatim (task-38-
+    brief.md decision 5) from `routers/databases.py`'s `update_row_property`, which is now
+    a thin wrapper: parse/404 the path params, check data-source ownership, call this, map
+    its typed exceptions to HTTP. See this module's docstring for the extraction's error-
+    handling convention.
+
+    `value` is the full spec §3.3 wrapper (e.g. `{"type": "status", "status": "done"}`,
+    matching what `GET .../rows` returns and what's actually stored) or `None` to
+    clear/unset the property (spec §3.3: "Absent key ≡ empty" — never a bare scalar).
+
+    Ordinary data sources only — the All Notes virtual-source rejection stays in the
+    router (it never reaches this function; that check needs no `conn` access and every
+    other `*_core` caller is never routing through All Notes in the first place).
+    """
+    # Milestone 7: widened to also pull the row's pre-write value for this key in the same
+    # round trip (task-21-brief.md §4). The LEFT JOIN means `old_value` is SQL NULL (not an
+    # error) whenever the row has no db_row_props value yet for this key, or no
+    # db_row_props row at all -- both mean "no old date to diff against" to the cascade
+    # logic below, and (task-38) "no old value to diff against" to the property_edited
+    # trigger-matching logic.
+    prop_row = await conn.fetchrow(
+        """
+        SELECT dp.storage, dp.type, drp.properties -> dp.key AS old_value
+        FROM db_properties dp
+        LEFT JOIN db_row_props drp
+          ON drp.note_id = $2 AND drp.data_source_id = $1 AND drp.user_id = $3
+        WHERE dp.data_source_id = $1 AND dp.user_id = $3 AND dp.key = $4
+        """,
+        data_source_id,
+        note_id,
+        user_id,
+        property_key,
+    )
+    if prop_row is None:
+        raise PropertyNotFoundError(f"property not found: {property_key!r}")
+    if prop_row["type"] == "relation":
+        # task-21-brief.md §1: writing any key into db_row_props.properties for a
+        # relation-typed property would create exactly the second copy migration 015's
+        # whole design forbids (its header: "the JSONB is not the source of truth for
+        # relations"). `db_relation_links`, via the relations endpoints, is the only legal
+        # way to change a relation's value.
+        raise RowPropertyValueError(
+            "relation properties are not writable through this endpoint -- use "
+            f"GET/PUT /db/data-sources/{data_source_id}/rows/{note_id}/relations/"
+            f"{property_key} (and its /links sub-paths) instead"
+        )
+    if prop_row["storage"] != "jsonb":
+        raise RowPropertyValueError("property is not JSONB-backed")
+
+    # task-10 review finding 2: every stored value is a discriminated wrapper
+    # (`{"type": <type>, <type>: <value>}`) matching its property's declared type --
+    # Milestone 3's filter/sort compiler assumes that invariant holds. `None` (clear-
+    # property) is exempt. Deliberately shallow: only the wrapper's `type` tag is checked,
+    # not that the inner value is well-formed for that type.
+    if value is not None:
+        if not isinstance(value, dict) or value.get("type") != prop_row["type"]:
+            raise RowPropertyValueError(
+                f"value must be a {prop_row['type']!r} wrapper, e.g. "
+                f'{{"type": "{prop_row["type"]}", ...}}'
+            )
+
+    # Milestone 7: the write and the (possible) dependency cascade it triggers must commit
+    # or roll back together (task-21-brief.md §4) -- both live inside one transaction.
+    old_start = _parse_date_start(prop_row["old_value"])
+    shifted_rows: list[ShiftedRow] | None = None
+    async with conn.transaction():
+        if value is None:
+            # A top-level `null` means "clear/unset this property", not "set its value to
+            # SQL NULL" -- `db_row_props.properties` is NOT NULL (migration 014), and
+            # `jsonb_set(properties, path, NULL, true)` would set the *entire column* to
+            # NULL, not just this key. `properties - key` drops just the one key; spec
+            # §3.3: "Absent key ≡ empty."
+            row = await conn.fetchrow(
+                """
+                UPDATE db_row_props
+                SET properties = properties - $1, updated_at = now()
+                WHERE note_id = $2 AND data_source_id = $3 AND user_id = $4
+                RETURNING note_id, properties
+                """,
+                property_key,
+                note_id,
+                data_source_id,
+                user_id,
+            )
+        else:
+            row = await conn.fetchrow(
+                """
+                UPDATE db_row_props
+                SET properties = jsonb_set(properties, $1, $2, true), updated_at = now()
+                WHERE note_id = $3 AND data_source_id = $4 AND user_id = $5
+                RETURNING note_id, properties
+                """,
+                [property_key],
+                value,
+                note_id,
+                data_source_id,
+                user_id,
+            )
+        if row is None:
+            raise RowNotFoundError(f"row not found: {note_id!r}")
+
+        # A database row IS a note, and its human-readable name lives in TWO places -- the
+        # `title`-typed property in `db_row_props.properties` and `notes.title` (what every
+        # OTHER surface renders: the sidebar, search, relation chips). Kept inside the same
+        # transaction as the property write: the two copies of the title must not be able
+        # to disagree. A cleared title (`value is None`) falls back to 'Untitled', matching
+        # what `create_row_core` seeds a fresh note with.
+        if prop_row["type"] == "title":
+            new_title = (value or {}).get("title") or "Untitled"
+            await conn.execute(
+                """
+                UPDATE notes SET title = $1, updated_at = now()
+                WHERE id = $2 AND user_id = $3
+                """,
+                new_title,
+                note_id,
+                user_id,
+            )
+
+        # Milestone 7 dependency date-shift cascade (task-21-brief.md §4). Only considered
+        # for a successful write to a `date` property where both the old and the new value
+        # have a usable `start`. Deliberately NOT gated on `new_start != old_start`: a
+        # write that only changes `end` must still reach cascade_dependency_shift, since
+        # SHIFT_WHEN_OVERLAP depends on the blocker's *end*, not its start.
+        if prop_row["type"] == "date":
+            new_start = _parse_date_start(value)
+            if old_start is not None and new_start is not None:
+                dep_row = await conn.fetchrow(
+                    """
+                    SELECT config FROM db_properties
+                    WHERE data_source_id = $1 AND user_id = $2 AND type = 'relation'
+                      AND config->>'system' = 'dependency' AND config->>'side' = 'forward'
+                    """,
+                    data_source_id,
+                    user_id,
+                )
+                if (
+                    dep_row is not None
+                    and dep_row["config"].get("date_property_key") == property_key
+                ):
+                    dep_ref = relation_ref_from_config(dep_row["config"])
+                    if dep_ref is not None:
+                        # RelationError/ValueError propagate uncaught -- this module is
+                        # framework-free (see docstring); the router's own mapping seam
+                        # (`_relation_error_to_http`) catches them.
+                        changes = await cascade_dependency_shift(
+                            conn,
+                            user_id,
+                            dep_ref,
+                            changed_row_id=note_id,
+                            delta=new_start - old_start,
+                            mode=dep_row["config"].get("date_shift_mode") or SHIFT_NEVER,
+                            avoid_weekends=bool(dep_row["config"].get("avoid_weekends", False)),
+                            date_property_key=property_key,
+                        )
+                        if changes:
+                            shifted_rows = [
+                                ShiftedRow(
+                                    id=shifted_id,
+                                    properties={
+                                        property_key: {
+                                            "type": "date",
+                                            "date": {
+                                                "start": window.start.isoformat(),
+                                                "end": (
+                                                    window.end.isoformat()
+                                                    if window.end is not None
+                                                    else None
+                                                ),
+                                                "time_zone": None,
+                                            },
+                                        }
+                                    },
+                                )
+                                for shifted_id, window in changes.items()
+                            ]
+
+        # Milestone 8 (task-28-brief.md §3): recompute this row -- and, if the M7 cascade
+        # above moved any OTHER rows, each of those too -- inside THIS SAME transaction.
+        written = await recompute.recompute_row(conn, user_id, data_source_id, note_id)
+        for shifted in shifted_rows or []:
+            await recompute.recompute_row(conn, user_id, data_source_id, shifted.id)
+
+    # `written` (this row's own freshly materialised formula/rollup values) merges into the
+    # response the same way `_merge_computed_into_rows` does for a listing/query. A `None`
+    # entry (the value is now EMPTY, spec §3.3's "absent key" convention) is omitted.
+    merged_properties = {
+        **row["properties"],
+        **{k: v for k, v in written.items() if v is not None},
+    }
+    return RowResponse(
+        id=str(row["note_id"]), properties=merged_properties, shifted_rows=shifted_rows
+    )
