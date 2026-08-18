@@ -9,6 +9,7 @@ import { useNotes } from "@/lib/hooks/useNotes";
 import { useCollections } from "@/lib/hooks/useCollections";
 import { useTrash } from "@/lib/hooks/useTrash";
 import { NoteTree } from "./NoteTree";
+import { NotificationsBell } from "./NotificationsBell";
 
 function NavItem({
   label,
@@ -191,6 +192,9 @@ export function Sidebar({
 
       {/* Navigation */}
       <nav aria-label="Main navigation" className="px-3 pt-1 space-y-0.5 shrink-0">
+        {/* Milestone 12 (task-41): notifications inbox — a top-level entry,
+         * NOT scoped to any one database (task-41-brief.md decision 5). */}
+        <NotificationsBell />
         <NavItem
           label="AI Tutor"
           icon={MessageSquare}
