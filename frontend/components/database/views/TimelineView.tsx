@@ -412,6 +412,28 @@ export function TimelineView({
   }
   const datePropertyKey: string = dateProperty.key;
 
+  // fix-wave-1 finding 2: the dependency shift cascade (services/db/relations.py's
+  // `cascade_dependency_shift`) only fires server-side when the dependency relation's
+  // OWN `config.date_property_key` (set independently in DatabaseSettingsMenu.tsx) equals
+  // the property actually being PATCHed. This Timeline's `config.date_property_id` has no
+  // relationship to that setting, so a user can configure dependencies against one date
+  // property and build a Timeline against another — resizing a bar here would then
+  // silently do nothing extra, no cascade, no error. A cheap, non-blocking warning is all
+  // that's called for here (not a redesign): the Timeline still renders and functions
+  // normally either way.
+  const dependencyDatePropertyKey =
+    dependencyForward && typeof dependencyForward.config.date_property_key === "string"
+      ? (dependencyForward.config.date_property_key as string)
+      : null;
+  const dependencyDateProperty = dependencyDatePropertyKey
+    ? properties.find((p) => p.key === dependencyDatePropertyKey)
+    : undefined;
+  const dependencyDateMismatch =
+    arrowsBy &&
+    !!dependencyForward &&
+    dependencyDatePropertyKey !== null &&
+    dependencyDatePropertyKey !== datePropertyKey;
+
   const rowsById: Record<string, DatabaseRow> = {};
   for (const row of rows) rowsById[row.id] = row;
 
@@ -523,6 +545,17 @@ export function TimelineView({
         {!dependencyForward && (
           <span className="text-[10px] text-gray-400 dark:text-gray-500">
             Turn on dependencies in Database settings first
+          </span>
+        )}
+        {dependencyDateMismatch && (
+          <span
+            role="status"
+            data-testid="timeline-dependency-date-mismatch-warning"
+            className="basis-full text-[10px] text-amber-600 dark:text-amber-400"
+          >
+            Dependency shifting uses a different date property (
+            {dependencyDateProperty?.name ?? dependencyDatePropertyKey}) than this Timeline.
+            Resizing bars here won&apos;t trigger automatic shifting.
           </span>
         )}
       </div>

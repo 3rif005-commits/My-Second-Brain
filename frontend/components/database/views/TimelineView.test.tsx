@@ -391,6 +391,57 @@ describe("TimelineView", () => {
     });
   });
 
+  describe("dependency date-property mismatch warning (fix-wave-1 finding 2)", () => {
+    const STARTED_PROP = prop({ key: "started", name: "Started", type: "date", position: 3 });
+    const DEPENDENCY_ON_DIFFERENT_DATE_PROP = prop({
+      key: "blocking",
+      name: "Blocking",
+      type: "relation",
+      position: 2,
+      config: {
+        system: "dependency",
+        side: "forward",
+        relation_id: "rel-1",
+        date_property_key: "started", // differs from the Timeline's own "due" below
+        date_shift_mode: "Shift & maintain time between items",
+      },
+    });
+
+    it("warns when the dependency relation's date property differs from this Timeline's own date property", () => {
+      renderTimeline({
+        properties: [TITLE_PROP, DUE_PROP, STARTED_PROP, DEPENDENCY_ON_DIFFERENT_DATE_PROP],
+        config: { date_property_id: "due", arrows_by: true },
+      });
+      const warning = screen.getByTestId("timeline-dependency-date-mismatch-warning");
+      expect(warning).toBeInTheDocument();
+      expect(warning).toHaveTextContent("Started"); // uses the display name, not the raw key
+    });
+
+    it("does not warn when the dependency relation's date property matches this Timeline's own date property", () => {
+      renderTimeline({
+        properties: [TITLE_PROP, DUE_PROP, DEPENDENCY_FORWARD_PROP], // date_property_key: "due" — matches
+        config: { date_property_id: "due", arrows_by: true },
+      });
+      expect(screen.queryByTestId("timeline-dependency-date-mismatch-warning")).not.toBeInTheDocument();
+    });
+
+    it("does not warn when arrows_by is false, even with mismatched date properties", () => {
+      renderTimeline({
+        properties: [TITLE_PROP, DUE_PROP, STARTED_PROP, DEPENDENCY_ON_DIFFERENT_DATE_PROP],
+        config: { date_property_id: "due", arrows_by: false },
+      });
+      expect(screen.queryByTestId("timeline-dependency-date-mismatch-warning")).not.toBeInTheDocument();
+    });
+
+    it("does not warn when no dependency pair exists, even with arrows_by true", () => {
+      renderTimeline({
+        properties: [TITLE_PROP, DUE_PROP], // no dependency relation property
+        config: { date_property_id: "due", arrows_by: true },
+      });
+      expect(screen.queryByTestId("timeline-dependency-date-mismatch-warning")).not.toBeInTheDocument();
+    });
+  });
+
   it("clicking Today does not crash and scrolls the track container", () => {
     const rows = [row("row-1", "Task A", { start: "2026-01-01T00:00:00.000Z", end: "2026-01-11T00:00:00.000Z", time_zone: null })];
     renderTimeline({ rows });
