@@ -18,6 +18,8 @@ import { withMultiColumn, multiColumnDropCursor } from "@blocknote/xl-multi-colu
 import { useTheme } from "@/app/providers";
 import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec } from "./customBlocks";
 import { extractCalloutChildren, attachCalloutChildren } from "./calloutChildren";
+import { NoteIdContext } from "./noteIdContext";
+import { DatabaseBlockSpec, insertDatabaseBlock } from "../database/DatabaseBlock";
 
 // Inline @mention — links to another note in the brain
 const MentionSpec = createInlineContentSpec(
@@ -56,6 +58,7 @@ const multiColSchema = withMultiColumn(
       math: MathBlockSpec(),
       checkpoint: CheckpointBlockSpec(),
       callout: CalloutBlockSpec(),
+      database: DatabaseBlockSpec(),
     },
     inlineContentSpecs: { ...defaultInlineContentSpecs, mention: MentionSpec },
   })
@@ -346,6 +349,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 
     return (
       <div className="prose max-w-none">
+        <NoteIdContext.Provider value={_noteId}>
         <BlockNoteView
           editor={editor}
           theme={resolvedTheme === "dark" ? appDarkTheme : "light"}
@@ -380,7 +384,24 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                     }),
                   }]
                 : [];
-              const all = [...defaults, ...aiItems, ...custom];
+              // Own "Database" group (rather than folding into "Interactive",
+              // which is really about the Knowledge Check quiz block above) —
+              // a database is a distinct kind of thing from an interactive
+              // block, and Notion's own slash menu gives databases their own
+              // section too.
+              const databaseItems = [{
+                title: "Database",
+                group: "Database",
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                icon: <span style={{ fontSize: 18 }}>🗄️</span> as any,
+                subtext: "Embed a new database in this note",
+                aliases: ["table", "db"],
+                onItemClick: () => {
+                  const pos = editor.getTextCursorPosition();
+                  insertDatabaseBlock(editor, pos?.block?.id);
+                },
+              }];
+              const all = [...defaults, ...aiItems, ...custom, ...databaseItems];
               if (!query) return all;
               const q = query.toLowerCase();
               return all.filter((item) =>
@@ -429,6 +450,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
             }}
           />
         </BlockNoteView>
+        </NoteIdContext.Provider>
       </div>
     );
   }
