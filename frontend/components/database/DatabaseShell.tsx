@@ -46,6 +46,10 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     updateTemplate,
     deleteTemplate,
     instantiateTemplate,
+    automations,
+    createAutomation,
+    updateAutomation,
+    deleteAutomation,
     refetch,
     refetchRows,
   } = useDatabaseView(databaseId);
@@ -288,6 +292,10 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
                 onCreateTemplate={createTemplate}
                 onUpdateTemplate={updateTemplate}
                 onDeleteTemplate={deleteTemplate}
+                automations={automations}
+                onCreateAutomation={createAutomation}
+                onUpdateAutomation={updateAutomation}
+                onDeleteAutomation={deleteAutomation}
               />
             </div>
           )}

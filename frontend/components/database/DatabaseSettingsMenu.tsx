@@ -10,8 +10,16 @@
 import { useState } from "react";
 import { useToast } from "@/app/providers";
 import { DATE_SHIFT_MODES, findSystemRelationProperty } from "@/lib/database/types";
-import type { PropertyResponse, RowTemplatePatch, RowTemplateResponse, ViewResponse } from "@/lib/database/types";
+import type {
+  AutomationPatch,
+  AutomationResponse,
+  PropertyResponse,
+  RowTemplatePatch,
+  RowTemplateResponse,
+  ViewResponse,
+} from "@/lib/database/types";
 import { TemplateManager } from "./TemplateManager";
+import { AutomationManager } from "./AutomationManager";
 
 interface DatabaseSettingsMenuProps {
   dataSourceId: string;
@@ -34,6 +42,13 @@ interface DatabaseSettingsMenuProps {
   onCreateTemplate: (name: string, icon?: string | null) => Promise<RowTemplateResponse>;
   onUpdateTemplate: (id: string, patch: RowTemplatePatch) => Promise<RowTemplateResponse>;
   onDeleteTemplate: (id: string) => Promise<void>;
+  // Milestone 12 (task-41): database automations. Same "this menu only owns
+  // the entry point" reasoning as templates above — threaded straight
+  // through to AutomationManager.
+  automations: AutomationResponse[];
+  onCreateAutomation: (name: string) => Promise<AutomationResponse>;
+  onUpdateAutomation: (id: string, patch: AutomationPatch) => Promise<AutomationResponse>;
+  onDeleteAutomation: (id: string) => Promise<void>;
 }
 
 async function errorMessage(res: Response): Promise<string> {
@@ -51,12 +66,17 @@ export function DatabaseSettingsMenu({
   onCreateTemplate,
   onUpdateTemplate,
   onDeleteTemplate,
+  automations,
+  onCreateAutomation,
+  onUpdateAutomation,
+  onDeleteAutomation,
 }: DatabaseSettingsMenuProps) {
   const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [enablingSubItems, setEnablingSubItems] = useState(false);
   const [enablingDependencies, setEnablingDependencies] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [automationsOpen, setAutomationsOpen] = useState(false);
 
   const subItemForward = findSystemRelationProperty(properties, "sub_item", "forward");
   const dependencyForward = findSystemRelationProperty(properties, "dependency", "forward");
@@ -244,6 +264,20 @@ export function DatabaseSettingsMenu({
               Manage templates
             </button>
           </section>
+
+          <section>
+            <h3 className="font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Automations</h3>
+            <button
+              type="button"
+              onClick={() => {
+                setAutomationsOpen(true);
+                setOpen(false);
+              }}
+              className="text-xs px-2 py-1 rounded bg-indigo-600 text-white"
+            >
+              Manage automations
+            </button>
+          </section>
         </div>
       )}
 
@@ -255,6 +289,17 @@ export function DatabaseSettingsMenu({
         onCreateTemplate={onCreateTemplate}
         onUpdateTemplate={onUpdateTemplate}
         onDeleteTemplate={onDeleteTemplate}
+      />
+
+      <AutomationManager
+        open={automationsOpen}
+        onClose={() => setAutomationsOpen(false)}
+        automations={automations}
+        properties={properties}
+        dataSourceId={dataSourceId}
+        onCreateAutomation={onCreateAutomation}
+        onUpdateAutomation={onUpdateAutomation}
+        onDeleteAutomation={onDeleteAutomation}
       />
     </div>
   );

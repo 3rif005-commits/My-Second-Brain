@@ -81,6 +81,10 @@ describe("DatabaseSettingsMenu", () => {
         onCreateTemplate={vi.fn()}
         onUpdateTemplate={vi.fn()}
         onDeleteTemplate={vi.fn()}
+        automations={[]}
+        onCreateAutomation={vi.fn()}
+        onUpdateAutomation={vi.fn()}
+        onDeleteAutomation={vi.fn()}
       />
     );
     await openMenu(user);
@@ -111,6 +115,10 @@ describe("DatabaseSettingsMenu", () => {
         onCreateTemplate={vi.fn()}
         onUpdateTemplate={vi.fn()}
         onDeleteTemplate={vi.fn()}
+        automations={[]}
+        onCreateAutomation={vi.fn()}
+        onUpdateAutomation={vi.fn()}
+        onDeleteAutomation={vi.fn()}
       />
     );
     await openMenu(user);
@@ -138,6 +146,10 @@ describe("DatabaseSettingsMenu", () => {
         onCreateTemplate={vi.fn()}
         onUpdateTemplate={vi.fn()}
         onDeleteTemplate={vi.fn()}
+        automations={[]}
+        onCreateAutomation={vi.fn()}
+        onUpdateAutomation={vi.fn()}
+        onDeleteAutomation={vi.fn()}
       />
     );
     await openMenu(user);
@@ -168,6 +180,10 @@ describe("DatabaseSettingsMenu", () => {
         onCreateTemplate={vi.fn()}
         onUpdateTemplate={vi.fn()}
         onDeleteTemplate={vi.fn()}
+        automations={[]}
+        onCreateAutomation={vi.fn()}
+        onUpdateAutomation={vi.fn()}
+        onDeleteAutomation={vi.fn()}
         />
       );
       await openMenu(user);
@@ -194,6 +210,10 @@ describe("DatabaseSettingsMenu", () => {
         onCreateTemplate={vi.fn()}
         onUpdateTemplate={vi.fn()}
         onDeleteTemplate={vi.fn()}
+        automations={[]}
+        onCreateAutomation={vi.fn()}
+        onUpdateAutomation={vi.fn()}
+        onDeleteAutomation={vi.fn()}
         />
       );
       await openMenu(user);
@@ -225,6 +245,10 @@ describe("DatabaseSettingsMenu", () => {
         onCreateTemplate={vi.fn()}
         onUpdateTemplate={vi.fn()}
         onDeleteTemplate={vi.fn()}
+        automations={[]}
+        onCreateAutomation={vi.fn()}
+        onUpdateAutomation={vi.fn()}
+        onDeleteAutomation={vi.fn()}
         />
       );
       await openMenu(user);
@@ -250,6 +274,10 @@ describe("DatabaseSettingsMenu", () => {
         onCreateTemplate={vi.fn()}
         onUpdateTemplate={vi.fn()}
         onDeleteTemplate={vi.fn()}
+        automations={[]}
+        onCreateAutomation={vi.fn()}
+        onUpdateAutomation={vi.fn()}
+        onDeleteAutomation={vi.fn()}
         />
       );
       await openMenu(user);
@@ -272,6 +300,10 @@ describe("DatabaseSettingsMenu", () => {
         onCreateTemplate={vi.fn()}
         onUpdateTemplate={vi.fn()}
         onDeleteTemplate={vi.fn()}
+        automations={[]}
+        onCreateAutomation={vi.fn()}
+        onUpdateAutomation={vi.fn()}
+        onDeleteAutomation={vi.fn()}
         />
       );
       await openMenu(user);
@@ -296,6 +328,10 @@ describe("DatabaseSettingsMenu", () => {
           onCreateTemplate={vi.fn()}
           onUpdateTemplate={vi.fn()}
           onDeleteTemplate={vi.fn()}
+          automations={[]}
+          onCreateAutomation={vi.fn()}
+          onUpdateAutomation={vi.fn()}
+          onDeleteAutomation={vi.fn()}
         />
       );
       await openMenu(user);
