@@ -41,6 +41,8 @@ import type {
   PropertyResponse,
   PropertyValue,
   RelatedRow,
+  RowResponse,
+  RowTemplateResponse,
   SubtaskDisplayMode,
 } from "@/lib/database/types";
 import { renderCellValue } from "../cells/renderCellValue";
@@ -94,6 +96,19 @@ interface TableViewProps {
    * rather than half-built (research §3.4 also names them, but the brief
    * explicitly scopes this task down to the first two). */
   subItemDisplayMode?: SubtaskDisplayMode;
+  // Milestone 12 (task-40): the "+ New" split-button's dropdown. Optional,
+  // same "older/other caller just gets a degraded but non-crashing
+  // behaviour" convention as the relation props above — a caller that omits
+  // `templates` (or passes `[]`) simply gets the plain "+ New" button with
+  // no chevron next to it, which is byte-identical to this component's
+  // behaviour before this task existed (the brief's own regression bar for
+  // this file: the plain "+ New" click path must stay unchanged).
+  templates?: RowTemplateResponse[];
+  /** useDatabaseView's `instantiateTemplate` — creates a row from a chosen
+   * (non-default) template right now. Does not itself refetch rows; this
+   * component calls `refetchRows` afterward, same as `handleAddRow` does
+   * for the plain path. */
+  onInstantiateTemplate?: (templateId: string) => Promise<RowResponse>;
 }
 
 const columnHelper = createColumnHelper<DatabaseRow>();
@@ -145,6 +160,8 @@ export function TableView({
   ensureRelationLinksBulk,
   setRelationLinks,
   subItemDisplayMode,
+  templates,
+  onInstantiateTemplate,
 }: TableViewProps) {
   const { showToast } = useToast();
 
@@ -154,6 +171,12 @@ export function TableView({
   const [propertySubmitting, setPropertySubmitting] = useState(false);
   const [propertyFormError, setPropertyFormError] = useState<string | null>(null);
   const [rowSubmitting, setRowSubmitting] = useState(false);
+  // Milestone 12 (task-40): the "+ New" split-button's dropdown open state,
+  // and a separate submitting flag so picking a template disables/re-enables
+  // its own row without touching `rowSubmitting` (the plain "+ New" click
+  // path's own state, left completely alone by this task).
+  const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
+  const [instantiatingTemplateId, setInstantiatingTemplateId] = useState<string | null>(null);
   // task-31 Part 1: relation-only fields, collected by the same inline
   // add-property form rather than a parallel one. `databases` is fetched
   // lazily (only once the user actually picks "Relation" or "Rollup" — no
@@ -535,6 +558,11 @@ export function TableView({
   // One-click, no form, no confirmation — matches the sidebar's "New Note"
   // convention (backend defaults the row to an "Untitled" note and appends
   // it at the end position; there's nothing for a form to collect).
+  //
+  // UNCHANGED by task-40's split-button widening below: this still calls
+  // the same bare POST with no body, and the backend already auto-applies
+  // the data source's default template server-side if one exists (Task 37) —
+  // no frontend change needed for that path at all.
   async function handleAddRow() {
     if (!dataSourceId || rowSubmitting) return;
     setRowSubmitting(true);
@@ -546,6 +574,26 @@ export function TableView({
       showToast(err instanceof Error ? err.message : "Could not add row", "error");
     } finally {
       setRowSubmitting(false);
+    }
+  }
+
+  // Milestone 12 (task-40), decision 3: every NON-default template — the
+  // default one is already what plain "+ New" produces (the backend
+  // auto-applies it), so listing it again in the dropdown would be
+  // confusing/redundant.
+  const nonDefaultTemplates = (templates ?? []).filter((t) => !t.is_default);
+
+  async function handleInstantiateTemplate(templateId: string) {
+    if (!onInstantiateTemplate || instantiatingTemplateId) return;
+    setInstantiatingTemplateId(templateId);
+    setTemplateMenuOpen(false);
+    try {
+      await onInstantiateTemplate(templateId);
+      await refetchRows?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not create row from template", "error");
+    } finally {
+      setInstantiatingTemplateId(null);
     }
   }
 
@@ -823,14 +871,53 @@ export function TableView({
           {editable && (
             <tr>
               <td colSpan={Math.max(columnCount, 1)} className="px-3 py-1.5">
-                <button
-                  type="button"
-                  onClick={handleAddRow}
-                  disabled={rowSubmitting}
-                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-40"
-                >
-                  + New
-                </button>
+                <div className="relative inline-flex items-center">
+                  <button
+                    type="button"
+                    onClick={handleAddRow}
+                    disabled={rowSubmitting}
+                    className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-40"
+                  >
+                    + New
+                  </button>
+                  {/* Task-40 decision 3: zero non-default templates -> no
+                   * chevron at all, no dropdown with nothing in it. */}
+                  {nonDefaultTemplates.length > 0 && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label="Choose a template"
+                        aria-haspopup="menu"
+                        aria-expanded={templateMenuOpen}
+                        onClick={() => setTemplateMenuOpen((o) => !o)}
+                        className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-1"
+                      >
+                        ▾
+                      </button>
+                      {templateMenuOpen && (
+                        <div
+                          role="menu"
+                          aria-label="New row from template"
+                          className="absolute left-0 bottom-full z-20 mb-1 min-w-[10rem] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-1"
+                        >
+                          {nonDefaultTemplates.map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              role="menuitem"
+                              disabled={instantiatingTemplateId === t.id}
+                              onClick={() => handleInstantiateTemplate(t.id)}
+                              className="w-full flex items-center gap-1.5 text-left text-xs px-3 py-1.5 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-40"
+                            >
+                              {t.icon && <span className="leading-none">{t.icon}</span>}
+                              {t.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </td>
             </tr>
           )}

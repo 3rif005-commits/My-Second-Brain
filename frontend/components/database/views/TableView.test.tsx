@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TableView } from "./TableView";
 import { KNOWN_PROPERTY_TYPES, ROLLUP_FUNCTIONS } from "@/lib/database/types";
-import type { DatabaseRow, PropertyResponse, RelatedRow } from "@/lib/database/types";
+import type { DatabaseRow, PropertyResponse, RelatedRow, RowTemplateResponse } from "@/lib/database/types";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -1117,6 +1117,160 @@ describe("TableView", () => {
       );
       expect(screen.queryByRole("button", { name: /collapse|expand/i })).not.toBeInTheDocument();
       expect(screen.queryByText(/↳/)).not.toBeInTheDocument();
+    });
+  });
+
+  // Milestone 12 (task-40): the "+ New" split-button's dropdown. The plain
+  // "+ New" click path itself (handleAddRow, tested in "Add row" above) is
+  // untouched by any of this — this task's own regression bar for this
+  // file — so none of those existing tests were modified.
+  describe("New row from template (task-40)", () => {
+    function rowTemplate(overrides: Partial<RowTemplateResponse>): RowTemplateResponse {
+      return {
+        id: "tmpl-1",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Weekly review",
+        icon: null,
+        properties: {},
+        content: [],
+        is_default: false,
+        repeat_config: null,
+        next_run_at: null,
+        position: 0,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        ...overrides,
+      };
+    }
+
+    it("renders no chevron at all when there are zero templates", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          templates={[]}
+        />
+      );
+      expect(screen.getByRole("button", { name: "+ New" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Choose a template" })).not.toBeInTheDocument();
+    });
+
+    it("renders no chevron at all when the `templates` prop is simply omitted (older/other caller)", () => {
+      render(
+        <TableView properties={PROPERTIES} rows={[]} editable={true} onCellChange={vi.fn()} dataSourceId="ds-1" />
+      );
+      expect(screen.queryByRole("button", { name: "Choose a template" })).not.toBeInTheDocument();
+    });
+
+    it("the dropdown lists one entry per NON-default template — the default one is omitted (plain \"+ New\" already produces it)", async () => {
+      const user = userEvent.setup();
+      const templates = [
+        rowTemplate({ id: "default-1", name: "Default one", is_default: true }),
+        rowTemplate({ id: "extra-1", name: "Extra template", is_default: false }),
+      ];
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          templates={templates}
+          onInstantiateTemplate={vi.fn()}
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: "Choose a template" }));
+
+      expect(screen.getByRole("menuitem", { name: "Extra template" })).toBeInTheDocument();
+      expect(screen.queryByRole("menuitem", { name: "Default one" })).not.toBeInTheDocument();
+    });
+
+    it("clicking a template entry calls onInstantiateTemplate then refetchRows", async () => {
+      const user = userEvent.setup();
+      const onInstantiateTemplate = vi.fn().mockResolvedValue({ id: "row-9", properties: {} });
+      const refetchRows = vi.fn().mockResolvedValue(undefined);
+      const templates = [rowTemplate({ id: "extra-1", name: "Extra template" })];
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetchRows={refetchRows}
+          templates={templates}
+          onInstantiateTemplate={onInstantiateTemplate}
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: "Choose a template" }));
+      await user.click(screen.getByRole("menuitem", { name: "Extra template" }));
+
+      await waitFor(() => expect(onInstantiateTemplate).toHaveBeenCalledWith("extra-1"));
+      await waitFor(() => expect(refetchRows).toHaveBeenCalled());
+    });
+
+    it("a failed instantiate shows a toast and does not call refetchRows", async () => {
+      const user = userEvent.setup();
+      const onInstantiateTemplate = vi.fn().mockRejectedValue(new Error("could not create row"));
+      const refetchRows = vi.fn();
+      const templates = [rowTemplate({ id: "extra-1", name: "Extra template" })];
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetchRows={refetchRows}
+          templates={templates}
+          onInstantiateTemplate={onInstantiateTemplate}
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: "Choose a template" }));
+      await user.click(screen.getByRole("menuitem", { name: "Extra template" }));
+
+      await waitFor(() => expect(onInstantiateTemplate).toHaveBeenCalled());
+      expect(refetchRows).not.toHaveBeenCalled();
+    });
+
+    it("the plain \"+ New\" button's click behavior is unaffected by templates being present", async () => {
+      const user = userEvent.setup();
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "row-2", properties: {} }, 201));
+      vi.stubGlobal("fetch", fetchMock);
+      const refetchRows = vi.fn().mockResolvedValue(undefined);
+      const onInstantiateTemplate = vi.fn();
+      const templates = [rowTemplate({ id: "extra-1", name: "Extra template" })];
+
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetchRows={refetchRows}
+          templates={templates}
+          onInstantiateTemplate={onInstantiateTemplate}
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: "+ New" }));
+
+      await waitFor(() => expect(refetchRows).toHaveBeenCalled());
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/db/data-sources/ds-1/rows",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(onInstantiateTemplate).not.toHaveBeenCalled();
     });
   });
 });
