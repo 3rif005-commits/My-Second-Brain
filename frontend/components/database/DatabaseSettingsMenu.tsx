@@ -10,7 +10,8 @@
 import { useState } from "react";
 import { useToast } from "@/app/providers";
 import { DATE_SHIFT_MODES, findSystemRelationProperty } from "@/lib/database/types";
-import type { PropertyResponse, ViewResponse } from "@/lib/database/types";
+import type { PropertyResponse, RowTemplatePatch, RowTemplateResponse, ViewResponse } from "@/lib/database/types";
+import { TemplateManager } from "./TemplateManager";
 
 interface DatabaseSettingsMenuProps {
   dataSourceId: string;
@@ -24,6 +25,15 @@ interface DatabaseSettingsMenuProps {
    * useDatabaseView's `refetch`. */
   onPropertiesChanged: () => void | Promise<void>;
   onUpdateView: (viewId: string, patch: { config: Record<string, unknown> }) => Promise<ViewResponse>;
+  // Milestone 12 (task-40): row templates. Threaded straight through to
+  // TemplateManager (decision 1: this menu is too small — fixed `w-72` —
+  // to host a template list, let alone a nested BlockEditor, so it only
+  // owns the "open the modal" entry point, not the template list/editor
+  // themselves).
+  templates: RowTemplateResponse[];
+  onCreateTemplate: (name: string, icon?: string | null) => Promise<RowTemplateResponse>;
+  onUpdateTemplate: (id: string, patch: RowTemplatePatch) => Promise<RowTemplateResponse>;
+  onDeleteTemplate: (id: string) => Promise<void>;
 }
 
 async function errorMessage(res: Response): Promise<string> {
@@ -37,11 +47,16 @@ export function DatabaseSettingsMenu({
   activeView,
   onPropertiesChanged,
   onUpdateView,
+  templates,
+  onCreateTemplate,
+  onUpdateTemplate,
+  onDeleteTemplate,
 }: DatabaseSettingsMenuProps) {
   const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [enablingSubItems, setEnablingSubItems] = useState(false);
   const [enablingDependencies, setEnablingDependencies] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const subItemForward = findSystemRelationProperty(properties, "sub_item", "forward");
   const dependencyForward = findSystemRelationProperty(properties, "dependency", "forward");
@@ -215,8 +230,32 @@ export function DatabaseSettingsMenu({
               </div>
             )}
           </section>
+
+          <section>
+            <h3 className="font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Templates</h3>
+            <button
+              type="button"
+              onClick={() => {
+                setTemplatesOpen(true);
+                setOpen(false);
+              }}
+              className="text-xs px-2 py-1 rounded bg-indigo-600 text-white"
+            >
+              Manage templates
+            </button>
+          </section>
         </div>
       )}
+
+      <TemplateManager
+        open={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
+        templates={templates}
+        properties={properties}
+        onCreateTemplate={onCreateTemplate}
+        onUpdateTemplate={onUpdateTemplate}
+        onDeleteTemplate={onDeleteTemplate}
+      />
     </div>
   );
 }

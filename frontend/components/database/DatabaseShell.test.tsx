@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import type { Group, RelatedRow, ViewResponse } from "@/lib/database/types";
+import type { Group, RelatedRow, RowTemplateResponse, ViewResponse } from "@/lib/database/types";
 
 // ListView (task-17) navigates via next/navigation's useRouter — outside a
 // real Next.js app router tree (as here, a plain RTL render) that throws
@@ -29,6 +29,11 @@ const mockHook: {
   setRelationLinks: ReturnType<typeof vi.fn>;
   createView: ReturnType<typeof vi.fn>;
   updateView: ReturnType<typeof vi.fn>;
+  templates: RowTemplateResponse[];
+  createTemplate: ReturnType<typeof vi.fn>;
+  updateTemplate: ReturnType<typeof vi.fn>;
+  deleteTemplate: ReturnType<typeof vi.fn>;
+  instantiateTemplate: ReturnType<typeof vi.fn>;
   refetch: ReturnType<typeof vi.fn>;
   refetchRows: ReturnType<typeof vi.fn>;
 } = {
@@ -77,6 +82,11 @@ const mockHook: {
   setRelationLinks: vi.fn(),
   createView: vi.fn(),
   updateView: vi.fn(),
+  templates: [],
+  createTemplate: vi.fn(),
+  updateTemplate: vi.fn(),
+  deleteTemplate: vi.fn(),
+  instantiateTemplate: vi.fn(),
   refetch: vi.fn(),
   refetchRows: vi.fn(),
 };

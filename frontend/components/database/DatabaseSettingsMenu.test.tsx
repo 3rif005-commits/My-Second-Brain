@@ -77,6 +77,10 @@ describe("DatabaseSettingsMenu", () => {
         activeView={VIEW}
         onPropertiesChanged={onPropertiesChanged}
         onUpdateView={vi.fn()}
+        templates={[]}
+        onCreateTemplate={vi.fn()}
+        onUpdateTemplate={vi.fn()}
+        onDeleteTemplate={vi.fn()}
       />
     );
     await openMenu(user);
@@ -103,6 +107,10 @@ describe("DatabaseSettingsMenu", () => {
         activeView={VIEW}
         onPropertiesChanged={vi.fn()}
         onUpdateView={onUpdateView}
+        templates={[]}
+        onCreateTemplate={vi.fn()}
+        onUpdateTemplate={vi.fn()}
+        onDeleteTemplate={vi.fn()}
       />
     );
     await openMenu(user);
@@ -126,6 +134,10 @@ describe("DatabaseSettingsMenu", () => {
         activeView={VIEW}
         onPropertiesChanged={onPropertiesChanged}
         onUpdateView={vi.fn()}
+        templates={[]}
+        onCreateTemplate={vi.fn()}
+        onUpdateTemplate={vi.fn()}
+        onDeleteTemplate={vi.fn()}
       />
     );
     await openMenu(user);
@@ -152,6 +164,10 @@ describe("DatabaseSettingsMenu", () => {
           activeView={VIEW}
           onPropertiesChanged={vi.fn()}
           onUpdateView={vi.fn()}
+        templates={[]}
+        onCreateTemplate={vi.fn()}
+        onUpdateTemplate={vi.fn()}
+        onDeleteTemplate={vi.fn()}
         />
       );
       await openMenu(user);
@@ -174,6 +190,10 @@ describe("DatabaseSettingsMenu", () => {
           activeView={VIEW}
           onPropertiesChanged={vi.fn()}
           onUpdateView={vi.fn()}
+        templates={[]}
+        onCreateTemplate={vi.fn()}
+        onUpdateTemplate={vi.fn()}
+        onDeleteTemplate={vi.fn()}
         />
       );
       await openMenu(user);
@@ -201,6 +221,10 @@ describe("DatabaseSettingsMenu", () => {
           activeView={VIEW}
           onPropertiesChanged={vi.fn()}
           onUpdateView={vi.fn()}
+        templates={[]}
+        onCreateTemplate={vi.fn()}
+        onUpdateTemplate={vi.fn()}
+        onDeleteTemplate={vi.fn()}
         />
       );
       await openMenu(user);
@@ -222,6 +246,10 @@ describe("DatabaseSettingsMenu", () => {
           activeView={VIEW}
           onPropertiesChanged={vi.fn()}
           onUpdateView={vi.fn()}
+        templates={[]}
+        onCreateTemplate={vi.fn()}
+        onUpdateTemplate={vi.fn()}
+        onDeleteTemplate={vi.fn()}
         />
       );
       await openMenu(user);
@@ -240,6 +268,10 @@ describe("DatabaseSettingsMenu", () => {
           activeView={VIEW}
           onPropertiesChanged={vi.fn()}
           onUpdateView={vi.fn()}
+        templates={[]}
+        onCreateTemplate={vi.fn()}
+        onUpdateTemplate={vi.fn()}
+        onDeleteTemplate={vi.fn()}
         />
       );
       await openMenu(user);
@@ -247,6 +279,31 @@ describe("DatabaseSettingsMenu", () => {
       // The old "isn't available yet" caveat must be gone now that Timeline
       // is real (task-34-brief.md's whole reason for existing).
       expect(screen.queryByText(/isn.t available yet/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Templates (task-40)", () => {
+    it("shows a 'Manage templates' button that opens TemplateManager, and closes the settings dropdown", async () => {
+      const user = userEvent.setup();
+      render(
+        <DatabaseSettingsMenu
+          dataSourceId="ds-1"
+          properties={[TITLE_PROP]}
+          activeView={VIEW}
+          onPropertiesChanged={vi.fn()}
+          onUpdateView={vi.fn()}
+          templates={[]}
+          onCreateTemplate={vi.fn()}
+          onUpdateTemplate={vi.fn()}
+          onDeleteTemplate={vi.fn()}
+        />
+      );
+      await openMenu(user);
+      await user.click(screen.getByRole("button", { name: "Manage templates" }));
+
+      expect(screen.getByRole("dialog", { name: "Templates" })).toBeInTheDocument();
+      // The settings dropdown itself collapses once the modal takes over.
+      expect(screen.queryByRole("button", { name: "Manage templates" })).not.toBeInTheDocument();
     });
   });
 });

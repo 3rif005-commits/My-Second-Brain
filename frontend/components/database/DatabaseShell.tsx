@@ -41,6 +41,11 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     setRelationLinks,
     createView,
     updateView,
+    templates,
+    createTemplate,
+    updateTemplate,
+    deleteTemplate,
+    instantiateTemplate,
     refetch,
     refetchRows,
   } = useDatabaseView(databaseId);
@@ -141,6 +146,8 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             ensureRelationLinksBulk={ensureRelationLinksBulk}
             setRelationLinks={setRelationLinks}
             subItemDisplayMode={getSubtaskDisplayMode(activeView.config)}
+            templates={templates}
+            onInstantiateTemplate={instantiateTemplate}
           />
         );
       case "board": {
@@ -277,6 +284,10 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
                 activeView={activeView}
                 onPropertiesChanged={refetch}
                 onUpdateView={updateView}
+                templates={templates}
+                onCreateTemplate={createTemplate}
+                onUpdateTemplate={updateTemplate}
+                onDeleteTemplate={deleteTemplate}
               />
             </div>
           )}
