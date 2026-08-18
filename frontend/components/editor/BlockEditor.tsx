@@ -20,6 +20,7 @@ import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec } from "./customBl
 import { extractCalloutChildren, attachCalloutChildren } from "./calloutChildren";
 import { NoteIdContext } from "./noteIdContext";
 import { DatabaseBlockSpec, insertDatabaseBlock } from "../database/DatabaseBlock";
+import { ButtonBlockSpec, insertButtonBlock } from "../database/ButtonBlock";
 
 // Inline @mention — links to another note in the brain
 const MentionSpec = createInlineContentSpec(
@@ -59,6 +60,7 @@ const multiColSchema = withMultiColumn(
       checkpoint: CheckpointBlockSpec(),
       callout: CalloutBlockSpec(),
       database: DatabaseBlockSpec(),
+      button: ButtonBlockSpec(),
     },
     inlineContentSpecs: { ...defaultInlineContentSpecs, mention: MentionSpec },
   })
@@ -409,7 +411,27 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                   insertDatabaseBlock(editor, pos?.block?.id);
                 },
               }];
-              const all = [...defaults, ...aiItems, ...custom, ...databaseItems];
+              // Milestone 12 (task-42): own "Buttons" group (plural,
+              // deliberately distinct from the item's own "Button" title
+              // below) — the exact same key-collision bug the "Databases"
+              // group above already hit and fixed once (a group with
+              // exactly one item whose title equals the group name
+              // collides on BlockNote's own flat-list React key, corrupting
+              // the slash menu's rendering; see that fix's commit,
+              // `8615748`, and the "Databases" comment just above).
+              const buttonItems = [{
+                title: "Button",
+                group: "Buttons",
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                icon: <span style={{ fontSize: 18 }}>⚡</span> as any,
+                subtext: "Add a clickable button with its own action chain",
+                aliases: ["action", "click"],
+                onItemClick: () => {
+                  const pos = editor.getTextCursorPosition();
+                  insertButtonBlock(editor, pos?.block?.id);
+                },
+              }];
+              const all = [...defaults, ...aiItems, ...custom, ...databaseItems, ...buttonItems];
               if (!query) return all;
               const q = query.toLowerCase();
               return all.filter((item) =>
