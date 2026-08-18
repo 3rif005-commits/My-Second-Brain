@@ -554,16 +554,29 @@ async def create_database(
     behaviour (every database starts with a title column) and means a
     freshly created database is immediately usable rather than inert with
     zero columns."""
+    parent_note_id = body.parent_note_id
+    if parent_note_id is not None:
+        parent_note_id = _parse_uuid_or_404(parent_note_id, "note")
+        note_row = await conn.fetchrow(
+            "SELECT id FROM notes WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL",
+            parent_note_id,
+            user_id,
+        )
+        if note_row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "note not found")
+
     async with conn.transaction():
         db_row = await conn.fetchrow(
             """
-            INSERT INTO db_databases (user_id, title, icon)
-            VALUES ($1, $2, $3)
+            INSERT INTO db_databases (user_id, title, icon, is_inline, parent_note_id)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING *
             """,
             user_id,
             body.title,
             body.icon,
+            parent_note_id is not None,
+            parent_note_id,
         )
         ds_row = await conn.fetchrow(
             """

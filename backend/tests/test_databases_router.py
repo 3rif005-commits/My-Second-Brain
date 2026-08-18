@@ -66,6 +66,11 @@ async def test_create_database_creates_exactly_one_data_source_and_one_default_t
     assert re.fullmatch(r"[0-9A-Za-z]{8}", body["properties"][0]["key"])
     assert len(body["views"]) == 1
     assert body["views"][0]["type"] == "table"
+    # Regression (task-36): the pre-existing, only-tested path — no
+    # `parent_note_id` in the request — must still leave both columns at
+    # their defaults now that `create_database` can set them.
+    assert body["database"]["is_inline"] is False
+    assert body["database"]["parent_note_id"] is None
 
     database_id = body["database"]["id"]
     ds_count = await db_conn.fetchval(
@@ -80,6 +85,51 @@ async def test_create_database_creates_exactly_one_data_source_and_one_default_t
     assert ds_count == 1
     assert view_count == 1
     assert prop_count == 1
+
+
+async def test_create_database_with_parent_note_id_sets_is_inline(client, db_conn, test_user):
+    note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Host note') RETURNING id", test_user
+    )
+    res = await client.post(
+        "/db/databases", json={"title": "Inline DB", "parent_note_id": str(note["id"])}
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert body["database"]["is_inline"] is True
+    assert body["database"]["parent_note_id"] == str(note["id"])
+
+
+async def test_create_database_404s_for_another_users_parent_note_id(client, db_conn, test_user):
+    other_user = str(uuid.uuid4())
+    await db_conn.execute(
+        "INSERT INTO auth.users (id, email) VALUES ($1, $2)", other_user, f"{other_user}@t.local"
+    )
+    others_note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Not mine') RETURNING id", other_user
+    )
+    res = await client.post(
+        "/db/databases", json={"title": "Inline DB", "parent_note_id": str(others_note["id"])}
+    )
+    assert res.status_code == 404
+
+
+async def test_create_database_404s_for_a_trashed_parent_note_id(client, db_conn, test_user):
+    trashed = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title, deleted_at) VALUES ($1, 'Trashed', now()) RETURNING id",
+        test_user,
+    )
+    res = await client.post(
+        "/db/databases", json={"title": "Inline DB", "parent_note_id": str(trashed["id"])}
+    )
+    assert res.status_code == 404
+
+
+async def test_create_database_404s_for_a_syntactically_invalid_parent_note_id(client):
+    res = await client.post(
+        "/db/databases", json={"title": "Inline DB", "parent_note_id": "not-a-uuid"}
+    )
+    assert res.status_code == 404
 
 
 async def test_get_database_round_trips_a_created_database(client):

@@ -26,6 +26,11 @@ from pydantic import BaseModel
 class DatabaseCreate(BaseModel):
     title: str = "Untitled"
     icon: str | None = None
+    # Set by the note editor's inline `/database` slash command (task-36) —
+    # the note this database is embedded in. `None` (the default) is the
+    # existing full-page-database path, unchanged: `is_inline`/`parent_note_id`
+    # both stay at their column defaults (False/NULL).
+    parent_note_id: str | None = None
 
 
 class DatabaseResponse(BaseModel):
