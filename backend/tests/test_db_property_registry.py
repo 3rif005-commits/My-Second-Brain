@@ -63,7 +63,7 @@ def test_registry_entries_satisfy_property_type_protocol(key):
 
     ops = prop.operators()
     assert isinstance(ops, dict)
-    if key not in ("formula", "rollup"):
+    if key not in ("formula", "rollup", "button"):
         assert ops  # at least one operator per type
     # else: Milestone 8 (Task 27) -- formula/rollup's filter-operator set
     # depends on the PROPERTY's own `result_type`, not just its `type`, so
@@ -72,6 +72,10 @@ def test_registry_entries_satisfy_property_type_protocol(key):
     # The real dispatch lives in query/operators.py's RESULT_TYPE_OPERATORS
     # (see that module's own comment); `.operators()` here is legitimately
     # empty, only satisfying the PropertyType protocol's shape.
+    # "button" (task-39-brief.md decision 1): research §25 says "Filters:
+    # none" -- not even is_empty/is_not_empty, a deliberate narrowing from
+    # every other type's at-least-empty-check pair, since a button property
+    # carries no per-row value at all for a filter to ever test.
     assert all(isinstance(name, str) for name in ops)
 
     aggs = prop.aggregations()
@@ -86,7 +90,11 @@ def test_registry_entries_satisfy_property_type_protocol(key):
     # "formula"/"rollup" (task-27-brief.md, Milestone 8): the identical
     # posture -- services/db/recompute.py is the only legal writer of a
     # materialised value, so coerce_write is a hard failure here too.
-    if key in ("relation", "formula", "rollup"):
+    # "button" (task-39-brief.md decision 1): same posture again -- a
+    # button property's action chain lives in db_properties.config.actions,
+    # never in db_row_props, so coerce_write has zero legitimate inputs,
+    # None included (and zero production call sites today regardless).
+    if key in ("relation", "formula", "rollup", "button"):
         with pytest.raises(ValueError):
             prop.coerce_write(None)
     else:
@@ -166,8 +174,12 @@ def test_number_order_uses_the_same_indexable_expression():
 # their sql_extract needs `ctx.result_type` (a bare SqlContext with none
 # set raises, by design -- see test_computed_sql_extract_requires_a_
 # result_type below), so a shared "extract with no type context" sweep
-# doesn't apply to them the way it does to every other type.
-@pytest.mark.parametrize("key", sorted(REAL_TYPE_KEYS - {"relation", "formula", "rollup"}))
+# doesn't apply to them the way it does to every other type. "button" is
+# excluded for the task-39-brief.md decision 1 reason: it has no JSONB
+# value at all (operators()/aggregations() are both empty), so
+# sql_extract raises too -- see test_button_sql_extract_and_order_raise
+# below.
+@pytest.mark.parametrize("key", sorted(REAL_TYPE_KEYS - {"relation", "formula", "rollup", "button"}))
 def test_no_type_extracts_the_bare_wrapper_object(key):
     """`properties -> 'key'` alone is the §3.3 wrapper (`{"type": ...,
     "<type>": ...}`), not a value: unindexable, and orders by jsonb key
@@ -175,6 +187,17 @@ def test_no_type_extracts_the_bare_wrapper_object(key):
     frag = REGISTRY[key].sql_extract(SqlContext(key="a1b2c3d4", alias="p"))
     assert not re.fullmatch(r"[a-z_]+\.properties\s*->\s*'a1b2c3d4'", frag.sql.strip())
     assert "'a1b2c3d4'" in frag.sql  # the key is still reached
+
+
+def test_button_sql_extract_and_order_raise():
+    # task-39-brief.md decision 1: mirrors test_relation_sql_extract_raises below --
+    # a button property has no JSONB value at all (operators()/aggregations() are
+    # both empty, so M3/M4's compilers should never reach either method), so both
+    # raise rather than emitting a dummy fragment.
+    with pytest.raises(ValueError):
+        REGISTRY["button"].sql_extract(SqlContext(key="a1b2c3d4", alias="p"))
+    with pytest.raises(ValueError):
+        REGISTRY["button"].sql_order(SqlContext(key="a1b2c3d4", alias="p"), "asc")
 
 
 def test_relation_sql_extract_raises():

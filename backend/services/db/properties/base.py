@@ -371,6 +371,7 @@ from .choice import Select, MultiSelect, Status  # noqa: E402
 from .temporal import Date, CreatedTime, LastEditedTime  # noqa: E402
 from .relation import Relation  # noqa: E402
 from .computed import Formula, Rollup  # noqa: E402
+from .button import Button  # noqa: E402
 
 _RICH_OVERRIDES: dict[str, PropertyType] = {
     "number": Number(),
@@ -388,6 +389,10 @@ _RICH_OVERRIDES: dict[str, PropertyType] = {
     # key -- wrong column, wrong key, never exercised until this task).
     "formula": Formula(),
     "rollup": Rollup(),
+    # Milestone 12 (task-39): a real, deliberately narrowed descriptor (empty
+    # operators()/aggregations(), unconditional is_empty, hard-failing coerce_write) --
+    # see properties/button.py's own docstring.
+    "button": Button(),
 }
 
 REGISTRY: dict[str, PropertyType] = {
