@@ -80,7 +80,7 @@ backend/services/db/
   formula/
     lexer.py  parser.py  ast.py     Pratt parser
     typecheck.py                     type inference
-    functions/ …                     88 builtins, by category
+    functions/ …                     93 builtins, by category
     evaluator.py                     tree-walking evaluator
     deps.py                          dependency graph, cycle detection
   rollup.py            rollup evaluation
@@ -449,7 +449,7 @@ Each follows the same shape: failing test → run → minimal implementation →
 **Test cases:** creating a link from either side produces **exactly one** `db_relation_links` row; deleting one side deletes the pair; self-relations; sub-item depth capped at **10**; dependency cycles **rejected with the cycle path**; the three date-shift modes by their real names — `Shift only when dates overlap`, `Shift & maintain time between items`, `Do not automatically shift` — plus `Avoid weekends`.
 
 ### M8 — Formula engine + rollups · spec §7 · 🚦 **GATE G3**
-**Test cases:** parser — `^` right-associative, comparisons **non-associative** (`1 > x > 5` is a parse error), `not` at precedence 9; semantics — `empty(0)` is `true`, `empty()` is the null literal, `dateBetween(a,b,u)` is **a − b**, no `"seconds"` unit; all 88 functions with a golden-value table; type checker rejects `add(2,"2")` while `+` concatenates; cycles rejected at save; depth 15 and relation depth 3 yield `{"type":"unsupported"}`; **volatile formulas are never materialised**; Grist's **liveness assertion** fires when a pass computes zero cells.
+**Test cases:** parser — `^` right-associative, comparisons **non-associative** (`1 > x > 5` is a parse error), `not` at precedence 9; semantics — `empty(0)` is `true`, `empty()` is the null literal, `dateBetween(a,b,u)` is **a − b**, no `"seconds"` unit; all 93 functions with a golden-value table; type checker rejects `add(2,"2")` while `+` concatenates; cycles rejected at save; depth 15 and relation depth 3 yield `{"type":"unsupported"}`; **volatile formulas are never materialised**; Grist's **liveness assertion** fires when a pass computes zero cells.
 
 ### M9 — Calendar · Timeline · research §G.5–6
 **Test cases:** `view_range` week/month; `show_weekends`; timeline `zoom_level` across all **8** levels (`hours|day|week|bi_week|month|quarter|year|5_years`); `arrows_by` renders dependency arrows; date shifting honours the M7 modes.
