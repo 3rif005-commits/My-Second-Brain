@@ -587,3 +587,67 @@ export function getChartReferenceLines(config: Record<string, unknown>): ChartRe
       l && typeof l === "object" && typeof l.id === "string" && typeof l.value === "number"
   );
 }
+
+// ── Milestone 12 (task-40): row templates ──────────────────────────────────
+// Mirrors `backend/models/database.py`'s `RowTemplateResponse` and
+// `services/db/templates.py`'s module-docstring `RepeatConfig` shape
+// (task-40-brief.md's "Backend API surface" / "repeat_config shape" — the
+// authoritative version lives on that backend module, not re-derived here).
+// No end-date field — templates don't have one (unlike automations' schedule
+// trigger, a different M12 surface entirely). `timezone` is always `"UTC"`
+// from this UI: there is no per-user timezone concept anywhere in this app
+// (M3's already-recorded gap) — REPEAT_TIMEZONE below is a constant, not a
+// picker.
+
+export const REPEAT_FREQUENCIES = ["daily", "weekly", "monthly", "yearly"] as const;
+export type RepeatFrequency = (typeof REPEAT_FREQUENCIES)[number];
+
+/** This UI always sends `"UTC"` (or omits the field, which the backend
+ * defaults the same way) — never offered as a choice. */
+export const REPEAT_TIMEZONE = "UTC";
+
+export interface RepeatConfig {
+  frequency: RepeatFrequency;
+  interval: number;
+  /** ISO 1=Monday..7=Sunday. Only meaningful — and only ever collected by
+   * this UI — when `frequency === "weekly"`. */
+  weekdays?: number[];
+  /** "YYYY-MM-DD" */
+  start_date: string;
+  /** "HH:MM" */
+  time_of_day: string;
+  timezone?: string;
+}
+
+/** Mirrors `backend/models/database.py`'s `RowTemplateResponse` exactly —
+ * `POST/GET/PATCH .../templates` and `POST .../templates/{id}/instantiate`
+ * (Task 37's backend, already live) all return this shape. */
+export interface RowTemplateResponse {
+  id: string;
+  data_source_id: string;
+  user_id: string;
+  name: string;
+  icon: string | null;
+  properties: Record<string, PropertyValue>;
+  /** Page-body blocks — the same `AnyBlock[]` shape `BlockEditor` already
+   * reads/writes for a real note's `content`, kept `unknown[]` here (same as
+   * `DatabaseResponse.description` above) since this file doesn't otherwise
+   * depend on the editor's block types. */
+  content: unknown[];
+  is_default: boolean;
+  repeat_config: RepeatConfig | null;
+  /** Server-computed next scheduled run, `null` whenever `repeat_config` is
+   * `null`. Read-only — never sent in a PATCH body. */
+  next_run_at: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Fields `PATCH /db/templates/{id}` accepts — mirrors the POST body's own
+ * field set (task-40-brief.md's "Backend API surface"), everything optional
+ * for a partial update. `id`/`data_source_id`/`user_id`/`next_run_at`/
+ * `position`/`created_at`/`updated_at` are never patchable. */
+export type RowTemplatePatch = Partial<
+  Pick<RowTemplateResponse, "name" | "icon" | "properties" | "content" | "is_default" | "repeat_config">
+>;

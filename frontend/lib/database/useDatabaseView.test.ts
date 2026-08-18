@@ -7,7 +7,7 @@ vi.mock("@/app/providers", () => ({
 }));
 
 import { useDatabaseView } from "./useDatabaseView";
-import type { DatabaseDetailResponse, DatabaseRow, Group, ViewResponse } from "./types";
+import type { DatabaseDetailResponse, DatabaseRow, Group, RowTemplateResponse, ViewResponse } from "./types";
 
 const TABLE_VIEW: ViewResponse = {
   id: "v1",
@@ -101,6 +101,7 @@ describe("useDatabaseView", () => {
       if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
         return Promise.resolve(jsonResponse({ rows: ROWS }));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -147,6 +148,7 @@ describe("useDatabaseView", () => {
         if (body.group_by) return Promise.resolve(jsonResponse({ groups: GROUPS }));
         return Promise.resolve(jsonResponse({ rows: ROWS }));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -208,6 +210,7 @@ describe("useDatabaseView", () => {
         if (body.group_by) return Promise.resolve(jsonResponse({ groups: GROUPS }));
         return Promise.resolve(jsonResponse({ rows: ROWS }));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -253,6 +256,7 @@ describe("useDatabaseView", () => {
         }
         return Promise.resolve(jsonResponse({ rows: ROWS }));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -283,6 +287,7 @@ describe("useDatabaseView", () => {
           jsonResponse({ id: "row-1", properties: { titleKey: { type: "title", title: "Edited" } } })
         );
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -357,6 +362,7 @@ describe("useDatabaseView", () => {
           })
         );
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -404,6 +410,7 @@ describe("useDatabaseView", () => {
       if (url === "/api/db/data-sources/ds-1/rows/row-1" && init?.method === "PATCH") {
         return Promise.resolve(jsonResponse({ detail: "internal error" }, 500));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -433,6 +440,7 @@ describe("useDatabaseView", () => {
           jsonResponse({ detail: "row writes on the All Notes virtual source are not yet implemented" }, 501)
         );
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -476,6 +484,7 @@ describe("useDatabaseView", () => {
           jsonResponse({ id: "row-1", properties: { titleKey: { type: "title", title: "First" }, status: { type: "status", status: "done" } } })
         );
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -527,6 +536,7 @@ describe("useDatabaseView", () => {
           })
         );
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -564,6 +574,7 @@ describe("useDatabaseView", () => {
       if (url === "/api/db/data-sources/ds-1/views" && init?.method === "POST") {
         return Promise.resolve(jsonResponse(created, 201));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -597,6 +608,7 @@ describe("useDatabaseView", () => {
       if (url === "/api/db/views/v1" && init?.method === "PATCH") {
         return Promise.resolve(jsonResponse(patched));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -611,6 +623,212 @@ describe("useDatabaseView", () => {
     expect(result.current.views.find((v) => v.id === "v1")?.config).toEqual({ foo: "bar" });
   });
 
+  // Milestone 12 (task-40): row templates. createTemplate/updateTemplate/
+  // deleteTemplate/instantiateTemplate mirror createView/updateView above
+  // exactly (fetch, errorMessage on a failed response — thrown, not caught
+  // here, same as createView/updateView — and local `templates` state
+  // updated on success).
+  describe("templates (task-40)", () => {
+    const TEMPLATE: RowTemplateResponse = {
+      id: "tmpl-1",
+      data_source_id: "ds-1",
+      user_id: "user-1",
+      name: "Weekly review",
+      icon: null,
+      properties: {},
+      content: [],
+      is_default: false,
+      repeat_config: null,
+      next_run_at: null,
+      position: 0,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    };
+
+    it("load(): fetches GET .../templates alongside the database detail and exposes it as `templates`", async () => {
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+        if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([TEMPLATE]));
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      expect(result.current.templates).toEqual([TEMPLATE]);
+    });
+
+    it("load(): skips GET .../templates entirely for the virtual All Notes source", async () => {
+      const virtualDetail: DatabaseDetailResponse = {
+        ...DETAIL,
+        data_source: { ...DETAIL.data_source, id: "all-notes", is_virtual: true },
+      };
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(virtualDetail));
+        if (url === "/api/db/data-sources/all-notes/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      expect(result.current.templates).toEqual([]);
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/templates"))).toBe(false);
+    });
+
+    it("createTemplate: POSTs {name, icon, properties: {}, content: [], is_default: false, repeat_config: null} and appends the result to `templates`", async () => {
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+        if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        if (url === "/api/db/data-sources/ds-1/templates" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse(TEMPLATE, 201));
+        }
+        if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      let returned: RowTemplateResponse | undefined;
+      await act(async () => {
+        returned = await result.current.createTemplate("Weekly review");
+      });
+
+      expect(returned).toEqual(TEMPLATE);
+      expect(result.current.templates).toEqual([TEMPLATE]);
+
+      const createCall = fetchMock.mock.calls.find(
+        ([url, i]) => url === "/api/db/data-sources/ds-1/templates" && (i as RequestInit)?.method === "POST"
+      );
+      expect(JSON.parse((createCall![1] as RequestInit).body as string)).toEqual({
+        name: "Weekly review",
+        icon: null,
+        properties: {},
+        content: [],
+        is_default: false,
+        repeat_config: null,
+      });
+    });
+
+    it("updateTemplate: PATCHes .../templates/{id} and replaces the matching entry in `templates`", async () => {
+      const updated: RowTemplateResponse = { ...TEMPLATE, name: "Renamed" };
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+        if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([TEMPLATE]));
+        if (url === "/api/db/templates/tmpl-1" && init?.method === "PATCH") {
+          return Promise.resolve(jsonResponse(updated));
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.templates).toEqual([TEMPLATE]));
+
+      await act(async () => {
+        await result.current.updateTemplate("tmpl-1", { name: "Renamed" });
+      });
+
+      expect(result.current.templates).toEqual([updated]);
+      const patchCall = fetchMock.mock.calls.find(([url]) => url === "/api/db/templates/tmpl-1");
+      expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({ name: "Renamed" });
+    });
+
+    it("updateTemplate: throws (does not catch/toast internally) on a failed PATCH — same as updateView", async () => {
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+        if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([TEMPLATE]));
+        if (url === "/api/db/templates/tmpl-1" && init?.method === "PATCH") {
+          return Promise.resolve(jsonResponse({ detail: "another default already exists" }, 400));
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.templates).toEqual([TEMPLATE]));
+
+      await expect(
+        act(async () => {
+          await result.current.updateTemplate("tmpl-1", { is_default: true });
+        })
+      ).rejects.toThrow("another default already exists");
+      expect(showToast).not.toHaveBeenCalled();
+      // Local state is untouched by a failed PATCH — the caller (e.g.
+      // TemplateEditor's is_default checkbox) owns its own revert.
+      expect(result.current.templates).toEqual([TEMPLATE]);
+    });
+
+    it("deleteTemplate: DELETEs .../templates/{id} and removes it from `templates`", async () => {
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+        if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([TEMPLATE]));
+        if (url === "/api/db/templates/tmpl-1" && init?.method === "DELETE") {
+          return Promise.resolve(new Response(null, { status: 204 }));
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.templates).toEqual([TEMPLATE]));
+
+      await act(async () => {
+        await result.current.deleteTemplate("tmpl-1");
+      });
+
+      expect(result.current.templates).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledWith("/api/db/templates/tmpl-1", { method: "DELETE" });
+    });
+
+    it("instantiateTemplate: POSTs .../templates/{id}/instantiate, returns the created row, and does NOT touch `templates` state", async () => {
+      const createdRow = { id: "row-9", properties: { titleKey: { type: "title", title: "From template" } } };
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+        if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse({ rows: ROWS }));
+        }
+        if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([TEMPLATE]));
+        if (url === "/api/db/templates/tmpl-1/instantiate" && init?.method === "POST") {
+          return Promise.resolve(jsonResponse(createdRow));
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { result } = renderHook(() => useDatabaseView("db-1"));
+      await waitFor(() => expect(result.current.templates).toEqual([TEMPLATE]));
+
+      let returned: unknown;
+      await act(async () => {
+        returned = await result.current.instantiateTemplate("tmpl-1");
+      });
+
+      expect(returned).toEqual(createdRow);
+      expect(result.current.templates).toEqual([TEMPLATE]);
+    });
+  });
+
   it("ensureRelationLinks: fetches once, caches the result, and is a no-op on a second call for the same key", async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
@@ -618,6 +836,7 @@ describe("useDatabaseView", () => {
       if (url === "/api/db/data-sources/ds-1/rows/row-1/relations/related") {
         return Promise.resolve(jsonResponse({ rows: [{ id: "row-2", title: "Second" }] }));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -664,6 +883,7 @@ describe("useDatabaseView", () => {
           })
         );
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -697,6 +917,7 @@ describe("useDatabaseView", () => {
           jsonResponse({ links: Object.fromEntries(body.row_ids.map((id: string) => [id, []])) })
         );
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -724,6 +945,7 @@ describe("useDatabaseView", () => {
       if (url === "/api/db/data-sources/ds-1/rows/row-1/relations/related" && init?.method === "PUT") {
         return Promise.resolve(jsonResponse({ rows: [{ id: "row-2", title: "Second" }] }));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -752,6 +974,7 @@ describe("useDatabaseView", () => {
       if (url === "/api/db/data-sources/ds-1/rows/row-1/relations/related" && init?.method === "PUT") {
         return Promise.resolve(jsonResponse({ detail: "cycle detected: a -> b -> a" }, 400));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -779,6 +1002,7 @@ describe("useDatabaseView", () => {
       if (url === "/api/db/data-sources/ds-1/rows/row-1/relations/related") {
         return Promise.resolve(jsonResponse({ rows: [{ id: "row-2", title: "Second" }] }));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -810,6 +1034,7 @@ describe("useDatabaseView", () => {
       if (url === "/api/db/data-sources/ds-1/rows/row-1/relations/related" && init?.method === "PUT") {
         return Promise.resolve(jsonResponse({ rows: [{ id: "row-2", title: "Second" }] }));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -847,6 +1072,7 @@ describe("useDatabaseView", () => {
         queryCallCount += 1;
         return Promise.resolve(jsonResponse({ rows: ROWS }));
       }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock);

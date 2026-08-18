@@ -26,6 +26,8 @@ import type {
   RelationLinksBulkResponse,
   RelationLinksResponse,
   RowResponse,
+  RowTemplatePatch,
+  RowTemplateResponse,
   ViewResponse,
 } from "./types";
 import { getQueryExtras } from "./types";
@@ -82,6 +84,16 @@ export function useDatabaseView(databaseId: string) {
   // `[]` ("fetched, no links") the same way `getGroupBySpec`-style helpers
   // above distinguish "absent" from "empty".
   const [relationLinks, setRelationLinksState] = useState<Record<string, RelatedRow[]>>({});
+  // Milestone 12 (task-40): row templates. Fetched right after `detail`
+  // resolves (a sequential fetch, not folded into a `Promise.all` — matches
+  // this function's existing style, which is already sequential:
+  // `detailRes` first, `loadRows`'s own effect second, never parallelized).
+  // Skipped entirely for the virtual All Notes source: it has no
+  // `db_data_sources` row with a real UUID, and `GET .../templates` 404s on
+  // anything that doesn't `_parse_uuid_or_404` (routers/databases.py's
+  // `list_templates`) — same "is_virtual gates the write-shaped stuff" rule
+  // `DatabaseShell.tsx`'s own `editable = !dataSource.is_virtual` follows.
+  const [templates, setTemplates] = useState<RowTemplateResponse[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,6 +113,15 @@ export function useDatabaseView(databaseId: string) {
       setActiveViewId((prev) =>
         prev && detail.views.some((v) => v.id === prev) ? prev : (detail.views[0]?.id ?? null)
       );
+
+      if (detail.data_source.is_virtual) {
+        setTemplates([]);
+      } else {
+        const templatesRes = await fetch(`/api/db/data-sources/${detail.data_source.id}/templates`);
+        if (!templatesRes.ok) throw new Error(await errorMessage(templatesRes));
+        const templatesData: RowTemplateResponse[] = await templatesRes.json();
+        setTemplates(templatesData);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -435,6 +456,67 @@ export function useDatabaseView(databaseId: string) {
     return updated;
   }
 
+  /** `POST /db/data-sources/{id}/templates` (task-37's backend, task-40's
+   * frontend) — mirrors `createView` above exactly: fetch, `errorMessage` on
+   * failure (thrown, not caught here — same as `createView`/`updateView`,
+   * leaving toast-vs-inline-error to the caller, e.g. `TemplateManager`'s
+   * "New template" button), append to local `templates` on success, return
+   * the created response. Collects only `name`/`icon` up front — decision 2
+   * (task-40-brief.md): "create immediately, edit in place," same convention
+   * `Sidebar.tsx`'s `handleNewDatabase` already uses for databases
+   * themselves, so there's no multi-field creation form here. */
+  async function createTemplate(name: string, icon: string | null = null): Promise<RowTemplateResponse> {
+    if (!dataSource) throw new Error("No data source loaded yet");
+    const res = await fetch(`/api/db/data-sources/${dataSource.id}/templates`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, icon, properties: {}, content: [], is_default: false, repeat_config: null }),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res));
+    const created: RowTemplateResponse = await res.json();
+    setTemplates((prev) => [...prev, created]);
+    return created;
+  }
+
+  /** `PATCH /db/templates/{id}` — partial update, mirrors `updateView`
+   * above. Used for every field `TemplateEditor` edits: name/icon (on
+   * blur), `is_default` (immediately, with the caller reverting its own
+   * checkbox state on a rejected 400 — this hook has no "previous value" to
+   * roll back to since it never applied one optimistically), `properties`
+   * (debounced), `content` (BlockEditor's own `onSave`), and
+   * `repeat_config` (whole-object PATCH, `null` to clear). */
+  async function updateTemplate(templateId: string, patch: RowTemplatePatch): Promise<RowTemplateResponse> {
+    const res = await fetch(`/api/db/templates/${templateId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res));
+    const updated: RowTemplateResponse = await res.json();
+    setTemplates((prev) => prev.map((t) => (t.id === templateId ? updated : t)));
+    return updated;
+  }
+
+  /** `DELETE /db/templates/{id}` — 204 No Content, nothing to parse on
+   * success (unlike every other mutator here, which returns the resource). */
+  async function deleteTemplate(templateId: string): Promise<void> {
+    const res = await fetch(`/api/db/templates/${templateId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(await errorMessage(res));
+    setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+  }
+
+  /** `POST /db/templates/{id}/instantiate` — creates a ROW from the
+   * template right now, independent of any repeat schedule (decision 5,
+   * task-40-brief.md): does NOT touch local `templates` state (nothing about
+   * the template itself changed). The caller (`TableView`'s split-button
+   * dropdown) is responsible for calling `refetchRows()` afterward itself,
+   * the same way `handleAddRow` already does for the plain "+ New" path. */
+  async function instantiateTemplate(templateId: string): Promise<RowResponse> {
+    const res = await fetch(`/api/db/templates/${templateId}/instantiate`, { method: "POST" });
+    if (!res.ok) throw new Error(await errorMessage(res));
+    return await res.json();
+  }
+
   return {
     database,
     dataSource,
@@ -454,6 +536,11 @@ export function useDatabaseView(databaseId: string) {
     setRelationLinks,
     createView,
     updateView,
+    templates,
+    createTemplate,
+    updateTemplate,
+    deleteTemplate,
+    instantiateTemplate,
     refetch: load,
     // `load` only re-fetches database/properties/views — `loadRows`'s own
     // effect is keyed to activeView's id/type/filter/sorts/config, none of
