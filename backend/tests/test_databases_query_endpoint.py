@@ -592,6 +592,45 @@ async def test_aggregations_ungrouped_reflects_full_filtered_set_not_just_first_
     assert body["aggregates"] == {"y": total_rows}  # but the aggregate covers every row, not page 1
 
 
+async def test_aggregations_grouped_reflects_full_group_not_just_first_page(
+    client, db_conn, test_user
+):
+    # fix-wave-1 finding 1: before the fix, `compute_full_set` only fired when
+    # `body.group_by is None`, so a *grouped* query with aggregations stayed clipped to
+    # `body.page_size` for its row fetch -- silently truncating a group's aggregate to
+    # whichever of its rows happened to land in page 1. This is the exact case every
+    # grouped Chart type (column/bar/line/donut) hits in practice, since the frontend never
+    # sends a custom `page_size` for a Chart request (getQueryExtras/loadRows never set
+    # one) and `QueryRequest.page_size` defaults to 50.
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    status_prop = await _create_property(client, ds_id, "Status", "select")
+    estimate_prop = await _create_property(client, ds_id, "Estimate", "number")
+
+    total_rows = 8
+    for _ in range(total_rows):
+        await _insert_row(db_conn, test_user, ds_id, {
+            status_prop["key"]: {"type": "select", "select": "todo"},
+            estimate_prop["key"]: {"type": "number", "number": 1},
+        })
+
+    small_page_size = 3
+    assert small_page_size < total_rows  # the assertion below is only meaningful if this holds
+
+    res = await client.post(
+        f"/db/data-sources/{ds_id}/query",
+        json={
+            "page_size": small_page_size,
+            "group_by": {"property_key": status_prop["key"]},
+            "aggregations": [{"key": "y", "property_key": estimate_prop["key"], "aggregator": "sum"}],
+        },
+    )
+    assert res.status_code == 200, res.text
+    groups = {g["key"]: g for g in res.json()["groups"]}
+    assert groups["todo"]["aggregates"] == {"y": total_rows}  # every row in the group, not page 1
+    assert groups["todo"]["row_count"] == total_rows
+
+
 async def test_aggregations_ungrouped_still_validates_out_of_range_page_size(client):
     # The full-filtered-set fetch above bypasses `ast.Pagination`'s own `le=200` cap for
     # the *SQL fetch it issues*, but `body.page_size`/`body.offset` themselves must stay

@@ -1022,13 +1022,16 @@ async def query_rows(
         # would otherwise never reach.
         _resolve_aggregates([], properties, body.aggregations)
 
-    # Ungrouped + aggregations: a Chart's Number-mode aggregate must reflect the whole
-    # filtered/sorted result set, not the one page `rows` returns (task-32-brief.md §2) --
-    # so this fetch is *not* clipped to `body.page_size`/`body.offset` the way every other
-    # query on this endpoint is. Grouped queries are unaffected and keep today's
-    # page_size-bounded fetch (the brief scopes the "full set" requirement to the
-    # ungrouped case only).
-    compute_full_set = body.group_by is None and bool(body.aggregations)
+    # Any query with aggregations must reflect the whole filtered/sorted result set, not
+    # the one page `rows` returns (task-32-brief.md §2) -- so this fetch is *not* clipped
+    # to `body.page_size`/`body.offset` the way every other query on this endpoint is.
+    # Originally this only fired for the ungrouped case (`body.group_by is None`), but a
+    # grouped Chart (column/bar/line/donut -- every Chart type except the ungrouped
+    # "Number" mode) needs its per-group aggregate computed over ALL of that group's rows
+    # too, not just whichever of them happened to land in the first `page_size`-bound page
+    # -- fix-wave-1 finding 1. Grouped queries *without* aggregations are unaffected and
+    # keep today's page_size-bounded fetch; grouping itself was never meant to page.
+    compute_full_set = bool(body.aggregations)
 
     try:
         filter_node = ast.parse_filter(body.filter)
