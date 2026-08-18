@@ -112,15 +112,18 @@ describe("TemplateEditor", () => {
 
   it("setting is_default calls updateTemplate immediately, and reverts the checkbox on a rejected 400", async () => {
     const user = userEvent.setup();
-    // Resolves on a real macrotask (not the same microtask tick a plain
-    // `mockRejectedValue` would) so the optimistic `true` is actually
-    // observable before the revert — otherwise the whole
-    // apply-then-catch-then-revert chain can settle inside the same
-    // `await user.click()`, and the intermediate state is never visible.
+    // A manually-controlled (never auto-settling) promise so the optimistic
+    // `true` is deterministically observable before the revert, regardless
+    // of real-clock timing under a loaded test run — a plain
+    // `mockRejectedValue` (or even a short real setTimeout) can let the
+    // whole apply-then-catch-then-revert chain settle before
+    // `await user.click()` returns, making the intermediate state
+    // unobservable/flaky.
+    let rejectUpdate!: (e: Error) => void;
     const onUpdateTemplate = vi.fn(
       () =>
         new Promise<RowTemplateResponse>((_resolve, reject) => {
-          setTimeout(() => reject(new Error("another default already exists")), 20);
+          rejectUpdate = reject;
         })
     );
 
@@ -136,8 +139,9 @@ describe("TemplateEditor", () => {
     expect(checkbox.checked).toBe(false);
 
     await user.click(checkbox);
-    expect(checkbox.checked).toBe(true); // optimistic
+    await waitFor(() => expect(checkbox.checked).toBe(true)); // optimistic
 
+    rejectUpdate(new Error("another default already exists"));
     await waitFor(() => expect(checkbox.checked).toBe(false)); // reverted
     expect(onUpdateTemplate).toHaveBeenCalledWith("t1", { is_default: true });
     expect(showToast).toHaveBeenCalledWith("another default already exists", "error");
