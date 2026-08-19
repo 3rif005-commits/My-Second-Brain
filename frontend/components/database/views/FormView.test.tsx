@@ -235,4 +235,33 @@ describe("FormView", () => {
     expect(screen.queryByText(/read_and_write/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /access to submission/i })).not.toBeInTheDocument();
   });
+
+  it("the copy-link button produces the correct /forms/{viewId} URL", async () => {
+    const user = userEvent.setup();
+    // `userEvent.setup()` installs its own in-memory clipboard stub on the
+    // window (`writeToClipboard: true` by default — see
+    // Clipboard.attachClipboardStubToView) *after* this call, replacing
+    // whatever `navigator.clipboard` pointed to before — so the spy has to
+    // be attached after `setup()`, not before it, or it gets clobbered.
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    render(<FormView viewId="abc-123" properties={[]} config={{}} onConfigChange={vi.fn()} />);
+
+    expect(screen.getByLabelText("Form link")).toHaveValue(`${window.location.origin}/forms/abc-123`);
+
+    await user.click(screen.getByRole("button", { name: /copy link/i }));
+
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/forms/abc-123`);
+    expect(await screen.findByText("Copied!")).toBeInTheDocument();
+  });
+
+  it("renders the closed-form badge only when is_form_closed is true", () => {
+    const { rerender } = render(
+      <FormView viewId="v1" properties={[]} config={{ is_form_closed: false }} onConfigChange={vi.fn()} />
+    );
+    expect(screen.queryByTestId("form-closed-badge")).not.toBeInTheDocument();
+
+    rerender(<FormView viewId="v1" properties={[]} config={{ is_form_closed: true }} onConfigChange={vi.fn()} />);
+    expect(screen.getByTestId("form-closed-badge")).toBeInTheDocument();
+    expect(screen.getByText(/closed — not accepting responses/i)).toBeInTheDocument();
+  });
 });

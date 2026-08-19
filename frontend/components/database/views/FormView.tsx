@@ -39,8 +39,13 @@
 // remove/reorder/required, is_form_closed) PATCH immediately, matching
 // Board's/TemplateEditor's own toggle convention.
 //
-// (Share/copy-link section lands in a follow-up commit.)
+// Copy link: `${window.location.origin}/forms/{viewId}` (Task 43's public
+// route — no `/api` prefix, that's the submit route only), same clipboard-
+// write + "Copied!" 2s transient state NoteEditorPage.tsx's own share-link
+// button already uses (matched rather than inventing a new copy-link
+// affordance).
 import { useRef, useState } from "react";
+import { Check, Link as LinkIcon } from "lucide-react";
 import { isKnownPropertyType } from "@/lib/database/types";
 import type { PropertyResponse } from "@/lib/database/types";
 
@@ -172,6 +177,16 @@ export function FormView({ viewId, properties, config, onConfigChange }: FormVie
   function handleSubmitScreenBlur() {
     if (submitScreenDebounceRef.current) clearTimeout(submitScreenDebounceRef.current);
     onConfigChange({ submit_screen: draftSubmitScreen, submission_permissions: "none" });
+  }
+
+  // ── Share / copy link ───────────────────────────────────────────────
+  const [linkCopied, setLinkCopied] = useState(false);
+  const formUrl = typeof window !== "undefined" ? `${window.location.origin}/forms/${viewId}` : `/forms/${viewId}`;
+
+  async function copyFormLink() {
+    await navigator.clipboard.writeText(formUrl);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   }
 
   return (
@@ -322,6 +337,37 @@ export function FormView({ viewId, properties, config, onConfigChange }: FormVie
               className="flex-1 text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
             />
           </label>
+        </div>
+      </section>
+
+      {/* Share */}
+      <section className="space-y-2">
+        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+          Share
+        </h3>
+        {isFormClosed && (
+          <div
+            data-testid="form-closed-badge"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded"
+          >
+            Closed — not accepting responses
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <input
+            readOnly
+            aria-label="Form link"
+            value={formUrl}
+            className="flex-1 text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+          />
+          <button
+            type="button"
+            onClick={copyFormLink}
+            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded bg-indigo-600 text-white"
+          >
+            {linkCopied ? <Check size={13} /> : <LinkIcon size={13} />}
+            {linkCopied ? "Copied!" : "Copy link"}
+          </button>
         </div>
       </section>
     </div>
