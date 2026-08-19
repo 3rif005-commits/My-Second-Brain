@@ -915,6 +915,236 @@ async def test_update_view_404s_for_another_users_view(client, db_conn):
 
 
 # ---------------------------------------------------------------------------
+# Dashboard view config validation (task-45, research §13.2): update_view's
+# `config` column is a completely unvalidated JSONB pass-through for every
+# OTHER view type, but a `dashboard` view's `config.rows[].widgets[]` is
+# checked against the widget-grid limits before it's ever persisted.
+# ---------------------------------------------------------------------------
+
+async def _create_dashboard_and_widget_views(client, n_widget_views: int = 1):
+    """A fresh database, a `dashboard` view on its data source, and
+    `n_widget_views` plain `table` views on the SAME data source to use as
+    widget targets."""
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+
+    dash_res = await client.post(
+        f"/db/data-sources/{ds_id}/views", json={"type": "dashboard", "name": "Dash"}
+    )
+    assert dash_res.status_code == 201, dash_res.text
+    dash_view = dash_res.json()
+
+    widget_views = []
+    for i in range(n_widget_views):
+        v = await client.post(
+            f"/db/data-sources/{ds_id}/views", json={"type": "table", "name": f"Widget {i}"}
+        )
+        assert v.status_code == 201, v.text
+        widget_views.append(v.json())
+
+    return created, dash_view, widget_views
+
+
+def _widget(view_id: str, width: int = 6, widget_id: str = "w1") -> dict:
+    return {"id": widget_id, "view_id": view_id, "width": width}
+
+
+async def test_update_dashboard_view_accepts_config_at_the_limits_inclusive(client):
+    # Exactly 4 widgets/row and exactly 12 total -- proves the limits are
+    # inclusive boundaries ("up to 4"/"up to 12"), not off-by-one rejections.
+    created, dash_view, widget_views = await _create_dashboard_and_widget_views(
+        client, n_widget_views=12
+    )
+    rows = [
+        {
+            "id": f"row-{r}",
+            "height": 300,
+            "widgets": [
+                _widget(widget_views[r * 4 + c]["id"], width=3, widget_id=f"w{r}-{c}")
+                for c in range(4)
+            ],
+        }
+        for r in range(3)
+    ]
+
+    res = await client.patch(f"/db/views/{dash_view['id']}", json={"config": {"rows": rows}})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert len(body["config"]["rows"]) == 3
+    assert sum(len(row["widgets"]) for row in body["config"]["rows"]) == 12
+
+
+async def test_update_dashboard_view_rejects_more_than_4_widgets_in_one_row(client):
+    created, dash_view, widget_views = await _create_dashboard_and_widget_views(
+        client, n_widget_views=5
+    )
+    widgets = [_widget(v["id"], width=2, widget_id=f"w{i}") for i, v in enumerate(widget_views)]
+    res = await client.patch(
+        f"/db/views/{dash_view['id']}",
+        json={"config": {"rows": [{"id": "row-1", "height": 300, "widgets": widgets}]}},
+    )
+    assert res.status_code == 400
+
+
+async def test_update_dashboard_view_rejects_more_than_12_widgets_total(client):
+    created, dash_view, widget_views = await _create_dashboard_and_widget_views(
+        client, n_widget_views=13
+    )
+    # 4 + 4 + 4 + 1 = 13 widgets across 4 rows -- every row individually
+    # respects the 4/row cap, only the 12-total cap is violated.
+    counts = [4, 4, 4, 1]
+    rows = []
+    idx = 0
+    for r, count in enumerate(counts):
+        widgets = [
+            _widget(widget_views[idx + c]["id"], width=3, widget_id=f"w{r}-{c}")
+            for c in range(count)
+        ]
+        idx += count
+        rows.append({"id": f"row-{r}", "height": 300, "widgets": widgets})
+
+    res = await client.patch(f"/db/views/{dash_view['id']}", json={"config": {"rows": rows}})
+    assert res.status_code == 400
+
+
+async def test_update_dashboard_view_rejects_nonexistent_widget_view_id(client):
+    created, dash_view, _ = await _create_dashboard_and_widget_views(client, n_widget_views=0)
+    res = await client.patch(
+        f"/db/views/{dash_view['id']}",
+        json={
+            "config": {
+                "rows": [{"id": "row-1", "height": 300, "widgets": [_widget(str(uuid.uuid4()))]}]
+            }
+        },
+    )
+    assert res.status_code == 400
+
+
+async def test_update_dashboard_view_rejects_widget_from_a_different_data_source(client):
+    created, dash_view, _ = await _create_dashboard_and_widget_views(client, n_widget_views=0)
+    other_db = await _create_database(client, "Other DB")
+    other_ds_id = other_db["data_source"]["id"]
+    other_view = await client.post(
+        f"/db/data-sources/{other_ds_id}/views", json={"type": "table"}
+    )
+    assert other_view.status_code == 201, other_view.text
+    other_view_id = other_view.json()["id"]
+
+    res = await client.patch(
+        f"/db/views/{dash_view['id']}",
+        json={
+            "config": {
+                "rows": [{"id": "row-1", "height": 300, "widgets": [_widget(other_view_id)]}]
+            }
+        },
+    )
+    assert res.status_code == 400
+
+
+async def test_update_dashboard_view_rejects_widget_from_a_different_user(client, db_conn):
+    created, dash_view, _ = await _create_dashboard_and_widget_views(client, n_widget_views=0)
+    ds_id = created["data_source"]["id"]
+
+    other_user = str(uuid.uuid4())
+    await db_conn.execute(
+        "INSERT INTO auth.users (id, email) VALUES ($1, $2)", other_user, f"{other_user}@t.local"
+    )
+    # A view owned by another user, inserted directly into the SAME
+    # data_source_id -- a "guess another user's view id in my own data
+    # source" attempt, not merely "a view somewhere else".
+    other_view_row = await db_conn.fetchrow(
+        """
+        INSERT INTO db_views (data_source_id, user_id, name, type)
+        VALUES ($1, $2, 'Other users view', 'table')
+        RETURNING id
+        """,
+        ds_id,
+        other_user,
+    )
+    other_view_id = str(other_view_row["id"])
+
+    res = await client.patch(
+        f"/db/views/{dash_view['id']}",
+        json={
+            "config": {
+                "rows": [{"id": "row-1", "height": 300, "widgets": [_widget(other_view_id)]}]
+            }
+        },
+    )
+    assert res.status_code == 400
+
+
+async def test_update_dashboard_view_rejects_nested_dashboard_widget(client):
+    created, dash_view, _ = await _create_dashboard_and_widget_views(client, n_widget_views=0)
+    ds_id = created["data_source"]["id"]
+    other_dash = await client.post(
+        f"/db/data-sources/{ds_id}/views", json={"type": "dashboard", "name": "Dash 2"}
+    )
+    assert other_dash.status_code == 201, other_dash.text
+    other_dash_id = other_dash.json()["id"]
+
+    res = await client.patch(
+        f"/db/views/{dash_view['id']}",
+        json={
+            "config": {
+                "rows": [{"id": "row-1", "height": 300, "widgets": [_widget(other_dash_id)]}]
+            }
+        },
+    )
+    assert res.status_code == 400
+
+
+async def test_update_dashboard_view_rejects_self_referencing_widget(client):
+    # A dashboard widgetting itself is a special case of the nested-dashboard
+    # rule -- the view being edited already has stored type="dashboard".
+    created, dash_view, _ = await _create_dashboard_and_widget_views(client, n_widget_views=0)
+    res = await client.patch(
+        f"/db/views/{dash_view['id']}",
+        json={
+            "config": {
+                "rows": [{"id": "row-1", "height": 300, "widgets": [_widget(dash_view["id"])]}]
+            }
+        },
+    )
+    assert res.status_code == 400
+
+
+async def test_update_dashboard_view_rejects_widget_width_out_of_range(client):
+    created, dash_view, widget_views = await _create_dashboard_and_widget_views(
+        client, n_widget_views=1
+    )
+    for bad_width in (0, 13, -1):
+        res = await client.patch(
+            f"/db/views/{dash_view['id']}",
+            json={
+                "config": {
+                    "rows": [
+                        {
+                            "id": "row-1",
+                            "height": 300,
+                            "widgets": [_widget(widget_views[0]["id"], width=bad_width)],
+                        }
+                    ]
+                }
+            },
+        )
+        assert res.status_code == 400, f"width {bad_width} should have been rejected"
+
+
+async def test_update_non_dashboard_view_config_stays_an_unvalidated_pass_through(client):
+    # Regression: a table view's config must NOT go through dashboard
+    # validation -- an arbitrary shape with no rows/widgets at all must
+    # still be accepted exactly as before this task.
+    created = await _create_database(client)
+    view_id = created["views"][0]["id"]  # the default table view
+    res = await client.patch(
+        f"/db/views/{view_id}", json={"config": {"frozen_column_index": 2}}
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["config"] == {"frozen_column_index": 2}
+
+
+# ---------------------------------------------------------------------------
 # Tenancy guard: every generated query scopes on user_id.
 # ---------------------------------------------------------------------------
 

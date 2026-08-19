@@ -1669,6 +1669,121 @@ async def create_view(
     return ViewResponse(**_row(row))
 
 
+# task-45-brief.md: research §13.2's hard limits on a `dashboard` view's
+# widget grid.
+_DASHBOARD_MAX_WIDGETS_PER_ROW = 4
+_DASHBOARD_MAX_WIDGETS_TOTAL = 12
+
+
+async def _validate_dashboard_config(
+    conn: asyncpg.Connection,
+    user_id: str,
+    data_source_id: str,
+    config: dict[str, Any],
+) -> None:
+    """Validates a `dashboard` view's `config.rows[].widgets[]` shape (research §13.2,
+    §13's structure table) before it's persisted — `update_view`'s `config` column is
+    otherwise a completely unvalidated JSONB pass-through (task-45-brief.md: "the
+    widget-count limits below are enforceable NOWHERE right now"). Follows the same
+    inline `HTTPException(400, ...)` convention as `_validate_and_prepare_computed_property`
+    above, rather than a typed exception + a `_x_error_to_http` mapper — there's exactly
+    one caller shape here (a single router function), not several services sharing one
+    error taxonomy the way `RelationError` is shared.
+
+    Called from `update_view`, whenever a PATCH sets `config` on a view whose
+    already-stored `type` is `"dashboard"`. NOT called from `create_view`: `ViewCreate`
+    (models/database.py) has no `config` field at all, so a freshly created dashboard
+    always starts at `config: {}` (empty `rows`) and every widget is added through a
+    subsequent PATCH, which always goes through this same check. If `ViewCreate` ever
+    grows a `config` field, `create_view` must call this too — it does not today because
+    there is nothing for it to validate yet.
+
+    Widget self-reference (a dashboard whose own widget points back at itself) is a
+    special case of the nested-dashboard rule below, not a separate check: the view being
+    edited already has stored `type = "dashboard"`, so if a widget's `view_id` is that
+    same id, the query below finds it with `type = "dashboard"` and the nested-dashboard
+    branch rejects it — no extra id-exclusion logic needed.
+    """
+    if not isinstance(config, dict):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "config must be an object")
+
+    rows = config.get("rows", [])
+    if not isinstance(rows, list):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "config.rows must be a list")
+
+    total_widgets = 0
+    view_ids: set[str] = set()
+
+    for row in rows:
+        if not isinstance(row, dict):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "each config.rows entry must be an object")
+        widgets = row.get("widgets", [])
+        if not isinstance(widgets, list):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "config.rows[].widgets must be a list")
+        if len(widgets) > _DASHBOARD_MAX_WIDGETS_PER_ROW:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"a dashboard row cannot have more than {_DASHBOARD_MAX_WIDGETS_PER_ROW} "
+                "widgets (research §13.2)",
+            )
+        total_widgets += len(widgets)
+        for widget in widgets:
+            if not isinstance(widget, dict):
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "each widget must be an object")
+            widget_view_id = widget.get("view_id")
+            width = widget.get("width")
+            if not _is_uuid(widget_view_id):
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "widget.view_id is not a valid id")
+            if not isinstance(width, int) or isinstance(width, bool) or not (1 <= width <= 12):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, "widget.width must be between 1 and 12"
+                )
+            view_ids.add(widget_view_id)
+
+    if total_widgets > _DASHBOARD_MAX_WIDGETS_TOTAL:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"a dashboard cannot have more than {_DASHBOARD_MAX_WIDGETS_TOTAL} widgets "
+            "total (research §13.2)",
+        )
+
+    if not view_ids:
+        return
+
+    found_rows = await conn.fetch(
+        """
+        SELECT id, type FROM db_views
+        WHERE id = ANY($1::uuid[]) AND user_id = $2 AND data_source_id = $3
+        """,
+        list(view_ids),
+        user_id,
+        data_source_id,
+    )
+    # A widget's view_id that doesn't come back here is either nonexistent, owned by a
+    # different user, or from a different data_source_id -- all three collapse to the
+    # same tenancy-scoped WHERE clause and the same rejection reason, matching how every
+    # other cross-entity FK check in this file (e.g. the rollup target checks above)
+    # scopes by user_id in the same query rather than checking existence and ownership
+    # as two separate round trips.
+    found = {str(r["id"]): r["type"] for r in found_rows}
+
+    missing = view_ids - found.keys()
+    if missing:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "widget.view_id must reference an existing view belonging to this dashboard's "
+            f"own data source: {sorted(missing)[0]} not found",
+        )
+
+    nested = sorted(vid for vid in view_ids if found[vid] == "dashboard")
+    if nested:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "dashboard views cannot be nested -- widget.view_id "
+            f"{nested[0]} is itself a dashboard view (research §13.2)",
+        )
+
+
 # `ViewUpdate`'s own declared field names — never request-supplied, so
 # building a SET clause from them (below) isn't a SQL-injection surface,
 # the same reasoning as the column allow-list in
@@ -1706,6 +1821,16 @@ async def update_view(
     WHERE clause's scope predicate is always the same literal text (see
     `tests/test_databases_router.py`'s guard test, which greps for exactly
     that), even though the SET clause's shape varies.
+
+    task-45-brief.md: when `config` is one of the touched fields, a
+    pre-check SELECT (`type`, `data_source_id`) runs first -- the request
+    body never carries `type`, so this is the only way to know whether the
+    view being patched is a `dashboard` before deciding whether
+    `_validate_dashboard_config` applies. That pre-check deliberately does
+    NOT 404 on its own when the view is missing; it lets control fall
+    through to the UPDATE's own `RETURNING` -> `row is None` -> 404 below,
+    so "view not found" keeps exactly one wording regardless of which
+    field triggered the lookup.
     """
     view_id = _parse_uuid_or_404(view_id, "view")
     updates = {
@@ -1724,6 +1849,25 @@ async def update_view(
             user_id,
         )
     else:
+        if "config" in updates:
+            # task-45-brief.md: the request body doesn't carry `type`, so a
+            # pre-check is needed to know whether this PATCH is touching a
+            # dashboard view -- only dashboards get widget-grid validation.
+            # A missing view here (existing is None) is deliberately NOT a
+            # 404 by itself: it falls through to the UPDATE below, whose own
+            # `RETURNING` -> `row is None` -> 404 stays the single source of
+            # truth for "view not found", so the 404 wording never depends on
+            # which branch noticed the view was missing.
+            existing = await conn.fetchrow(
+                "SELECT type, data_source_id FROM db_views WHERE id = $1 AND user_id = $2",
+                view_id,
+                user_id,
+            )
+            if existing is not None and existing["type"] == "dashboard":
+                await _validate_dashboard_config(
+                    conn, user_id, str(existing["data_source_id"]), updates["config"]
+                )
+
         set_sql = ", ".join(f"{field} = ${i + 3}" for i, field in enumerate(updates))
         row = await conn.fetchrow(
             f"""
