@@ -137,7 +137,7 @@ describe("ButtonCell", () => {
     render(<ButtonCell property={property} noteId="note-1" editable={true} />);
     fireEvent.click(screen.getByRole("button", { name: "Run it" }));
 
-    await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/brain/note-42"));
+    await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/brain/workspace/note-42"));
   });
 
   it("toasts on a failed click, never throws to a native dialog", async () => {
