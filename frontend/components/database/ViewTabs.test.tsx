@@ -379,4 +379,42 @@ describe("ViewTabs", () => {
     expect(onCreateView).toHaveBeenCalledTimes(2);
     expect(onCreateView).toHaveBeenLastCalledWith({ name: "Second", type: "table", groupPropertyKey: undefined });
   });
+
+  // task-44 (Milestone 13, Form view): a new view type added to
+  // VIEW_TYPE_OPTIONS, additive only. Unlike Board/Calendar/Timeline/Chart,
+  // Form has no creation-time required config (its config all defaults
+  // client-side in FormView.tsx), so this only has to prove the option is
+  // selectable and Create submits it plainly, with no extra required field
+  // appearing and no other view type's creation flow disturbed.
+  it("creating a Form view calls onCreateView with type=form and no extra required fields", async () => {
+    const user = userEvent.setup();
+    const onCreateView = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={onCreateView} />
+    );
+
+    await user.click(screen.getByText("+ New view"));
+    await user.selectOptions(screen.getByLabelText(/view type/i), "form");
+    await user.type(screen.getByLabelText(/view name/i), "My Form");
+
+    // No Board-style "Group by", Calendar/Timeline-style "Date property",
+    // or Chart-style config fields render for Form.
+    expect(screen.queryByLabelText(/group by/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/date property/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/chart type/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^create$/i })).not.toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(onCreateView).toHaveBeenCalledWith({ name: "My Form", type: "form", groupPropertyKey: undefined });
+  });
+
+  it("Map is not offered as a creatable view type (out of scope for the whole milestone)", async () => {
+    const user = userEvent.setup();
+    render(<ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={vi.fn()} />);
+
+    await user.click(screen.getByText("+ New view"));
+    const options = screen.getAllByRole("option", { name: /.+/ }).map((o) => o.textContent);
+    expect(options).not.toContain("Map");
+  });
 });

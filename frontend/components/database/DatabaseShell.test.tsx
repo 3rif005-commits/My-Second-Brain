@@ -259,6 +259,62 @@ describe("DatabaseShell", () => {
     expect(screen.getByText("Feed row")).toBeInTheDocument();
   });
 
+  it("renders FormView (not some other component, not a blank fallback) for a form-typed active view", () => {
+    mockHook.views = [
+      {
+        id: "v11",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Form",
+        icon: null,
+        type: "form",
+        config: { questions: [{ property_key: "title", required: false }] },
+        filter: null,
+        sorts: [],
+        is_locked: false,
+        position: 0,
+      },
+    ];
+    mockHook.activeViewId = "v11";
+    render(<DatabaseShell databaseId="db-1" />);
+    expect(screen.getByTestId("form-view")).toBeInTheDocument();
+    // The seeded question renders by its property name, proof `properties`
+    // reached FormView and config.questions was read correctly — not just
+    // that some placeholder rendered.
+    expect(screen.getByText("Title")).toBeInTheDocument();
+  });
+
+  it("Form view's onConfigChange PATCHes through updateView with the rest of activeView.config preserved, same as every other config-driven view", async () => {
+    const user = userEvent.setup();
+    mockHook.views = [
+      {
+        id: "v11",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Form",
+        icon: null,
+        type: "form",
+        config: { submit_screen: { button_text: "Go", button_color: "#000000", confirmation_title: "Thanks!", confirmation_body: "" } },
+        filter: null,
+        sorts: [],
+        is_locked: false,
+        position: 0,
+      },
+    ];
+    mockHook.activeViewId = "v11";
+    render(<DatabaseShell databaseId="db-1" />);
+
+    await user.click(screen.getByLabelText("Closed for submissions"));
+
+    expect(mockHook.updateView).toHaveBeenCalledWith("v11", {
+      config: {
+        submit_screen: { button_text: "Go", button_color: "#000000", confirmation_title: "Thanks!", confirmation_body: "" },
+        is_form_closed: true,
+        submission_permissions: "none",
+      },
+    });
+  });
+
   it("clicking a different view tab calls setActiveViewId", async () => {
     mockHook.views = [
       { id: "v1", data_source_id: "ds-1", user_id: "user-1", name: "Table view", icon: null, type: "table", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },

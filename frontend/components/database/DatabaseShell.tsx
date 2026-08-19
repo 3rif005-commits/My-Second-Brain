@@ -14,6 +14,7 @@ import { FeedView } from "./views/FeedView";
 import { CalendarView } from "./views/CalendarView";
 import { TimelineView } from "./views/TimelineView";
 import { ChartView } from "./views/ChartView";
+import { FormView } from "./views/FormView";
 import { ViewTabs } from "./ViewTabs";
 import { DatabaseSettingsMenu } from "./DatabaseSettingsMenu";
 
@@ -247,13 +248,30 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             editable={false}
           />
         );
+      case "form":
+        // Builder/editor, not a data grid (task-44-brief.md — Notion's own
+        // Form view "has no `properties` array and cannot group/sort/filter
+        // data", research §12) — no `rows`/`editable`/`onCellChange` threaded
+        // through, same read-only-of-row-data spirit as Chart's own branch
+        // above, just for a different reason (this one edits `config`, not
+        // row data, at all).
+        return (
+          <FormView
+            viewId={activeView.id}
+            properties={properties}
+            config={activeView.config}
+            onConfigChange={(patch) => updateView(activeView.id, { config: { ...activeView.config, ...patch } })}
+          />
+        );
       default:
         // Task-15's own spirit for view *config* ("tolerates unknown...
         // drops them at read"), applied to view *type* rendering — every
         // type this milestone ships (table/board/gallery/list/feed/
-        // calendar/timeline/chart) has a branch above; anything else (a
+        // calendar/timeline/chart/form) has a branch above; anything else (a
         // stale/unknown string) is a plain message, never a crash or a
-        // blank screen.
+        // blank screen. Map is explicitly out of scope for the whole
+        // milestone (user decision) and falls through to this same
+        // placeholder, same as any other unimplemented type string.
         return (
           <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500">
             This view type isn&apos;t supported yet.

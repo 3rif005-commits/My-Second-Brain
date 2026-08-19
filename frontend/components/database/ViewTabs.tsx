@@ -38,9 +38,11 @@ interface ViewTabsProps {
   }) => Promise<void>;
 }
 
-// The eight view types this milestone supports creating (table/board —
+// The nine view types this milestone supports creating (table/board —
 // Task 16; gallery/list/feed — Task 17; calendar — Task 33; timeline —
-// Task 34; chart — Task 35).
+// Task 34; chart — Task 35; form — Task 44). Map is explicitly out of
+// scope for the whole milestone (user decision — no geocoding/tile
+// provider configured, docs/plans/2026-08-08-notion-databases.md M13).
 const VIEW_TYPE_OPTIONS = [
   { value: "table", label: "Table" },
   { value: "board", label: "Board" },
@@ -50,6 +52,7 @@ const VIEW_TYPE_OPTIONS = [
   { value: "calendar", label: "Calendar" },
   { value: "timeline", label: "Timeline" },
   { value: "chart", label: "Chart" },
+  { value: "form", label: "Form" },
 ] as const;
 
 export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateView }: ViewTabsProps) {
