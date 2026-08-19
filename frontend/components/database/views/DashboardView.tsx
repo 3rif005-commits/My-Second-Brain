@@ -36,7 +36,7 @@
 // the brief's documented "acceptable, simpler substitute" for a full
 // drag-resize, chosen to keep this task's scope to the grid mechanic itself
 // rather than a new pointer-drag interaction.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useToast } from "@/app/providers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { getQueryExtras } from "@/lib/database/types";
@@ -49,7 +49,6 @@ import { FeedView } from "./FeedView";
 import { CalendarView } from "./CalendarView";
 import { TimelineView } from "./TimelineView";
 import { ChartView } from "./ChartView";
-import { FormView } from "./FormView";
 
 // research §13.2: "Up to 4 widgets per row" / "Up to 12 widgets total" —
 // mirrors `_DASHBOARD_MAX_WIDGETS_PER_ROW`/`_DASHBOARD_MAX_WIDGETS_TOTAL`
@@ -84,13 +83,28 @@ function genLocalId(prefix: string): string {
 /** Tolerates a missing/malformed shape (empty array, never a throw) — same
  * "tolerates unknown... drops them at read" spirit spec §10 states for view
  * config generally, and `FormView.tsx`'s `readFormQuestions` already
- * follows for this milestone's other config-driven view. */
+ * follows for this milestone's other config-driven view.
+ *
+ * Combined-M13-review fix: fallback ids for a row/widget missing one used
+ * to be minted via `genLocalId` (a module counter + `Date.now()`) — called
+ * fresh on every invocation, including every render, since this function
+ * runs unconditionally in the component body. For any config lacking ids
+ * (hand-edited, or a future writer that omits them), that meant a NEW id
+ * every render: React remounts every widget each time (id is the list
+ * key), re-firing `useWidgetQuery`'s fetch, and `handleRemoveWidgetConfirmed`
+ * filters on a `widgetId` captured at click time that no longer matches
+ * anything by the time the click handler runs — Remove silently no-ops.
+ * Fallback ids are now derived from each row/widget's own position in the
+ * array instead — deterministic across repeated calls with the SAME
+ * config, so two reads of identical input always agree, and only a
+ * genuinely NEW row/widget (via `handleAddRow`/`handleAddWidget`, still
+ * using `genLocalId`) gets a freshly-minted id. */
 export function readDashboardRows(config: Record<string, unknown>): DashboardRow[] {
   if (!Array.isArray(config.rows)) return [];
   return config.rows
     .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
-    .map((r) => ({
-      id: typeof r.id === "string" && r.id ? r.id : genLocalId("row"),
+    .map((r, rowIndex) => ({
+      id: typeof r.id === "string" && r.id ? r.id : `row-${rowIndex}`,
       height: typeof r.height === "number" && r.height > 0 ? r.height : DASHBOARD_DEFAULT_ROW_HEIGHT,
       widgets: Array.isArray(r.widgets)
         ? r.widgets
@@ -98,8 +112,8 @@ export function readDashboardRows(config: Record<string, unknown>): DashboardRow
               (w): w is Record<string, unknown> =>
                 !!w && typeof w === "object" && typeof (w as Record<string, unknown>).view_id === "string"
             )
-            .map((w) => ({
-              id: typeof w.id === "string" && w.id ? w.id : genLocalId("widget"),
+            .map((w, widgetIndex) => ({
+              id: typeof w.id === "string" && w.id ? w.id : `row-${rowIndex}-widget-${widgetIndex}`,
               view_id: w.view_id as string,
               width:
                 typeof w.width === "number" && w.width >= 1 && w.width <= 12
@@ -145,6 +159,15 @@ function useWidgetQuery(dataSourceId: string, view: ViewResponse | undefined) {
 
   const load = useCallback(async () => {
     if (!view) return;
+    // Combined-M13-review fix: `form` is a builder/editor over `config`,
+    // never a row-data view (same reasoning FormView.tsx's own top-of-file
+    // comment gives) — querying rows for it was always wasted work, only
+    // reachable via a stale/hand-edited config since the "add widget"
+    // picker now excludes `form` (see widgetCandidates below).
+    if (view.type === "form") {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setLoadError(null);
     try {
@@ -350,7 +373,20 @@ function DashboardWidgetContent({ view, properties, dataSourceId, editable, onUp
         <ChartView properties={properties} config={view.config} groups={groups} aggregates={aggregates} editable={false} />
       );
     case "form":
-      return <FormView viewId={view.id} properties={properties} config={view.config} onConfigChange={patchThisWidgetsView} />;
+      // Combined-M13-review fix: a Form view is a builder/editor over
+      // `config` (question picker, submit-screen settings, the public
+      // share link) — mounting the FULL owner-side FormView.tsx into a
+      // ~small grid cell, ignoring `editable` entirely (FormView has no
+      // such prop), was never a sensible dashboard widget. Now excluded
+      // from the "add widget" picker (widgetCandidates below); this
+      // branch only still exists for a config that already references one
+      // (stale/hand-edited), rendered as a clear placeholder rather than
+      // silently degrading.
+      return (
+        <div className="flex items-center justify-center h-full text-xs text-gray-400 dark:text-gray-500 p-2 text-center">
+          Form views can&apos;t be shown as a dashboard widget.
+        </div>
+      );
     default:
       return (
         <div className="flex items-center justify-center h-full text-xs text-gray-400 dark:text-gray-500">
@@ -383,6 +419,23 @@ export function DashboardView({ viewId, dataSourceId, properties, views, config,
   const [confirmRemoveRow, setConfirmRemoveRow] = useState<string | null>(null);
   const [addWidgetViewId, setAddWidgetViewId] = useState<Record<string, string>>({});
 
+  // Combined-M13-review fix: row-height/widget-width numeric inputs used to
+  // PATCH on every keystroke, fire-and-forget, with no ordering guarantee —
+  // `useDatabaseView.updateView` unconditionally applies whichever response
+  // lands last, so typing "1000" (four PATCHes: 1/10/100/1000) could have
+  // the "1" response arrive after "1000" under routine latency jitter and
+  // silently clobber the layout back to height 1. Local draft state +
+  // 600ms debounce-then-flush-on-blur, same duration/pattern
+  // `FormView.tsx`'s submit-screen fields already establish for this
+  // milestone's other config-driven view, closes both the ordering race
+  // and the "clearing the field mid-edit snaps to the default and PATCHes
+  // that" side effect (the draft holds the raw in-progress string; only
+  // the debounced/blurred save clamps it).
+  const [draftHeights, setDraftHeights] = useState<Record<string, string>>({});
+  const [draftWidths, setDraftWidths] = useState<Record<string, string>>({});
+  const heightDebounceRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const widthDebounceRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
   const rows = readDashboardRows(config);
   const totalWidgets = rows.reduce((n, row) => n + row.widgets.length, 0);
 
@@ -390,8 +443,11 @@ export function DashboardView({ viewId, dataSourceId, properties, views, config,
   // client-side as the add-widget picker's own candidate pool — a UX
   // nicety (research §13.2's hard rules are still enforced server-side by
   // `_validate_dashboard_config`, which is what actually rejects a request
-  // this pool somehow let through, e.g. a stale `views` list).
-  const widgetCandidates = views.filter((v) => v.id !== viewId && v.type !== "dashboard");
+  // this pool somehow let through, e.g. a stale `views` list). `form` is
+  // also excluded (combined-M13-review fix): it's a builder/editor over
+  // `config`, not a row-data view, and was never a sensible widget — see
+  // `DashboardWidgetContent`'s own `case "form"` comment.
+  const widgetCandidates = views.filter((v) => v.id !== viewId && v.type !== "dashboard" && v.type !== "form");
   const viewById = new Map(views.map((v) => [v.id, v]));
 
   async function saveRows(nextRows: DashboardRow[]) {
@@ -412,9 +468,29 @@ export function DashboardView({ viewId, dataSourceId, properties, views, config,
     setConfirmRemoveRow(null);
   }
 
-  function handleRowHeightChange(rowId: string, height: number) {
-    const clamped = Number.isFinite(height) && height > 0 ? height : DASHBOARD_DEFAULT_ROW_HEIGHT;
-    saveRows(rows.map((r) => (r.id === rowId ? { ...r, height: clamped } : r)));
+  async function commitRowHeight(rowId: string, raw: string) {
+    const parsed = Number(raw);
+    const clamped = Number.isFinite(parsed) && parsed > 0 ? parsed : DASHBOARD_DEFAULT_ROW_HEIGHT;
+    await saveRows(rows.map((r) => (r.id === rowId ? { ...r, height: clamped } : r)));
+    // Falls back to reading `row.height` (now updated) again, rather than
+    // pinning to this stale raw string forever.
+    setDraftHeights((prev) => {
+      const { [rowId]: _omit, ...rest } = prev;
+      return rest;
+    });
+  }
+
+  function handleRowHeightChange(rowId: string, raw: string) {
+    setDraftHeights((prev) => ({ ...prev, [rowId]: raw }));
+    if (heightDebounceRefs.current[rowId]) clearTimeout(heightDebounceRefs.current[rowId]);
+    heightDebounceRefs.current[rowId] = setTimeout(() => commitRowHeight(rowId, raw), 600);
+  }
+
+  function handleRowHeightBlur(rowId: string) {
+    const draft = draftHeights[rowId];
+    if (draft === undefined) return;
+    if (heightDebounceRefs.current[rowId]) clearTimeout(heightDebounceRefs.current[rowId]);
+    commitRowHeight(rowId, draft);
   }
 
   function handleAddWidget(rowId: string) {
@@ -439,15 +515,36 @@ export function DashboardView({ viewId, dataSourceId, properties, views, config,
     setConfirmRemoveWidget(null);
   }
 
-  function handleResizeWidget(rowId: string, widgetId: string, width: number) {
-    const clamped = Math.min(12, Math.max(1, Math.round(width) || 1));
-    saveRows(
+  async function commitWidgetWidth(rowId: string, widgetId: string, raw: string) {
+    const parsed = Number(raw);
+    const clamped = Math.min(12, Math.max(1, Math.round(parsed) || 1));
+    await saveRows(
       rows.map((r) =>
         r.id === rowId
           ? { ...r, widgets: r.widgets.map((w) => (w.id === widgetId ? { ...w, width: clamped } : w)) }
           : r
       )
     );
+    const draftKey = `${rowId}:${widgetId}`;
+    setDraftWidths((prev) => {
+      const { [draftKey]: _omit, ...rest } = prev;
+      return rest;
+    });
+  }
+
+  function handleResizeWidget(rowId: string, widgetId: string, raw: string) {
+    const draftKey = `${rowId}:${widgetId}`;
+    setDraftWidths((prev) => ({ ...prev, [draftKey]: raw }));
+    if (widthDebounceRefs.current[draftKey]) clearTimeout(widthDebounceRefs.current[draftKey]);
+    widthDebounceRefs.current[draftKey] = setTimeout(() => commitWidgetWidth(rowId, widgetId, raw), 600);
+  }
+
+  function handleResizeWidgetBlur(rowId: string, widgetId: string) {
+    const draftKey = `${rowId}:${widgetId}`;
+    const draft = draftWidths[draftKey];
+    if (draft === undefined) return;
+    if (widthDebounceRefs.current[draftKey]) clearTimeout(widthDebounceRefs.current[draftKey]);
+    commitWidgetWidth(rowId, widgetId, draft);
   }
 
   const removingWidgetView = confirmRemoveWidget
@@ -500,9 +597,10 @@ export function DashboardView({ viewId, dataSourceId, properties, views, config,
                     <input
                       type="number"
                       aria-label={`Row height for ${row.id}`}
-                      value={row.height}
+                      value={draftHeights[row.id] ?? row.height}
                       min={1}
-                      onChange={(e) => handleRowHeightChange(row.id, Number(e.target.value))}
+                      onChange={(e) => handleRowHeightChange(row.id, e.target.value)}
+                      onBlur={() => handleRowHeightBlur(row.id)}
                       className="w-16 text-xs px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                     />
                     px
@@ -548,8 +646,9 @@ export function DashboardView({ viewId, dataSourceId, properties, views, config,
                               aria-label={`Width for ${widgetView?.name ?? widget.id}`}
                               min={1}
                               max={12}
-                              value={widget.width}
-                              onChange={(e) => handleResizeWidget(row.id, widget.id, Number(e.target.value))}
+                              value={draftWidths[`${row.id}:${widget.id}`] ?? widget.width}
+                              onChange={(e) => handleResizeWidget(row.id, widget.id, e.target.value)}
+                              onBlur={() => handleResizeWidgetBlur(row.id, widget.id)}
                               className="w-10 text-[11px] px-1 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                             />
                           </label>

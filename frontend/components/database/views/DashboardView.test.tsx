@@ -330,7 +330,15 @@ describe("DashboardView", () => {
     const widthInput = screen.getByLabelText("Width for Other");
     fireEvent.change(widthInput, { target: { value: "20" } });
 
-    expect(onUpdateView).toHaveBeenCalledTimes(1);
+    // Combined-M13-review fix: debounced (600ms), same pattern FormView.tsx's
+    // own submit-screen fields already use — no PATCH on the raw keystroke,
+    // preventing a slow-arriving intermediate response from clobbering a
+    // later one (the race the review found: DashboardView.tsx used to PATCH
+    // on every keystroke with no ordering guarantee).
+    expect(onUpdateView).not.toHaveBeenCalled();
+    fireEvent.blur(widthInput);
+
+    await waitFor(() => expect(onUpdateView).toHaveBeenCalledTimes(1));
     const [, patch] = onUpdateView.mock.calls[0];
     const rows = patch.config.rows as DashboardRow[];
     expect(rows[0].widgets[0].width).toBe(12); // clamped, never above the 12-column grid
@@ -356,10 +364,43 @@ describe("DashboardView", () => {
     const heightInput = screen.getByLabelText("Row height for row-1");
     fireEvent.change(heightInput, { target: { value: "500" } });
 
-    expect(onUpdateView).toHaveBeenCalledTimes(1);
+    // Combined-M13-review fix: debounced (600ms) — see the widget-width
+    // test above for why.
+    expect(onUpdateView).not.toHaveBeenCalled();
+    fireEvent.blur(heightInput);
+
+    await waitFor(() => expect(onUpdateView).toHaveBeenCalledTimes(1));
     const [, patch] = onUpdateView.mock.calls[0];
     const rows = patch.config.rows as DashboardRow[];
     expect(rows[0].height).toBe(500);
+  });
+
+  it("changing a row's height debounce-PATCHes without an explicit blur (real timer, no premature call)", async () => {
+    const onUpdateView = vi.fn().mockResolvedValue(DASHBOARD_VIEW);
+    const config = { rows: [{ id: "row-1", height: 300, widgets: [] }] };
+    render(
+      <DashboardView
+        viewId="dash-1"
+        dataSourceId="ds-1"
+        properties={[TITLE_PROP]}
+        views={[DASHBOARD_VIEW]}
+        config={config}
+        editable={true}
+        onUpdateView={onUpdateView}
+      />
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const heightInput = screen.getByLabelText("Row height for row-1");
+    fireEvent.change(heightInput, { target: { value: "700" } });
+
+    expect(onUpdateView).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(onUpdateView).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    const [, patch] = onUpdateView.mock.calls[0];
+    const rows = patch.config.rows as DashboardRow[];
+    expect(rows[0].height).toBe(700);
   });
 
   it("a row already at 4 widgets disables adding another (client-side pre-check of the backend's per-row limit)", async () => {
@@ -453,5 +494,47 @@ describe("DashboardView", () => {
       />
     );
     expect(screen.getByRole("button", { name: "Edit" })).toBeDisabled();
+  });
+
+  it("combined-M13-review fix: a Form-type view is not offered in the add-widget picker", async () => {
+    const user = userEvent.setup();
+    const fetchMock = makeQueryFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+    const formView = view({ id: "form-1", name: "Signup form", type: "form" });
+    const tableView = view({ id: "table-1", name: "A table", type: "table" });
+    render(
+      <DashboardView
+        viewId="dash-1"
+        dataSourceId="ds-1"
+        properties={[TITLE_PROP]}
+        views={[DASHBOARD_VIEW, formView, tableView]}
+        config={{ rows: [{ id: "row-1", height: 300, widgets: [] }] }}
+        editable={true}
+        onUpdateView={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    const picker = screen.getByLabelText("Add widget to row-1");
+    const optionLabels = Array.from(picker.querySelectorAll("option")).map((o) => o.textContent);
+    expect(optionLabels.some((label) => label?.includes("Signup form"))).toBe(false);
+    expect(optionLabels.some((label) => label?.includes("A table"))).toBe(true);
+  });
+
+  it("combined-M13-review fix: a stale config referencing a Form-type widget renders a placeholder, not the FormView builder", async () => {
+    const formView = view({ id: "form-1", name: "Signup form", type: "form" });
+    render(
+      <DashboardView
+        viewId="dash-1"
+        dataSourceId="ds-1"
+        properties={[TITLE_PROP]}
+        views={[DASHBOARD_VIEW, formView]}
+        config={{ rows: [{ id: "row-1", height: 300, widgets: [{ id: "w1", view_id: "form-1", width: 6 }] }] }}
+        editable={true}
+        onUpdateView={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Form views can't be shown as a dashboard widget.")).toBeInTheDocument();
   });
 });

@@ -5,8 +5,9 @@
 --     write path an unauthenticated caller has into this schema
 --   get_form_view(p_view_id) — the only read path an unauthenticated
 --     caller has: curated view+question metadata, never row data
--- Policy: db_row_props_anon_form_submit — defense-in-depth restating the
---   write function's own invariant directly on the table
+-- Policy: db_row_props_anon_form_submit — defense-in-depth backstop
+--   directly on the table (necessarily narrower than the function's own
+--   checks — see "RLS POLICY vs SECURITY DEFINER FUNCTION" below for why)
 --
 -- Spec: docs/superpowers/specs/2026-08-08-notion-databases-design.md §3.2
 --   (db_row_props), §10 (db_views, config JSONB), §13 (migration path/gating)
@@ -99,15 +100,30 @@
 -- The write path is a SECURITY DEFINER function (house pattern — see
 -- 001_initial_schema.sql's handle_new_user, 003_fix_handle_new_user.sql),
 -- so it runs as the function owner and technically bypasses RLS on the
--- tables it touches. `db_row_props_anon_form_submit` below restates the
--- SAME invariant the function enforces (target data source belongs to an
--- OPEN form view, and user_id matches that view's data source owner)
--- directly as a `WITH CHECK` on `db_row_props`, `TO anon`. This is
--- deliberate defense-in-depth, not decoration: if a future change to the
--- function (or to how it is invoked) ever stops going through the
--- SECURITY DEFINER path, this policy is what stands between an anonymous
--- caller and an arbitrary write. It is also the concrete policy gate G5's
+-- tables it touches. `db_row_props_anon_form_submit` below is deliberate
+-- defense-in-depth, not decoration: if a future change to the function (or
+-- to how it is invoked) ever stops going through the SECURITY DEFINER
+-- path, this policy is what stands between an anonymous caller and a
+-- write with NO scoping at all. It is also the concrete policy gate G5's
 -- proof query is written to catch drifting away from being real.
+--
+-- Combined-M13-review correction (controller-added): an earlier version of
+-- this comment claimed the policy "restates the SAME invariant" the
+-- function enforces. That overclaimed — it is NECESSARILY weaker, and
+-- structurally so, not from an oversight: `db_row_props` has no `view_id`
+-- column (a row belongs to a data SOURCE, not to the view a submission
+-- happened to go through), so a `WITH CHECK` on this table can only ever
+-- express "this data source has SOME open form view," not "the SPECIFIC
+-- view this submission targeted is open." A data source with two form
+-- views — one open, one closed — has every write the policy alone would
+-- authorize legitimized by the open one, regardless of which view id a
+-- caller actually named. The policy also cannot express the function's
+-- property-key filtering or its rate limit at all (neither has anywhere
+-- to live in a row-level `WITH CHECK`). None of this weakens what the
+-- function itself enforces on the real, in-use write path — it only means
+-- the BACKSTOP is narrower than the primary path, which is the honest,
+-- structurally-forced shape of RLS-as-defense-in-depth for a table with no
+-- per-view identity of its own.
 --
 -- No new SELECT policy for `anon` is added anywhere in this migration — on
 -- `db_row_props`, `notes`, or `db_views`. "Anonymous submission cannot read
@@ -144,10 +160,70 @@ ALTER TABLE db_form_submissions ENABLE ROW LEVEL SECURITY;
 
 
 -- ---- submit_form_response ----
--- The entire public write path. Atomic: form-open check, rate limit
--- check-then-insert, property filtering + required-field validation, and
+-- The entire public write path. Atomic: form-open check, property
+-- filtering + required-field validation, rate limit check-then-insert, and
 -- the notes + db_row_props insert all happen in the single implicit
 -- transaction of this function call, so any failure rolls back everything.
+--
+-- Combined-M13-review fixes (post-implementation, controller-added —
+-- caught by an independent whole-milestone review, each verified directly
+-- against this file before being accepted as real):
+--
+-- (a) Ordering: validation (form-open, property-filter, required-fields)
+--     now happens BEFORE the rate-limit check-and-insert, not after.
+--     Previously the ledger INSERT ran first and then a later
+--     `missing_required_property` RAISE rolled back the WHOLE transaction
+--     INCLUDING that insert — so an attacker sending deliberately-
+--     incomplete requests (missing a required field) never consumed a
+--     rate-limit slot, and every such request still paid for an advisory
+--     lock acquisition + COUNT + INSERT before discovering it was invalid.
+--     With validation first, a malformed request is now cheap (a couple of
+--     read-only lookups, no lock, no insert) and only structurally-
+--     complete submission attempts ever reach the rate limiter — which is
+--     also the more meaningful definition of "5 per hour" (five real
+--     attempts, not five that happened to also survive a race).
+--
+-- (b) Title hijack: previously ANY allowed key whose submitted value
+--     happened to carry `"type": "title"` overwrote the new row's title —
+--     a respondent could set an arbitrary note title through a `checkbox`
+--     or `rich_text` question, since nothing checked that the key
+--     receiving that value was actually this data source's real title
+--     property. Now the actual title property key is resolved once,
+--     server-side, from `db_properties` (`type = 'title'`), and only a
+--     submission for THAT specific key can ever set `v_title`.
+--
+-- (c) Deleted-property questions: `get_form_view` (below) already
+--     silently drops a `config.questions[]` entry whose property no
+--     longer exists (INNER JOIN against `db_properties`) — but this
+--     function used to still enforce `required` for that same orphaned
+--     key, since it validated straight off `config.questions[]` with no
+--     existence check of its own. A form with a required question whose
+--     property was later deleted was therefore permanently unsubmittable
+--     (the public page renders no field for it, since `get_form_view`
+--     already hides it, yet the server still demanded it) with no way for
+--     a respondent to fix it. Both functions now apply the SAME
+--     `db_properties` existence join, so an orphaned question is treated
+--     as absent by both the read and the write path — never enforced,
+--     never rendered, consistently.
+--
+-- (d) Secondary, coarser PER-VIEW rate limit (`v_global_rate_limit`,
+--     independent of `ip_hash`): the per-(view,ip) limit is fully
+--     bypassable by an attacker who varies `X-Forwarded-For` on each
+--     request — this app has no reverse proxy anywhere in its deploy
+--     shape (`app.sh` runs `next dev` directly, no nginx/Vercel/
+--     middleware.ts), so `x-forwarded-for` is 100% caller-controlled and
+--     genuine IP attribution isn't achievable in code alone. Rather than
+--     pretend the per-IP limit is trustworthy, this adds a second,
+--     independent cap on TOTAL submissions to a given view regardless of
+--     claimed IP — bounding the worst case even when the IP dimension is
+--     fully spoofed. Deliberately generous (50/hour) so it never fires
+--     for real traffic; it exists purely to put a ceiling on abuse this
+--     deployment cannot otherwise attribute. A COUNT-based check here
+--     (not lock-serialized against every other view's concurrent
+--     request) can under-count by a handful of rows under heavy
+--     concurrent abuse from many different claimed IPs at once — an
+--     acceptable slop for a coarse secondary backstop, not the precise
+--     primary limit.
 
 CREATE OR REPLACE FUNCTION submit_form_response(
   p_view_id    UUID,
@@ -159,20 +235,23 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_data_source_id UUID;
-  v_user_id        UUID;
-  v_config         JSONB;
-  v_allowed_keys   TEXT[];
-  v_filtered       JSONB := '{}'::jsonb;
-  v_key            TEXT;
-  v_value          JSONB;
-  v_question       JSONB;
-  v_required       BOOLEAN;
-  v_title          TEXT := 'Untitled';
-  v_recent_count   INTEGER;
-  v_note_id        UUID;
-  v_rate_limit     CONSTANT INTEGER := 5;
-  v_window         CONSTANT INTERVAL := INTERVAL '1 hour';
+  v_data_source_id   UUID;
+  v_user_id          UUID;
+  v_config           JSONB;
+  v_title_key        TEXT;
+  v_allowed_keys     TEXT[];
+  v_filtered         JSONB := '{}'::jsonb;
+  v_key              TEXT;
+  v_value            JSONB;
+  v_question         JSONB;
+  v_required         BOOLEAN;
+  v_title            TEXT := 'Untitled';
+  v_recent_count     INTEGER;
+  v_global_count     INTEGER;
+  v_note_id          UUID;
+  v_rate_limit        CONSTANT INTEGER := 5;
+  v_global_rate_limit CONSTANT INTEGER := 50;
+  v_window            CONSTANT INTERVAL := INTERVAL '1 hour';
 BEGIN
   -- Resolve the view, its data source, and its owning user_id — entirely
   -- server-side, never client-supplied. Reject unless the view exists and
@@ -191,8 +270,72 @@ BEGIN
     RAISE EXCEPTION 'form_closed';
   END IF;
 
-  -- Serialize concurrent submissions from the same (view, ip) so the
-  -- rate-limit check-then-insert below is atomic — see header comment.
+  -- (b): the ONE real title property for this data source, resolved
+  -- server-side — never inferred from whatever `type` a submitted value
+  -- happens to claim.
+  SELECT dp.key INTO v_title_key
+  FROM db_properties dp
+  WHERE dp.data_source_id = v_data_source_id AND dp.type = 'title'
+  LIMIT 1;
+
+  -- Filter to exactly the property keys the form actually asks for AND
+  -- that still exist on the data source (c) — an anonymous caller must
+  -- never be able to write an arbitrary property key (silently dropped,
+  -- not a hard failure — see header comment), and a question whose
+  -- property was deleted is treated as absent, matching `get_form_view`.
+  SELECT array_agg(dp.key) INTO v_allowed_keys
+  FROM jsonb_array_elements(COALESCE(v_config -> 'questions', '[]'::jsonb)) AS q
+  JOIN db_properties dp
+    ON dp.data_source_id = v_data_source_id AND dp.key = q ->> 'property_key';
+
+  FOR v_key, v_value IN
+    SELECT key, value FROM jsonb_each(COALESCE(p_properties, '{}'::jsonb))
+  LOOP
+    IF v_key = ANY(v_allowed_keys) THEN
+      v_filtered := v_filtered || jsonb_build_object(v_key, v_value);
+      IF v_key = v_title_key THEN
+        v_title := COALESCE(NULLIF(v_value ->> 'title', ''), v_title);
+      END IF;
+    END IF;
+  END LOOP;
+
+  -- Required questions are enforced here authoritatively — the public
+  -- page's own client-side required check is UX only, not the real gate
+  -- (combined-M13-review fix: this was previously true in name only — a
+  -- direct API call could satisfy "required" with an explicit empty
+  -- string, e.g. `{"type":"rich_text","rich_text":""}`, which is present
+  -- and non-null but not a real answer; the literal inner value is now
+  -- also checked for text-shaped property types, not just presence/null).
+  -- Same existence join as v_allowed_keys above (c): a required question
+  -- whose property no longer exists is never enforced, matching
+  -- `get_form_view` never rendering it in the first place.
+  FOR v_question IN
+    SELECT q.* FROM jsonb_array_elements(COALESCE(v_config -> 'questions', '[]'::jsonb)) AS q
+    JOIN db_properties dp
+      ON dp.data_source_id = v_data_source_id AND dp.key = q ->> 'property_key'
+  LOOP
+    v_required := COALESCE((v_question ->> 'required')::boolean, false);
+    v_key := v_question ->> 'property_key';
+    IF v_required AND (
+      NOT (v_filtered ? v_key)
+      OR v_filtered -> v_key IS NULL
+      OR v_filtered -> v_key = 'null'::jsonb
+      -- The value wrapper's own `type` field names which sub-key holds the
+      -- literal (this app's own `{"type": T, T: value}` convention) — an
+      -- empty string there is "no answer," same as it being absent. Only
+      -- closes the common single-string-valued types (title/rich_text/
+      -- url/email/phone/select/status); array-shaped types
+      -- (multi_select/relation/people) still fall back to the
+      -- presence/null check above only — a documented, deliberate partial
+      -- fix (Minor severity finding), not a claim of full generality.
+      OR (v_filtered -> v_key ->> (v_filtered -> v_key ->> 'type')) = ''
+    ) THEN
+      RAISE EXCEPTION 'missing_required_property';
+    END IF;
+  END LOOP;
+
+  -- (a): rate limiting runs LAST, only once the submission is known to be
+  -- structurally complete — see header comment (a).
   PERFORM pg_advisory_xact_lock(hashtext(p_view_id::text), hashtext(p_ip_hash));
 
   SELECT count(*) INTO v_recent_count
@@ -205,40 +348,17 @@ BEGIN
     RAISE EXCEPTION 'rate_limited';
   END IF;
 
+  -- (d): coarser per-view backstop, independent of the (spoofable) IP.
+  SELECT count(*) INTO v_global_count
+  FROM db_form_submissions
+  WHERE view_id = p_view_id
+    AND submitted_at > now() - v_window;
+
+  IF v_global_count >= v_global_rate_limit THEN
+    RAISE EXCEPTION 'rate_limited';
+  END IF;
+
   INSERT INTO db_form_submissions (view_id, ip_hash) VALUES (p_view_id, p_ip_hash);
-
-  -- Filter to exactly the property keys the form actually asks for — an
-  -- anonymous caller must never be able to write an arbitrary property key
-  -- (silently dropped, not a hard failure — see header comment).
-  SELECT array_agg(q ->> 'property_key') INTO v_allowed_keys
-  FROM jsonb_array_elements(COALESCE(v_config -> 'questions', '[]'::jsonb)) AS q;
-
-  FOR v_key, v_value IN
-    SELECT key, value FROM jsonb_each(COALESCE(p_properties, '{}'::jsonb))
-  LOOP
-    IF v_key = ANY(v_allowed_keys) THEN
-      v_filtered := v_filtered || jsonb_build_object(v_key, v_value);
-      IF v_value ->> 'type' = 'title' THEN
-        v_title := COALESCE(NULLIF(v_value ->> 'title', ''), v_title);
-      END IF;
-    END IF;
-  END LOOP;
-
-  -- Required questions are enforced here authoritatively — the public
-  -- page's own client-side required check is UX only, not the real gate.
-  FOR v_question IN
-    SELECT * FROM jsonb_array_elements(COALESCE(v_config -> 'questions', '[]'::jsonb))
-  LOOP
-    v_required := COALESCE((v_question ->> 'required')::boolean, false);
-    v_key := v_question ->> 'property_key';
-    IF v_required AND (
-      NOT (v_filtered ? v_key)
-      OR v_filtered -> v_key IS NULL
-      OR v_filtered -> v_key = 'null'::jsonb
-    ) THEN
-      RAISE EXCEPTION 'missing_required_property';
-    END IF;
-  END LOOP;
 
   INSERT INTO notes (user_id, title, content)
   VALUES (v_user_id, v_title, '[]'::jsonb)
