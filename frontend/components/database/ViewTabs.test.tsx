@@ -409,6 +409,33 @@ describe("ViewTabs", () => {
     expect(onCreateView).toHaveBeenCalledWith({ name: "My Form", type: "form", groupPropertyKey: undefined });
   });
 
+  // task-45 (Milestone 13, Dashboard view): a new view type added to
+  // VIEW_TYPE_OPTIONS, additive only alongside task-44's Form entry above.
+  // Dashboard has no creation-time required config either (`ViewCreate` has
+  // no `config` field at all — a freshly created dashboard always starts at
+  // `config: {}`, widgets are added afterward via DashboardView's own Edit
+  // mode), so this mirrors the Form test above exactly.
+  it("creating a Dashboard view calls onCreateView with type=dashboard and no extra required fields", async () => {
+    const user = userEvent.setup();
+    const onCreateView = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={onCreateView} />
+    );
+
+    await user.click(screen.getByText("+ New view"));
+    await user.selectOptions(screen.getByLabelText(/view type/i), "dashboard");
+    await user.type(screen.getByLabelText(/view name/i), "My Dashboard");
+
+    expect(screen.queryByLabelText(/group by/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/date property/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/chart type/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^create$/i })).not.toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    expect(onCreateView).toHaveBeenCalledWith({ name: "My Dashboard", type: "dashboard", groupPropertyKey: undefined });
+  });
+
   it("Map is not offered as a creatable view type (out of scope for the whole milestone)", async () => {
     const user = userEvent.setup();
     render(<ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={vi.fn()} />);

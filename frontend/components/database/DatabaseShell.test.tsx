@@ -315,6 +315,18 @@ describe("DatabaseShell", () => {
     });
   });
 
+  it("renders DashboardView (not some other component, not a blank fallback) for a dashboard-typed active view", () => {
+    // Empty config.rows -- no widgets to mount, so no per-widget fetch is
+    // needed for this render-dispatch check (DashboardView.test.tsx owns
+    // the widget-content/fetch-driven behaviour).
+    mockHook.views = [
+      { id: "v12", data_source_id: "ds-1", user_id: "user-1", name: "Dashboard", icon: null, type: "dashboard", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },
+    ];
+    mockHook.activeViewId = "v12";
+    render(<DatabaseShell databaseId="db-1" />);
+    expect(screen.getByTestId("dashboard-view")).toBeInTheDocument();
+  });
+
   it("clicking a different view tab calls setActiveViewId", async () => {
     mockHook.views = [
       { id: "v1", data_source_id: "ds-1", user_id: "user-1", name: "Table view", icon: null, type: "table", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },

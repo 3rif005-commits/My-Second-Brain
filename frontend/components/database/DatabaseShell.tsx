@@ -15,6 +15,7 @@ import { CalendarView } from "./views/CalendarView";
 import { TimelineView } from "./views/TimelineView";
 import { ChartView } from "./views/ChartView";
 import { FormView } from "./views/FormView";
+import { DashboardView } from "./views/DashboardView";
 import { ViewTabs } from "./ViewTabs";
 import { DatabaseSettingsMenu } from "./DatabaseSettingsMenu";
 
@@ -263,14 +264,44 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             onConfigChange={(patch) => updateView(activeView.id, { config: { ...activeView.config, ...patch } })}
           />
         );
+      case "dashboard":
+        // The only COMPOSITE view type (task-45-brief.md, research §13): it
+        // renders OTHER views from this SAME data source in a 12-column
+        // widget grid rather than row data itself, so — unlike every case
+        // above — it needs the full `views` list (to resolve each widget's
+        // `view_id`) rather than `rows`/`groups`/`aggregates` (each widget
+        // fetches its own, independently of whatever this dashboard view's
+        // own query state is — DashboardView.tsx's own top-of-file comment
+        // explains why that's a separate fetch rather than reusing this
+        // function's `rows`/`groups`/`aggregates` closure).
+        //
+        // `onUpdateView` is `updateView` itself, unwrapped — same pattern
+        // `DatabaseSettingsMenu`'s own `onUpdateView` prop already uses a
+        // few lines down — rather than a bespoke `onConfigChange` closure
+        // like every other case above: DashboardView needs to PATCH BOTH
+        // its own view (the widget grid) AND, per-widget, whichever OTHER
+        // view a widget is displaying (e.g. a Board widget's "hide empty
+        // groups" toggle), so a single `(patch) => updateView(activeView.id,
+        // ...)` closure bound to just this view wouldn't be enough.
+        return (
+          <DashboardView
+            viewId={activeView.id}
+            dataSourceId={dataSourceId}
+            properties={properties}
+            views={views}
+            config={activeView.config}
+            editable={editable}
+            onUpdateView={updateView}
+          />
+        );
       default:
         // Task-15's own spirit for view *config* ("tolerates unknown...
         // drops them at read"), applied to view *type* rendering — every
         // type this milestone ships (table/board/gallery/list/feed/
-        // calendar/timeline/chart/form) has a branch above; anything else (a
-        // stale/unknown string) is a plain message, never a crash or a
-        // blank screen. Map is explicitly out of scope for the whole
-        // milestone (user decision) and falls through to this same
+        // calendar/timeline/chart/form/dashboard) has a branch above;
+        // anything else (a stale/unknown string) is a plain message, never
+        // a crash or a blank screen. Map is explicitly out of scope for the
+        // whole milestone (user decision) and falls through to this same
         // placeholder, same as any other unimplemented type string.
         return (
           <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500">

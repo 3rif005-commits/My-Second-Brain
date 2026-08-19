@@ -38,11 +38,20 @@ interface ViewTabsProps {
   }) => Promise<void>;
 }
 
-// The nine view types this milestone supports creating (table/board —
+// The ten view types this milestone supports creating (table/board —
 // Task 16; gallery/list/feed — Task 17; calendar — Task 33; timeline —
-// Task 34; chart — Task 35; form — Task 44). Map is explicitly out of
-// scope for the whole milestone (user decision — no geocoding/tile
-// provider configured, docs/plans/2026-08-08-notion-databases.md M13).
+// Task 34; chart — Task 35; form — Task 44; dashboard — Task 45). Map is
+// explicitly out of scope for the whole milestone (user decision — no
+// geocoding/tile provider configured, docs/plans/2026-08-08-notion-
+// databases.md M13).
+//
+// Dashboard needs no creation-time fields the way Board/Calendar/Timeline/
+// Chart do (task-45-brief.md, confirmed against `ViewCreate` in
+// models/database.py: it has no `config` field at all) — a freshly created
+// dashboard always starts at `config: {}` (empty `rows`), and every widget
+// is added afterward through DashboardView's own Edit mode, which PATCHes
+// `config` through the same `_validate_dashboard_config`-guarded
+// `update_view` endpoint every other config change already goes through.
 const VIEW_TYPE_OPTIONS = [
   { value: "table", label: "Table" },
   { value: "board", label: "Board" },
@@ -53,6 +62,7 @@ const VIEW_TYPE_OPTIONS = [
   { value: "timeline", label: "Timeline" },
   { value: "chart", label: "Chart" },
   { value: "form", label: "Form" },
+  { value: "dashboard", label: "Dashboard" },
 ] as const;
 
 export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateView }: ViewTabsProps) {
