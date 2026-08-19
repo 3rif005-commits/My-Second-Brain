@@ -113,6 +113,28 @@ beforeEach(() => {
     { id: "p2", data_source_id: "ds-1", user_id: "user-1", key: "status", name: "Status", type: "status", config: {}, description: null, storage: "jsonb", column_name: null, result_type: null, is_volatile: false, position: 1, created_at: "2026-01-01T00:00:00Z" },
   ];
   vi.clearAllMocks();
+  // `patchViewConfig` (DatabaseShell.tsx's fix for the live-discovered
+  // stale-config-merge race) actually awaits `updateView`'s response and
+  // reads `.config` off it — every prior config-driven view's PATCH call
+  // was fire-and-forget from the component's own perspective, so this
+  // mock never needed a resolved value before. A generic default here
+  // (id doesn't need to match any specific test's view) keeps every
+  // existing `updateView`-calling test from hitting an unhandled
+  // rejection; a test asserting the ACTUAL merged/returned config
+  // overrides this with its own `mockResolvedValueOnce` as needed.
+  mockHook.updateView.mockResolvedValue({
+    id: "unused",
+    data_source_id: "ds-1",
+    user_id: "user-1",
+    name: "",
+    icon: null,
+    type: "table",
+    config: {},
+    filter: null,
+    sorts: [],
+    is_locked: false,
+    position: 0,
+  });
 });
 
 describe("DatabaseShell", () => {
@@ -313,6 +335,80 @@ describe("DatabaseShell", () => {
         submission_permissions: "none",
       },
     });
+  });
+
+  it("live-discovered fix: two config PATCHes fired before the first's response lands do not clobber each other (patchViewConfig's stale-merge race)", async () => {
+    // Reproduces exactly what broke live while click-testing FormView.tsx:
+    // toggling "Required" then immediately toggling "Closed", before the
+    // first PATCH's response had come back, silently reverted "Required"
+    // back to false in the SECOND request's body — because the old
+    // `(patch) => updateView(activeView.id, { config: { ...activeView.config,
+    // ...patch } })` closure always merged onto the SAME stale
+    // `activeView.config` from render time, regardless of an earlier PATCH
+    // already in flight.
+    const user = userEvent.setup();
+    mockHook.views = [
+      {
+        id: "v11",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Form",
+        icon: null,
+        type: "form",
+        config: { questions: [{ property_key: "title", required: false }], is_form_closed: false },
+        filter: null,
+        sorts: [],
+        is_locked: false,
+        position: 0,
+      },
+    ];
+    mockHook.activeViewId = "v11";
+
+    // A controllable, never-auto-resolving mock for the FIRST call only —
+    // the second call gets the `beforeEach` default (resolves immediately)
+    // so it can complete and reveal what it actually sent, without the test
+    // itself needing to inspect an intermediate resolved value.
+    let resolveFirst: (v: ViewResponse) => void = () => {};
+    mockHook.updateView.mockImplementationOnce(
+      () => new Promise<ViewResponse>((resolve) => { resolveFirst = resolve; })
+    );
+
+    render(<DatabaseShell databaseId="db-1" />);
+
+    await user.click(screen.getByLabelText("Question 1 required"));
+    // The first PATCH (Required) is now in flight, deliberately unresolved.
+    expect(mockHook.updateView).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByLabelText("Closed for submissions"));
+    // patchViewConfig queues same-view PATCHes sequentially — the second
+    // one must not have fired its own updateView call yet, since it's
+    // chained behind the still-pending first one.
+    expect(mockHook.updateView).toHaveBeenCalledTimes(1);
+
+    // Resolve the first PATCH exactly as the real endpoint would: the
+    // server's own merged config, `required: true` genuinely applied.
+    resolveFirst({
+      id: "v11",
+      data_source_id: "ds-1",
+      user_id: "user-1",
+      name: "Form",
+      icon: null,
+      type: "form",
+      config: { questions: [{ property_key: "title", required: true }], is_form_closed: false },
+      filter: null,
+      sorts: [],
+      is_locked: false,
+      position: 0,
+    });
+
+    await vi.waitFor(() => expect(mockHook.updateView).toHaveBeenCalledTimes(2));
+
+    // The bug: this second call's body would carry `required: false` if it
+    // had merged onto the stale render-time `activeView.config` instead of
+    // the first PATCH's own resolved result.
+    const [, secondPatchBody] = mockHook.updateView.mock.calls[1];
+    expect(secondPatchBody.config.questions).toEqual([{ property_key: "title", required: true }]);
+    expect(secondPatchBody.config.is_form_closed).toBe(true);
   });
 
   it("renders DashboardView (not some other component, not a blank fallback) for a dashboard-typed active view", () => {

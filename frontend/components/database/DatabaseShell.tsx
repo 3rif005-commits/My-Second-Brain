@@ -4,7 +4,10 @@
 // switch over the active view's `type` that renders the matching view
 // component. Was hardcoded to `views[0]` + TableView only (Milestone 2);
 // task-16 adds real view switching/creation and the Board view.
+import { useCallback, useRef } from "react";
+import { useToast } from "@/app/providers";
 import { useDatabaseView } from "@/lib/database/useDatabaseView";
+import type { ViewResponse } from "@/lib/database/types";
 import { getGroupBySpec, getSubGroupBySpec, getSubtaskDisplayMode } from "@/lib/database/types";
 import { TableView } from "./views/TableView";
 import { BoardView } from "./views/BoardView";
@@ -55,6 +58,71 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     refetch,
     refetchRows,
   } = useDatabaseView(databaseId);
+  const { showToast } = useToast();
+
+  // Live-discovered fix (post-M13-review, controller-added): every
+  // config-driven view below (Gallery/Feed/Calendar/Timeline/Form) used to
+  // build its `onConfigChange` PATCH by merging onto `activeView.config`
+  // captured from THIS render's closure — `(patch) => updateView(activeView.id,
+  // { config: { ...activeView.config, ...patch } })`. Two structural
+  // config changes fired close together (before React re-renders with the
+  // first PATCH's response) both read the SAME stale `activeView.config`,
+  // so the second request's merge silently drops whatever the first one
+  // changed once its own response landed — caught live while click-testing
+  // FormView.tsx: toggling "Required" then immediately toggling "Closed"
+  // reverted "Required" back to false server-side, even though the UI
+  // showed both as applied. `patchViewConfig` below fixes this for good by
+  // tracking each view's LATEST known config in a ref (updated the instant
+  // a PATCH response lands, not on next render) and chaining same-view
+  // PATCHes sequentially, so each one always merges onto the true latest
+  // state rather than a stale prop.
+  const latestConfigByViewRef = useRef<Map<string, Record<string, unknown>>>(new Map());
+  const pendingPatchByViewRef = useRef<Map<string, Promise<unknown>>>(new Map());
+  const patchViewConfig = useCallback(
+    (viewId: string, renderTimeConfig: Record<string, unknown>, patch: Record<string, unknown>) => {
+      const prevQueue = pendingPatchByViewRef.current.get(viewId) ?? Promise.resolve();
+      const nextQueue = prevQueue
+        .catch(() => undefined)
+        .then(async () => {
+          // `base` is resolved HERE, not synchronously at call time — a
+          // first bugged version of this fix computed it eagerly (reading
+          // `latestConfigByViewRef` before the queue's own prior entry had
+          // actually resolved and populated it), which meant a second
+          // rapid call still silently fell back to the stale
+          // `renderTimeConfig` exactly like the original bug. Reading the
+          // ref HERE, inside the `.then()` that only runs once the
+          // previous same-view PATCH has resolved, is what actually
+          // guarantees freshness — caught by this file's own regression
+          // test for this exact scenario before it shipped.
+          const base = latestConfigByViewRef.current.get(viewId) ?? renderTimeConfig;
+          const merged = { ...base, ...patch };
+          let updated: ViewResponse;
+          try {
+            updated = await updateView(viewId, { config: merged });
+          } catch (err) {
+            // Same "toast, don't throw to an unhandled rejection" convention
+            // DashboardView.tsx's own saveRows already establishes for a
+            // failed config PATCH — a caller here never awaits this queue's
+            // result (onConfigChange is fire-and-forget from every view's
+            // own perspective), so an uncaught rejection here would
+            // otherwise vanish silently instead of telling the user their
+            // change didn't save.
+            showToast(err instanceof Error ? err.message : "Could not save that change", "error");
+            return undefined;
+          }
+          latestConfigByViewRef.current.set(viewId, updated.config);
+          return updated;
+        })
+        .finally(() => {
+          if (pendingPatchByViewRef.current.get(viewId) === nextQueue) {
+            pendingPatchByViewRef.current.delete(viewId);
+          }
+        });
+      pendingPatchByViewRef.current.set(viewId, nextQueue);
+      return nextQueue;
+    },
+    [updateView]
+  );
 
   if (loading && !database) {
     return (
@@ -187,7 +255,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             editable={editable}
             onCellChange={updateCell}
             config={activeView.config}
-            onConfigChange={(patch) => updateView(activeView.id, { config: { ...activeView.config, ...patch } })}
+            onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
           />
         );
       case "list":
@@ -202,7 +270,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             editable={editable}
             onCellChange={updateCell}
             config={activeView.config}
-            onConfigChange={(patch) => updateView(activeView.id, { config: { ...activeView.config, ...patch } })}
+            onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
           />
         );
       case "calendar":
@@ -213,7 +281,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             editable={editable}
             onCellChange={updateCell}
             config={activeView.config}
-            onConfigChange={(patch) => updateView(activeView.id, { config: { ...activeView.config, ...patch } })}
+            onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
             dataSourceId={dataSourceId}
             refetchRows={refetchRows}
           />
@@ -226,7 +294,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             editable={editable}
             onCellChange={updateCell}
             config={activeView.config}
-            onConfigChange={(patch) => updateView(activeView.id, { config: { ...activeView.config, ...patch } })}
+            onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
             relationLinks={relationLinks}
             ensureRelationLinksBulk={ensureRelationLinksBulk}
           />
@@ -261,7 +329,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             viewId={activeView.id}
             properties={properties}
             config={activeView.config}
-            onConfigChange={(patch) => updateView(activeView.id, { config: { ...activeView.config, ...patch } })}
+            onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
           />
         );
       case "dashboard":
