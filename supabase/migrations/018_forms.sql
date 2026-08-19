@@ -1,9 +1,12 @@
 -- Migration 018: Notion Databases — public Form-view submission
 -- Table: db_form_submissions (rate-limit ledger)
--- Function: submit_form_response(p_view_id, p_ip_hash, p_properties) — the
---   only write path an unauthenticated caller has into this schema
+-- Functions:
+--   submit_form_response(p_view_id, p_ip_hash, p_properties) — the only
+--     write path an unauthenticated caller has into this schema
+--   get_form_view(p_view_id) — the only read path an unauthenticated
+--     caller has: curated view+question metadata, never row data
 -- Policy: db_row_props_anon_form_submit — defense-in-depth restating the
---   function's own invariant directly on the table
+--   write function's own invariant directly on the table
 --
 -- Spec: docs/superpowers/specs/2026-08-08-notion-databases-design.md §3.2
 --   (db_row_props), §10 (db_views, config JSONB), §13 (migration path/gating)
@@ -109,7 +112,12 @@
 -- No new SELECT policy for `anon` is added anywhere in this migration — on
 -- `db_row_props`, `notes`, or `db_views`. "Anonymous submission cannot read
 -- existing rows" holds by construction (absence of a read grant), not by an
--- app-layer check that could be forgotten elsewhere.
+-- app-layer check that could be forgotten elsewhere. The public form PAGE
+-- still needs to read a view's config and its questions' property metadata
+-- to render inputs at all — `get_form_view` (below) is how: a SECURITY
+-- DEFINER function, not a SELECT policy, returning only curated
+-- name/config/question-metadata fields and never actual row data. See its
+-- own comment for why a blanket policy would have been the wrong shape.
 
 BEGIN;
 
@@ -278,6 +286,65 @@ CREATE POLICY db_row_props_anon_form_submit ON db_row_props
     )
   );
 
+
+-- ---- get_form_view ----
+-- The public form PAGE (Next.js Server Component, anon key, no auth) needs
+-- to read a view's config and its questions' property metadata (name/type,
+-- to know which input control to render) to render the form at all. A
+-- blanket anon SELECT policy on `db_views`/`db_properties` would satisfy
+-- that but directly contradicts this migration's own "no new SELECT
+-- policy for anon anywhere" requirement (an anon caller could then read
+-- every OTHER view/property on the data source too, plus every other
+-- view — including non-form ones — on any data source, just by knowing an
+-- id). A second SECURITY DEFINER function is not a SELECT policy: it
+-- returns exactly the curated fields the public page needs (the view's
+-- name, its full config, and — for each `config.questions[]` entry that
+-- still resolves to a real property — that property's key/name/type) and
+-- nothing else. No row data (`db_row_props`), no other properties on the
+-- data source, no data_source_id/user_id. Returns NULL for a missing or
+-- non-form view id (the page's own `notFound()`), and still returns data
+-- for a CLOSED form (so the page can render the "not accepting responses"
+-- state instead of a 404 — closed-ness is itself part of `config`).
+
+CREATE OR REPLACE FUNCTION get_form_view(p_view_id UUID) RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_data_source_id UUID;
+  v_name           TEXT;
+  v_config         JSONB;
+  v_questions      JSONB;
+BEGIN
+  SELECT dv.data_source_id, dv.name, dv.config
+    INTO v_data_source_id, v_name, v_config
+  FROM db_views dv
+  WHERE dv.id = p_view_id AND dv.type = 'form';
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(
+           jsonb_build_object(
+             'property_key', q.value ->> 'property_key',
+             'required', COALESCE((q.value ->> 'required')::boolean, false),
+             'name', dp.name,
+             'type', dp.type
+           ) ORDER BY q.ord
+         ), '[]'::jsonb)
+    INTO v_questions
+  FROM jsonb_array_elements(COALESCE(v_config -> 'questions', '[]'::jsonb)) WITH ORDINALITY AS q(value, ord)
+  JOIN db_properties dp
+    ON dp.data_source_id = v_data_source_id AND dp.key = q.value ->> 'property_key';
+
+  RETURN jsonb_build_object('name', v_name, 'config', v_config, 'questions', v_questions);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_form_view(UUID) TO anon;
+
 COMMIT;
 
 
@@ -291,7 +358,8 @@ COMMIT;
 SELECT 'migration 018 applied' AS status,
        (SELECT count(*) FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = 'db_form_submissions') AS table_created,
-       (SELECT count(*) FROM pg_proc WHERE proname = 'submit_form_response') AS function_created,
+       (SELECT count(*) FROM pg_proc WHERE proname = 'submit_form_response') AS submit_function_created,
+       (SELECT count(*) FROM pg_proc WHERE proname = 'get_form_view') AS read_function_created,
        (SELECT count(*) FROM pg_policies
         WHERE tablename = 'db_row_props'
           AND policyname = 'db_row_props_anon_form_submit') AS anon_policy_present;
