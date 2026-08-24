@@ -10,6 +10,7 @@ import { useCollections } from "@/lib/hooks/useCollections";
 import { useTrash } from "@/lib/hooks/useTrash";
 import { NoteTree } from "./NoteTree";
 import { NotificationsBell } from "./NotificationsBell";
+import { CsvImportButton } from "./CsvImportButton";
 
 function NavItem({
   label,
@@ -227,6 +228,11 @@ export function Sidebar({
           New Database
           <Plus size={13} strokeWidth={2.5} className="ml-auto" />
         </button>
+        {/* Milestone 14 (task-47): "Import → CSV" -- a sibling action to "New
+         * Database" (not inside DatabaseSettingsMenu, which is scoped to an
+         * already-open database), since CSV import also always creates a brand-new
+         * database. */}
+        <CsvImportButton onImported={loadDatabases} />
       </nav>
 
       {/* Divider */}
