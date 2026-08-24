@@ -38,6 +38,20 @@ _TOOL_MIN_TIER: dict[str, Tier] = {
     "brain.set_mastery":    Tier.INTERNAL_API,
     "brain.move_note":      Tier.INTERNAL_API,
     "brain.delete_note":    Tier.INTERNAL_API,
+    # Database tools (Milestone 14, task 49) — read tools are as safe as
+    # brain.list_notes/get_note (scoped read-only queries through the same
+    # compiler); the two writes sit at the same tier as create_note/
+    # update_note above. Without an entry here every one of these 5 would
+    # be denied at the gate with "unknown tool" before ever reaching
+    # execute_brain_tool, regardless of any dispatch wiring below — the
+    # brief's own research didn't name this file, but engine.py's call
+    # sequence (permission_check before execute_brain_tool) makes it
+    # load-bearing for the in-app agent path.
+    "brain.list_databases":      Tier.EXTERNAL,
+    "brain.get_database_schema": Tier.EXTERNAL,
+    "brain.query_database":      Tier.EXTERNAL,
+    "brain.create_row":          Tier.INTERNAL_API,
+    "brain.update_row":          Tier.INTERNAL_API,
     # Editor tools — inline and ingest surfaces only
     "editor.insert_block":          Tier.INTERNAL_API,
     "editor.replace_block":         Tier.INTERNAL_API,

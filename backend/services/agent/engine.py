@@ -398,7 +398,7 @@ async def _stream_loop(
         target_id = args.get("id") or args.get("note_id")
         if target_id and tool != "brain.search_brain":
             try:
-                note_meta = execute_brain_tool(
+                note_meta = await execute_brain_tool(
                     "brain.get_note", args={"id": target_id}, user_id=user_id
                 )
             except Exception:
@@ -432,7 +432,7 @@ async def _stream_loop(
             result = {"content": mcp_result["content"]}
         else:
             try:
-                result = execute_brain_tool(tool, args=args, user_id=user_id)
+                result = await execute_brain_tool(tool, args=args, user_id=user_id)
             except Exception as e:
                 yield _ev({"type": "tool_denied", "id": slot["id"],
                            "tool": tool, "reason": f"execution error: {e}"})

@@ -24,13 +24,13 @@ def test_search_brain_schema_has_query_param():
 
 @patch("services.agent.brain_tools.embed")
 @patch("services.agent.brain_tools.retrieve")
-def test_search_brain_runs_retrieve(mock_retrieve, mock_embed):
+async def test_search_brain_runs_retrieve(mock_retrieve, mock_embed):
     mock_embed.return_value = [0.1, 0.2, 0.3]
     mock_retrieve.return_value = [
         {"id": "n1", "title": "Note 1", "content_text": "x",
          "deep_link": "/brain/n1", "similarity": 0.9}
     ]
-    result = execute_brain_tool(
+    result = await execute_brain_tool(
         "brain.search_brain", args={"query": "chain rule"},
         user_id="u1"
     )
@@ -40,31 +40,31 @@ def test_search_brain_runs_retrieve(mock_retrieve, mock_embed):
 
 
 @patch("services.agent.brain_tools.get_supabase")
-def test_get_note_returns_row(mock_supa):
+async def test_get_note_returns_row(mock_supa):
     mock_table = MagicMock()
     mock_supa.return_value.table.return_value = mock_table
     mock_table.select.return_value.eq.return_value.eq.return_value.single.return_value.execute.return_value.data = {
         "id": "n1", "title": "T", "content": [], "local_only": False,
     }
-    result = execute_brain_tool("brain.get_note", args={"id": "n1"},
-                                user_id="u1")
+    result = await execute_brain_tool("brain.get_note", args={"id": "n1"},
+                                      user_id="u1")
     assert result["id"] == "n1"
     assert result["local_only"] is False
 
 
-def test_unknown_tool_raises():
+async def test_unknown_tool_raises():
     with pytest.raises(ValueError):
-        execute_brain_tool("brain.nope", args={}, user_id="u1")
+        await execute_brain_tool("brain.nope", args={}, user_id="u1")
 
 
 @patch("services.agent.brain_tools.get_supabase")
-def test_create_note_inserts_row(mock_supa):
+async def test_create_note_inserts_row(mock_supa):
     mock_table = MagicMock()
     mock_supa.return_value.table.return_value = mock_table
     mock_table.insert.return_value.execute.return_value.data = [
         {"id": "new_id", "title": "T"}
     ]
-    result = execute_brain_tool(
+    result = await execute_brain_tool(
         "brain.create_note",
         args={"title": "T", "blocks": []},
         user_id="u1",
@@ -77,13 +77,13 @@ def test_create_note_inserts_row(mock_supa):
 
 
 @patch("services.agent.brain_tools.get_supabase")
-def test_update_note_uses_patch_semantics(mock_supa):
+async def test_update_note_uses_patch_semantics(mock_supa):
     mock_table = MagicMock()
     mock_supa.return_value.table.return_value = mock_table
     mock_table.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
         {"id": "n1"}
     ]
-    execute_brain_tool(
+    await execute_brain_tool(
         "brain.update_note",
         args={"id": "n1", "blocks": [{"type": "paragraph"}]},
         user_id="u1",
@@ -92,13 +92,13 @@ def test_update_note_uses_patch_semantics(mock_supa):
 
 
 @patch("services.agent.brain_tools.get_supabase")
-def test_set_mastery_updates_status(mock_supa):
+async def test_set_mastery_updates_status(mock_supa):
     mock_table = MagicMock()
     mock_supa.return_value.table.return_value = mock_table
     mock_table.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
         {"id": "n1"}
     ]
-    execute_brain_tool(
+    await execute_brain_tool(
         "brain.set_mastery",
         args={"id": "n1", "status": "mastered"},
         user_id="u1",
@@ -108,13 +108,13 @@ def test_set_mastery_updates_status(mock_supa):
 
 
 @patch("services.agent.brain_tools.get_supabase")
-def test_delete_note_soft_deletes(mock_supa):
+async def test_delete_note_soft_deletes(mock_supa):
     mock_table = MagicMock()
     mock_supa.return_value.table.return_value = mock_table
     mock_table.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
         {"id": "n1"}
     ]
-    result = execute_brain_tool(
+    result = await execute_brain_tool(
         "brain.delete_note",
         args={"id": "n1", "confirm": True},
         user_id="u1",

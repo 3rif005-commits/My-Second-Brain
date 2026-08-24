@@ -100,6 +100,94 @@ async def list_tools() -> list[Tool]:
             ),
             inputSchema={"type": "object", "properties": {}, "required": []},
         ),
+        # --- Database tools (Milestone 14, task 49) --- mirror
+        # services/agent/brain_tools.py's 5 database tools via
+        # routers/internal.py's /internal/db/* endpoints (this server has no
+        # asyncpg access of its own, only HTTP + the internal key).
+        Tool(
+            name="list_databases",
+            description=(
+                "List every database (Notion-style table) in the user's Second Brain, "
+                "each with its data source id. Use to discover which databases exist "
+                "before querying or writing rows."
+            ),
+            inputSchema={"type": "object", "properties": {}, "required": []},
+        ),
+        Tool(
+            name="get_database_schema",
+            description=(
+                "Fetch a database's data source, properties, and views by database id. "
+                "Use this before query_database/create_row/update_row to learn the data "
+                "source id and each property's key/type (and, for select/status, its "
+                "valid option ids)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "database_id": {
+                        "type": "string",
+                        "description": "Database UUID (or the well-known 'all-notes' id)",
+                    },
+                },
+                "required": ["database_id"],
+            },
+        ),
+        Tool(
+            name="query_database",
+            description=(
+                "Query a data source's rows with an optional filter/sort AST -- the same "
+                "shape the Second Brain UI sends. A condition is "
+                '{"type":"condition","property":<key>,"operator":<op>,"value":...}; a '
+                'group is {"type":"group","op":"and"|"or","children":[...]}. Only ever '
+                "returns rows the authenticated user owns."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_source_id": {"type": "string"},
+                    "filter": {"type": "object", "description": "Filter AST (condition/group)"},
+                    "sorts": {"type": "array", "items": {"type": "object"}},
+                    "page_size": {"type": "integer", "description": "Max rows (default 50)", "default": 50},
+                    "offset": {"type": "integer", "default": 0},
+                },
+                "required": ["data_source_id"],
+            },
+        ),
+        Tool(
+            name="create_row",
+            description=(
+                "Create a new row on a data source. `properties` is a flat "
+                '{property_key: raw_value} map (e.g. {"XJnFZop1": "My title"}) -- never '
+                "the internal wrapper shape. Look up property keys/types with "
+                "get_database_schema first."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_source_id": {"type": "string"},
+                    "properties": {"type": "object"},
+                },
+                "required": ["data_source_id"],
+            },
+        ),
+        Tool(
+            name="update_row",
+            description=(
+                "Update a single property's value on an existing row (note_id is the "
+                "row's id, e.g. from query_database). `value` is the raw value (not the "
+                "internal wrapper), or null to clear the property."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "data_source_id": {"type": "string"},
+                    "note_id": {"type": "string"},
+                    "property_key": {"type": "string"},
+                    "value": {"description": "Raw value, or null to clear"},
+                },
+                "required": ["data_source_id", "note_id", "property_key"],
+            },
+        ),
     ]
 
 
@@ -174,6 +262,110 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     f"| mastery: {n.get('mastery_status', 'not_started')}"
                 )
             return [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "list_databases":
+            resp = await client.post(
+                "/internal/db/list_databases",
+                headers=headers,
+                json={"user_id": USER_ID},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            databases = data.get("databases", [])
+            if not databases:
+                return [TextContent(type="text", text="No databases found in Second Brain.")]
+            lines = [f"Second Brain — {len(databases)} database(s):\n"]
+            for entry in databases:
+                db = entry.get("database", {})
+                ds = entry.get("data_source", {})
+                lines.append(
+                    f"- **{db.get('title', 'Untitled')}** "
+                    f"(database_id: {db.get('id', '')}, data_source_id: {ds.get('id', '')})"
+                )
+            return [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "get_database_schema":
+            database_id = arguments.get("database_id", "")
+            resp = await client.post(
+                "/internal/db/get_database_schema",
+                headers=headers,
+                json={"database_id": database_id, "user_id": USER_ID},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            db = data.get("database", {})
+            ds = data.get("data_source", {})
+            props = data.get("properties", [])
+            lines = [
+                f"# {db.get('title', 'Untitled')}",
+                f"**data_source_id:** {ds.get('id', '')}\n",
+                "**Properties:**",
+            ]
+            for p in props:
+                lines.append(f"- `{p.get('key')}` — {p.get('name')} ({p.get('type')})")
+            return [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "query_database":
+            payload = {
+                "data_source_id": arguments.get("data_source_id", ""),
+                "user_id": USER_ID,
+                "filter": arguments.get("filter"),
+                "sorts": arguments.get("sorts", []),
+                "page_size": int(arguments.get("page_size", 50)),
+                "offset": int(arguments.get("offset", 0)),
+            }
+            resp = await client.post(
+                "/internal/db/query_database", headers=headers, json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            groups = data.get("groups") or []
+            if groups:
+                lines = [f"Query returned {len(groups)} group(s):\n"]
+                for g in groups:
+                    lines.append(f"- {g.get('label')}: {g.get('row_count')} row(s)")
+                return [TextContent(type="text", text="\n".join(lines))]
+            rows = data.get("rows") or []
+            if not rows:
+                return [TextContent(type="text", text="No rows matched.")]
+            lines = [f"{len(rows)} row(s) matched:\n"]
+            for r in rows:
+                lines.append(f"- {r.get('id', '')}: {r.get('properties', {})}")
+            return [TextContent(type="text", text="\n".join(lines))]
+
+        elif name == "create_row":
+            payload = {
+                "data_source_id": arguments.get("data_source_id", ""),
+                "user_id": USER_ID,
+                "properties": arguments.get("properties", {}),
+            }
+            resp = await client.post(
+                "/internal/db/create_row", headers=headers, json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return [TextContent(
+                type="text",
+                text=f"Row created: {data.get('id', '')}\nProperties: {data.get('properties', {})}",
+            )]
+
+        elif name == "update_row":
+            payload = {
+                "data_source_id": arguments.get("data_source_id", ""),
+                "user_id": USER_ID,
+                "note_id": arguments.get("note_id", ""),
+                "property_key": arguments.get("property_key", ""),
+                "value": arguments.get("value"),
+            }
+            resp = await client.post(
+                "/internal/db/update_row", headers=headers, json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return [TextContent(
+                type="text",
+                text=f"Row updated: {data.get('id', '')}\nProperties: {data.get('properties', {})}",
+            )]
 
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
