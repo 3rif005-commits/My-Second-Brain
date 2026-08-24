@@ -1253,3 +1253,117 @@ async def test_list_databases_excludes_all_notes_and_soft_deleted(client, db_con
     )
     res = await client.get("/db/databases")
     assert db_id not in {e["database"]["id"] for e in res.json()["databases"]}
+
+
+# ===========================================================================
+# Fix 4 (task-50, M14 combined review Important finding) -- `create_row`/
+# `update_row_property` must actually trigger the Task 46 property-preamble
+# reindex. Router-HTTP path (the other of the 2 call sites the brief names
+# explicitly -- `services/agent/brain_tools.py`'s agent-tool path is covered
+# in `test_brain_tools_db.py`). Mocking convention follows
+# `tests/test_indexer.py`'s own `_db()` helper (same per-test-file
+# duplication that file's docstring documents): `get_supabase()` is
+# `index_note`'s only dependency besides the embedder, and MagicMock chains
+# ignore whatever note_id/user_id they're actually filtered on.
+# ===========================================================================
+
+
+def _preamble_fake_supabase(*, ds_id, row_properties, prop_defs, notes_title="Untitled"):
+    from unittest.mock import MagicMock
+
+    tables: dict = {}
+    db = MagicMock()
+    db.table.side_effect = lambda name: tables.setdefault(name, MagicMock())
+
+    notes = tables.setdefault("notes", MagicMock())
+    notes.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
+        "title": notes_title, "content": [],
+    }
+
+    row_props = tables.setdefault("db_row_props", MagicMock())
+    row_props.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
+        "properties": row_properties, "data_source_id": ds_id,
+    }
+
+    properties = tables.setdefault("db_properties", MagicMock())
+    properties.select.return_value.eq.return_value.eq.return_value.order.return_value.execute.return_value.data = (
+        prop_defs
+    )
+
+    tables.setdefault("note_chunks", MagicMock())
+    db.tables = tables
+    return db
+
+
+async def test_update_row_property_triggers_property_preamble_reindex(client, db_conn, test_user):
+    """Fix 4.2: `update_row_property` must call `try_index_note` after
+    `update_row_property_core` succeeds -- editing a property cell is the
+    entire point of spec §12 item 1 ("a query like 'what's blocked on the
+    compiler' can match on property values"), and pre-fix, NOTHING on this
+    path ever called `index_note`. Asserts the exact rendered preamble
+    Task 46 built lands as `note_chunks` chunk 0 for this real row, via the
+    real HTTP PATCH endpoint end-to-end."""
+    from unittest.mock import patch
+
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Notes", "type": "rich_text"}
+        )
+    ).json()
+    row = (await client.post(f"/db/data-sources/{ds_id}/rows")).json()
+    note_id = row["id"]
+
+    fake_db = _preamble_fake_supabase(
+        ds_id=ds_id,
+        row_properties={prop["key"]: {"type": "rich_text", "rich_text": "hello world"}},
+        prop_defs=[{"key": prop["key"], "name": "Notes", "type": "rich_text", "position": 0, "config": {}}],
+    )
+
+    with (
+        patch("services.indexer.get_supabase", return_value=fake_db),
+        patch("services.indexer.embed_batch", side_effect=lambda texts: [[0.0]] * len(texts)),
+        patch("services.indexer.embed", return_value=[0.0]),
+        patch("services.indexer.generate_descriptor", return_value="d"),
+    ):
+        res = await client.patch(
+            f"/db/data-sources/{ds_id}/rows/{note_id}",
+            json={"property_key": prop["key"], "value": {"type": "rich_text", "rich_text": "hello world"}},
+        )
+    assert res.status_code == 200, res.text
+
+    insert_call = fake_db.tables["note_chunks"].insert.call_args
+    assert insert_call is not None, "note_chunks.insert was never called -- index_note was never invoked"
+    rows = insert_call[0][0]
+    assert len(rows) == 1  # no body blocks -- only the preamble chunk
+    assert rows[0]["chunk_index"] == 0
+    assert rows[0]["chunk_text"] == "Notes: hello world"
+    assert rows[0]["block_id"] == "__property_preamble__"
+    assert rows[0]["note_id"] == note_id
+
+
+async def test_update_row_property_succeeds_even_if_indexing_fails(client, db_conn, test_user):
+    """Fix 4's own required regression guard: `try_index_note` is best-
+    effort/non-fatal -- a flaky/down embedder must never turn a successful
+    property write into a 500."""
+    from unittest.mock import patch
+
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Notes", "type": "rich_text"}
+        )
+    ).json()
+    row = (await client.post(f"/db/data-sources/{ds_id}/rows")).json()
+    note_id = row["id"]
+
+    with patch("services.indexer.index_note", side_effect=RuntimeError("embedder down")):
+        res = await client.patch(
+            f"/db/data-sources/{ds_id}/rows/{note_id}",
+            json={"property_key": prop["key"], "value": {"type": "rich_text", "rich_text": "still works"}},
+        )
+
+    assert res.status_code == 200, res.text
+    assert res.json()["properties"][prop["key"]] == {"type": "rich_text", "rich_text": "still works"}

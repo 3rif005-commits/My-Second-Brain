@@ -190,3 +190,34 @@ def index_note(note_id: str, user_id: str) -> bool:
     }).eq("id", note_id).execute()
 
     return True
+
+
+def try_index_note(note_id: str, user_id: str) -> bool:
+    """Best-effort, non-fatal wrapper around `index_note` (task-50, Fix 4).
+
+    Task 46 built the property-preamble chunk logic above correctly, but nothing on any
+    row-write path ever called `index_note()` -- a row created via "+ New row", an agent
+    tool, or CSV import got zero preamble chunks until someone happened to edit its body
+    text, and editing a property cell (the entire point of spec §12 item 1) never
+    refreshed the preamble either. Every row-write call site (`routers/databases.py`'s
+    `create_row`/`update_row_property`, `services/agent/brain_tools.py`'s `_create_row`/
+    `_update_row`, `routers/internal.py`'s `internal_create_row`/`internal_update_row`,
+    `routers/db_import.py`'s per-row import loop) calls this single shared helper instead
+    of repeating the same try/except-log-and-continue block six times.
+
+    Matches `routers/ingest.py`'s own `_try_index_note` convention exactly: wrapped in
+    `try/except Exception`, logs a warning and continues on failure, never raises, never
+    blocks the primary write. `index_note` makes external HTTP calls (the embedding
+    service via `services/embedder.py`) that are slow and network-fallible -- a down/slow
+    embedder must degrade to "row exists but isn't searchable yet by property value"
+    (self-healing next time anyone edits the row's body), never turn a successful row
+    write into a 500.
+    """
+    try:
+        return index_note(note_id, user_id)
+    except Exception:
+        logger.warning(
+            "try_index_note: best-effort property-preamble reindex failed for note %s",
+            note_id, exc_info=True,
+        )
+        return False

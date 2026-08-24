@@ -116,6 +116,7 @@ from services.db.rows import (
 from services.db import templates as templates_service
 from services.db.templates import DuplicateDefaultTemplateError, TemplateConfigError
 from services.db.views import sweep_property_from_views
+from services.indexer import try_index_note
 
 router = APIRouter(prefix="/db", tags=["databases"])
 
@@ -1220,9 +1221,16 @@ async def create_row(
         # connection one line above (no request boundary in between for a
         # concurrent delete to land in).
         assert result is not None
+        try_index_note(result.id, user_id)
         return result
 
-    return await create_row_core(conn, user_id, data_source_id)
+    result = await create_row_core(conn, user_id, data_source_id)
+    # Fix 4.1 (task-50, M14 combined review): best-effort, non-fatal property-preamble
+    # refresh -- see `services/indexer.py`'s `try_index_note` docstring. Without this,
+    # a row created via "+ New row" (this exact path) never got any preamble chunks
+    # until someone happened to edit its body text.
+    try_index_note(result.id, user_id)
+    return result
 
 
 @router.patch("/data-sources/{data_source_id}/rows/{note_id}", response_model=RowResponse)
@@ -1286,7 +1294,7 @@ async def update_row_property(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "data source not found")
 
     try:
-        return await update_row_property_core(
+        result = await update_row_property_core(
             conn, user_id, data_source_id, note_id, body.property_key, body.value
         )
     except PropertyNotFoundError as exc:
@@ -1306,6 +1314,14 @@ async def update_row_property(
         # `cascade_dependency_shift`) -- same "never a 500" bar the
         # pre-extraction inline handler held.
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    # Fix 4.2 (task-50, M14 combined review): best-effort, non-fatal property-preamble
+    # refresh -- see `services/indexer.py`'s `try_index_note` docstring. Editing a
+    # property cell is the entire point of spec §12 item 1 ("a query like 'what's
+    # blocked on the compiler' can match on property values"), so this is the single
+    # most important call site of the 6 this fix touches.
+    try_index_note(result.id, user_id)
+    return result
 
 
 @router.post(

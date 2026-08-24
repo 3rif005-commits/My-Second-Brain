@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -38,8 +39,17 @@ from services.db.connection import get_conn
 from services.db.keys import mint_key
 from services.db.properties.choice import SelectConfig, SelectOption
 from services.db.rows import create_row_core
+from services.indexer import try_index_note
 
 router = APIRouter(prefix="/db/import", tags=["db-import"])
+
+# Fix 7 (task-50, M14 combined review): `raw = await file.read()` had no bound at all --
+# an unbounded upload is a trivial memory-exhaustion vector before any parsing even
+# starts. 10 MiB is a generous cap for what this endpoint is actually for (a single CSV
+# database export/import, not a bulk-data pipe) -- picked as a round number well above
+# any real spreadsheet export this app would plausibly see, not derived from a specific
+# measurement.
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 # ---------------------------------------------------------------------------
@@ -92,9 +102,19 @@ def _parse_number(value: str) -> int | float | None:
     except ValueError:
         pass
     try:
-        return float(value)
+        result = float(value)
     except ValueError:
         return None
+    # Fix 2.1 (task-50): Python's `float()` accepts "nan"/"infinity"/"-inf" (case-
+    # insensitive) as valid floats, but Postgres `jsonb` rejects the non-standard
+    # `NaN`/`Infinity` literals `json.dumps` emits for them -- a column of e.g. "NaN"
+    # sailed through this "is it a number?" check, then 500ed with
+    # `asyncpg.exceptions.InvalidTextRepresentationError` on the write. Same "this
+    # column isn't actually numbers" signal (`None`) this function already uses for a
+    # genuinely non-numeric cell.
+    if not math.isfinite(result):
+        return None
+    return result
 
 
 def _ordered_unique(values: list[str]) -> list[str]:
@@ -192,7 +212,16 @@ def _wrap_value(prop_type: str, cell: str, value_to_option_id: dict[str, str] | 
     if prop_type == "email":
         return {"type": "email", "email": cell}
     if prop_type == "select":
-        assert value_to_option_id is not None
+        if value_to_option_id is None:
+            # Fix 6 (task-50): `assert` vanishes under `python -O`, turning this
+            # controlled failure into a confusing `KeyError` two lines below instead --
+            # same "not an assert, load-bearing guard" convention
+            # `services/db/properties/columns.py` already uses for exactly this
+            # situation.
+            raise RuntimeError(
+                "select column has no value_to_option_id map -- infer_column must "
+                "populate it for every select-inferred column"
+            )
         return {"type": "select", "select": value_to_option_id[cell]}
     if prop_type == "title":
         return {"type": "title", "title": cell}
@@ -246,6 +275,9 @@ async def import_csv(
     leaving a half-imported database behind on, e.g., a single malformed row.
     """
     raw = await file.read()
+    # Fix 7 (task-50): reject an oversized upload before any parsing starts at all.
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "CSV file is too large (max 10 MB)")
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
@@ -257,20 +289,79 @@ async def import_csv(
             "CSV file is not valid UTF-8 -- re-export the file as UTF-8 and try again.",
         ) from exc
 
+    # Fix 2.2 (task-50): a NUL byte anywhere in the file reaches Postgres as a cell
+    # value and 500s with `asyncpg.exceptions.CharacterNotInRepertoireError` --
+    # rejecting the whole file matches the existing "reject the whole file, don't try
+    # to sanitize per-cell" posture of the UTF-8 check right above.
+    if "\x00" in text:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "CSV file contains a null byte and cannot be imported"
+        )
+
     title = (database_title or "").strip()
     if not title:
         title = Path(file.filename).stem if file.filename else "Untitled"
 
-    reader = csv.DictReader(io.StringIO(text))
-    fieldnames = list(reader.fieldnames or [])
-    if not fieldnames:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "CSV file has no header row.")
-    csv_rows = list(reader)
+    # Fix 2.3 (task-50): both `reader.fieldnames` (a lazy property that parses the
+    # first line on first access) and `list(reader)` can raise `csv.Error` for a
+    # sufficiently malformed file (e.g. `_csv.Error: field larger than field limit`,
+    # raised mid-loop once a single field crosses the csv module's default 128 KiB
+    # limit) -- both wrapped here so neither surfaces as a bare 500.
+    try:
+        reader = csv.DictReader(io.StringIO(text))
+        fieldnames = list(reader.fieldnames or [])
+        if not fieldnames:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "CSV file has no header row.")
+        csv_rows = list(reader)
+    except csv.Error as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"CSV file could not be parsed: {exc}"
+        ) from exc
+
+    # Fix 3 (task-50): `csv.DictReader` collapses a duplicate-named column when
+    # building each row's dict (the last occurrence's value wins for every
+    # occurrence's key, since `dict(zip(fieldnames, row_values))` is exactly what
+    # `DictReader` does internally) -- a duplicate `Name` header silently discards the
+    # title column's real data, with no error at all. Detected here, before any
+    # property/row processing (and before `create_database` opens the transaction
+    # below, so no database/rows are ever created for a rejected file) and turned into
+    # a clear, actionable 400 instead of Task 47's reviewed-and-accepted "no merge/
+    # exact-header-matching flow" scope note papering over silent data loss.
+    if len(set(fieldnames)) != len(fieldnames):
+        seen: set[str] = set()
+        duplicate = next(h for h in fieldnames if h in seen or seen.add(h))
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"CSV headers must be unique -- found a duplicate: '{duplicate}'",
+        )
 
     title_idx = next(
         (i for i, h in enumerate(fieldnames) if _is_title_header(h, title)), 0
     )
 
+    # Fix 2.4 (task-50): any malformed-input class that only surfaces once a cell
+    # value actually reaches Postgres (the NaN/Infinity case Fix 2.1 above closes is
+    # one instance of this general class; there may be others) is converted here to a
+    # clean 400 rather than a bare 500. The transaction itself already rolls back
+    # correctly on any exception propagating out of `async with conn.transaction():`
+    # (asyncpg/FastAPI's own behavior, unchanged by this try/except) -- this only
+    # changes what *response* the caller sees once that rollback has already happened.
+    try:
+        return await _run_import(conn, user_id, title, fieldnames, csv_rows, title_idx)
+    except asyncpg.PostgresError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, f"CSV import failed: {exc}"
+        ) from exc
+
+
+async def _run_import(
+    conn: asyncpg.Connection,
+    user_id: str,
+    title: str,
+    fieldnames: list[str],
+    csv_rows: list[dict[str, str | None]],
+    title_idx: int,
+) -> CsvImportResponse:
     async with conn.transaction():
         created = await create_database(DatabaseCreate(title=title), user_id=user_id, conn=conn)
         data_source_id = created.data_source.id
@@ -320,6 +411,7 @@ async def import_csv(
             )
 
         row_count = 0
+        created_note_ids: list[str] = []
         for row in csv_rows:
             properties: dict[str, Any] = {}
             for header in fieldnames:
@@ -328,7 +420,15 @@ async def import_csv(
                     # Spec §3.3: "Absent key ≡ empty" -- never a bare scalar. Empty
                     # cells never veto a type; they just contribute no wrapper.
                     continue
-                assert cell is not None
+                if cell is None:
+                    # Fix 6 (task-50): `assert` vanishes under `python -O`, turning this
+                    # controlled failure into a confusing `AttributeError` on the
+                    # `.strip()` call two lines below instead -- same convention
+                    # `services/db/properties/columns.py` uses for exactly this
+                    # situation. `_is_empty_cell` above already excludes `None`, so this
+                    # is unreachable in practice; it documents the invariant rather than
+                    # leaving it implicit.
+                    raise RuntimeError(f"non-empty cell for header {header!r} was None")
                 key = header_to_key[header]
                 ptype = header_to_type[header]
                 properties[key] = _wrap_value(ptype, cell.strip(), header_to_value_map.get(header))
@@ -336,9 +436,23 @@ async def import_csv(
             # very likely not what a user importing hundreds of rows wants -- a
             # deliberate choice, distinct from the ordinary "+ New row" button, which
             # keeps trigger_automations=True (create_row_core's existing default).
-            await create_row_core(
+            result = await create_row_core(
                 conn, user_id, data_source_id, properties=properties, trigger_automations=False
             )
+            created_note_ids.append(result.id)
             row_count += 1
+
+    # Fix 4.6 (task-50): index_note() is called AFTER the transaction above has
+    # committed, never inside it -- index_note makes external HTTP calls (the embedding
+    # service) which are slow and network-fallible, and doing that inside the
+    # transaction would hold the asyncpg connection/transaction open for the whole
+    # import's duration, risking a slow embedder turning an otherwise-fine bulk import
+    # into a held-open DB transaction. A slow/down embedder now only degrades this
+    # batch to "rows exist but aren't searchable yet by property value" (self-healing
+    # next time anyone edits a row's body), rather than blocking or failing the import.
+    # Each row's call is independently best-effort (`try_index_note` never raises) so
+    # one row's indexing failure can't stop the rest of the batch from being indexed.
+    for note_id in created_note_ids:
+        try_index_note(note_id, user_id)
 
     return CsvImportResponse(database_id=created.database.id, row_count=row_count, columns=column_reports)

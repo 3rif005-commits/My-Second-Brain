@@ -23,6 +23,7 @@ from services.db.properties.base import REGISTRY
 from services.db.properties.choice import SelectOption, StatusOption
 from services.db.relations import RelationError
 from services.embedder import embed
+from services.indexer import try_index_note
 from services.retriever import retrieve
 
 
@@ -503,6 +504,71 @@ def require_uuid(value: str, what: str) -> None:
 # own guard.
 _EXPLICIT_READ_ONLY_TYPES = {"created_by", "last_edited_by"}
 
+# Fix round (task-50, M14 combined review Critical finding): 10 of the 24
+# real property types have no dedicated descriptor in `_RICH_OVERRIDES`
+# (properties/base.py) and are not in `_EXPLICIT_READ_ONLY_TYPES` above, so
+# they fall through to `_GenericProperty.coerce_write`, which is a bare
+# `return raw` -- no validation at all. Two concrete, reproduced failure
+# modes this closes: (1) `checkbox` accepting e.g. `"maybe"`, stored as
+# `{"type": "checkbox", "checkbox": "maybe"}`, then 500ing the FIRST query
+# that filters/sorts on it (`properties/base.py`'s `_VALUE_SHAPES` does an
+# unguarded `->> 'checkbox' ::boolean` cast -- see that module's own
+# comment on the tradeoff); (2) a non-str `title` (e.g. `12345`) reaching
+# `create_row_core`/`update_row_property_core` and crashing with
+# `asyncpg.exceptions.DataError` when bound to a `text` column, unhandled
+# by `/internal/db/create_row`/`update_row` (routers/internal.py has no
+# catch-all the way `engine.py`'s agent loop does).
+#
+# `None` is deliberately exempt from every check below -- it is the
+# universal "no-op/absent value" case every rich descriptor's own
+# `coerce_write(None)` already honours (see e.g. `scalar.py`'s `Number`/
+# `UniqueId`), and `_create_row` (below) calls `coerce_property_write` even
+# for a key whose value is explicitly `None`, so preserving that pass-
+# through here (rather than rejecting it) keeps existing create-with-null
+# behavior unchanged -- only a real, non-None, wrong-shaped value is new
+# territory.
+_CHECKBOX_TYPE = "checkbox"
+_STR_TYPES = {"title", "rich_text", "url", "email", "phone_number"}
+_LIST_TYPES = {"people", "files"}
+_DICT_TYPES = {"place", "verification"}
+
+
+def _check_generic_property_shape(prop_type: str, raw: Any) -> None:
+    """Real type-checks for the 10 types named above. Checked BEFORE
+    dispatch to `REGISTRY[type].coerce_write` so a bad shape never reaches
+    `_GenericProperty`'s no-op pass-through, regardless of which caller
+    (`_create_row`, `_update_row`, or the `/internal/db/*` mirror in
+    `routers/internal.py`, which all funnel through `coerce_property_write`)
+    is asking."""
+    if raw is None:
+        return
+    if prop_type == _CHECKBOX_TYPE:
+        # `isinstance(True, int)` is `True` in Python -- bool must be
+        # checked as its own case, not folded into an int-exclusion check
+        # meant for something else. There is no int-exclusion check here
+        # (people/files check `list`, not `int`), but the explicit
+        # `isinstance(raw, bool)` (not e.g. `type(raw) is bool`) is still
+        # the correct, first check for this type on its own terms.
+        if not isinstance(raw, bool):
+            raise ValueError(
+                f"checkbox value must be a bool, got: {type(raw).__name__}"
+            )
+    elif prop_type in _STR_TYPES:
+        if not isinstance(raw, str):
+            raise ValueError(
+                f"{prop_type} value must be a string, got: {type(raw).__name__}"
+            )
+    elif prop_type in _LIST_TYPES:
+        if not isinstance(raw, list):
+            raise ValueError(
+                f"{prop_type} value must be a list, got: {type(raw).__name__}"
+            )
+    elif prop_type in _DICT_TYPES:
+        if not isinstance(raw, dict):
+            raise ValueError(
+                f"{prop_type} value must be an object, got: {type(raw).__name__}"
+            )
+
 
 def coerce_property_write(prop_type: str, config: dict[str, Any] | None, raw: Any) -> Any:
     """`raw` (a flat, unwrapped value an LLM would naturally emit, e.g. `42`
@@ -524,6 +590,7 @@ def coerce_property_write(prop_type: str, config: dict[str, Any] | None, raw: An
     prop_impl = REGISTRY.get(prop_type)
     if prop_impl is None:
         raise ValueError(f"unknown property type: {prop_type!r}")
+    _check_generic_property_shape(prop_type, raw)
     config = config or {}
     if prop_type == "select":
         options = tuple(SelectOption(**o) for o in config.get("options", []))
@@ -648,6 +715,9 @@ async def _create_row(args: dict[str, Any], user_id: str) -> dict[str, Any]:
         result = await rows_service.create_row_core(
             conn, user_id, data_source_id, properties=wrapped
         )
+    # Fix 4.3 (task-50, M14 combined review): best-effort, non-fatal property-preamble
+    # refresh -- see `services/indexer.py`'s `try_index_note` docstring.
+    try_index_note(result.id, user_id)
     return result.model_dump(mode="json")
 
 
@@ -703,4 +773,7 @@ async def _update_row(args: dict[str, Any], user_id: str) -> dict[str, Any]:
             RelationError,
         ) as exc:
             raise ValueError(str(exc)) from exc
+    # Fix 4.4 (task-50, M14 combined review): best-effort, non-fatal property-preamble
+    # refresh -- see `services/indexer.py`'s `try_index_note` docstring.
+    try_index_note(result.id, user_id)
     return result.model_dump(mode="json")

@@ -420,3 +420,308 @@ async def test_update_row_rejects_unknown_property_key(patched_pool, db_conn, te
             },
             user_id=test_user,
         )
+
+
+# ===========================================================================
+# Fix round (task-50, M14 combined review Critical finding) -- 10 of 24
+# property types had NO write-side validation at all (`_GenericProperty.
+# coerce_write` is a bare `return raw`). Each case below asserts the bad
+# value is rejected with a clear `ValueError` BEFORE reaching asyncpg (i.e.
+# the row is never created), and that no row was actually written.
+# ===========================================================================
+
+
+async def test_create_row_rejects_a_non_bool_checkbox_value(patched_pool, db_conn, test_user):
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "chk1", "Done", "checkbox")
+
+    with pytest.raises(ValueError, match="checkbox"):
+        await execute_brain_tool(
+            "brain.create_row",
+            args={"data_source_id": ds_id, "properties": {"chk1": "maybe"}},
+            user_id=test_user,
+        )
+
+    count = await db_conn.fetchval(
+        "SELECT count(*) FROM db_row_props WHERE data_source_id = $1", uuid.UUID(ds_id)
+    )
+    assert count == 0
+
+
+async def test_create_row_rejects_an_int_checkbox_value(patched_pool, db_conn, test_user):
+    """`1`/`0` are exactly what an LLM would guess for a boolean -- and
+    `isinstance(1, bool)` is `False` (the reverse of the bool-is-a-subclass-
+    of-int trap), so this specifically exercises the "reject anything that
+    isn't literally a bool" requirement, not just "reject strings"."""
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "chk1", "Done", "checkbox")
+
+    with pytest.raises(ValueError, match="checkbox"):
+        await execute_brain_tool(
+            "brain.create_row",
+            args={"data_source_id": ds_id, "properties": {"chk1": 1}},
+            user_id=test_user,
+        )
+
+
+async def test_create_row_rejects_a_non_str_title(patched_pool, db_conn, test_user):
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "ttl1", "Name", "title")
+
+    with pytest.raises(ValueError, match="title"):
+        await execute_brain_tool(
+            "brain.create_row",
+            args={"data_source_id": ds_id, "properties": {"ttl1": 12345}},
+            user_id=test_user,
+        )
+
+    count = await db_conn.fetchval(
+        "SELECT count(*) FROM db_row_props WHERE data_source_id = $1", uuid.UUID(ds_id)
+    )
+    assert count == 0
+
+
+async def test_create_row_rejects_a_dict_title(patched_pool, db_conn, test_user):
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "ttl1", "Name", "title")
+
+    with pytest.raises(ValueError, match="title"):
+        await execute_brain_tool(
+            "brain.create_row",
+            args={"data_source_id": ds_id, "properties": {"ttl1": {"nested": "dict"}}},
+            user_id=test_user,
+        )
+
+
+async def test_create_row_rejects_a_non_list_people_value(patched_pool, db_conn, test_user):
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "ppl1", "Assignees", "people")
+
+    with pytest.raises(ValueError, match="people"):
+        await execute_brain_tool(
+            "brain.create_row",
+            args={"data_source_id": ds_id, "properties": {"ppl1": "not-a-list"}},
+            user_id=test_user,
+        )
+
+
+async def test_create_row_rejects_a_non_list_files_value(patched_pool, db_conn, test_user):
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "fil1", "Attachments", "files")
+
+    with pytest.raises(ValueError, match="files"):
+        await execute_brain_tool(
+            "brain.create_row",
+            args={"data_source_id": ds_id, "properties": {"fil1": "not-a-list"}},
+            user_id=test_user,
+        )
+
+
+async def test_create_row_rejects_a_non_dict_place_value(patched_pool, db_conn, test_user):
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "plc1", "Location", "place")
+
+    with pytest.raises(ValueError, match="place"):
+        await execute_brain_tool(
+            "brain.create_row",
+            args={"data_source_id": ds_id, "properties": {"plc1": "not-a-dict"}},
+            user_id=test_user,
+        )
+
+
+async def test_create_row_rejects_a_non_dict_verification_value(patched_pool, db_conn, test_user):
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "ver1", "Verified", "verification")
+
+    with pytest.raises(ValueError, match="verification"):
+        await execute_brain_tool(
+            "brain.create_row",
+            args={"data_source_id": ds_id, "properties": {"ver1": 42}},
+            user_id=test_user,
+        )
+
+
+async def test_create_row_still_accepts_none_for_a_previously_unvalidated_type(
+    patched_pool, db_conn, test_user
+):
+    """The new checks must not reject the pre-existing `None` pass-through
+    convention (`_create_row` calls `coerce_property_write` even for a key
+    whose value is explicitly `None` -- every rich descriptor's own
+    `coerce_write(None)` already treats this as a no-op, not an error)."""
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "chk1", "Done", "checkbox")
+    await _insert_property(db_conn, test_user, ds_id, "ttl1", "Name", "title")
+
+    result = await execute_brain_tool(
+        "brain.create_row",
+        args={"data_source_id": ds_id, "properties": {"chk1": None, "ttl1": None}},
+        user_id=test_user,
+    )
+    assert result["properties"]["chk1"] == {"type": "checkbox", "checkbox": None}
+    assert result["properties"]["ttl1"] == {"type": "title", "title": None}
+
+
+async def test_update_row_rejects_a_non_bool_checkbox_value(patched_pool, db_conn, test_user):
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "chk1", "Done", "checkbox")
+    row_id = await _make_row(db_conn, test_user, ds_id)
+
+    with pytest.raises(ValueError, match="checkbox"):
+        await execute_brain_tool(
+            "brain.update_row",
+            args={
+                "data_source_id": ds_id, "note_id": row_id,
+                "property_key": "chk1", "value": "yes",
+            },
+            user_id=test_user,
+        )
+
+    row = await db_conn.fetchrow(
+        "SELECT properties FROM db_row_props WHERE note_id = $1", uuid.UUID(row_id)
+    )
+    assert "chk1" not in (row["properties"] or {})
+
+
+async def test_checkbox_mutation_check_reproduces_the_reviewed_asyncpg_crash(db_conn):
+    """Mutation test (task-50, Critical fix): temporarily simulate the
+    pre-fix `_GenericProperty.coerce_write` behaviour (`return raw`, no
+    validation at all) for `checkbox` and confirm a bad value actually
+    reaches asyncpg and crashes with the exact reviewed error class
+    (`asyncpg.exceptions.InvalidTextRepresentationError`), not just "the
+    test fails" -- proving `_check_generic_property_shape` is genuinely the
+    thing standing between an LLM's `"maybe"` and a broken row's JSONB, not
+    a coincidentally-passing assertion."""
+    import asyncpg
+
+    from services.agent import brain_tools
+    from services.db.properties.base import REGISTRY
+
+    # Bypass `_check_generic_property_shape` entirely -- exactly what the pre-fix
+    # code path did -- and let the malformed value reach the generic `coerce_write`,
+    # then write it straight into a real `jsonb` column and read it back cast to
+    # `::boolean`, the same expression `properties/base.py`'s
+    # `_VALUE_SHAPES["checkbox"]` compiles for a filter/sort.
+    raw = "maybe"
+    coerced = REGISTRY["checkbox"].coerce_write(raw)  # _GenericProperty: `return raw`
+    assert coerced == "maybe"  # confirms there really is no validation here
+
+    await db_conn.execute("CREATE TEMP TABLE mutation_check (properties jsonb)")
+    # `db_conn` has the same jsonb codec the production pool registers
+    # (`services/db/connection.py`'s `_init_connection`) active -- a native
+    # Python dict, not a pre-serialized JSON string, is what a `$1::jsonb`
+    # bind expects here (the codec's own `encoder=json.dumps` runs on it).
+    await db_conn.execute(
+        "INSERT INTO mutation_check (properties) VALUES ($1::jsonb)",
+        {"type": "checkbox", "checkbox": "maybe"},
+    )
+    with pytest.raises(asyncpg.exceptions.InvalidTextRepresentationError):
+        # The exact `->> 'checkbox' ::boolean` cast `_GenericProperty._value_sql`
+        # compiles for a real filter/sort on this column.
+        await db_conn.fetchval(
+            "SELECT (properties ->> 'checkbox')::boolean FROM mutation_check"
+        )
+
+    # And confirm the real fix (still in place) rejects it long before any of the
+    # above -- `coerce_property_write` (not the raw REGISTRY descriptor) is what
+    # every real write call site actually calls.
+    with pytest.raises(ValueError, match="checkbox"):
+        brain_tools.coerce_property_write("checkbox", {}, "maybe")
+
+
+# ===========================================================================
+# Fix 4 (task-50, M14 combined review Important finding) -- brain.create_row
+# must actually trigger the Task 46 property-preamble reindex, an agent-tool
+# call site the brief names explicitly. Mocking convention follows
+# `tests/test_indexer.py`'s own `_db()`/`_patched()` helpers (same per-test-
+# file duplication that file's own docstring documents, rather than a
+# shared cross-file import) -- `get_supabase()` is `index_note`'s only
+# dependency besides the embedder, and MagicMock chains ignore whatever
+# note_id/user_id they're actually filtered on, so the fake table data can
+# be wired up BEFORE the real note_id is known (it's server-minted inside
+# `create_row_core`, which runs before `try_index_note` is even called).
+# ===========================================================================
+
+
+def _preamble_fake_supabase(*, ds_id, row_properties, prop_defs, notes_title="Untitled"):
+    tables: dict = {}
+    db = MagicMock()
+    db.table.side_effect = lambda name: tables.setdefault(name, MagicMock())
+
+    notes = tables.setdefault("notes", MagicMock())
+    notes.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
+        "title": notes_title, "content": [],
+    }
+
+    row_props = tables.setdefault("db_row_props", MagicMock())
+    row_props.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
+        "properties": row_properties, "data_source_id": ds_id,
+    }
+
+    properties = tables.setdefault("db_properties", MagicMock())
+    properties.select.return_value.eq.return_value.eq.return_value.order.return_value.execute.return_value.data = (
+        prop_defs
+    )
+
+    tables.setdefault("note_chunks", MagicMock())
+    db.tables = tables
+    return db
+
+
+def _inserted_preamble_rows(db) -> list[dict]:
+    insert_call = db.tables["note_chunks"].insert.call_args
+    assert insert_call is not None, "note_chunks.insert was never called -- index_note was never invoked"
+    return insert_call[0][0]
+
+
+async def test_create_row_triggers_property_preamble_reindex(patched_pool, db_conn, test_user):
+    """Fix 4.3: `_create_row` must call `try_index_note` after
+    `create_row_core` succeeds. Task 46's own preamble-rendering logic is
+    proven correct in `test_indexer.py` already -- this test's whole job is
+    proving the call site exists at all (it didn't, pre-fix: nothing on any
+    row-write path ever called `index_note`), by asserting the exact
+    rendered preamble Task 46 built lands as `note_chunks` chunk 0 for the
+    real note id `brain.create_row` just returned."""
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "notekey", "Notes", "rich_text")
+
+    fake_db = _preamble_fake_supabase(
+        ds_id=ds_id,
+        row_properties={"notekey": {"type": "rich_text", "rich_text": "hello from agent"}},
+        prop_defs=[{"key": "notekey", "name": "Notes", "type": "rich_text", "position": 0, "config": {}}],
+    )
+
+    with (
+        patch("services.indexer.get_supabase", return_value=fake_db),
+        patch("services.indexer.embed_batch", side_effect=lambda texts: [[0.0]] * len(texts)),
+        patch("services.indexer.embed", return_value=[0.0]),
+        patch("services.indexer.generate_descriptor", return_value="d"),
+    ):
+        result = await execute_brain_tool(
+            "brain.create_row",
+            args={"data_source_id": ds_id, "properties": {"notekey": "hello from agent"}},
+            user_id=test_user,
+        )
+
+    rows = _inserted_preamble_rows(fake_db)
+    assert len(rows) == 1  # no body blocks -- only the preamble chunk
+    assert rows[0]["chunk_index"] == 0
+    assert rows[0]["chunk_text"] == "Notes: hello from agent"
+    assert rows[0]["block_id"] == "__property_preamble__"
+    assert rows[0]["note_id"] == result["id"]
+
+
+async def test_create_row_succeeds_even_if_indexing_fails(patched_pool, db_conn, test_user):
+    """Fix 4's own required regression guard: `try_index_note` is best-
+    effort/non-fatal -- a flaky/down embedder must never turn a successful
+    row write into a failed tool call."""
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "notekey", "Notes", "rich_text")
+
+    with patch("services.indexer.index_note", side_effect=RuntimeError("embedder down")):
+        result = await execute_brain_tool(
+            "brain.create_row",
+            args={"data_source_id": ds_id, "properties": {"notekey": "still works"}},
+            user_id=test_user,
+        )
+
+    assert result["properties"]["notekey"] == {"type": "rich_text", "rich_text": "still works"}

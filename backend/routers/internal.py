@@ -16,7 +16,7 @@ from services.db import rows as rows_service
 from services.db.connection import get_pool
 from services.db.relations import RelationError
 from services.embedder import embed
-from services.indexer import index_note
+from services.indexer import index_note, try_index_note
 from services.retriever import retrieve
 
 logger = logging.getLogger(__name__)
@@ -283,6 +283,9 @@ async def internal_create_row(body: CreateRowRequest, x_internal_key: str = Head
         result = await rows_service.create_row_core(
             conn, body.user_id, body.data_source_id, properties=wrapped
         )
+    # Fix 4.5 (task-50, M14 combined review): best-effort, non-fatal property-preamble
+    # refresh -- see `services/indexer.py`'s `try_index_note` docstring.
+    try_index_note(result.id, body.user_id)
     return result.model_dump(mode="json")
 
 
@@ -345,4 +348,7 @@ async def internal_update_row(body: UpdateRowRequest, x_internal_key: str = Head
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
         except rows_service.RowPropertyValueError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    # Fix 4.5 (task-50, M14 combined review): best-effort, non-fatal property-preamble
+    # refresh -- see `services/indexer.py`'s `try_index_note` docstring.
+    try_index_note(result.id, body.user_id)
     return result.model_dump(mode="json")

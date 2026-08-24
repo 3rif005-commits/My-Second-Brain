@@ -10,6 +10,8 @@ convention as every other `test_db_*.py` file. NEVER touches
 """
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import httpx
 import pytest_asyncio
 
@@ -208,6 +210,163 @@ async def test_csv_with_no_header_row_returns_400(client):
         files={"file": ("empty.csv", b"", "text/csv")},
     )
     assert res.status_code == 400
+
+
+# ===========================================================================
+# Fix round (task-50, M14 combined review) -- 4 concrete malformed inputs
+# that previously 500ed instead of 400ing.
+# ===========================================================================
+
+
+async def test_nan_infinity_column_never_reaches_postgres_as_a_number(client):
+    """Fix 2.1: pre-fix, `_parse_number("NaN")` returned Python's `float('nan')` (a
+    "successful" parse), so a column mixing ordinary numbers with "NaN"/"Infinity"/
+    "-inf" was still classified `number`, and the eventual JSONB write 500ed with
+    `asyncpg.exceptions.InvalidTextRepresentationError` (Postgres rejects `NaN`/
+    `Infinity`, the non-standard literals `json.dumps` emits for a Python float that
+    isn't finite). Post-fix, `_parse_number` returns `None` for these tokens -- the
+    SAME "not actually a number" signal it already uses for a genuinely non-numeric
+    cell -- so the column no longer satisfies `infer_column`'s `all(...)` check and
+    falls back to a type that never crashes (proving the crash-inducing
+    misclassification is gone, not just papered over with a try/except)."""
+    csv_text = "Name,Value\nA,42\nB,NaN\nC,Infinity\nD,-inf\n"
+    res = await _import(client, csv_text, title="Nums")
+    assert res.status_code != 500
+    assert res.status_code == 201, res.text
+    by_header = {c["header"]: c for c in res.json()["columns"]}
+    assert by_header["Value"]["inferred_type"] != "number"
+
+
+async def test_null_byte_in_csv_returns_400_not_500(client):
+    """Fix 2.2: a NUL byte anywhere in the file reaches Postgres as a cell value and
+    500s with `asyncpg.exceptions.CharacterNotInRepertoireError` pre-fix."""
+    csv_text = "Name,Value\nA\x00B,1\n"
+    res = await client.post(
+        "/db/import/csv",
+        data={"database_title": "Bad"},
+        files=_csv_file(csv_text),
+    )
+    assert res.status_code == 400
+    detail = res.json()["detail"]
+    assert "null byte" in detail
+    # Never leaks a raw Postgres/Python traceback.
+    assert "Traceback" not in detail
+    assert "asyncpg" not in detail
+
+
+async def test_field_larger_than_csv_limit_returns_400_not_500(client):
+    """Fix 2.3: a single field over csv's default 128 KiB limit raises
+    `_csv.Error: field larger than field limit`, mid-loop while iterating
+    `csv.DictReader` -- not up front, so both `fieldnames` access and
+    `list(reader)` must be guarded."""
+    huge_field = "A" * 200_000
+    csv_text = f"Name,Value\n{huge_field},1\n"
+    res = await client.post(
+        "/db/import/csv",
+        data={"database_title": "Huge"},
+        files=_csv_file(csv_text),
+    )
+    assert res.status_code == 400
+    detail = res.json()["detail"]
+    assert "could not be parsed" in detail
+    assert "Traceback" not in detail
+
+
+async def test_generic_postgres_error_during_import_returns_400_not_500(client, monkeypatch):
+    """Fix 2.4: any other `asyncpg.PostgresError` surfacing from inside the write loop
+    (the NaN/Infinity case is one instance of this general class) must be converted to
+    a clean 400 -- proven here independent of any specific Postgres error class, by
+    forcing `create_row_core` itself to raise one."""
+    import asyncpg
+
+    import routers.db_import as db_import_module
+
+    async def boom(*args, **kwargs):
+        raise asyncpg.PostgresError("simulated postgres failure")
+
+    monkeypatch.setattr(db_import_module, "create_row_core", boom)
+
+    csv_text = "Name,Value\nA,1\n"
+    res = await _import(client, csv_text, title="Boom")
+    assert res.status_code == 400
+    detail = res.json()["detail"]
+    assert "CSV import failed" in detail
+    assert "Traceback" not in detail
+
+
+# ===========================================================================
+# Fix 3: a duplicate CSV header must be rejected before any write, not
+# silently discard the title column's data.
+# ===========================================================================
+
+
+async def test_duplicate_header_is_rejected_before_any_database_is_created(client, db_conn):
+    csv_text = "Name,Name\nfoo,bar\nfoo2,bar2\n"
+    res = await client.post(
+        "/db/import/csv",
+        data={"database_title": "DupHeaders"},
+        files=_csv_file(csv_text),
+    )
+    assert res.status_code == 400
+    detail = res.json()["detail"]
+    assert "unique" in detail.lower()
+    assert "Name" in detail
+
+    count = await db_conn.fetchval(
+        "SELECT count(*) FROM db_databases WHERE title = $1", "DupHeaders"
+    )
+    assert count == 0
+
+
+# ===========================================================================
+# Fix 7: an oversized upload is rejected before any parsing starts.
+# ===========================================================================
+
+
+async def test_oversized_csv_upload_returns_400(client):
+    from routers.db_import import MAX_UPLOAD_BYTES
+
+    huge_bytes = b"x" * (MAX_UPLOAD_BYTES + 1)
+    res = await client.post(
+        "/db/import/csv",
+        data={"database_title": "Huge"},
+        files={"file": ("huge.csv", huge_bytes, "text/csv")},
+    )
+    assert res.status_code == 400
+    assert "too large" in res.json()["detail"]
+
+
+# ===========================================================================
+# Fix 4.6 (task-50, M14 combined review) -- the per-row import loop must
+# call try_index_note() for each imported row AFTER the transaction commits,
+# not inside it.
+# ===========================================================================
+
+
+async def test_import_indexes_every_created_row_after_commit(client):
+    """Proven via call recording rather than a real `get_supabase()` mock
+    (this file's other tests don't stub the embedder/indexer at all) --
+    `try_index_note` is `db_import.py`'s own imported name, patched at that
+    call site directly. Confirms every row `create_row_core` actually
+    created gets indexed exactly once -- the entire fix's point (previously
+    NOTHING called `index_note` from this loop at all)."""
+    import routers.db_import as db_import_module
+
+    called_with: list[str] = []
+
+    def fake_try_index_note(note_id, user_id):
+        called_with.append(note_id)
+        return True
+
+    csv_text = "Name,Value\nA,1\nB,2\nC,3\n"
+    with patch.object(db_import_module, "try_index_note", side_effect=fake_try_index_note):
+        res = await _import(client, csv_text, title="IndexMe")
+    assert res.status_code == 201, res.text
+
+    props = await _properties_by_name(client, res.json()["database_id"])
+    rows = await _get_rows(client, props["Name"]["data_source_id"])
+    assert sorted(called_with) == sorted(r["id"] for r in rows)
+    assert len(called_with) == 3
 
 
 # ===========================================================================
