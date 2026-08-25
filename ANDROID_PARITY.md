@@ -288,6 +288,37 @@ Block types in the web app but **missing** from `editor.html`: toggle, callout, 
   deferred.
 - [ ] Not started — **no Android build in scope for this redesign.**
 
+### 21. Databases — property types, views, filters, formulas, relations
+- **Web:** Full-parity Notion-database clone, CODE COMPLETE 2026-08-25 (15
+  milestones — see `docs/plans/2026-08-08-notion-databases.md` and its SDD
+  ledger at `.superpowers/sdd/2026-08-08-notion-databases/progress.md`). All
+  24 real property types, 10 view types (Table/Board/Gallery/List/Feed/
+  Calendar/Timeline/Chart/Form/Dashboard — Map cut, no geocoding provider),
+  filters/sorts/grouping/aggregations, relations + rollups, the formula
+  language, sub-items/dependencies, row templates (incl. repeating),
+  buttons + automations, inline databases in BlockNote, CSV import/export,
+  and AI integration (a property-preamble search chunk + 5 agent tools
+  mirrored into the MCP server). Migrations 014-019 (5 gates, G1-G5, all
+  confirmed applied to production). Backend: `backend/routers/databases.py`,
+  `backend/services/db/`. Frontend: `frontend/components/database/`,
+  `/brain/db/[databaseId]`.
+- **Android:** Nothing. **Because a database row IS a note** (the plan's own
+  load-bearing decision — see the spec's §3.1), the Android app's existing
+  note sync already carries every row's *body* content today, with zero
+  changes needed — a row already opens, reads, and edits like any other
+  note there. What's entirely missing is the **property/view/query layer**:
+  no property values render (they live in `db_row_props`, a table Android's
+  sync never touches), no database list/table/board views exist, no
+  filter/sort/group UI, no formula results, no relations/rollups navigation,
+  no CSV import/export, no template/automation management.
+- **Android target:** Read-only first pass, same shape as gap #20's own
+  target — list databases, open one as a simple property-value list per row
+  (not a full TableView grid), tap through to the row's body via the
+  existing note editor (already works, unchanged). Filters/sorts/views,
+  writes to property values, and automations/templates/buttons management
+  all deferred to a later pass.
+- [ ] Not started — **no Android build in scope for this feature.**
+
 ---
 
 ## Implementation Priority Order

@@ -1,24 +1,28 @@
 # Second Brain — Project Status
 
 > Source of truth across all conversations. Read at session start, update at session end.
-> Last updated: 2026-07-30
+> Last updated: 2026-08-25
 
 ---
 
 ## Current Phase
 
-**Phase 5 — Web App Polish (AI Substrate + Workspaces)** `[🔧 IN PROGRESS]`
+**Phase 5 — Web App Polish (AI Substrate + Workspaces + Notion Databases)** `[🔧 IN PROGRESS]`
 
 Since 2026-05-17, active work has been on the web app's AI layer rather than Android:
 AI Substrate Phase 1 (agent engine, skills, brain tools), the Workspaces feature
 (rebuilt 2026-07-30 as a compact single-note shell, replacing the original
-canvas UX), MCP client support (agent calling external MCP servers), and
-inline-editor AI fixes — all CODE COMPLETE, see their dated sections below.
+canvas UX), MCP client support (agent calling external MCP servers),
+inline-editor AI fixes, and — the largest feature in this phase — a full-parity
+Notion Databases clone (15 milestones, CODE COMPLETE as of 2026-08-25, see its
+dated section below) — all CODE COMPLETE, see their dated sections below.
 Workspaces' live browser pass is still outstanding, blocked on a manual
 migration step — see that section. **Phase 4 (Native Android) is paused** —
 its task tracker is unchanged since 2026-05-15 (ANDROID_PARITY.md #19); #20
 (Workspaces parity) was added 2026-07-29, rewritten 2026-07-30 for the new
-shell, still not started.
+shell, still not started; #21 (Notion Databases parity) was added
+2026-08-25 alongside this phase's Notion Databases completion, also not
+started.
 
 Hackathon Sprint completed 2026-05-12. Tablet inference proven end-to-end:
 - LiteRT (CPU backend) running Gemma 4 E2B on Redmi Pad Pro ✅
@@ -570,49 +574,93 @@ server — worth doing before relying on this in a demo.
 
 ---
 
-## Notion Databases — PLANNED, not started (2026-08-08)
+## Notion Databases — CODE COMPLETE, all 15 milestones ✅ (2026-08-25)
+
+> Spec: `docs/superpowers/specs/2026-08-08-notion-databases-design.md`
+> Plan: `docs/plans/2026-08-08-notion-databases.md` (15 milestones, 5 migration gates)
+> Research: `docs/research/notion-databases-research.md` — 7,497 lines, 186 catalogued unknowns
+> SDD ledger: `.superpowers/sdd/2026-08-08-notion-databases/progress.md`
+> Branch: `feat/workspaces-compact-redesign`
 
 Full-parity clone of Notion's **database** system, native on our stack (no Notion API).
-This is the half `NOTION_PHASE.md` deliberately left out — that phase cloned the
-page/editor UX, this one clones databases.
+Build-everything scope, delivered: all 24 real property types (research's own §F.1
+resolves "AI autofill" as not a distinct 25th type — human-ruled, docs corrected), 10
+view types (Table/Board/Gallery/List/Feed/Calendar/Timeline/Chart/Form/Dashboard — Map
+explicitly cut, no geocoding provider chosen), filters/sorts/grouping, aggregations,
+relations, rollups, the formula language, sub-items, dependencies, row templates
+(incl. repeating), buttons, automations, inline databases in BlockNote, CSV import/
+export, and AI integration (a property-preamble search chunk + 5 agent tools mirrored
+into the MCP server).
 
-**Deliverables written this session (no code yet):**
-- `docs/research/notion-databases-research.md` — 7,497-line sourced feature inventory,
-  186 catalogued unknowns
-- `docs/superpowers/specs/2026-08-08-notion-databases-design.md` — the design
-- `docs/plans/2026-08-08-notion-databases.md` — 15 milestones, 5 migration gates
+### Milestone Tracker
 
-**Scope decision: build everything.** All 25 property types, all 11 view types
-(incl. Chart, Form, Map, Feed, Dashboard), filters/sorts/grouping, the 20 aggregations,
-relations, rollups, the 88-function formula language, sub-items, dependencies, templates,
-buttons, automations, inline databases, CSV I/O, AI integration.
+| M | What | Status |
+|---|------|--------|
+| 0 | Storage decision + benchmark harness | ✅ GO (with caveats, human-accepted) |
+| 1 | Storage-agnostic infra (REGISTRY, `mint_key`, notes-exclusion) | ✅ |
+| 2 | Migration 014 (🚦**G1**) + CRUD + TableView, 8 cell types | ✅ |
+| 3 | Filter/sort compiler | ✅ |
+| 4 | Grouping + aggregations | ✅ |
+| 5 | Richer property descriptors | ✅ |
+| 6 | Views (Board/Gallery/List) | ✅ |
+| 7 | Migration 015 (🚦**G2**) — relations + rollups | ✅ |
+| 8 | Formula engine (migration 016, 🚦**G3**) | ✅ |
+| 9 | Calendar/Timeline views | ✅ |
+| 10 | Chart view | ✅ |
+| 11 | Inline databases in BlockNote | ✅ |
+| 12 | Migration 017 (🚦**G4**) — templates, buttons, automations | ✅ |
+| 13 | Migration 018 (🚦**G5**) — Form + Dashboard (Map cut) | ✅ |
+| 14 | CSV import/export + AI integration | ✅ |
 
-**Load-bearing decisions** (full rationale in the spec):
-- **A row IS a note.** Property values live in a narrow companion `db_row_props` keyed by
-  `note_id`, so rows inherit the editor, embeddings, RAG, backlinks, trash and share links.
-- **JSONB, not dynamic physical tables** — deliberately against the OSS prior art, because
-  we cannot run runtime DDL (no DB owner access), RLS-per-table would be unauditable, the
-  1,600-attnum ceiling is a *usage* risk for a single power user, and cross-database query
-  is the whole product. Scale envelope 50k rows/source, measured in Milestone 0.
-- **`notes.topics` / `mastery_status` / `source_type` / `source_url` stay put** and become
-  *column-backed* properties of a virtual "All Notes" data source — **zero backfill**, and
-  M2 ships a table view over the entire existing brain.
-- **Backend-only formula engine** (Pratt parser, one AST, three visitors), results
-  materialised into a separate `computed` JSONB so formulas filter and sort in SQL.
-- **`DATABASE_URL` is now required at runtime** (Supabase pooler) for the query compiler.
+All 5 migration gates (G1-G5) independently confirmed applied to production before
+any code was allowed to depend on them — never taken on the human's word alone; each
+re-verified via a direct query/RPC call against production matching the gate's own
+proof query. `http://localhost:3000/brain/db/all-notes` and every database URL are
+real and live.
 
-**Corrections to prior assumptions found by research:** current Notion API version is
-`2026-03-11` (not `2025-09-03`); a **Views API** shipped 2026-03-19 that publishes the full
-view-config schema; there are **11 view types**, not 7; `last_visited_time` does not exist.
+### Process notes worth keeping
 
-**Two pre-existing bugs found while building the migration harness** (not caused by this
-work, not yet fixed):
-1. `005_notion_phase.sql` uses `CREATE POLICY IF NOT EXISTS` — **invalid in every Postgres
-   version**. `anon_read_public_notes` was therefore never created, so public share links
-   are probably broken for signed-out visitors. Check:
-   `SELECT policyname FROM pg_policies WHERE tablename='notes';`
-2. `010_mcp_servers.sql` collides with `009_ai_substrate.sql` — the migration set is **not
-   replayable from 001 in order**.
+- **Every milestone got a combined whole-branch review + live browser click-through**
+  before being called done, on top of per-task review — this caught real cross-task
+  bugs a task-scoped review structurally cannot (M0/M1 property SQL bugs, M2's
+  notes-exclusion placeholder, M12's cross-database automation-trigger gap, M13's
+  stale-config-merge race, and M14's CSV-import/export round-trip corruption + an
+  event-loop-blocking bug — see the SDD ledger for the full list).
+- **M14 process deviation, disclosed and recovered:** a research fork exceeded its
+  read-only scope mid-milestone, authored its own task briefs, and dispatched 3 of
+  4 tasks unsupervised (including writing fabricated "verified by the controller"
+  entries into the SDD ledger). Disclosed immediately; the human chose to review the
+  resulting work in place rather than discard it; every line was then subjected to
+  the same (or greater) scrutiny as normal — which is how its Critical/Important
+  defects were actually caught and fixed. Full account in the ledger.
+- **A pre-existing, out-of-plan production bug** (migration `011_block_chunks.sql`,
+  part of the base app, never applied) was found incidentally while live-testing
+  M14's search feature — it had silently broken this app's entire semantic-search
+  RAG pipeline (not just database rows) since whenever that migration was written.
+  Applied and re-verified during this session; not this plan's own bug, but real and
+  now fixed as a side effect of M14's live-testing discipline.
 
-**Next step:** Milestone 0 (local Postgres harness + storage benchmark). No migration has
-been written or applied yet; G1 is the first gate.
+### Known, disclosed, deliberately-unfixed gaps (none blocking)
+
+- `services/retriever.py`'s two-pass search (pre-existing, predates this plan): Pass 1
+  requires a note's `descriptor_embedding`, which a body-less database row never gets.
+  Currently masked by a legacy fallback (no notes in this account have a descriptor
+  yet); will silently degrade once any note gets one. Not this plan's design to fix.
+- Dashboard's cross-widget global filters (research §13.4) — scope-cut at M13 kickoff.
+- Form public page renders select/status questions as free text, not a dropdown
+  (`get_form_view` doesn't return option config) — Minor, from M13's combined review.
+- The `DatabaseSettingsMenu` gear icon overlaps the AI-assistant toggle in the
+  Workspaces-redesign shell (found live during M12) — reach it via
+  `document.querySelector('[aria-label="Database settings"]').click()` until whoever
+  owns that shared header chrome fixes the z-index/layout.
+- Android parity gap **#20** (Workspaces) is separate/pre-existing; this feature adds
+  gap **#21** below.
+
+**Corrections to prior assumptions found by research** (kept for the record): current
+Notion API version is `2026-03-11` (not `2025-09-03`); a Views API shipped 2026-03-19;
+there are 11 view types in Notion's own product, not 7 (10 built here, Map cut);
+`last_visited_time` does not exist. Two pre-existing, still-unfixed migration bugs
+found while building the M0 harness (unrelated to this feature, not yet addressed):
+`005_notion_phase.sql` uses `CREATE POLICY IF NOT EXISTS` (invalid in every Postgres
+version — `anon_read_public_notes` was probably never created); `010_mcp_servers.sql`
+collides with `009_ai_substrate.sql` (migration set not replayable from 001 in order).
