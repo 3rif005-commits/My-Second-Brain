@@ -260,6 +260,29 @@ async def update_row_property_core(
                 f"value must be a {prop_row['type']!r} wrapper, e.g. "
                 f'{{"type": "{prop_row["type"]}", ...}}'
             )
+        # Fix 2 (task-51, M14 final cross-cutting review): unlike the agent-tools/
+        # internal-API write path (`services/agent/brain_tools.py`'s
+        # `coerce_property_write` -> `REGISTRY[type].coerce_write`, which now guards
+        # this in `scalar.py`'s `Number.coerce_write`), this function -- the shared
+        # core BOTH the PATCH cell-edit endpoint and every automation action handler
+        # write through -- accepts `value` as an already-built wrapper with no
+        # per-type coercion/validation at all. A too-large Python int (unbounded, so
+        # `isinstance(raw, (int, float))`-shaped checks never catch it) sails
+        # through as a "well-formed" number wrapper, gets written, then raises an
+        # unhandled `OverflowError` (not a `ValueError`, so nothing here or in the
+        # router's exception mapping would otherwise catch it) the moment
+        # `recompute_row` below decodes it. Guarded narrowly here (just the number-
+        # overflow class this fix round is about, not a general coerce_write
+        # integration for every property type -- that's a bigger, separate scope).
+        if prop_row["type"] == "number":
+            raw_number = value.get("number")
+            if isinstance(raw_number, (int, float)) and not isinstance(raw_number, bool):
+                try:
+                    float(raw_number)
+                except OverflowError as exc:
+                    raise RowPropertyValueError(
+                        f"number value out of range: {raw_number!r}"
+                    ) from exc
 
     # Milestone 7: the write and the (possible) dependency cascade it triggers must commit
     # or roll back together (task-21-brief.md §4) -- both live inside one transaction.

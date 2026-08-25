@@ -82,6 +82,27 @@ def test_number_coerce_write_rejects_string_and_other_types():
         n.coerce_write({"a": 1})
 
 
+def test_number_coerce_write_rejects_an_int_too_large_for_float():
+    """Fix 2 (task-51, M14 final cross-cutting review): a Python `int` is
+    unbounded, but this value is later read back through `services/db/
+    recompute.py`'s `_decode_stored` (`float(raw)`, run on EVERY row write) --
+    a too-large int previously sailed through `coerce_write`'s bare
+    `isinstance(raw, (int, float))` check, got stored, and only crashed the
+    NEXT time anything recomputed the row (`OverflowError`, not a `ValueError`,
+    so nothing downstream converts it to a clean 400 either). Guarded here at
+    write time instead: same magnitude that reproduces `OverflowError: int too
+    large to convert to float` directly (`float(10**400)`)."""
+    n = Number()
+    huge = 10**400
+    with pytest.raises(ValueError, match="out of range"):
+        n.coerce_write(huge)
+    with pytest.raises(ValueError, match="out of range"):
+        n.coerce_write(-huge)
+    # A merely large-but-float-representable int/float is untouched.
+    assert n.coerce_write(10**15) == 10**15
+    assert n.coerce_write(1.5e300) == 1.5e300
+
+
 def test_number_operators_and_aggregations_are_sane():
     n = Number()
     ops = n.operators()

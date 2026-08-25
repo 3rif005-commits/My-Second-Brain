@@ -35,6 +35,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from services.db import automations as automations_service
 from services.db import templates as templates_service
 from services.db.connection import get_pool
+from services.indexer import try_index_note
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,15 @@ async def _tick_templates(conn) -> int:
                 template_id,
                 user_id,
             )
+        # Fix 6 (task-51, M14 final cross-cutting review): best-effort, non-fatal
+        # property-preamble refresh -- see `services/indexer.py`'s `try_index_note`
+        # docstring. Called AFTER the `async with conn.transaction():` block above
+        # has exited (this row's own INSERT + `next_run_at` advance are committed),
+        # never inside it -- same "don't hold the transaction open for a slow/
+        # network-fallible embedder call" reasoning `db_import.py`'s per-row loop
+        # documents. Without this, a row created by a repeating template firing on
+        # schedule was permanently unsearchable by property value.
+        try_index_note(result.id, user_id)
         created += 1
     return created
 

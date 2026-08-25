@@ -1174,7 +1174,33 @@ async def _fetch_all_export_rows(
     sorts_list: list[dict[str, Any]],
     user_id: str,
     conn: asyncpg.Connection,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], bool]:
+    """Returns `(rows, truncated)` -- Fix 5 (task-51, M14 final cross-cutting review):
+    `_ROWS_LIMIT` silently capped the export with a plain `200 OK` and no signal that
+    more rows exist, while Task 50's Fix 7 caps CSV *import* at 10 MiB (easily tens of
+    thousands of rows for a typical row shape) -- so a user could legitimately import
+    far more than they could ever export back out, with zero warning. `truncated` is
+    only ever `True` when the cap genuinely bit; the caller (`export_rows_csv`) turns
+    that into an `X-Export-Truncated` response header.
+
+    The loop's own exit condition mostly distinguishes the two cases: an underfull
+    page (`len(page_rows) < _EXPORT_PAGE_SIZE`) proves there is nothing left to
+    fetch beyond what's now in `all_rows`. But that alone is NOT the same as "not
+    truncated" -- `_EXPORT_PAGE_SIZE` (200) does not evenly divide `_ROWS_LIMIT`
+    (500) in production, and a caller-supplied `_ROWS_LIMIT` (tests) can be smaller
+    than one page outright, so a single page can legitimately contain MORE rows
+    than the remaining cap allows while still itself being underfull (e.g. exactly
+    501 rows total: the 3rd page, at offset 400, returns the last 101 rows -- an
+    underfull page, since 101 < 200 -- but `all_rows` is now 501, one over the
+    500-row cap). The correct test is whether `all_rows` (before slicing) exceeds
+    `_ROWS_LIMIT`, not merely whether the page was underfull. The *other* loop exit
+    (the `while` condition itself going false because `len(all_rows)` reached
+    `_ROWS_LIMIT` exactly on a FULL page) is genuinely ambiguous on its own: the
+    data source might have exactly `_ROWS_LIMIT` rows (nothing missing) or it might
+    have more (genuinely truncated) -- indistinguishable without one more look,
+    resolved with a single cheap probe (`page_size=1` at `offset=_ROWS_LIMIT`)
+    rather than guessed at.
+    """
     all_rows: list[dict[str, Any]] = []
     offset = 0
     while len(all_rows) < _ROWS_LIMIT:
@@ -1186,9 +1212,19 @@ async def _fetch_all_export_rows(
         page_rows = result.rows or []
         all_rows.extend(page_rows)
         if len(page_rows) < _EXPORT_PAGE_SIZE:
-            break
+            # Ran out of rows naturally -- there is nothing beyond what's already
+            # been fetched. Still truncated if this last (possibly oversized
+            # relative to the remaining cap) page pushed `all_rows` past
+            # `_ROWS_LIMIT` -- see the docstring's 501-row example.
+            return all_rows[:_ROWS_LIMIT], len(all_rows) > _ROWS_LIMIT
         offset += _EXPORT_PAGE_SIZE
-    return all_rows[:_ROWS_LIMIT]
+
+    probe_body = QueryRequest(
+        filter=filter_dict, sorts=sorts_list, page_size=1, offset=_ROWS_LIMIT,
+    )
+    probe = await query_rows(data_source_id, probe_body, user_id=user_id, conn=conn)
+    truncated = bool(probe.rows)
+    return all_rows[:_ROWS_LIMIT], truncated
 
 
 @router.get("/data-sources/{data_source_id}/export")
@@ -1265,7 +1301,7 @@ async def export_rows_csv(
         user_id,
     )
 
-    rows = await _fetch_all_export_rows(
+    rows, truncated = await _fetch_all_export_rows(
         data_source_id, view_row["filter"], list(view_row["sorts"] or []), user_id, conn
     )
 
@@ -1277,6 +1313,30 @@ async def export_rows_csv(
         cells = [row["id"]]
         for p in prop_rows:
             wrapper = wrapper_by_key.get(p["key"])
+            if p["type"] in ("formula", "rollup") and isinstance(wrapper, dict):
+                # Fix 4 (task-51, M14 final cross-cutting review): `query_rows`
+                # already merges this row's MATERIALISED formula/rollup result into
+                # `row["properties"][key]` (`_merge_computed_into_rows`, the same
+                # merge `TableView` renders from) -- but that merged wrapper is
+                # tagged with the computed RESULT's own type (e.g. `{"type":
+                # "number", "number": 42.0}` for a formula that produces a number),
+                # never literally `"formula"`/`"rollup"` (`rollup.computed_wrapper`'s
+                # own docstring/shape). Unwrapping via `p["type"]` (the PROPERTY's
+                # declared type) below looks up a key ("formula"/"rollup") that was
+                # never set on this wrapper -- always `None` -- and
+                # `format_property_value` separately hard-codes `None` for these two
+                # types regardless (by design, per Task 46: its caller, indexer.py,
+                # never has a computed value available at all). Neither limitation
+                # applies here, where the value genuinely is present -- resolve
+                # using the WRAPPER'S OWN "type" tag (the result type) instead, and
+                # format with THAT type's own rendering rules.
+                actual_type = wrapper.get("type")
+                cell = ""
+                if actual_type:
+                    raw_value = wrapper.get(actual_type)
+                    cell = format_property_value(actual_type, raw_value, p["config"] or {}) or ""
+                cells.append(cell)
+                continue
             # §3.3 wrapper shape: {"type": <prop_type>, "<prop_type>": <value>} --
             # unwrap here (the one place that has both the wrapper and the
             # property's declared type), exactly as format.py's own module
@@ -1287,10 +1347,17 @@ async def export_rows_csv(
         writer.writerow(cells)
 
     safe_name = (view_row["name"] or "export").replace('"', "'")
+    headers = {"Content-Disposition": f'attachment; filename="{safe_name}.csv"'}
+    if truncated:
+        # Fix 5 (task-51): signal truncation rather than silently handing back a
+        # partial file. The frontend's `/api/db/[...path]` proxy only forwards
+        # `Content-Type` today (see this function's own docstring) -- widened
+        # alongside this to also forward this one header through.
+        headers["X-Export-Truncated"] = "true"
     return Response(
         content=buffer.getvalue(),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{safe_name}.csv"'},
+        headers=headers,
     )
 
 
@@ -2163,6 +2230,15 @@ async def instantiate_template(
     result = await templates_service.instantiate_template(conn, user_id, template_id)
     if result is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "template not found")
+    # Fix 6 (task-51, M14 final cross-cutting review): best-effort, non-fatal
+    # property-preamble refresh -- see `services/indexer.py`'s `try_index_note`
+    # docstring. This is a SEPARATE, standalone endpoint from `create_row`'s own
+    # default-template branch above (already wired since task-50) -- explicitly
+    # picking a non-default template from the real TableView template picker UI,
+    # not the "+ New row" default path. Missed by task-50's own sweep; a row
+    # created this way was permanently unsearchable by property value until
+    # someone happened to edit its body.
+    try_index_note(result.id, user_id)
     return result
 
 

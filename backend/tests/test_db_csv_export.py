@@ -317,3 +317,333 @@ async def test_export_404s_for_a_view_id_belonging_to_another_user(client, db_co
     # proving the 404s above are the ownership check, not a broken route.
     res = await client.get(f"/db/data-sources/{ds_id}/export?view_id={own_view_id}")
     assert res.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Fix 3 (task-51, M14 final cross-cutting review): the export's own synthetic
+# "id" header must not corrupt an export -> import -> export -> import round
+# trip, and `db_import.py` must treat an "id" header in a USER'S OWN CSV as
+# reserved metadata too (not just this app's own re-imported export).
+# ---------------------------------------------------------------------------
+
+
+async def test_export_import_export_import_round_trip_never_duplicate_header_400s(
+    client, db_conn, test_user
+):
+    """The exact reviewer-reported repro: export -> import -> export -> import must
+    succeed cleanly at EVERY step. Pre-fix: the first re-import treated the
+    exported "id" column as an ordinary data column and created a REAL property
+    literally named "id" for it; the second export then emitted TWO "id" headers
+    (its own synthetic one + the now-real property), and the second re-import
+    400ed with "CSV headers must be unique -- found a duplicate: 'id'"."""
+    created = await _create_database(client, "Round Trip")
+    ds_id = created["data_source"]["id"]
+    view_id = created["views"][0]["id"]
+    title_key = created["properties"][0]["key"]
+    author_prop = await _create_property(client, ds_id, "Author", "rich_text")
+
+    await _insert_row(
+        db_conn, test_user, ds_id,
+        {
+            title_key: {"type": "title", "title": "Dune"},
+            author_prop["key"]: {"type": "rich_text", "rich_text": "Herbert"},
+        },
+    )
+
+    # Export #1.
+    res = await client.get(f"/db/data-sources/{ds_id}/export?view_id={view_id}")
+    assert res.status_code == 200, res.text
+    csv_1 = res.text
+    assert _rows(csv_1)[0] == ["id", "Title", "Author"]
+
+    # Import #1 (of export #1's own output) -- a brand new database.
+    res = await client.post(
+        "/db/import/csv",
+        data={"database_title": "Reimported 1"},
+        files={"file": ("export1.csv", csv_1.encode("utf-8"), "text/csv")},
+    )
+    assert res.status_code == 201, res.text
+    reimport_1 = res.json()
+    by_header_1 = {c["header"]: c for c in reimport_1["columns"]}
+    # The reserved "id" column is reported (diagnostics), but produced NO
+    # real property -- see the property-list assertion further below.
+    assert by_header_1["id"]["inferred_type"] == "id (reserved, not imported)"
+    assert by_header_1["Title"]["inferred_type"] == "title"
+    assert by_header_1["Author"]["inferred_type"] == "rich_text"
+
+    res = await client.get(f"/db/databases/{reimport_1['database_id']}")
+    assert res.status_code == 200, res.text
+    detail = res.json()
+    ds_id_2 = detail["data_source"]["id"]
+    view_id_2 = detail["views"][0]["id"]
+
+    # Export #2 (of import #1's own database) -- must NOT carry two "id" headers.
+    res = await client.get(f"/db/data-sources/{ds_id_2}/export?view_id={view_id_2}")
+    assert res.status_code == 200, res.text
+    csv_2 = res.text
+    header_2 = _rows(csv_2)[0]
+    assert header_2.count("id") == 1
+    assert header_2 == ["id", "Title", "Author"]
+
+    # Import #2 (of export #2's own output) -- the exact step that 500/400ed
+    # pre-fix on a duplicate "id" header. Must succeed cleanly.
+    res = await client.post(
+        "/db/import/csv",
+        data={"database_title": "Reimported 2"},
+        files={"file": ("export2.csv", csv_2.encode("utf-8"), "text/csv")},
+    )
+    assert res.status_code == 201, res.text
+    reimport_2 = res.json()
+    by_header_2 = {c["header"]: c for c in reimport_2["columns"]}
+    assert by_header_2["id"]["inferred_type"] == "id (reserved, not imported)"
+    assert by_header_2["Title"]["inferred_type"] == "title"
+
+
+async def test_id_header_alongside_a_real_title_header_produces_no_property_and_correct_titles(
+    client,
+):
+    """An `id` column AND a `Title` column (title correctly detected by name):
+    the `id` column produces NO property and no data in any row, and titles
+    are the real title text, never the raw id."""
+    csv_text = (
+        "id,Title,Author\n"
+        "11111111-1111-1111-1111-111111111111,Dune,Herbert\n"
+        "22222222-2222-2222-2222-222222222222,Foundation,Asimov\n"
+    )
+    res = await client.post(
+        "/db/import/csv",
+        data={"database_title": "IdPlusTitle"},
+        files={"file": ("data.csv", csv_text.encode("utf-8"), "text/csv")},
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    by_header = {c["header"]: c for c in body["columns"]}
+    assert by_header["id"]["inferred_type"] == "id (reserved, not imported)"
+    assert by_header["Title"]["inferred_type"] == "title"
+    assert by_header["Author"]["inferred_type"] == "rich_text"
+
+    res = await client.get(f"/db/databases/{body['database_id']}")
+    props = {p["name"]: p for p in res.json()["properties"]}
+    assert "id" not in props  # no property was created for the reserved column
+
+    rows_res = await client.get(f"/db/data-sources/{props['Title']['data_source_id']}/rows")
+    titles = {
+        r["properties"][props["Title"]["key"]]["title"] for r in rows_res.json()["rows"]
+    }
+    assert titles == {"Dune", "Foundation"}  # never the raw uuid strings
+
+
+async def test_id_header_with_no_title_match_falls_back_to_first_non_id_column(client):
+    """An `id` column and NO title-matching header: title falls back to the first
+    NON-`id` column, not to the `id` column itself (pre-fix: the index-0
+    fallback landed on `id`, so every row's title silently became a raw UUID
+    string)."""
+    csv_text = (
+        "id,Widget,Count\n"
+        "11111111-1111-1111-1111-111111111111,Gadget,5\n"
+        "22222222-2222-2222-2222-222222222222,Gizmo,7\n"
+    )
+    res = await client.post(
+        "/db/import/csv",
+        data={"database_title": "IdNoTitleMatch"},
+        files={"file": ("data.csv", csv_text.encode("utf-8"), "text/csv")},
+    )
+    assert res.status_code == 201, res.text
+    body = res.json()
+    by_header = {c["header"]: c for c in body["columns"]}
+    assert by_header["id"]["inferred_type"] == "id (reserved, not imported)"
+    assert by_header["Widget"]["inferred_type"] == "title"
+    assert by_header["Count"]["inferred_type"] == "number"
+
+    res = await client.get(f"/db/databases/{body['database_id']}")
+    props = {p["name"]: p for p in res.json()["properties"]}
+    rows_res = await client.get(f"/db/data-sources/{props['Widget']['data_source_id']}/rows")
+    titles = {r["properties"][props["Widget"]["key"]]["title"] for r in rows_res.json()["rows"]}
+    assert titles == {"Gadget", "Gizmo"}
+
+
+# ---------------------------------------------------------------------------
+# Fix 4 (task-51, M14 final cross-cutting review): formula/rollup columns
+# export the computed value, not blank.
+# ---------------------------------------------------------------------------
+
+
+async def test_formula_column_exports_the_computed_number_not_blank(client):
+    """`query_rows` already merges the row's materialised formula result into
+    `row["properties"][key]`, tagged with the RESULT's own type (e.g. `{"type":
+    "number", "number": 42.0}`), not literally `"formula"` -- pre-fix, the export
+    loop unwrapped by the PROPERTY's declared type ("formula"), which was never a
+    key on that wrapper, so the cell was always blank."""
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    default_view_id = created["views"][0]["id"]
+    title_key = created["properties"][0]["key"]
+
+    score_prop = await _create_property(client, ds_id, "Score", "number")
+    formula_prop = await _create_property(
+        client, ds_id, "Doubled", "formula",
+        config={"expression": 'prop("Score") * 2'},
+    )
+
+    res = await client.post(f"/db/data-sources/{ds_id}/rows")
+    assert res.status_code == 201, res.text
+    row_id = res.json()["id"]
+    res = await client.patch(
+        f"/db/data-sources/{ds_id}/rows/{row_id}",
+        json={"property_key": title_key, "value": {"type": "title", "title": "Row 1"}},
+    )
+    assert res.status_code == 200, res.text
+    res = await client.patch(
+        f"/db/data-sources/{ds_id}/rows/{row_id}",
+        json={"property_key": score_prop["key"], "value": {"type": "number", "number": 21.0}},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["properties"][formula_prop["key"]]["number"] == 42.0
+
+    res = await client.get(f"/db/data-sources/{ds_id}/export?view_id={default_view_id}")
+    assert res.status_code == 200, res.text
+    rows = _rows(res.text)
+    header = rows[0]
+    body = dict(zip(header, rows[1]))
+    assert body["Doubled"] == "42"  # not "" (blank)
+
+
+async def test_rollup_column_exports_the_computed_count_not_blank(client):
+    """A rollup's computed result is ALSO tagged with its own result type on the
+    merged wrapper (never literally "rollup") -- same fix, exercised through a
+    different (list-shaped) result path than the formula test above."""
+    owner = await _create_database(client, "Owners")
+    target = await _create_database(client, "Targets")
+    owner_ds, target_ds = owner["data_source"]["id"], target["data_source"]["id"]
+    owner_view_id = owner["views"][0]["id"]
+    owner_title_key = owner["properties"][0]["key"]
+
+    rel = (
+        await client.post(
+            f"/db/data-sources/{owner_ds}/relations",
+            json={"name": "Rel", "target_data_source_id": target_ds, "two_way": False},
+        )
+    ).json()
+    rel_key = rel["forward"]["key"]
+
+    target_num = await _create_property(client, target_ds, "Value", "number")
+    rollup_prop = await _create_property(
+        client, owner_ds, "Count", "rollup",
+        config={
+            "relation_key": rel_key, "target_data_source_id": target_ds,
+            "target_key": target_num["key"], "function": "count",
+        },
+    )
+
+    owner_row = (await client.post(f"/db/data-sources/{owner_ds}/rows")).json()["id"]
+    target_row_1 = (await client.post(f"/db/data-sources/{target_ds}/rows")).json()["id"]
+    target_row_2 = (await client.post(f"/db/data-sources/{target_ds}/rows")).json()["id"]
+
+    for target_row_id in (target_row_1, target_row_2):
+        res = await client.post(
+            f"/db/data-sources/{owner_ds}/rows/{owner_row}/relations/{rel_key}/links",
+            json={"row_id": target_row_id},
+        )
+        assert res.status_code in (200, 201), res.text
+
+    # Linking alone does not trigger a recompute of the OWNER row's rollup
+    # (only a subsequent row-write does, `services/db/rows.py`'s
+    # `update_row_property_core`) -- a trivial title edit is enough to force
+    # one, the same way a real user editing any cell on the row would.
+    res = await client.patch(
+        f"/db/data-sources/{owner_ds}/rows/{owner_row}",
+        json={"property_key": owner_title_key, "value": {"type": "title", "title": "Owner Row"}},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["properties"][rollup_prop["key"]]["number"] == 2.0
+
+    res = await client.get(f"/db/data-sources/{owner_ds}/export?view_id={owner_view_id}")
+    assert res.status_code == 200, res.text
+    rows = _rows(res.text)
+    header = rows[0]
+    body = dict(zip(header, rows[1]))
+    assert body["Count"] == "2"  # not "" (blank)
+
+
+# ---------------------------------------------------------------------------
+# Fix 5 (task-51, M14 final cross-cutting review): a truncated export must say
+# so via the `X-Export-Truncated` response header; an untruncated one must not.
+# ---------------------------------------------------------------------------
+
+
+async def test_truncated_export_sets_the_truncation_header(client, db_conn, test_user, monkeypatch):
+    """`_ROWS_LIMIT` monkeypatched down to a small number -- same precedent
+    `test_databases_router.py`'s own `test_list_rows_caps_*_at_the_hard_limit`
+    tests already establish for testing this exact constant, rather than
+    actually creating 501+ rows."""
+    import routers.databases as databases_module
+
+    monkeypatch.setattr(databases_module, "_ROWS_LIMIT", 3, raising=False)
+
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    default_view_id = created["views"][0]["id"]
+    title_key = created["properties"][0]["key"]
+
+    for i in range(5):
+        await _insert_row(
+            db_conn, test_user, ds_id, {title_key: {"type": "title", "title": f"Row {i}"}},
+        )
+
+    res = await client.get(f"/db/data-sources/{ds_id}/export?view_id={default_view_id}")
+    assert res.status_code == 200, res.text
+    assert res.headers.get("x-export-truncated") == "true"
+    rows = _rows(res.text)
+    assert len(rows) == 1 + 3  # header + _ROWS_LIMIT rows, not all 5
+
+
+async def test_untruncated_export_never_sets_the_truncation_header(
+    client, db_conn, test_user, monkeypatch
+):
+    import routers.databases as databases_module
+
+    monkeypatch.setattr(databases_module, "_ROWS_LIMIT", 3, raising=False)
+
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    default_view_id = created["views"][0]["id"]
+    title_key = created["properties"][0]["key"]
+
+    # Fewer rows than the (lowered) cap -- never truncated.
+    for i in range(2):
+        await _insert_row(
+            db_conn, test_user, ds_id, {title_key: {"type": "title", "title": f"Row {i}"}},
+        )
+
+    res = await client.get(f"/db/data-sources/{ds_id}/export?view_id={default_view_id}")
+    assert res.status_code == 200, res.text
+    assert "x-export-truncated" not in res.headers
+
+
+async def test_export_exactly_at_the_limit_is_not_truncated(
+    client, db_conn, test_user, monkeypatch
+):
+    """The genuinely ambiguous case `_fetch_all_export_rows`'s own probe exists
+    for: exactly `_ROWS_LIMIT` rows, no more -- the loop's own exit condition
+    can't tell this apart from "there are more" on its own (both end with a
+    FULL last page), so this is the one case that actually exercises the extra
+    probe query rather than the cheap `break`-on-underfull-page path."""
+    import routers.databases as databases_module
+
+    monkeypatch.setattr(databases_module, "_ROWS_LIMIT", 3, raising=False)
+
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    default_view_id = created["views"][0]["id"]
+    title_key = created["properties"][0]["key"]
+
+    for i in range(3):
+        await _insert_row(
+            db_conn, test_user, ds_id, {title_key: {"type": "title", "title": f"Row {i}"}},
+        )
+
+    res = await client.get(f"/db/data-sources/{ds_id}/export?view_id={default_view_id}")
+    assert res.status_code == 200, res.text
+    assert "x-export-truncated" not in res.headers
+    rows = _rows(res.text)
+    assert len(rows) == 1 + 3

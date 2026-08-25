@@ -117,6 +117,23 @@ class Number:
         if isinstance(raw, bool):
             raise ValueError(f"number value cannot be a bool, got: {raw!r}")
         if isinstance(raw, (int, float)):
+            # Fix 2 (task-51, M14 final cross-cutting review): a plain Python `int`
+            # is unbounded, but this value is later read back through
+            # `services/db/recompute.py`'s `_decode_stored` (`float(raw)` for ANY
+            # `FType.NUMBER` dependency -- run on EVERY row write, not just formula/
+            # rollup dependents) and `_encode_fvalue`'s own `float`/JSON round trip.
+            # A too-large int (e.g. a 400+-digit CSV cell) sails through the
+            # `isinstance` check above, gets stored, then raises an unhandled
+            # `OverflowError` (NOT a `ValueError`, so no existing catch-all here or
+            # in any caller's exception mapping covers it) the next time anything
+            # recomputes this row. Guarding here, at write time, turns that into a
+            # clean, immediate `ValueError` -- the same "fail loud at the write,
+            # not the next unrelated read" standard this function already applies
+            # to bools.
+            try:
+                float(raw)
+            except OverflowError as exc:
+                raise ValueError(f"number value out of range: {raw!r}") from exc
             return raw
         # No `float(raw)` data-cleaning attempt on e.g. a numeric string --
         # spec's "fail loud" standard (same reasoning query/operators.py's

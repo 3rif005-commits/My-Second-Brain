@@ -379,6 +379,80 @@ describe("DatabaseSettingsMenu", () => {
       clickSpy.mockRestore();
     });
 
+    it("task-51 Fix 5: warns via toast (in addition to still downloading) when the response carries X-Export-Truncated", async () => {
+      const user = userEvent.setup();
+      const csvBody = "id,Title\nabc,Dune\n";
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(csvBody, {
+          status: 200,
+          headers: { "Content-Type": "text/csv", "X-Export-Truncated": "true" },
+        })
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const { createObjectURL, clickSpy } = stubDownloadGlobals();
+
+      render(
+        <DatabaseSettingsMenu
+          dataSourceId="ds-1"
+          properties={[TITLE_PROP]}
+          activeView={VIEW}
+          onPropertiesChanged={vi.fn()}
+          onUpdateView={vi.fn()}
+          templates={[]}
+          onCreateTemplate={vi.fn()}
+          onUpdateTemplate={vi.fn()}
+          onDeleteTemplate={vi.fn()}
+          automations={[]}
+          onCreateAutomation={vi.fn()}
+          onUpdateAutomation={vi.fn()}
+          onDeleteAutomation={vi.fn()}
+        />
+      );
+      await openMenu(user);
+      await user.click(screen.getByRole("button", { name: "Export CSV" }));
+
+      await waitFor(() => expect(showToast).toHaveBeenCalled());
+      expect(showToast.mock.calls[0][0]).toMatch(/500 rows/i);
+      // Still triggers the download -- a truncated-but-present export is still useful.
+      await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+      clickSpy.mockRestore();
+    });
+
+    it("does not warn when the response has no X-Export-Truncated header", async () => {
+      const user = userEvent.setup();
+      const csvBody = "id,Title\nabc,Dune\n";
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(csvBody, { status: 200, headers: { "Content-Type": "text/csv" } })
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const { createObjectURL, clickSpy } = stubDownloadGlobals();
+
+      render(
+        <DatabaseSettingsMenu
+          dataSourceId="ds-1"
+          properties={[TITLE_PROP]}
+          activeView={VIEW}
+          onPropertiesChanged={vi.fn()}
+          onUpdateView={vi.fn()}
+          templates={[]}
+          onCreateTemplate={vi.fn()}
+          onUpdateTemplate={vi.fn()}
+          onDeleteTemplate={vi.fn()}
+          automations={[]}
+          onCreateAutomation={vi.fn()}
+          onUpdateAutomation={vi.fn()}
+          onDeleteAutomation={vi.fn()}
+        />
+      );
+      await openMenu(user);
+      await user.click(screen.getByRole("button", { name: "Export CSV" }));
+
+      await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+      expect(showToast).not.toHaveBeenCalled();
+      clickSpy.mockRestore();
+    });
+
     it("a failed fetch toasts and does NOT create a stray anchor/download", async () => {
       const user = userEvent.setup();
       const fetchMock = vi.fn().mockResolvedValue(

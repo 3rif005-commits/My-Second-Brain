@@ -10,6 +10,8 @@ convention as every other `test_db_*.py` file. NEVER touches
 """
 from __future__ import annotations
 
+import asyncio
+import time
 from unittest.mock import patch
 
 import httpx
@@ -272,6 +274,40 @@ async def test_field_larger_than_csv_limit_returns_400_not_500(client):
     assert "Traceback" not in detail
 
 
+async def test_oversized_integer_column_degrades_to_rich_text_not_a_500(client):
+    """Fix 2 (task-51, M14 final cross-cutting review): `_wrap_value` builds the
+    `{"type": "number", ...}` wrapper directly for CSV-inferred values, bypassing
+    `Number.coerce_write` (`services/db/properties/scalar.py`) entirely -- so
+    that function's own overflow guard (added in this same fix round) never runs
+    for a CSV cell. `_parse_number`'s own int branch is guarded here instead
+    (identical `float()`-survives-the-round-trip check the NaN/Infinity case
+    just above already uses): a 400+-digit cell no longer satisfies
+    `infer_column`'s `all(...)` check and falls back to `rich_text` -- the SAME
+    graceful-degrade convention `test_nan_infinity_column_never_reaches_postgres_
+    as_a_number` above proves for non-finite floats, applied here to an
+    unbounded-int overflow instead of a bare `ValueError`/500 (pre-fix, this
+    class of cell reached `services/db/recompute.py`'s `_decode_stored` -- run
+    on every row write -- and raised an unhandled `OverflowError` the moment the
+    row was created)."""
+    huge = "1" + "0" * 400
+    csv_text = f"Title,Score\nRow1,{huge}\nRow2,42\n"
+    res = await _import(client, csv_text, title="ReproCsv")
+    assert res.status_code != 500
+    assert res.status_code == 201, res.text
+    by_header = {c["header"]: c for c in res.json()["columns"]}
+    assert by_header["Score"]["inferred_type"] != "number"
+    assert by_header["Score"]["inferred_type"] == "rich_text"
+
+    # The row itself was created (no crash), and the huge value round-trips
+    # intact as plain text rather than being silently mangled.
+    props = await _properties_by_name(client, res.json()["database_id"])
+    rows = await _get_rows(client, props["Title"]["data_source_id"])
+    by_title = {r["properties"][props["Title"]["key"]]["title"]: r for r in rows}
+    assert by_title["Row1"]["properties"][props["Score"]["key"]] == {
+        "type": "rich_text", "rich_text": huge,
+    }
+
+
 async def test_generic_postgres_error_during_import_returns_400_not_500(client, monkeypatch):
     """Fix 2.4: any other `asyncpg.PostgresError` surfacing from inside the write loop
     (the NaN/Infinity case is one instance of this general class) must be converted to
@@ -439,3 +475,133 @@ async def test_trigger_automations_false_mutation_check_via_direct_call(client, 
         "SELECT count(*) FROM db_notifications WHERE user_id = $1", test_user
     )
     assert count_after_true == 1
+
+
+# ===========================================================================
+# Fix 1 (task-51, CRITICAL) -- bulk import's per-row indexing must not block the
+# event loop.
+# ===========================================================================
+#
+# `app.sh` runs a single uvicorn worker -- one event loop for the whole backend.
+# Pre-fix, `import_csv`'s per-row loop called `try_index_note` directly (a
+# synchronous, blocking function: the sync Supabase REST client + a plain
+# `httpx.post` for embeddings, no `await` anywhere inside it) -- for an N-row
+# import, that ties up the ONE event loop for the entire loop's duration, so every
+# other request (a totally different user, a totally unrelated endpoint) queues
+# behind it. This test proves the regression class itself (event-loop starvation),
+# not just "the import still works": a heartbeat task ticks on a fixed cadence
+# concurrently with a real multi-row import (via `asyncio.gather`-style
+# concurrency -- both run under the same `await`s), and the test asserts the
+# heartbeat actually ticked close to as many times as wall-clock time alone would
+# predict, regardless of how long the import itself takes.
+#
+# Documented simplifications (brief explicitly permits this class of choice):
+#
+# 1. `try_index_note` is monkeypatched to a `time.sleep(0.05)` stub instead of
+#    exercising the real (slow, network-dependent) embedder -- same latency shape
+#    as a real indexing call (the brief's own numbers: ~90ms/row against a local
+#    harness, much more in production), deterministic and fast to run.
+#
+# 2. The concurrency proof is a heartbeat TICK COUNT, not a single concurrent
+#    request's own elapsed time (the brief's own literal suggestion, and this
+#    test's first draft) -- measuring one `await client.get(...)`'s own elapsed
+#    time turned out to be unreliable: a task that hasn't yet been GRANTED the
+#    CPU (queued behind a synchronous stretch) doesn't start its own clock until
+#    it finally runs, so its recorded "latency" looks small even though it sat
+#    ready-but-starved the whole time -- confirmed empirically while writing this
+#    test (a first draft using a single concurrent `/health` request, timed with
+#    `asyncio.gather`, passed even against the UNFIXED code, for exactly this
+#    reason). Counting how many times a cheap, fixed-interval tick actually
+#    completes over a KNOWN wall-clock span sidesteps that: if the loop is
+#    genuinely free, ticks land at roughly their requested cadence throughout; if
+#    the loop is frozen for a stretch, no ticks can land during that stretch no
+#    matter when they were scheduled, so the total count over the whole request
+#    falls far short of what wall-clock time alone would predict. Verified RED
+#    (15/166 expected ticks, ~9%) against the unfixed code and GREEN (159/168,
+#    ~94%) against the fix before this test was finalized.
+#
+# 3. A second concurrent request to a `/db/...` endpoint (the brief's own literal
+#    example) was tried and abandoned: this test file's `client` fixture (like
+#    every other `test_db_*.py` file's) overrides `get_conn` to hand out the SAME
+#    single `db_conn` asyncpg connection for every request, and asyncpg
+#    connections are not safe for concurrent/overlapping use from two coroutines
+#    at once (confirmed with a throwaway script: two coroutines issuing queries on
+#    the same connection via `asyncio.gather` raise `asyncpg.exceptions.
+#    InterfaceError: cannot perform operation: another operation is in progress`)
+#    -- a second concurrent DB-touching request in this test harness would be
+#    racy/erroring for reasons unrelated to Fix 1 entirely. The heartbeat above
+#    needs no database access at all, sidestepping that while still proving the
+#    same -- arguably more general -- regression: a blocked event loop stalls ALL
+#    traffic, not just other database requests.
+
+
+async def test_bulk_import_indexing_does_not_block_the_event_loop(client, monkeypatch):
+    import routers.db_import as db_import_module
+
+    def _slow_fake_index(note_id: str, user_id: str) -> bool:
+        time.sleep(0.05)
+        return True
+
+    monkeypatch.setattr(db_import_module, "try_index_note", _slow_fake_index)
+
+    row_count = 30
+    csv_text = "Title,Value\n" + "".join(f"Row{i},{i}\n" for i in range(row_count))
+
+    # A heartbeat task, NOT per-call latency, is what actually proves/disproves
+    # starvation here: measuring one (or a few) individual `await`'s own elapsed
+    # time is misleading, since a task that hasn't even been GRANTED the CPU yet
+    # (queued behind a synchronous stretch) doesn't start its own clock until it
+    # finally runs -- so its recorded "latency" looks small even though it sat
+    # ready-but-starved the whole time. Counting how many times a cheap,
+    # fixed-interval tick actually completes over a KNOWN wall-clock span sidesteps
+    # that entirely: if the loop is genuinely free, ticks land at roughly their
+    # requested cadence throughout; if the loop is frozen for a stretch, no ticks
+    # can land during that stretch NO MATTER when they were scheduled, so the total
+    # count over the whole request falls far short of what wall-clock time alone
+    # would predict.
+    TICK_INTERVAL = 0.01
+    stop = False
+    tick_count = 0
+
+    async def heartbeat():
+        nonlocal tick_count
+        while not stop:
+            await asyncio.sleep(TICK_INTERVAL)
+            tick_count += 1
+
+    async def do_import():
+        nonlocal stop
+        t0 = time.monotonic()
+        res = await _import(client, csv_text, title="Big Import")
+        elapsed = time.monotonic() - t0
+        stop = True
+        return res, elapsed
+
+    heartbeat_task = asyncio.create_task(heartbeat())
+    import_res, import_elapsed = await do_import()
+    heartbeat_task.cancel()
+    try:
+        await heartbeat_task
+    except asyncio.CancelledError:
+        pass
+
+    assert import_res.status_code == 201, import_res.text
+    assert import_res.json()["row_count"] == row_count
+
+    expected_ticks_if_unblocked = import_elapsed / TICK_INTERVAL
+    # The import alone (30 rows * 0.05s/row of "indexing") takes >= 1.5s. Pre-fix,
+    # a direct, unawaited `time.sleep` call per row blocks the ONE OS thread the
+    # event loop runs on for that entire stretch -- no other task, including this
+    # heartbeat, can make progress no matter how ready it is, so `tick_count` over
+    # the request's real duration falls far short of `expected_ticks_if_unblocked`.
+    # Post-fix (`asyncio.to_thread` per row), the loop is free between rows, so
+    # ticks land at close to their normal cadence throughout, regardless of how
+    # long the import takes overall. The 60% cutoff is comfortably below what a
+    # fully unblocked loop achieves in practice (some scheduling jitter is normal)
+    # and comfortably above what the frozen pre-fix loop can ever reach (it can
+    # only tick during the row-creation phase, a small fraction of the total).
+    assert tick_count > expected_ticks_if_unblocked * 0.6, (
+        f"heartbeat only ticked {tick_count} times over {import_elapsed:.3f}s "
+        f"(expected ~{expected_ticks_if_unblocked:.0f} if the loop stayed free) "
+        f"-- the event loop was blocked while the CSV import ran"
+    )

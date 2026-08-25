@@ -19,6 +19,7 @@ reimplementing any of their transactional logic here.
 """
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import math
@@ -98,9 +99,27 @@ def _looks_like_email(value: str) -> bool:
 
 def _parse_number(value: str) -> int | float | None:
     try:
-        return int(value)
+        as_int = int(value)
     except ValueError:
         pass
+    else:
+        # Fix 2 (task-51, M14 final cross-cutting review): this function's write
+        # path (`_wrap_value` below) builds the `{"type": "number", ...}` wrapper
+        # directly, bypassing `Number.coerce_write` (`services/db/properties/
+        # scalar.py`) entirely for CSV-inferred values -- so that function's own
+        # overflow guard (added in this same fix round) never runs for a CSV cell.
+        # A Python `int` is unbounded (e.g. a CSV cell of 400+ "9"s parses fine
+        # here), but `services/db/recompute.py`'s `_decode_stored` later does
+        # `float(raw)` for this value on every row write, raising an unhandled
+        # `OverflowError`. Same non-finite-float check just below already treats
+        # "doesn't survive becoming a well-formed number" as `None` (not a number
+        # column after all) -- extended here to the int branch, checked via the
+        # identical `float()` probe.
+        try:
+            float(as_int)
+        except OverflowError:
+            return None
+        return as_int
     try:
         result = float(value)
     except ValueError:
@@ -233,6 +252,26 @@ def _is_title_header(header: str, working_title: str) -> bool:
     return h in ("title", "name") or h == working_title.strip().lower()
 
 
+def _is_reserved_id_header(header: str) -> bool:
+    """Fix 3 (task-51, M14 final cross-cutting review): a header that is an exact,
+    case-insensitive match for `"id"` is reserved metadata, never an importable data
+    column -- this app's own CSV export (`routers/databases.py`'s `export_rows_csv`)
+    emits exactly this header for the row's own note id. Without this: (1)
+    re-importing an exported CSV creates a REAL property literally named `id` for
+    it, so exporting THAT result emits two `id` headers (the synthetic one +
+    the now-real property) and the next re-import 400s on "CSV headers must be
+    unique"; (2) since `CsvImportButton.tsx` always sends the filename stem as
+    `database_title` (which essentially never matches a real column header),
+    `title_idx`'s index-0 fallback would land on this column for any CSV that is
+    itself an M14 export (column 0 there is always `id`) -- every row's title
+    silently becomes a raw UUID string, and the real title data gets demoted to
+    an ordinary `rich_text` property instead. Treating it as reserved closes both:
+    it is never turned into a property (so never collides on a later export) and
+    is excluded from `title_idx`'s candidate set entirely (so it can never be
+    picked, by name-match or by the index-0 fallback, as the title column)."""
+    return header.strip().lower() == "id"
+
+
 # ---------------------------------------------------------------------------
 # Response shape
 # ---------------------------------------------------------------------------
@@ -335,8 +374,17 @@ async def import_csv(
             f"CSV headers must be unique -- found a duplicate: '{duplicate}'",
         )
 
+    # Fix 3 (task-51): a reserved `id` header is never a title-column candidate --
+    # neither by name-match (impossible anyway, "id" doesn't match `_is_title_header`)
+    # nor by the index-0 fallback below, which must skip over it and land on the
+    # next real column instead. `non_id_fieldnames` is the fallback's own candidate
+    # list -- `next(..., 0)`'s literal `0` bare fallback (no non-id column at all,
+    # e.g. a CSV whose only column is named "id") is the one remaining degenerate
+    # case with no real column to prefer, deliberately left unguarded further.
+    non_id_indices = [i for i, h in enumerate(fieldnames) if not _is_reserved_id_header(h)]
     title_idx = next(
-        (i for i, h in enumerate(fieldnames) if _is_title_header(h, title)), 0
+        (i for i in non_id_indices if _is_title_header(fieldnames[i], title)),
+        non_id_indices[0] if non_id_indices else 0,
     )
 
     # Fix 2.4 (task-50): any malformed-input class that only surfaces once a cell
@@ -374,6 +422,19 @@ async def _run_import(
 
         for i, header in enumerate(fieldnames):
             values = [row.get(header) for row in csv_rows]
+            if i != title_idx and _is_reserved_id_header(header):
+                # Fix 3 (task-51): reserved metadata column -- never becomes a
+                # property, never contributes data to any row (see
+                # `_is_reserved_id_header`'s own docstring for why). The row-
+                # writing loop below skips it too (via `header not in
+                # header_to_key`, since it's deliberately never added here).
+                column_reports.append(
+                    ColumnImportReport(
+                        header=header, inferred_type="id (reserved, not imported)",
+                        non_empty_count=0, empty_count=len(values),
+                    )
+                )
+                continue
             if i == title_idx:
                 # Reuse the auto-created title property (step 1 of create_database) --
                 # never create a second title-type property; the compiler/UI assume
@@ -415,6 +476,11 @@ async def _run_import(
         for row in csv_rows:
             properties: dict[str, Any] = {}
             for header in fieldnames:
+                if header not in header_to_key:
+                    # Fix 3 (task-51): the reserved `id` header -- deliberately never
+                    # added to `header_to_key` above, so it contributes no key/value
+                    # to any row's `properties`.
+                    continue
                 cell = row.get(header)
                 if _is_empty_cell(cell):
                     # Spec §3.3: "Absent key ≡ empty" -- never a bare scalar. Empty
@@ -452,7 +518,19 @@ async def _run_import(
     # next time anyone edits a row's body), rather than blocking or failing the import.
     # Each row's call is independently best-effort (`try_index_note` never raises) so
     # one row's indexing failure can't stop the rest of the batch from being indexed.
+    #
+    # Fix 1 (task-51, M14 final cross-cutting review, CRITICAL): `try_index_note` ->
+    # `index_note` is a synchronous, blocking function (the sync Supabase REST client +
+    # `services/embedder.py`'s plain `httpx.post`, no `await` anywhere inside it).
+    # `app.sh` runs a single uvicorn worker -- one event loop for the whole backend --
+    # so calling it directly here, N times in a row for an N-row import, ties up that
+    # one event loop for the entire loop's duration: every other request (every other
+    # user, the AI agent, everything) is blocked for as long as the import's indexing
+    # takes. `asyncio.to_thread` runs each call in a worker thread instead, so the loop
+    # stays free to serve other requests while each blocking call runs -- this request
+    # still awaits every row's indexing before responding (unchanged behavior from the
+    # caller's point of view), only where it runs changes.
     for note_id in created_note_ids:
-        try_index_note(note_id, user_id)
+        await asyncio.to_thread(try_index_note, note_id, user_id)
 
     return CsvImportResponse(database_id=created.database.id, row_count=row_count, columns=column_reports)

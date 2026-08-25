@@ -359,6 +359,34 @@ async def test_create_row_with_a_non_str_title_is_a_clean_400_not_a_500(
     assert count == 0
 
 
+async def test_create_row_rejects_an_oversized_number_with_400_not_500(
+    patched_pool, db_conn, test_user
+):
+    """Fix 2 (task-51, M14 final cross-cutting review): a too-large Python int
+    (unbounded, e.g. a 400+-digit literal) sails past a bare `isinstance(raw,
+    (int, float))` check, then previously crashed with an unhandled
+    `OverflowError` (not a `ValueError`, so no existing catch here covered it)
+    the moment `create_row_core`'s own `recompute_row` call decoded it back
+    (`services/db/recompute.py`'s `_decode_stored`, run on EVERY row write).
+    Now guarded in `Number.coerce_write` itself (`services/db/properties/
+    scalar.py`), reached here via `coerce_property_write`."""
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "num1", "Score", "number")
+
+    huge = int("1" + "0" * 400)
+    res = await client_post_internal(
+        db_conn, "/internal/db/create_row",
+        {"data_source_id": ds_id, "user_id": test_user, "properties": {"num1": huge}},
+    )
+    assert res.status_code == 400, res.text
+    assert "out of range" in res.json()["detail"]
+
+    count = await db_conn.fetchval(
+        "SELECT count(*) FROM db_row_props WHERE data_source_id = $1", uuid.UUID(ds_id)
+    )
+    assert count == 0
+
+
 # ===========================================================================
 # /internal/db/update_row
 # ===========================================================================

@@ -52,6 +52,13 @@ async function proxy(req: Request, path: string[]) {
   const respHeaders = new Headers();
   const respCT = res.headers.get("Content-Type");
   if (respCT) respHeaders.set("Content-Type", respCT);
+  // task-51 Fix 5 (M14 final cross-cutting review): CSV export signals a silently-
+  // truncated (>500 row) result via this one response header -- forwarded here
+  // alongside Content-Type (this proxy otherwise drops every backend response
+  // header, per this file's own header comment) so `DatabaseSettingsMenu.tsx`'s
+  // `exportCsv()` can warn the user instead of handing back a silently partial file.
+  const truncated = res.headers.get("X-Export-Truncated");
+  if (truncated) respHeaders.set("X-Export-Truncated", truncated);
   return new Response(res.body, { status: res.status, headers: respHeaders });
 }
 

@@ -193,17 +193,38 @@ def index_note(note_id: str, user_id: str) -> bool:
 
 
 def try_index_note(note_id: str, user_id: str) -> bool:
-    """Best-effort, non-fatal wrapper around `index_note` (task-50, Fix 4).
+    """Best-effort, non-fatal wrapper around `index_note` (task-50, Fix 4; task-51,
+    Fix 6 closed the remaining gaps below).
 
     Task 46 built the property-preamble chunk logic above correctly, but nothing on any
     row-write path ever called `index_note()` -- a row created via "+ New row", an agent
     tool, or CSV import got zero preamble chunks until someone happened to edit its body
     text, and editing a property cell (the entire point of spec §12 item 1) never
-    refreshed the preamble either. Every row-write call site (`routers/databases.py`'s
-    `create_row`/`update_row_property`, `services/agent/brain_tools.py`'s `_create_row`/
-    `_update_row`, `routers/internal.py`'s `internal_create_row`/`internal_update_row`,
-    `routers/db_import.py`'s per-row import loop) calls this single shared helper instead
-    of repeating the same try/except-log-and-continue block six times.
+    refreshed the preamble either. Task 50 wired 6 call sites; a task-51 re-grep of every
+    `create_row_core`/`update_row_property_core` call site found 3 more real (non-test)
+    gaps, now closed too -- every row-write path in this codebase calls this single
+    shared helper instead of repeating the same try/except-log-and-continue block:
+
+    - `routers/databases.py`'s `create_row` (both its default-template and plain
+      branches) and `update_row_property`.
+    - `services/agent/brain_tools.py`'s `_create_row`/`_update_row` (the AI agent's own
+      row-write tools).
+    - `routers/internal.py`'s `internal_create_row`/`internal_update_row` (the MCP
+      server's mirror of the two tools above).
+    - `routers/db_import.py`'s per-row CSV import loop (off the event loop via
+      `asyncio.to_thread`, task-51 Fix 1 -- see that module for why).
+    - `routers/databases.py`'s `POST /db/templates/{id}/instantiate` (explicitly picking
+      a non-default template from the TableView template picker -- a separate,
+      standalone endpoint from `create_row`'s own default-template branch above).
+    - `services/db/scheduler.py`'s `_tick_templates` (a repeating row-template firing on
+      schedule, no HTTP request involved at all).
+    - `services/db/automations.py`'s `add_page_to`/`edit_pages_in` action handlers --
+      these can write into a DIFFERENT data source than the one whose automation
+      triggered them, so indexing the trigger row itself (already covered by whichever
+      of the sites above made the triggering write) says nothing about the row THESE
+      actions create/edit elsewhere. (`edit_property`, the automations action that
+      writes the trigger row itself, needs no separate call here -- that row is always
+      the same one its own triggering write already re-indexes.)
 
     Matches `routers/ingest.py`'s own `_try_index_note` convention exactly: wrapped in
     `try/except Exception`, logs a warning and continues on failure, never raises, never

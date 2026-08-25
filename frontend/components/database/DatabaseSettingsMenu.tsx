@@ -154,6 +154,17 @@ export function DatabaseSettingsMenu({
         `/api/db/data-sources/${dataSourceId}/export?view_id=${activeView.id}`
       );
       if (!res.ok) throw new Error(await errorMessage(res));
+      // task-51 Fix 5 (M14 final cross-cutting review): export silently truncated at
+      // 500 rows with no signal, while CSV import allows far more -- the backend now
+      // flags a truncated export with this header (proxied through unchanged by
+      // `/api/db/[...path]`'s route.ts); still trigger the download either way (a
+      // truncated-but-present export is still useful), just warn honestly alongside it.
+      if (res.headers.get("X-Export-Truncated")) {
+        showToast(
+          "Export limited to the first 500 rows -- some rows may be missing",
+          "info"
+        );
+      }
       const blob = await res.blob();
       const safeName = activeView.name.replace(/[^a-z0-9]/gi, "_").toLowerCase() || "export";
       const url = URL.createObjectURL(blob);

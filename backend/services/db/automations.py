@@ -37,6 +37,7 @@ from services.db import rollup
 from services.db.formula import evaluator, values as fvalues
 from services.db.formula.parser import parse as parse_formula
 from services.db.templates import seed_next_run_at, next_occurrence
+from services.indexer import try_index_note
 
 
 # ---------------------------------------------------------------------------
@@ -615,10 +616,21 @@ async def _action_add_page_to(action: dict[str, Any], ctx: ActionContext) -> Non
 
     from services.db.rows import create_row_core
 
-    await create_row_core(
+    result = await create_row_core(
         ctx.conn, ctx.user_id, target_ds, properties=resolved,
         trigger_automations=ctx.allow_triggering_automations,
     )
+    # Fix 6 (task-51, M14 final cross-cutting review): best-effort, non-fatal
+    # property-preamble refresh -- see `services/indexer.py`'s `try_index_note`
+    # docstring. This can write into a DIFFERENT data source than the one whose
+    # automation triggered it -- the triggering row getting indexed elsewhere (its
+    # own write path) says nothing about THIS newly created row in `target_ds`,
+    # which was permanently unsearchable by property value without this. Called
+    # right after `create_row_core` returns, i.e. after ITS OWN transactional work
+    # is done -- `create_row_core` opens `conn.transaction()` internally (a nested
+    # SAVEPOINT here, since this action chain already runs inside one), so by the
+    # time `await` above returns, that inner transaction has already exited.
+    try_index_note(result.id, ctx.user_id)
 
 
 @_register("edit_pages_in")
@@ -644,7 +656,7 @@ async def _action_edit_pages_in(action: dict[str, Any], ctx: ActionContext) -> N
     from services.db.rows import update_row_property_core
 
     for row_id in row_ids:
-        await update_row_property_core(
+        result = await update_row_property_core(
             ctx.conn,
             ctx.user_id,
             data_source_id,
@@ -653,6 +665,13 @@ async def _action_edit_pages_in(action: dict[str, Any], ctx: ActionContext) -> N
             value,
             trigger_automations=ctx.allow_triggering_automations,
         )
+        # Fix 6 (task-51, M14 final cross-cutting review): best-effort, non-fatal
+        # property-preamble refresh -- see `_action_add_page_to`'s identical comment
+        # just above and `services/indexer.py`'s `try_index_note` docstring. Same
+        # cross-data-source subtlety: `data_source_id` here is "a database of your
+        # choosing" (research §J.6.6), not necessarily the automation's own
+        # triggering data source.
+        try_index_note(result.id, ctx.user_id)
 
 
 @_register("send_notification")

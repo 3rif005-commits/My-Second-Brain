@@ -103,6 +103,39 @@ describe("GET/POST/PATCH/DELETE /api/db/[...path]", () => {
     expect(fetchSpy.mock.calls[0][0]).toBe("http://backend:9000/db/properties/prop-1");
   });
 
+  it("forwards the X-Export-Truncated header when the backend sets it (task-51 Fix 5)", async () => {
+    vi.stubEnv("FASTAPI_URL", "http://backend:9000");
+    getSession.mockResolvedValue({ data: { session: { access_token: "tok-123" } } });
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("id,Title\n", {
+        status: 200,
+        headers: { "Content-Type": "text/csv", "X-Export-Truncated": "true" },
+      })
+    );
+
+    const res = await GET(
+      new Request("http://localhost/api/db/data-sources/ds-1/export?view_id=v1"),
+      ctxFor(["data-sources", "ds-1", "export"])
+    );
+
+    expect(res.headers.get("X-Export-Truncated")).toBe("true");
+  });
+
+  it("does not set X-Export-Truncated when the backend response has no such header", async () => {
+    vi.stubEnv("FASTAPI_URL", "http://backend:9000");
+    getSession.mockResolvedValue({ data: { session: { access_token: "tok-123" } } });
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("id,Title\n", { status: 200, headers: { "Content-Type": "text/csv" } })
+    );
+
+    const res = await GET(
+      new Request("http://localhost/api/db/data-sources/ds-1/export?view_id=v1"),
+      ctxFor(["data-sources", "ds-1", "export"])
+    );
+
+    expect(res.headers.get("X-Export-Truncated")).toBeNull();
+  });
+
   it("returns 503 with a helpful message when the backend refuses the connection", async () => {
     getSession.mockResolvedValue({ data: { session: { access_token: "tok-abc" } } });
     vi.spyOn(global, "fetch").mockRejectedValue(new Error("connect ECONNREFUSED 127.0.0.1:8000"));

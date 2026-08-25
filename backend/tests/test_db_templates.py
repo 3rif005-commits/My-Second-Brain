@@ -383,6 +383,91 @@ async def test_instantiate_template_router_404s_for_unknown_template(client):
     assert res.status_code == 404
 
 
+def _preamble_fake_supabase(*, ds_id, row_properties, prop_defs, notes_title="Untitled"):
+    """Same helper `test_databases_router.py`'s Fix-4/preamble tests define --
+    duplicated per this file's own established "small per-file duplication"
+    convention (see e.g. this file's own `_extract_sql_statements` sweep vs.
+    `test_databases_router.py`'s)."""
+    from unittest.mock import MagicMock
+
+    tables: dict = {}
+    db = MagicMock()
+    db.table.side_effect = lambda name: tables.setdefault(name, MagicMock())
+
+    notes = tables.setdefault("notes", MagicMock())
+    notes.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
+        "title": notes_title, "content": [],
+    }
+
+    row_props = tables.setdefault("db_row_props", MagicMock())
+    row_props.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
+        "properties": row_properties, "data_source_id": ds_id,
+    }
+
+    properties = tables.setdefault("db_properties", MagicMock())
+    properties.select.return_value.eq.return_value.eq.return_value.order.return_value.execute.return_value.data = (
+        prop_defs
+    )
+
+    tables.setdefault("note_chunks", MagicMock())
+    db.tables = tables
+    return db
+
+
+async def test_instantiate_template_router_triggers_property_preamble_reindex(client):
+    """Fix 6 (task-51, M14 final cross-cutting review): `POST /db/templates/
+    {id}/instantiate` -- explicitly picking a NON-default template from the real
+    TableView template picker UI, a separate, standalone endpoint from
+    `create_row`'s own default-template branch (already wired since task-50) --
+    was one of 3 real row-write call sites missed by that task's own sweep. A
+    row created this way was permanently unsearchable by property value until
+    someone happened to edit its body text."""
+    from unittest.mock import patch
+
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Notes", "type": "rich_text"}
+        )
+    ).json()
+    tmpl_res = await client.post(
+        f"/db/data-sources/{ds_id}/templates",
+        json={
+            "name": "Non-default",
+            "is_default": False,
+            "properties": {prop["key"]: {"type": "rich_text", "rich_text": "from template"}},
+        },
+    )
+    assert tmpl_res.status_code == 201, tmpl_res.text
+    template_id = tmpl_res.json()["id"]
+
+    fake_db = _preamble_fake_supabase(
+        ds_id=ds_id,
+        row_properties={prop["key"]: {"type": "rich_text", "rich_text": "from template"}},
+        prop_defs=[{"key": prop["key"], "name": "Notes", "type": "rich_text", "position": 0, "config": {}}],
+    )
+
+    with (
+        patch("services.indexer.get_supabase", return_value=fake_db),
+        patch("services.indexer.embed_batch", side_effect=lambda texts: [[0.0]] * len(texts)),
+        patch("services.indexer.embed", return_value=[0.0]),
+        patch("services.indexer.generate_descriptor", return_value="d"),
+    ):
+        res = await client.post(f"/db/templates/{template_id}/instantiate")
+    assert res.status_code == 201, res.text
+    note_id = res.json()["id"]
+
+    insert_call = fake_db.tables["note_chunks"].insert.call_args
+    assert insert_call is not None, "note_chunks.insert was never called -- index_note was never invoked"
+    rows = insert_call[0][0]
+    assert len(rows) == 1
+    assert rows[0]["chunk_index"] == 0
+    assert rows[0]["chunk_text"] == "Notes: from template"
+    assert rows[0]["block_id"] == "__property_preamble__"
+    assert rows[0]["note_id"] == note_id
+
+
 # ===========================================================================
 # create_row: default-template auto-apply (task-37-brief.md decision 3)
 # ===========================================================================
@@ -535,6 +620,51 @@ async def test_tick_creates_a_row_and_advances_next_run_at_for_a_due_template(db
     )
     assert new_next_run_at == next_occurrence(repeat_config, past)
     assert new_next_run_at > past
+
+
+async def test_tick_triggers_property_preamble_reindex_for_the_created_row(db_conn, test_user):
+    """Fix 6 (task-51, M14 final cross-cutting review): a repeating row-template
+    firing on schedule -- no HTTP request involved at all -- was one of 3 real
+    row-write call sites task-50's own sweep missed. Without this, a row created
+    this way is permanently unsearchable by property value."""
+    from unittest.mock import patch
+
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "statusKey", "Status", "status")
+    past = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    repeat_config = {
+        "frequency": "daily", "interval": 1, "start_date": "2020-01-01", "time_of_day": "00:00",
+    }
+    await _insert_template(
+        db_conn, test_user, ds_id,
+        name="Daily standup",
+        properties={"statusKey": {"type": "status", "status": "todo"}},
+        repeat_config=repeat_config,
+        next_run_at=past,
+    )
+
+    fake_db = _preamble_fake_supabase(
+        ds_id=ds_id,
+        row_properties={"statusKey": {"type": "status", "status": "todo"}},
+        prop_defs=[{"key": "statusKey", "name": "Status", "type": "status", "position": 0, "config": {}}],
+    )
+
+    with (
+        patch("services.indexer.get_supabase", return_value=fake_db),
+        patch("services.indexer.embed_batch", side_effect=lambda texts: [[0.0]] * len(texts)),
+        patch("services.indexer.embed", return_value=[0.0]),
+        patch("services.indexer.generate_descriptor", return_value="d"),
+    ):
+        created = await _tick_templates(db_conn)
+    assert created == 1
+
+    insert_call = fake_db.tables["note_chunks"].insert.call_args
+    assert insert_call is not None, "note_chunks.insert was never called -- index_note was never invoked"
+    rows = insert_call[0][0]
+    assert len(rows) == 1
+    assert rows[0]["chunk_index"] == 0
+    assert rows[0]["chunk_text"].startswith("Status:")
+    assert rows[0]["block_id"] == "__property_preamble__"
 
 
 async def test_tick_does_not_touch_a_template_whose_next_run_at_is_in_the_future(db_conn, test_user):

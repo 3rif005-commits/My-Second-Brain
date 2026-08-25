@@ -459,6 +459,92 @@ async def test_add_page_to_does_not_trigger_the_target_data_sources_own_automati
     assert notifications_after == notifications_before
 
 
+def _preamble_fake_supabase(*, ds_id, row_properties, prop_defs, notes_title="Untitled"):
+    """Same helper `test_databases_router.py`'s Fix-4/preamble tests define --
+    duplicated per this file's own established per-test-file convention (see
+    e.g. this module's own `_ctx` vs. other test files' near-identical
+    fixtures)."""
+    from unittest.mock import MagicMock
+
+    tables: dict = {}
+    db = MagicMock()
+    db.table.side_effect = lambda name: tables.setdefault(name, MagicMock())
+
+    notes = tables.setdefault("notes", MagicMock())
+    notes.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
+        "title": notes_title, "content": [],
+    }
+
+    row_props = tables.setdefault("db_row_props", MagicMock())
+    row_props.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute.return_value.data = {
+        "properties": row_properties, "data_source_id": ds_id,
+    }
+
+    properties = tables.setdefault("db_properties", MagicMock())
+    properties.select.return_value.eq.return_value.eq.return_value.order.return_value.execute.return_value.data = (
+        prop_defs
+    )
+
+    tables.setdefault("note_chunks", MagicMock())
+    db.tables = tables
+    return db
+
+
+async def test_add_page_to_triggers_property_preamble_reindex_on_the_new_row(
+    db_conn, test_user
+):
+    """Fix 6 (task-51, M14 final cross-cutting review): `add_page_to`/
+    `edit_pages_in` can write into a DIFFERENT data source than the one whose
+    automation triggered them -- the triggering row getting indexed elsewhere
+    (its own write path) says nothing about the row THESE actions create in
+    the target data source, one of 3 real row-write call sites task-50's own
+    sweep missed. Exercises the actual cross-data-source subtlety the brief
+    calls out specifically: the reindexed row lives in `target_ds`, not
+    `trigger_ds`."""
+    from unittest.mock import patch
+
+    trigger_ds = await _make_data_source(db_conn, test_user, name="Trigger DS")
+    target_ds = await _make_data_source(db_conn, test_user, name="Target DS")
+    await _insert_property(db_conn, test_user, target_ds, "titleKey", "Name", "title")
+    row_id = await _make_row(db_conn, test_user, trigger_ds)
+
+    fake_db = _preamble_fake_supabase(
+        ds_id=target_ds,
+        row_properties={"titleKey": {"type": "title", "title": "New page"}},
+        prop_defs=[{"key": "titleKey", "name": "Name", "type": "title", "position": 0, "config": {}}],
+    )
+
+    ctx = _ctx(db_conn, test_user, trigger_ds, row_id)
+    with (
+        patch("services.indexer.get_supabase", return_value=fake_db),
+        patch("services.indexer.embed_batch", side_effect=lambda texts: [[0.0]] * len(texts)),
+        patch("services.indexer.embed", return_value=[0.0]),
+        patch("services.indexer.generate_descriptor", return_value="d"),
+    ):
+        await execute_action_chain(
+            db_conn, ctx,
+            [{
+                "type": "add_page_to", "data_source_id": target_ds,
+                "properties": {"titleKey": {"type": "title", "title": "New page"}},
+            }],
+            allowed=DATABASE_AUTOMATION_ACTIONS,
+        )
+
+    new_row = await db_conn.fetchrow(
+        "SELECT note_id FROM db_row_props WHERE data_source_id = $1", target_ds
+    )
+    assert new_row is not None
+
+    insert_call = fake_db.tables["note_chunks"].insert.call_args
+    assert insert_call is not None, "note_chunks.insert was never called -- index_note was never invoked"
+    rows = insert_call[0][0]
+    assert len(rows) == 1
+    assert rows[0]["chunk_index"] == 0
+    assert rows[0]["chunk_text"] == "Name: New page"
+    assert rows[0]["block_id"] == "__property_preamble__"
+    assert rows[0]["note_id"] == str(new_row["note_id"])
+
+
 async def test_edit_pages_in_trigger_row_target_writes_the_trigger_row(db_conn, test_user):
     ds_id = await _make_data_source(db_conn, test_user)
     await _insert_property(db_conn, test_user, ds_id, "statusKey", "Status", "status")

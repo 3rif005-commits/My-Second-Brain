@@ -814,6 +814,52 @@ async def test_update_row_property_rejects_a_bare_scalar_value(client, db_conn, 
     assert prop["key"] not in row_after["properties"]  # rejected, never written
 
 
+async def test_update_row_property_rejects_an_oversized_number_with_400_not_500(
+    client, db_conn, test_user
+):
+    """Fix 2 (task-51, M14 final cross-cutting review): pre-fix, this endpoint
+    accepted `body.value` as an already-built wrapper with no coercion at all
+    (unlike the agent-tools/internal-API write path, which validates through
+    `coerce_property_write` -> `Number.coerce_write`) -- a too-large Python int
+    (unbounded, so no `isinstance` check catches it) sailed through as a
+    "well-formed" number wrapper, got written, then raised an unhandled
+    `OverflowError` (not a `ValueError`) the moment `update_row_property_core`'s
+    own `recompute_row` call decoded it back -- reproduced directly against this
+    endpoint with a throwaway script before this test was written. Guarded
+    narrowly in `update_row_property_core` itself (the shared core this PATCH
+    endpoint and every automation action handler write through), since it
+    structurally never reaches `Number.coerce_write` at all."""
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Score", "type": "number"}
+        )
+    ).json()
+
+    note = await db_conn.fetchrow(
+        "INSERT INTO notes (user_id, title) VALUES ($1, 'Row 1') RETURNING id", test_user
+    )
+    await db_conn.execute(
+        "INSERT INTO db_row_props (note_id, data_source_id, user_id) VALUES ($1, $2, $3)",
+        note["id"], ds_id, test_user,
+    )
+
+    huge = int("1" + "0" * 400)
+    res = await client.patch(
+        f"/db/data-sources/{ds_id}/rows/{note['id']}",
+        json={"property_key": prop["key"], "value": {"type": "number", "number": huge}},
+    )
+    assert res.status_code == 400, res.text
+    assert "out of range" in res.json()["detail"]
+
+    # Never left the row in a broken state: the property was never written.
+    row_after = await db_conn.fetchrow(
+        "SELECT properties FROM db_row_props WHERE note_id = $1", note["id"]
+    )
+    assert prop["key"] not in (row_after["properties"] or {})
+
+
 async def test_update_row_property_requires_a_value_field(client, db_conn, test_user):
     # Review finding 1, fix round 2: `value` has no default (was `Any = None`,
     # now required) -- an omitted `value` is a 422 at the Pydantic layer, not
