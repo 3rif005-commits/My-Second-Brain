@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // TableView's title cell now renders an OpenNoteButton (controller fix, closing the
 // gap a user found live: TableView was the only view with no "open the row as its
@@ -12,6 +12,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: routerPush }),
+}));
+
+// RowPeek (opened by the Open-note button, see above) mounts a real
+// BlockEditor for the row's body — heavy (BlockNote), and not what these
+// TableView-level tests exercise (its own body-save wiring is
+// RowPeek-scoped, not TableView's concern). Stubbed the same way
+// TemplateEditor.test.tsx already does for the identical reason.
+vi.mock("@/components/editor/BlockEditor", () => ({
+  BlockEditor: () => <div data-testid="block-editor-stub" />,
 }));
 
 import { TableView } from "./TableView";
@@ -136,22 +145,107 @@ describe("TableView", () => {
     expect(onCellChange).toHaveBeenCalledWith("row-1", "done", { type: "checkbox", checkbox: false });
   });
 
-  it("clicking a row's Open note button navigates to the note's workspace route (controller fix — a user found live that TableView, unlike every other view, had no way to open a row as its full note page; TitleCell's own click only renames the title, matching Board/Gallery's own already-solved shape for the identical competing-click problem)", async () => {
-    const user = userEvent.setup();
-    render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+  describe("row peek (controller design, approved 2026-08-25 — a user found live that TableView had no way to open a row as its note page at all; the peek is the Notion-parity fix: a side panel with properties + body over the table, not an immediate navigation)", () => {
+    beforeEach(() => {
+      // RowPeek fetches the row's body via the pre-existing GET /api/notes/{id}
+      // route (the same one NoteEditorPage.tsx already uses) — mocked here
+      // since these are plain RTL renders, no real backend.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(jsonResponse({ id: "row-1", title: "First Note", content: [] }))
+      );
+    });
 
-    await user.click(screen.getByRole("button", { name: /open note/i }));
-    expect(routerPush).toHaveBeenCalledWith("/brain/workspace/row-1");
-  });
+    it("clicking a row's Open note button opens the peek, not a navigation", async () => {
+      const user = userEvent.setup();
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
 
-  it("clicking a row's title still only renames it — Open note is a separate control, not a side effect of the rename click", async () => {
-    const user = userEvent.setup();
-    const onCellChange = vi.fn();
-    render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={onCellChange} />);
+      await user.click(screen.getByRole("button", { name: /open note/i }));
 
-    await user.click(screen.getByText("First Note"));
-    expect(screen.getByRole("textbox")).toBeInTheDocument();
-    expect(routerPush).not.toHaveBeenCalled();
+      expect(await screen.findByRole("dialog", { name: /row details/i })).toBeInTheDocument();
+      expect(routerPush).not.toHaveBeenCalled();
+    });
+
+    it("clicking a row's title still only renames it — Open note is a separate control, not a side effect of the rename click", async () => {
+      const user = userEvent.setup();
+      const onCellChange = vi.fn();
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={onCellChange} />);
+
+      await user.click(screen.getByText("First Note"));
+      expect(screen.getByRole("textbox")).toBeInTheDocument();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(routerPush).not.toHaveBeenCalled();
+    });
+
+    it("shows the row's properties inside the peek, and editing one calls onCellChange with the row id", async () => {
+      const user = userEvent.setup();
+      const onCellChange = vi.fn();
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={onCellChange} />);
+
+      await user.click(screen.getByRole("button", { name: /open note/i }));
+      const dialog = await screen.findByRole("dialog", { name: /row details/i });
+
+      expect(within(dialog).getByText("Kind")).toBeInTheDocument();
+      expect(within(dialog).getByText("article")).toBeInTheDocument();
+
+      const checkbox = within(dialog).getByRole("checkbox");
+      await user.click(checkbox);
+      expect(onCellChange).toHaveBeenCalledWith("row-1", "done", { type: "checkbox", checkbox: false });
+    });
+
+    it("loads and renders the row's body once the note fetch resolves", async () => {
+      const user = userEvent.setup();
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+
+      await user.click(screen.getByRole("button", { name: /open note/i }));
+      const dialog = await screen.findByRole("dialog", { name: /row details/i });
+
+      expect(await within(dialog).findByTestId("block-editor-stub")).toBeInTheDocument();
+    });
+
+    it('"Open as full page" navigates to /brain/{noteId}', async () => {
+      const user = userEvent.setup();
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+
+      await user.click(screen.getByRole("button", { name: /open note/i }));
+      const dialog = await screen.findByRole("dialog", { name: /row details/i });
+      await user.click(within(dialog).getByRole("button", { name: /open as full page/i }));
+
+      expect(routerPush).toHaveBeenCalledWith("/brain/row-1");
+    });
+
+    it('"Open in Workspace" navigates to the workspace route', async () => {
+      const user = userEvent.setup();
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+
+      await user.click(screen.getByRole("button", { name: /open note/i }));
+      const dialog = await screen.findByRole("dialog", { name: /row details/i });
+      await user.click(within(dialog).getByRole("button", { name: /open in workspace/i }));
+
+      expect(routerPush).toHaveBeenCalledWith("/brain/workspace/row-1");
+    });
+
+    it("the Close button closes the peek", async () => {
+      const user = userEvent.setup();
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+
+      await user.click(screen.getByRole("button", { name: /open note/i }));
+      await screen.findByRole("dialog", { name: /row details/i });
+      await user.click(screen.getByRole("button", { name: /close/i }));
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("pressing Escape closes the peek", async () => {
+      const user = userEvent.setup();
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+
+      await user.click(screen.getByRole("button", { name: /open note/i }));
+      await screen.findByRole("dialog", { name: /row details/i });
+      await user.keyboard("{Escape}");
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
   });
 
   describe("empty-state gap fix", () => {

@@ -50,6 +50,7 @@ import { buildSubItemTree } from "@/lib/database/subItemTree";
 import { FormulaEditor } from "../FormulaEditor";
 import { ButtonPropertyConfigPopover } from "../ButtonPropertyConfigPopover";
 import { OpenNoteButton } from "../OpenNoteButton";
+import { RowPeek } from "../RowPeek";
 
 interface TableViewProps {
   properties: PropertyResponse[];
@@ -172,6 +173,11 @@ export function TableView({
 }: TableViewProps) {
   const { showToast } = useToast();
 
+  // Controller addition: clicking a row's Open-note icon opens a RowPeek
+  // (side panel, properties + body over the table) instead of navigating
+  // straight to Workspace — see RowPeek.tsx / OpenNoteButton.tsx's own
+  // `onOpen` prop. `null` = no peek open.
+  const [peekRowId, setPeekRowId] = useState<string | null>(null);
   const [addingProperty, setAddingProperty] = useState(false);
   const [propertyName, setPropertyName] = useState("");
   const [propertyType, setPropertyType] = useState<string>(ADDABLE_PROPERTY_TYPES[0].value);
@@ -614,7 +620,10 @@ export function TableView({
     }
   }
 
+  const peekRow = peekRowId ? rows.find((r) => r.id === peekRowId) : undefined;
+
   return (
+    <>
     <div className="overflow-auto h-full">
       <table className="w-full border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-white dark:bg-gray-900">
@@ -843,6 +852,7 @@ export function TableView({
                             <OpenNoteButton
                               noteId={entryRow.id}
                               className="shrink-0 opacity-0 group-hover:opacity-100"
+                              onOpen={setPeekRowId}
                             />
                           </div>
                         ) : (
@@ -886,6 +896,7 @@ export function TableView({
                             <OpenNoteButton
                               noteId={row.original.id}
                               className="shrink-0 opacity-0 group-hover:opacity-100"
+                              onOpen={setPeekRowId}
                             />
                           </div>
                         ) : (
@@ -953,5 +964,15 @@ export function TableView({
         </tbody>
       </table>
     </div>
+    {peekRow && (
+      <RowPeek
+        row={peekRow}
+        properties={properties}
+        editable={editable}
+        onCellChange={onCellChange}
+        onClose={() => setPeekRowId(null)}
+      />
+    )}
+    </>
   );
 }

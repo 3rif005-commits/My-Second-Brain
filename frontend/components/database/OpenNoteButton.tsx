@@ -21,14 +21,22 @@
 // click here would also register as the start of a (zero-distance, so
 // harmless) drag gesture — cheap to prevent outright rather than rely on
 // dnd-kit's activation-distance threshold to absorb it.
+//
+// `onOpen` (optional, controller addition): TableView opens a `RowPeek`
+// (a side panel showing properties + body over the table, matching
+// Notion's own default row-click behavior) instead of navigating straight
+// to the Workspace route every other view still does — see RowPeek.tsx.
+// Every existing caller (Board/Gallery) omits this prop and keeps today's
+// exact navigate-to-Workspace behavior unchanged.
 import { useOpenNote } from "@/lib/database/useOpenNote";
 
 interface OpenNoteButtonProps {
   noteId: string;
   className?: string;
+  onOpen?: (noteId: string) => void;
 }
 
-export function OpenNoteButton({ noteId, className = "" }: OpenNoteButtonProps) {
+export function OpenNoteButton({ noteId, className = "", onOpen }: OpenNoteButtonProps) {
   const openNote = useOpenNote();
 
   return (
@@ -39,7 +47,7 @@ export function OpenNoteButton({ noteId, className = "" }: OpenNoteButtonProps) 
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
-        openNote(noteId);
+        (onOpen ?? openNote)(noteId);
       }}
       className={`inline-flex items-center justify-center rounded p-1 bg-white/80 dark:bg-gray-900/80 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-white dark:hover:bg-gray-900 ${className}`}
     >
