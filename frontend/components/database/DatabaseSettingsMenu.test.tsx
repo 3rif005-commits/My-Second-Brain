@@ -314,6 +314,132 @@ describe("DatabaseSettingsMenu", () => {
     });
   });
 
+  describe("Export (task-48)", () => {
+    function stubDownloadGlobals() {
+      const createObjectURL = vi.fn().mockReturnValue("blob:mock-url");
+      const revokeObjectURL = vi.fn();
+      URL.createObjectURL = createObjectURL;
+      URL.revokeObjectURL = revokeObjectURL;
+      // jsdom doesn't implement navigation -- clicking a real `<a href="blob:...">`
+      // would otherwise log a "Not implemented" error. Follows BlockEditor.tsx's
+      // exact Blob/createObjectURL/`<a download>` mechanism (task-48-brief.md), so
+      // this stubs only the one browser API jsdom can't do, not the mechanism itself.
+      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+      return { createObjectURL, revokeObjectURL, clickSpy };
+    }
+
+    it("fetches the export endpoint and triggers a Blob download via createObjectURL/<a>, then revokes the URL", async () => {
+      const user = userEvent.setup();
+      const csvBody = "id,Title\nabc,Dune\n";
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(csvBody, { status: 200, headers: { "Content-Type": "text/csv" } })
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const { createObjectURL, revokeObjectURL, clickSpy } = stubDownloadGlobals();
+      const appendSpy = vi.spyOn(document.body, "appendChild");
+
+      render(
+        <DatabaseSettingsMenu
+          dataSourceId="ds-1"
+          properties={[TITLE_PROP]}
+          activeView={VIEW}
+          onPropertiesChanged={vi.fn()}
+          onUpdateView={vi.fn()}
+          templates={[]}
+          onCreateTemplate={vi.fn()}
+          onUpdateTemplate={vi.fn()}
+          onDeleteTemplate={vi.fn()}
+          automations={[]}
+          onCreateAutomation={vi.fn()}
+          onUpdateAutomation={vi.fn()}
+          onDeleteAutomation={vi.fn()}
+        />
+      );
+      await openMenu(user);
+      await user.click(screen.getByRole("button", { name: "Export CSV" }));
+
+      expect(fetchMock).toHaveBeenCalledWith("/api/db/data-sources/ds-1/export?view_id=v1");
+      await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+      // Not `toBeInstanceOf(Blob)`: Response.blob() (Node's undici Response) and
+      // this test file's global `Blob` are different realms/classes in this
+      // Vitest/jsdom setup, so a real cross-realm Blob fails a strict instanceof
+      // check despite being a genuine Blob -- duck-type instead.
+      const blobArg = createObjectURL.mock.calls[0][0];
+      expect(blobArg.constructor.name).toBe("Blob");
+      expect(blobArg.size).toBe(csvBody.length);
+
+      const anchor = appendSpy.mock.calls
+        .map(([node]) => node)
+        .find((node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement);
+      expect(anchor).toBeDefined();
+      expect(anchor?.download).toBe("table_view.csv");
+      expect(anchor?.href).toBe("blob:mock-url");
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
+      clickSpy.mockRestore();
+    });
+
+    it("a failed fetch toasts and does NOT create a stray anchor/download", async () => {
+      const user = userEvent.setup();
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: "view not found" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const { createObjectURL, clickSpy } = stubDownloadGlobals();
+
+      render(
+        <DatabaseSettingsMenu
+          dataSourceId="ds-1"
+          properties={[TITLE_PROP]}
+          activeView={VIEW}
+          onPropertiesChanged={vi.fn()}
+          onUpdateView={vi.fn()}
+          templates={[]}
+          onCreateTemplate={vi.fn()}
+          onUpdateTemplate={vi.fn()}
+          onDeleteTemplate={vi.fn()}
+          automations={[]}
+          onCreateAutomation={vi.fn()}
+          onUpdateAutomation={vi.fn()}
+          onDeleteAutomation={vi.fn()}
+        />
+      );
+      await openMenu(user);
+      await user.click(screen.getByRole("button", { name: "Export CSV" }));
+
+      await waitFor(() => expect(showToast).toHaveBeenCalledWith("view not found", "error"));
+      expect(createObjectURL).not.toHaveBeenCalled();
+      expect(clickSpy).not.toHaveBeenCalled();
+      clickSpy.mockRestore();
+    });
+
+    it("disables the Export CSV button when there is no active view", async () => {
+      const user = userEvent.setup();
+      render(
+        <DatabaseSettingsMenu
+          dataSourceId="ds-1"
+          properties={[TITLE_PROP]}
+          activeView={null}
+          onPropertiesChanged={vi.fn()}
+          onUpdateView={vi.fn()}
+          templates={[]}
+          onCreateTemplate={vi.fn()}
+          onUpdateTemplate={vi.fn()}
+          onDeleteTemplate={vi.fn()}
+          automations={[]}
+          onCreateAutomation={vi.fn()}
+          onUpdateAutomation={vi.fn()}
+          onDeleteAutomation={vi.fn()}
+        />
+      );
+      await openMenu(user);
+      expect(screen.getByRole("button", { name: "Export CSV" })).toBeDisabled();
+    });
+  });
+
   describe("Templates (task-40)", () => {
     it("shows a 'Manage templates' button that opens TemplateManager, and closes the settings dropdown", async () => {
       const user = userEvent.setup();

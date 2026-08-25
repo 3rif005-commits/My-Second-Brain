@@ -18,12 +18,14 @@ columns.py) instead.
 """
 from __future__ import annotations
 
+import csv
 import uuid as uuid_lib
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from typing import Any
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import ValidationError
 
 from models.database import (
@@ -88,6 +90,7 @@ from services.db.keys import mint_key
 from services.db.properties.base import REGISTRY
 from services.db.properties.columns import COLUMN_BACKED
 from services.db.properties.computed import ComputedConfig
+from services.db.properties.format import format_property_value
 from services.db.query import aggregations
 from services.db.query import ast
 from services.db.query import grouping
@@ -1146,6 +1149,148 @@ async def query_rows(
             )
             for g in groups
         ]
+    )
+
+
+# `ast.Pagination`'s own `Field(le=200)` (task-15's per-request UI-page ceiling,
+# validated inside `query_rows` on every call, `compute_full_set` or not) means a
+# single `query_rows(...)` call can never itself return more than 200 rows unless
+# `body.aggregations` is set -- and that branch re-slices `rows` straight back down
+# to one `body.page_size`-sized page afterward (see the `page_rows = rows[...]`
+# line and its comment inside `query_rows`), so it doesn't actually help reach an
+# unbounded fetch either. Rather than touch `query_rows`'s internals for this (the
+# brief's stated preference is to reuse it exactly as-is), `_fetch_all_export_rows`
+# below loops page-sized (`_EXPORT_PAGE_SIZE`-row) calls to that same unmodified
+# function up to `_ROWS_LIMIT` total rows -- filter/sort/tenancy stay 100%
+# `query_rows`'s own logic, unre-derived; only the "ask for more than one page"
+# orchestration is new, and it's the one departure from the brief's literal
+# single-call suggestion (documented here and in task-48-report.md).
+_EXPORT_PAGE_SIZE = 200
+
+
+async def _fetch_all_export_rows(
+    data_source_id: str,
+    filter_dict: dict[str, Any] | None,
+    sorts_list: list[dict[str, Any]],
+    user_id: str,
+    conn: asyncpg.Connection,
+) -> list[dict[str, Any]]:
+    all_rows: list[dict[str, Any]] = []
+    offset = 0
+    while len(all_rows) < _ROWS_LIMIT:
+        query_body = QueryRequest(
+            filter=filter_dict, sorts=sorts_list,
+            page_size=_EXPORT_PAGE_SIZE, offset=offset,
+        )
+        result = await query_rows(data_source_id, query_body, user_id=user_id, conn=conn)
+        page_rows = result.rows or []
+        all_rows.extend(page_rows)
+        if len(page_rows) < _EXPORT_PAGE_SIZE:
+            break
+        offset += _EXPORT_PAGE_SIZE
+    return all_rows[:_ROWS_LIMIT]
+
+
+@router.get("/data-sources/{data_source_id}/export")
+async def export_rows_csv(
+    data_source_id: str,
+    view_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> Response:
+    """Milestone 14 (task-48): CSV export honouring the CURRENTLY OPEN view's
+    filter/sort (spec §12, research §7.2/§10 "Markdown & CSV"; plan test case, line
+    471: "export honours the current view's filters and sorts"). Deliberately does
+    NOT reimplement filtering: builds a `QueryRequest` from the named view's own
+    `filter`/`sorts` and calls `query_rows` directly, repeatedly, via
+    `_fetch_all_export_rows` above (a plain `async def` under FastAPI's decorator,
+    callable with explicit args exactly like `create_row`/`create_property` already
+    are elsewhere in this file) so tenancy scoping (`QueryBuilder`/`compile_filter`/
+    `compile_sorts`'s mandatory `_scope()` splice) and the AST compiler are reused
+    unchanged, not re-derived. Fetches up to `_ROWS_LIMIT` rows total (not just the
+    request-facing `QueryRequest` default of one 50-row page) so export isn't
+    silently clipped to one UI page -- see `_fetch_all_export_rows`'s own docstring
+    for why that takes a paging loop rather than one call.
+
+    All Notes (`data_source_id == ALL_NOTES_ID`) is explicitly NOT a supported
+    export target: it has no `db_views` rows at all (`create_view` already 400s
+    attempts to create one, for the identical "virtual source" reason), so no
+    `view_id` could ever legitimately name one -- 400 here rather than let an
+    unresolvable `view_id` fall through to a generic-looking 404.
+
+    Response shape: a buffered `text/csv` body (not `StreamingResponse`, not a
+    JSON-wrapped `{csv: "..."}`) -- see task-48-report.md for why (in short: this
+    app's own file-producing precedents don't establish a stronger convention
+    either way, this is a personal-KB-scale export the brief itself says neither
+    approach would meaningfully differ on, and the frontend's `/api/db/[...path]`
+    proxy only forwards the `Content-Type` header, not `Content-Disposition`, so
+    the filename is built client-side from the view's own name it already has --
+    a plain text body is the simplest shape that works unchanged through that
+    proxy).
+    """
+    if data_source_id == ALL_NOTES_ID:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "cannot export the built-in All Notes source",
+        )
+
+    data_source_id = _parse_uuid_or_404(data_source_id, "data source")
+    view_id = _parse_uuid_or_404(view_id, "view")
+
+    view_row = await conn.fetchrow(
+        """
+        SELECT filter, sorts, name FROM db_views
+        WHERE id = $1 AND data_source_id = $2 AND user_id = $3
+        """,
+        view_id,
+        data_source_id,
+        user_id,
+    )
+    if view_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "view not found")
+
+    # `config` is fetched alongside `key`/`name`/`type` -- a deliberate widening
+    # beyond the brief's literal example query, same reasoning as Task 46's own
+    # identical widening in `indexer.py`'s property-preamble lookup (task-46-
+    # report.md judgment call 1): without it, `format_property_value` can't
+    # resolve a select/status/multi_select option id to its configured display
+    # name, so the export would show raw opaque ids where a label is knowable.
+    prop_rows = await conn.fetch(
+        """
+        SELECT key, name, type, config FROM db_properties
+        WHERE data_source_id = $1 AND user_id = $2
+        ORDER BY position, created_at
+        """,
+        data_source_id,
+        user_id,
+    )
+
+    rows = await _fetch_all_export_rows(
+        data_source_id, view_row["filter"], list(view_row["sorts"] or []), user_id, conn
+    )
+
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["id"] + [p["name"] for p in prop_rows])
+    for row in rows:
+        wrapper_by_key = row.get("properties") or {}
+        cells = [row["id"]]
+        for p in prop_rows:
+            wrapper = wrapper_by_key.get(p["key"])
+            # §3.3 wrapper shape: {"type": <prop_type>, "<prop_type>": <value>} --
+            # unwrap here (the one place that has both the wrapper and the
+            # property's declared type), exactly as format.py's own module
+            # docstring says the caller must, then hand the raw domain value to
+            # Task 46's formatter unchanged.
+            raw_value = wrapper.get(p["type"]) if isinstance(wrapper, dict) else None
+            cells.append(format_property_value(p["type"], raw_value, p["config"] or {}) or "")
+        writer.writerow(cells)
+
+    safe_name = (view_row["name"] or "export").replace('"', "'")
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}.csv"'},
     )
 
 

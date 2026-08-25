@@ -77,6 +77,7 @@ export function DatabaseSettingsMenu({
   const [enablingDependencies, setEnablingDependencies] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [automationsOpen, setAutomationsOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const subItemForward = findSystemRelationProperty(properties, "sub_item", "forward");
   const dependencyForward = findSystemRelationProperty(properties, "dependency", "forward");
@@ -135,6 +136,39 @@ export function DatabaseSettingsMenu({
     await onUpdateView(activeView.id, {
       config: { ...activeView.config, subtasks: { display_mode: mode } },
     });
+  }
+
+  // task-48-brief.md: export honors the CURRENTLY OPEN view's filter/sort --
+  // it acts on `activeView`, matching this menu's existing scope for other
+  // activeView-specific actions (the sub-item display-mode picker above),
+  // unlike CSV *import* (task-47), which creates a whole new database and
+  // lives in Sidebar.tsx instead. Follows BlockEditor.tsx's exact
+  // Blob/createObjectURL/`<a download>` client-side download shape (~lines
+  // 246-259) rather than inventing a different download mechanism -- no
+  // native dialogs anywhere.
+  async function exportCsv() {
+    if (!activeView || exporting) return;
+    setExporting(true);
+    try {
+      const res = await fetch(
+        `/api/db/data-sources/${dataSourceId}/export?view_id=${activeView.id}`
+      );
+      if (!res.ok) throw new Error(await errorMessage(res));
+      const blob = await res.blob();
+      const safeName = activeView.name.replace(/[^a-z0-9]/gi, "_").toLowerCase() || "export";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${safeName}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not export CSV", "error");
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -276,6 +310,18 @@ export function DatabaseSettingsMenu({
               className="text-xs px-2 py-1 rounded bg-indigo-600 text-white"
             >
               Manage automations
+            </button>
+          </section>
+
+          <section>
+            <h3 className="font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Export</h3>
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={!activeView || exporting}
+              className="text-xs px-2 py-1 rounded bg-indigo-600 text-white disabled:opacity-40"
+            >
+              {exporting ? "Exporting…" : "Export CSV"}
             </button>
           </section>
         </div>
