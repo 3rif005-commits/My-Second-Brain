@@ -49,6 +49,7 @@ import { renderCellValue } from "../cells/renderCellValue";
 import { buildSubItemTree } from "@/lib/database/subItemTree";
 import { FormulaEditor } from "../FormulaEditor";
 import { ButtonPropertyConfigPopover } from "../ButtonPropertyConfigPopover";
+import { OpenNoteButton } from "../OpenNoteButton";
 
 interface TableViewProps {
   properties: PropertyResponse[];
@@ -818,7 +819,7 @@ export function TableView({
                 return (
                   <tr
                     key={entryRow.id}
-                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                    className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                   >
                     {tableRow.getVisibleCells().map((cell) => (
                       <td key={cell.id} className="px-3 py-1.5 align-middle max-w-xs">
@@ -839,6 +840,10 @@ export function TableView({
                             <div className="flex-1 min-w-0">
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </div>
+                            <OpenNoteButton
+                              noteId={entryRow.id}
+                              className="shrink-0 opacity-0 group-hover:opacity-100"
+                            />
                           </div>
                         ) : (
                           flexRender(cell.column.columnDef.cell, cell.getContext())
@@ -864,16 +869,24 @@ export function TableView({
                 return (
                   <tr
                     key={row.id}
-                    className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                    className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td key={cell.id} className="px-3 py-1.5 align-middle max-w-xs">
-                        {cell.column.id === titleProperty?.key && parentTitle ? (
-                          <div>
-                            <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
-                              ↳ {parentTitle}
+                        {cell.column.id === titleProperty?.key ? (
+                          <div className="flex items-center gap-1">
+                            <div className="flex-1 min-w-0">
+                              {parentTitle && (
+                                <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                                  ↳ {parentTitle}
+                                </div>
+                              )}
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </div>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            <OpenNoteButton
+                              noteId={row.original.id}
+                              className="shrink-0 opacity-0 group-hover:opacity-100"
+                            />
                           </div>
                         ) : (
                           flexRender(cell.column.columnDef.cell, cell.getContext())

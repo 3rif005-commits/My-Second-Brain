@@ -2,6 +2,18 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// TableView's title cell now renders an OpenNoteButton (controller fix, closing the
+// gap a user found live: TableView was the only view with no "open the row as its
+// full note page" affordance — Board/Gallery/List/Feed/Calendar/Timeline all already
+// had one). OpenNoteButton navigates via next/navigation's useRouter — outside a real
+// Next.js app router tree (as here, a plain RTL render) that throws "invariant
+// expected app router to be mounted" unless mocked, same as BoardView.test.tsx/
+// ListView.test.tsx.
+const routerPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: routerPush }),
+}));
+
 import { TableView } from "./TableView";
 import { KNOWN_PROPERTY_TYPES, ROLLUP_FUNCTIONS } from "@/lib/database/types";
 import type { DatabaseRow, PropertyResponse, RelatedRow, RowTemplateResponse } from "@/lib/database/types";
@@ -15,6 +27,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  routerPush.mockClear();
 });
 
 function prop(overrides: Partial<PropertyResponse>): PropertyResponse {
@@ -121,6 +134,24 @@ describe("TableView", () => {
     await user.click(checkbox);
 
     expect(onCellChange).toHaveBeenCalledWith("row-1", "done", { type: "checkbox", checkbox: false });
+  });
+
+  it("clicking a row's Open note button navigates to the note's workspace route (controller fix — a user found live that TableView, unlike every other view, had no way to open a row as its full note page; TitleCell's own click only renames the title, matching Board/Gallery's own already-solved shape for the identical competing-click problem)", async () => {
+    const user = userEvent.setup();
+    render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /open note/i }));
+    expect(routerPush).toHaveBeenCalledWith("/brain/workspace/row-1");
+  });
+
+  it("clicking a row's title still only renames it — Open note is a separate control, not a side effect of the rename click", async () => {
+    const user = userEvent.setup();
+    const onCellChange = vi.fn();
+    render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={onCellChange} />);
+
+    await user.click(screen.getByText("First Note"));
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   describe("empty-state gap fix", () => {
