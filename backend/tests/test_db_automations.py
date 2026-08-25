@@ -12,7 +12,9 @@ convention as `test_db_templates.py`. NEVER touches `core.config.settings.databa
 """
 from __future__ import annotations
 
+import asyncio
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -583,6 +585,81 @@ async def test_edit_pages_in_variable_ref_target_writes_every_row_in_the_variabl
     for rid in (row_a, row_b):
         row = await db_conn.fetchrow("SELECT properties FROM db_row_props WHERE note_id = $1", rid)
         assert row["properties"]["statusKey"] == {"type": "status", "status": "complete"}
+
+
+async def test_edit_pages_in_indexing_does_not_block_the_event_loop(db_conn, test_user):
+    """Controller-caught, post-task-51 (M14 final cross-cutting review, Fix 1/Fix 6
+    interaction): `_action_edit_pages_in` (`services/db/automations.py`) has a
+    `for row_id in row_ids:` loop -- a `variable_ref` target can resolve to many
+    rows, exactly like this file's own
+    `test_edit_pages_in_variable_ref_target_writes_every_row_in_the_variable` above
+    exercises. Task 51's Fix 6 added a `try_index_note` call inside that loop, but
+    `try_index_note` -> `index_note` is synchronous and blocking (same function
+    Fix 1, in the SAME commit, moved off the event loop for `db_import.py`'s per-row
+    loop) -- calling it directly here reintroduces the identical regression, one
+    function away in the same fix round: an `edit_pages_in` action touching many
+    rows blocks every concurrent HTTP request for its duration (this file's
+    automation action chains run on the app's own event loop, same as every other
+    async route). Fixed directly by the controller (`asyncio.to_thread`, mirroring
+    Fix 1 exactly) after independently verifying task-51's diff; proven with the
+    same heartbeat-tick-count technique Fix 1's own test established (see
+    `test_db_csv_import.py`'s comment on why a single concurrent request's own
+    latency is an unreliable proof)."""
+    from unittest.mock import patch
+
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "statusKey", "Status", "status")
+    trigger_row = await _make_row(db_conn, test_user, ds_id)
+    row_count = 10
+    rows = [await _make_row(db_conn, test_user, ds_id) for _ in range(row_count)]
+
+    ctx = _ctx(db_conn, test_user, ds_id, trigger_row)
+    ctx.variables["subitems"] = [fvalues.Page(id=r) for r in rows]
+
+    def _slow_fake_index(note_id, user_id) -> bool:
+        time.sleep(0.05)
+        return True
+
+    TICK_INTERVAL = 0.01
+    stop = False
+    tick_count = 0
+
+    async def heartbeat():
+        nonlocal tick_count
+        while not stop:
+            await asyncio.sleep(TICK_INTERVAL)
+            tick_count += 1
+
+    async def do_action():
+        nonlocal stop
+        t0 = time.monotonic()
+        with patch("services.db.automations.try_index_note", side_effect=_slow_fake_index):
+            await execute_action_chain(
+                db_conn, ctx,
+                [{
+                    "type": "edit_pages_in", "target": {"variable_ref": "subitems"}, "data_source_id": ds_id,
+                    "property_key": "statusKey", "value": {"type": "status", "status": "complete"},
+                }],
+                allowed=DATABASE_AUTOMATION_ACTIONS,
+            )
+        elapsed = time.monotonic() - t0
+        stop = True
+        return elapsed
+
+    heartbeat_task = asyncio.create_task(heartbeat())
+    action_elapsed = await do_action()
+    heartbeat_task.cancel()
+    try:
+        await heartbeat_task
+    except asyncio.CancelledError:
+        pass
+
+    expected_ticks_if_unblocked = action_elapsed / TICK_INTERVAL
+    assert tick_count > expected_ticks_if_unblocked * 0.6, (
+        f"heartbeat only ticked {tick_count} times over {action_elapsed:.3f}s "
+        f"(expected ~{expected_ticks_if_unblocked:.0f} if the loop stayed free) "
+        f"-- the event loop was blocked while edit_pages_in ran"
+    )
 
 
 async def test_send_notification_action_creates_a_notification_row(db_conn, test_user):

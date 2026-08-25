@@ -22,6 +22,7 @@ per task-38-brief.md's "Out of scope" section.
 """
 from __future__ import annotations
 
+import asyncio
 import uuid as uuid_lib
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -671,7 +672,16 @@ async def _action_edit_pages_in(action: dict[str, Any], ctx: ActionContext) -> N
         # cross-data-source subtlety: `data_source_id` here is "a database of your
         # choosing" (research §J.6.6), not necessarily the automation's own
         # triggering data source.
-        try_index_note(result.id, ctx.user_id)
+        #
+        # Controller catch (post-task-51 verification, same class as scheduler.py's
+        # _tick_templates): this is a `for row_id in row_ids:` LOOP -- `target` can
+        # resolve to multiple rows (`_target_row_ids`) -- so a direct, unawaited call
+        # to the synchronous, blocking `try_index_note` here reintroduces the exact
+        # event-loop-starvation bug Fix 1 (same task-51 commit) closed for
+        # `db_import.py`'s per-row loop, one function away in the same fix round.
+        # `_action_add_page_to` just above is a single call (one row per action
+        # invocation), so it doesn't need this -- only the loop does.
+        await asyncio.to_thread(try_index_note, result.id, ctx.user_id)
 
 
 @_register("send_notification")
