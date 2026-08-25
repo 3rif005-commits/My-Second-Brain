@@ -27,6 +27,7 @@ connection from the shared `get_pool()` each tick instead.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -104,7 +105,18 @@ async def _tick_templates(conn) -> int:
         # network-fallible embedder call" reasoning `db_import.py`'s per-row loop
         # documents. Without this, a row created by a repeating template firing on
         # schedule was permanently unsearchable by property value.
-        try_index_note(result.id, user_id)
+        #
+        # Controller catch (post-task-51 verification): this loop runs on the SAME
+        # event loop as the rest of the app -- `AsyncIOScheduler` (imported above)
+        # integrates directly with the running asyncio loop, it does not run in a
+        # separate thread/process. Calling the synchronous, blocking `try_index_note`
+        # directly here for every due template in one tick is structurally the exact
+        # same event-loop-starvation bug Fix 1 (this same commit) closed for
+        # `db_import.py`'s per-row loop, just reintroduced one function away in the
+        # same fix round: any tick with multiple due templates would block every
+        # concurrent HTTP request for the tick's duration. `asyncio.to_thread`,
+        # identically to Fix 1's own fix.
+        await asyncio.to_thread(try_index_note, result.id, user_id)
         created += 1
     return created
 

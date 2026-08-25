@@ -14,7 +14,9 @@ hand-written `datetime(...)`, per task-37-brief.md's explicit instruction.
 """
 from __future__ import annotations
 
+import asyncio
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -665,6 +667,77 @@ async def test_tick_triggers_property_preamble_reindex_for_the_created_row(db_co
     assert rows[0]["chunk_index"] == 0
     assert rows[0]["chunk_text"].startswith("Status:")
     assert rows[0]["block_id"] == "__property_preamble__"
+
+
+async def test_tick_templates_indexing_does_not_block_the_event_loop(db_conn, test_user):
+    """Controller-caught, post-task-51 (M14 final cross-cutting review, Fix 1/Fix 6
+    interaction): `_tick_templates` runs on `AsyncIOScheduler`'s own asyncio loop --
+    the SAME event loop the rest of the app serves requests on (confirmed by reading
+    `scheduler.py`: `AsyncIOScheduler` integrates directly with the running loop, it
+    is not a separate thread/process). Task 51's own Fix 6 added a `try_index_note`
+    call inside this function's `for row in due:` loop -- but `try_index_note` ->
+    `index_note` is a synchronous, blocking function (same one Fix 1, in the SAME
+    commit, moved off the event loop for `db_import.py`'s per-row loop). Calling it
+    directly here reintroduces the exact regression class Fix 1 closed, one function
+    away: a tick with multiple due templates would block every concurrent HTTP
+    request for the tick's duration. Fixed directly by the controller (mirroring
+    Fix 1's own `asyncio.to_thread` fix exactly) after independently verifying
+    task-51's diff; proven here with the same heartbeat-tick-count technique Fix 1's
+    own test already established (see `test_db_csv_import.py`'s extensive comment on
+    why a single concurrent request's own latency is an unreliable proof)."""
+    ds_id = await _make_data_source(db_conn, test_user)
+    past = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    repeat_config = {
+        "frequency": "daily", "interval": 1, "start_date": "2020-01-01", "time_of_day": "00:00",
+    }
+    template_count = 10
+    for i in range(template_count):
+        await _insert_template(
+            db_conn, test_user, ds_id,
+            name=f"Template {i}", repeat_config=repeat_config, next_run_at=past,
+        )
+
+    def _slow_fake_index(note_id, user_id) -> bool:
+        time.sleep(0.05)
+        return True
+
+    from unittest.mock import patch
+
+    TICK_INTERVAL = 0.01
+    stop = False
+    tick_count = 0
+
+    async def heartbeat():
+        nonlocal tick_count
+        while not stop:
+            await asyncio.sleep(TICK_INTERVAL)
+            tick_count += 1
+
+    async def do_tick():
+        nonlocal stop
+        t0 = time.monotonic()
+        with patch("services.db.scheduler.try_index_note", side_effect=_slow_fake_index):
+            created = await _tick_templates(db_conn)
+        elapsed = time.monotonic() - t0
+        stop = True
+        return created, elapsed
+
+    heartbeat_task = asyncio.create_task(heartbeat())
+    created, tick_elapsed = await do_tick()
+    heartbeat_task.cancel()
+    try:
+        await heartbeat_task
+    except asyncio.CancelledError:
+        pass
+
+    assert created == template_count
+
+    expected_ticks_if_unblocked = tick_elapsed / TICK_INTERVAL
+    assert tick_count > expected_ticks_if_unblocked * 0.6, (
+        f"heartbeat only ticked {tick_count} times over {tick_elapsed:.3f}s "
+        f"(expected ~{expected_ticks_if_unblocked:.0f} if the loop stayed free) "
+        f"-- the event loop was blocked while _tick_templates ran"
+    )
 
 
 async def test_tick_does_not_touch_a_template_whose_next_run_at_is_in_the_future(db_conn, test_user):
