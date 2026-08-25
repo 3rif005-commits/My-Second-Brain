@@ -45,6 +45,7 @@ from models.database import (
     FormulaValidateResponse,
     FormulaValidationIssue,
     GroupResult,
+    NoteRowInfo,
     NotificationResponse,
     PropertyCreate,
     PropertyUpdate,
@@ -1358,6 +1359,81 @@ async def export_rows_csv(
         content=buffer.getvalue(),
         media_type="text/csv",
         headers=headers,
+    )
+
+
+@router.get("/notes/{note_id}/row", response_model=NoteRowInfo)
+async def get_note_row(
+    note_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> NoteRowInfo:
+    """RowPeek follow-up: lets `/brain/{noteId}` (the plain note page,
+    `frontend/components/editor/NoteEditorPage.tsx`) discover whether the note it's
+    showing is a database row and, if so, render its properties too -- previously
+    only TableView/RowPeek (which have a data source's rows bulk-loaded already)
+    could show property values at all; a directly-navigated-to note page had no way
+    to ask "is this a row, and what's its schema" from a bare note id.
+
+    404 (not a 200 with `properties: []`) for an ordinary, non-database note --
+    `NoteEditorPage.tsx` must treat that as "render nothing extra," not "this row
+    has zero properties," and a 404 is the unambiguous signal for that, matching
+    every other "this id doesn't resolve to what the path implies" case in this
+    router (`_parse_uuid_or_404` and friends).
+    """
+    note_id = _parse_uuid_or_404(note_id, "note")
+
+    row_row = await conn.fetchrow(
+        """
+        SELECT data_source_id, properties, computed FROM db_row_props
+        WHERE note_id = $1 AND user_id = $2
+        """,
+        note_id,
+        user_id,
+    )
+    if row_row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not a database row")
+
+    ds_row = await conn.fetchrow(
+        """
+        SELECT ds.database_id, db.title AS database_title
+        FROM db_data_sources ds
+        JOIN db_databases db ON db.id = ds.database_id
+        WHERE ds.id = $1 AND ds.user_id = $2 AND db.deleted_at IS NULL
+        """,
+        row_row["data_source_id"],
+        user_id,
+    )
+    if ds_row is None:
+        # The row's own data source/database was deleted out from under it --
+        # structurally rare (both FKs cascade-delete db_row_props itself), kept
+        # as a defensive 404 rather than an assert, same posture this router
+        # takes everywhere else a "should be impossible" join comes up empty.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not a database row")
+
+    prop_rows = await conn.fetch(
+        """
+        SELECT * FROM db_properties
+        WHERE data_source_id = $1 AND user_id = $2
+        ORDER BY position, created_at
+        """,
+        row_row["data_source_id"],
+        user_id,
+    )
+
+    # Merge computed (formula/rollup) values into the same flat properties dict --
+    # same merge `_merge_computed_into_rows` does for the bulk query path, just for
+    # one row: `computed` is already keyed by property key, §3.3-wrapper-shaped, and
+    # a key collision with a stored value is structurally impossible (a computed
+    # value is only ever written under its own formula/rollup property's key).
+    values = {**(row_row["properties"] or {}), **(row_row["computed"] or {})}
+
+    return NoteRowInfo(
+        data_source_id=str(row_row["data_source_id"]),
+        database_id=str(ds_row["database_id"]),
+        database_title=ds_row["database_title"],
+        properties=[PropertyResponse(**_row(r)) for r in prop_rows],
+        values=values,
     )
 
 

@@ -9,6 +9,7 @@ import type { Note } from "@/lib/types/database";
 import { Button } from "@/components/ui/button";
 import { wsApi } from "@/lib/workspace";
 import { NoteProperties } from "./NoteProperties";
+import { DatabaseRowProperties } from "../database/DatabaseRowProperties";
 import { BacklinksPanel } from "./BacklinksPanel";
 import { InteractiveBlockCard } from "./InteractiveBlockCard";
 import type { BlockEditorHandle, InteractiveBlock } from "./BlockEditor";
@@ -406,6 +407,10 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
 
             {/* Properties panel */}
             <NoteProperties note={note} />
+
+            {/* Database row properties — RowPeek's deferred phase 2, renders
+             * nothing for an ordinary note (see DatabaseRowProperties.tsx). */}
+            <DatabaseRowProperties noteId={note.id} />
 
             {/* Block editor */}
             <EditorErrorBoundary

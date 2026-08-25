@@ -228,6 +228,28 @@ class RowResponse(BaseModel):
     shifted_rows: list[ShiftedRow] | None = None
 
 
+class NoteRowInfo(BaseModel):
+    """`GET /db/notes/{note_id}/row` (RowPeek follow-up: making `/brain/{noteId}`,
+    the plain note page, database-row-aware). Lets a standalone page that only has a
+    bare note id discover "is this note a database row, and if so, what's its
+    property schema + values" — nothing before this endpoint could answer that
+    outside a data source's own bulk `list_rows`/`query_rows`, which TableView/RowPeek
+    already have loaded but a directly-navigated-to note page does not.
+
+    `properties`/`values` split mirrors `DatabaseDetailResponse` (schema) vs
+    `RowResponse` (data) rather than merging them — the frontend needs both
+    independently (iterate `properties` for column order/type, look up `values[key]`
+    for each one's current wrapper), same shape contract as every other row-rendering
+    call site in this app.
+    """
+
+    data_source_id: str
+    database_id: str
+    database_title: str
+    properties: list[PropertyResponse]
+    values: dict[str, Any]
+
+
 class AggregationSpec(BaseModel):
     """One y-axis (or Chart Number-mode) calculation request inside `QueryRequest.
     aggregations` (Milestone 10, task-32): a thin JSON wrapper around Milestone 4's
