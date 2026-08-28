@@ -17,7 +17,7 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 | `README.md` | written |
 | `PROGRESS.md` | written |
 | `SCREENSHOT-CHECKLIST.md` | written — 101 shots (87 P1 / 14 P2), §0 fixture + §1–§17 |
-| `docs/superpowers/specs/2026-08-28-notion-databases-ui-parity-design.md` | not-started |
+| `docs/superpowers/specs/2026-08-28-notion-databases-ui-parity-design.md` | written except §5 tokens (all TBD until screenshots) |
 | `docs/plans/2026-08-28-notion-databases-ui-parity.md` | not-started |
 
 ## Surface specs
@@ -55,8 +55,17 @@ capture run in parallel — the checklist is written first precisely so they can
 
 ---
 
+## Baseline (branch health before any implementation)
+
+- `npx tsc --noEmit` — **clean** (exit 0), 2026-08-29.
+- `npm run test` — see log below.
+
 ## Log
 
+- **2026-08-29** — Wrote the primitive-layer design doc. Decided: 3 Radix packages
+  (popover, dialog, tooltip); `-dropdown-menu` rejected because Notion's menus are ARIA
+  comboboxes, not menus, and its roving focus/typeahead fight the search input; Mantine
+  rejected despite being installed. §5 token table is written but every value is TBD.
 - **2026-08-29** — Wrote `SCREENSHOT-CHECKLIST.md`: §0 builds a `Parity Fixture` database
   with one property of every type, 8 rows with deliberate empty cells, sub-items,
   dependencies, 3 views and a template; §1–§17 are 101 numbered shots grouped by
