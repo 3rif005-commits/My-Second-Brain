@@ -18,7 +18,7 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 | `PROGRESS.md` | written |
 | `SCREENSHOT-CHECKLIST.md` | written — 101 shots (87 P1 / 14 P2), §0 fixture + §1–§17 |
 | `docs/superpowers/specs/2026-08-28-notion-databases-ui-parity-design.md` | written except §5 tokens (all TBD until screenshots) |
-| `docs/plans/2026-08-28-notion-databases-ui-parity.md` | not-started |
+| `docs/plans/2026-08-28-notion-databases-ui-parity.md` | structure written; per-milestone task lists pending their specs |
 
 ## Surface specs
 
@@ -62,6 +62,10 @@ capture run in parallel — the checklist is written first precisely so they can
 
 ## Log
 
+- **2026-08-29** — Wrote the implementation plan's structure: 12 milestones + Phase 0
+  (primitives) + Phase 0b (three backend endpoints), three review checkpoints, and the
+  per-milestone definition of done whose gate is the user's visual diff. Per-milestone task
+  lists are deliberately absent — they cite spec rows.
 - **2026-08-29** — Wrote the primitive-layer design doc. Decided: 3 Radix packages
   (popover, dialog, tooltip); `-dropdown-menu` rejected because Notion's menus are ARIA
   comboboxes, not menus, and its roving focus/typeahead fight the search input; Mantine
