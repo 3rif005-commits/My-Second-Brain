@@ -58,7 +58,7 @@ capture run in parallel — the checklist is written first precisely so they can
 ## Baseline (branch health before any implementation)
 
 - `npx tsc --noEmit` — **clean** (exit 0), 2026-08-29.
-- `npm run test` — see log below.
+- `npm run test` — **clean** (exit 0): 41 files, 575 tests passed, 83s. 2026-08-29.
 
 ## Log
 
