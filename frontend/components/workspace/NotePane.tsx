@@ -331,43 +331,59 @@ export function NotePane({
   }, [anchors, sources]);
 
   return (
-    <div className="h-full min-w-0 flex flex-col bg-white dark:bg-gray-900">
+    <div className="h-full min-w-0 flex flex-col">
       {chips.length > 0 && (
-        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 overflow-x-auto shrink-0">
-          <span className="text-[10px] uppercase tracking-wider text-gray-400 mr-1 shrink-0">
-            Sections
+        <div className="flex items-center gap-2 pl-3.5 pr-2 py-2 border-b border-gray-100 dark:border-white/5 shrink-0">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 shrink-0">
+            Jump to
           </span>
-          {chips.map((a) => {
-            const src = sourceById.get(a.resource_id);
-            return (
-              <button
-                key={a.block_id}
-                onClick={() => jumpToAnchor(a)}
-                title={`${src?.title ?? "source"} — ${anchorLabel(a.anchor_type, a.anchor_start)}`}
-                className="shrink-0 inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 hover:text-indigo-600 transition-colors"
-              >
-                <span className="w-1.5 h-1.5 rounded-full shrink-0"
-                      style={{ backgroundColor: sourceColor(src?.order_index ?? 0) }} />
-                {anchorLabel(a.anchor_type, a.anchor_start)}
-              </button>
-            );
-          })}
+          {/* The chips scroll on their own so the sync toggle can never be
+              pushed out of reach by a note with thirty sections. */}
+          <div className="ws-scroll-x flex-1 min-w-0 flex items-center gap-1 overflow-x-auto">
+            {chips.map((a) => {
+              const src = sourceById.get(a.resource_id);
+              const color = sourceColor(src?.order_index ?? 0);
+              return (
+                <button
+                  key={a.block_id}
+                  onClick={() => jumpToAnchor(a)}
+                  title={`${src?.title ?? "source"} — ${anchorLabel(a.anchor_type, a.anchor_start)}`}
+                  className="group shrink-0 inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full
+                    text-[11px] font-medium tabular-nums text-gray-600 dark:text-gray-300
+                    bg-gray-100/80 dark:bg-white/[0.06] ring-1 ring-transparent
+                    hover:ring-indigo-400/40 hover:text-indigo-600 dark:hover:text-indigo-300
+                    hover:-translate-y-px transition-all duration-150
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0 transition-transform duration-150 group-hover:scale-125"
+                    style={{ backgroundColor: color }}
+                  />
+                  {anchorLabel(a.anchor_type, a.anchor_start)}
+                </button>
+              );
+            })}
+          </div>
           <button
             onClick={() => setSyncOn((v) => !v)}
-            title="Toggle source ↔ note sync"
-            className={`ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border transition-colors ${
+            title={syncOn
+              ? "Following the source: the note scrolls as the source plays"
+              : "Not following the source"}
+            className={`shrink-0 inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-full text-[11px]
+              font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
               syncOn
-                ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-700 dark:text-indigo-300"
-                : "border-gray-200 text-gray-400 dark:border-gray-700"
+                ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 ring-1 ring-indigo-500/25"
+                : "text-gray-400 ring-1 ring-gray-200 dark:ring-white/10 hover:text-gray-600 dark:hover:text-gray-300"
             }`}
           >
-            <Link2 size={10} /> {syncOn ? "on" : "off"}
+            <Link2 size={11} className={syncOn ? "" : "opacity-60"} />
+            {syncOn ? "Following" : "Free"}
           </button>
         </div>
       )}
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-5 py-4">
+        <div className="px-5 py-5">
           <BlockEditor
             ref={editorRef}
             noteId={note.id}

@@ -3,9 +3,9 @@
 // Website source viewer — clean readable sections extracted server-side
 // (trafilatura). Every section is a selectable element with one-click send.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { Bookmark, Copy, CornerDownRight, ExternalLink, X } from "lucide-react";
 import type { SendAction, WsElement, NoteSource } from "@/lib/workspace";
-import { ActionBar, ActionButton } from "./ActionBar";
+import { ActionBar, ActionButton, ActionSeparator } from "./ActionBar";
 
 interface WebsiteViewerProps {
   resource: NoteSource;
@@ -69,9 +69,13 @@ export function WebsiteViewer({ resource, onPosition, onAction, seekRef }: Websi
           href={resource.source_url ?? "#"}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:underline mb-4"
+          title={resource.source_url ?? ""}
+          className="inline-flex max-w-full items-center gap-1.5 mb-5 px-2.5 py-1 rounded-full
+            bg-gray-100 dark:bg-gray-800/70 text-[11px] text-gray-500 dark:text-gray-400
+            hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors"
         >
-          <ExternalLink size={12} /> {resource.source_url}
+          <ExternalLink size={11} className="shrink-0" />
+          <span className="truncate">{resource.source_url}</span>
         </a>
         {elements.map((el) => (
           <div
@@ -101,7 +105,7 @@ export function WebsiteViewer({ resource, onPosition, onAction, seekRef }: Websi
 
       {active && (
         <ActionBar x={active.x} y={active.y}>
-          <ActionButton onClick={() => {
+          <ActionButton primary title="Send this section to the note" onClick={() => {
             const el = active.el;
             setActive(null);
             if (el.element_type === "image") {
@@ -110,15 +114,15 @@ export function WebsiteViewer({ resource, onPosition, onAction, seekRef }: Websi
               onAction({ type: "text", text: el.content ?? "" });
             }
           }}>
-            → Note
+            <CornerDownRight size={12} /> Send to note
           </ActionButton>
-          <ActionButton onClick={() => {
+          <ActionButton title="Copy to clipboard" onClick={() => {
             navigator.clipboard.writeText(active.el.content ?? "").catch(() => {});
             setActive(null);
           }}>
-            Copy
+            <Copy size={12} /> Copy
           </ActionButton>
-          <ActionButton onClick={() => {
+          <ActionButton title="Bookmark this section in the note" onClick={() => {
             onAction({
               type: "checkpoint", anchorType: "section",
               value: active.el.order_index,
@@ -126,9 +130,12 @@ export function WebsiteViewer({ resource, onPosition, onAction, seekRef }: Websi
             });
             setActive(null);
           }}>
-            📍
+            <Bookmark size={12} /> Checkpoint
           </ActionButton>
-          <ActionButton onClick={() => setActive(null)}>✕</ActionButton>
+          <ActionSeparator />
+          <ActionButton title="Dismiss" onClick={() => setActive(null)}>
+            <X size={12} />
+          </ActionButton>
         </ActionBar>
       )}
     </div>

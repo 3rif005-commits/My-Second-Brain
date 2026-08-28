@@ -236,3 +236,150 @@ body {
 :focus-visible {
   outline: none;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Workspace design system
+   A handful of primitives the workspace shell composes with Tailwind: layered
+   surfaces, glass overlays, and the motion tokens. Kept here (rather than
+   repeated as long class strings) so every panel, dock and drawer shares one
+   set of elevations and timings.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Recessed canvas the panels float on. */
+.ws-canvas {
+  background:
+    radial-gradient(120% 90% at 50% -20%, rgba(99, 102, 241, 0.07), transparent 60%),
+    #f3f4f6;
+}
+.dark .ws-canvas {
+  background:
+    radial-gradient(120% 90% at 50% -20%, rgba(99, 102, 241, 0.13), transparent 60%),
+    #0a0c12;
+}
+
+/* A raised content surface. */
+.ws-panel {
+  background: #ffffff;
+  border: 1px solid rgba(17, 24, 39, 0.07);
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.04),
+    0 12px 32px -20px rgba(16, 24, 40, 0.35);
+}
+.dark .ws-panel {
+  background: #11141c;
+  border-color: rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 16px 40px -24px rgba(0, 0, 0, 0.9);
+}
+
+/* Frosted overlay — floating docks, action popovers, menus. */
+.ws-glass {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  box-shadow: 0 8px 32px -8px rgba(16, 24, 40, 0.25);
+}
+.dark .ws-glass {
+  background: rgba(20, 23, 31, 0.82);
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.7);
+}
+
+/* Frosted overlay that always reads dark — used over media. */
+.ws-glass-dark {
+  background: rgba(16, 18, 25, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 40px -12px rgba(0, 0, 0, 0.8);
+}
+
+/* The one accent gradient. Primary actions only — never decoration. */
+.ws-accent {
+  background-image: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: #fff;
+  box-shadow:
+    0 1px 2px rgba(79, 70, 229, 0.4),
+    0 8px 20px -8px rgba(99, 102, 241, 0.7);
+}
+.ws-accent:hover:not(:disabled) {
+  background-image: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+}
+
+/* Horizontal strips that scroll but must not show a bar. */
+.ws-scroll-x {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.ws-scroll-x::-webkit-scrollbar { display: none; }
+
+/* ── motion ─────────────────────────────────────────────────────────────── */
+@keyframes ws-rise {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.ws-rise { animation: ws-rise 0.18s cubic-bezier(0.22, 1, 0.36, 1); }
+
+@keyframes ws-slide-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.ws-slide-in { animation: ws-slide-in 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* Text that is being generated right now. */
+@keyframes ws-shimmer {
+  to { background-position: -200% 0; }
+}
+.ws-shimmer {
+  background: linear-gradient(
+    90deg,
+    currentColor 0%, currentColor 35%,
+    rgba(255, 255, 255, 0.95) 50%,
+    currentColor 65%, currentColor 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: ws-shimmer 2s linear infinite;
+}
+.dark .ws-shimmer {
+  background: linear-gradient(
+    90deg,
+    #6366f1 0%, #6366f1 35%,
+    #c7d2fe 50%,
+    #6366f1 65%, #6366f1 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* A live recording indicator. */
+@keyframes ws-ping-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+  70%  { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.ws-recording { animation: ws-ping-ring 1.6s ease-out infinite; }
+
+/* Indeterminate progress sliver, for a source that is still being processed. */
+@keyframes ws-indeterminate {
+  0%   { transform: translateX(-100%) scaleX(0.4); }
+  50%  { transform: translateX(20%)   scaleX(0.7); }
+  100% { transform: translateX(160%)  scaleX(0.4); }
+}
+.ws-indeterminate {
+  animation: ws-indeterminate 1.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  transform-origin: left;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-rise, .ws-slide-in, .ws-shimmer, .ws-recording, .ws-indeterminate {
+    animation: none;
+  }
+  .ws-shimmer { color: inherit; -webkit-background-clip: border-box; background-clip: border-box; background: none; }
+}

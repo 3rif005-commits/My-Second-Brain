@@ -2,30 +2,48 @@
 
 // The source rail: every source attached to this note, one compact row each.
 // Add (file picker or pasted URL), select → viewer, retry a failed source,
-// remove. Rows are ~28px so five sources still leave the viewer usable.
+// remove. Rows are ~36px so five sources still leave the viewer usable, and
+// each one wears its source colour — the same colour its section chips and
+// chat citations use elsewhere in the shell.
 import { useEffect, useRef, useState } from "react";
-import { FileText, Globe, PlaySquare, Plus, RefreshCw, Video, X } from "lucide-react";
+import {
+  FileText, Globe, Link2, PlaySquare, Plus, RefreshCw, Upload, Video, X,
+} from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PromptDialog } from "@/components/ui/PromptDialog";
 import { sourceColor, type NoteSource, type ResourceKind } from "@/lib/workspace";
 
-function KindIcon({ kind }: { kind: ResourceKind }) {
-  const Icon = kind === "youtube" ? PlaySquare
-    : kind === "video" ? Video
-    : kind === "website" ? Globe
-    : FileText;
-  return <Icon size={12} className="shrink-0 text-gray-400" />;
-}
+const KIND_ICON = {
+  youtube: PlaySquare,
+  video: Video,
+  website: Globe,
+  pdf: FileText,
+  document: FileText,
+} as const satisfies Record<ResourceKind, unknown>;
 
-function StatusDot({ source }: { source: NoteSource }) {
+/** The source's colour chip — and its status, told through that same chip. */
+function KindTile({ source }: { source: NoteSource }) {
+  const Icon = KIND_ICON[source.kind] ?? FileText;
+  const color = sourceColor(source.order_index);
+
   if (source.status === "failed") {
-    return <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />;
+    return (
+      <span className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center
+        bg-red-500/12 text-red-500 ring-1 ring-red-500/25">
+        <Icon size={13} />
+      </span>
+    );
   }
-  if (source.status === "ready") {
-    return <span className="w-1.5 h-1.5 rounded-full shrink-0"
-                 style={{ backgroundColor: sourceColor(source.order_index) }} />;
-  }
-  return <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />;
+  const working = source.status !== "ready";
+  return (
+    <span
+      className={`shrink-0 w-6 h-6 rounded-lg flex items-center justify-center transition-opacity ${
+        working ? "opacity-50" : ""}`}
+      style={{ backgroundColor: `${color}22`, color, boxShadow: `inset 0 0 0 1px ${color}33` }}
+    >
+      <Icon size={13} />
+    </span>
+  );
 }
 
 interface SourceRailProps {
@@ -58,98 +76,148 @@ export function SourceRail({
   }, [showAdd]);
 
   return (
-    <div className="shrink-0 max-h-[38%] flex flex-col border-b border-gray-200 dark:border-gray-800">
-      <div className="flex items-center justify-between px-3 py-1.5 shrink-0">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
-          Sources {sources.length > 0 && `(${sources.length})`}
+    <div className="shrink-0 max-h-[38%] flex flex-col border-b border-gray-100 dark:border-white/5">
+      <div className="flex items-center justify-between pl-3.5 pr-2 pt-2.5 pb-1 shrink-0">
+        <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400">
+          Sources
+          {sources.length > 0 && (
+            <span className="px-1.5 py-px rounded-full bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 tracking-normal">
+              {sources.length}
+            </span>
+          )}
         </span>
         <div className="relative" ref={addMenuRef}>
           <button
             onClick={() => setShowAdd((v) => !v)}
             disabled={busy}
             title="Add a source"
-            className="w-6 h-6 flex items-center justify-center rounded-md text-gray-400 hover:text-indigo-600 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-40 transition-colors"
+            className="inline-flex items-center gap-1 h-7 pl-1.5 pr-2.5 rounded-full text-[11.5px] font-medium
+              text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300
+              hover:bg-indigo-500/10 disabled:opacity-40 transition-colors
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
           >
-            <Plus size={14} />
+            {busy
+              ? <span className="w-3.5 h-3.5 m-[1px] rounded-full border-2 border-current border-t-transparent animate-spin" />
+              : <Plus size={15} />}
+            {busy ? "Adding…" : "Add"}
           </button>
           {showAdd && (
-            <div className="absolute right-0 top-full mt-1 w-52 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg py-1 overflow-hidden">
+            <div className="ws-glass ws-rise absolute right-0 top-full mt-1.5 w-60 z-30 rounded-2xl p-1 overflow-hidden">
               <button
-                className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left text-[12.5px]
+                  text-gray-700 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                 onClick={() => { setShowAdd(false); fileInputRef.current?.click(); }}
               >
-                Upload file (PDF, MD, TXT, video)
+                <span className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
+                  <Upload size={14} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-medium">Upload a file</span>
+                  <span className="block text-[11px] text-gray-400">PDF, Markdown, text, video</span>
+                </span>
               </button>
               <button
-                className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left text-[12.5px]
+                  text-gray-700 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                 onClick={() => { setShowAdd(false); setShowUrl(true); }}
               >
-                Paste URL (website / YouTube)
+                <span className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
+                  <Link2 size={14} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-medium">Paste a link</span>
+                  <span className="block text-[11px] text-gray-400">Article or YouTube video</span>
+                </span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-1.5 pb-1.5">
+      <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-0.5">
         {sources.length === 0 && (
-          <p className="px-1.5 pb-2 text-[11px] text-gray-400">
+          <p className="px-1.5 pb-2 text-[11.5px] leading-relaxed text-gray-400">
             Drop a PDF, a video, or paste a link anywhere in this panel.
           </p>
         )}
-        {sources.map((s) => (
-          <div
-            key={s.id}
-            role="button"
-            tabIndex={0}
-            aria-current={s.id === activeId}
-            onClick={() => onSelect(s.id)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onSelect(s.id);
-              }
-            }}
-            className={`group flex items-center gap-1.5 h-7 px-2 rounded-md cursor-pointer transition-colors ${
-              s.id === activeId
-                ? "bg-indigo-50 dark:bg-indigo-900/30"
-                : "hover:bg-gray-50 dark:hover:bg-gray-800"
-            } focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400`}
-          >
-            <StatusDot source={s} />
-            <KindIcon kind={s.kind} />
-            <span className={`flex-1 min-w-0 truncate text-xs ${
-              s.id === activeId
-                ? "text-indigo-700 dark:text-indigo-300 font-medium"
-                : "text-gray-700 dark:text-gray-300"
-            }`} title={s.error ? `Failed: ${s.error}` : s.title}>
-              {s.title}
-            </span>
-            {s.status === "processing" && (
-              <span className="text-[10px] text-amber-500 shrink-0">processing</span>
-            )}
-            {(s.status === "queued" || s.status === "failed") && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onRetry(s); }}
-                title={s.status === "failed"
-                  ? (s.error ?? "Retry")
-                  : "Queued — click to start processing"}
-                className={`shrink-0 ${s.status === "failed"
-                  ? "text-red-400 hover:text-red-600"
-                  : "text-gray-400 hover:text-indigo-500"}`}
-              >
-                <RefreshCw size={11} />
-              </button>
-            )}
-            <button
-              onClick={(e) => { e.stopPropagation(); setPendingRemove(s); }}
-              title="Remove this source"
-              className="shrink-0 opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity"
+        {sources.map((s) => {
+          const active = s.id === activeId;
+          const working = s.status === "queued" || s.status === "processing";
+          return (
+            <div
+              key={s.id}
+              role="button"
+              tabIndex={0}
+              aria-current={active}
+              onClick={() => onSelect(s.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelect(s.id);
+                }
+              }}
+              className={`group relative flex items-center gap-2.5 h-9 pl-2 pr-1.5 rounded-xl cursor-pointer
+                overflow-hidden transition-all duration-150 ${
+                active
+                  ? "bg-indigo-500/[0.09] ring-1 ring-inset ring-indigo-500/20"
+                  : "hover:bg-black/[0.035] dark:hover:bg-white/[0.05]"
+              } focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400`}
             >
-              <X size={12} />
-            </button>
-          </div>
-        ))}
+              <KindTile source={s} />
+              <span
+                className={`flex-1 min-w-0 truncate text-[12.5px] ${
+                  active
+                    ? "text-indigo-700 dark:text-indigo-200 font-medium"
+                    : "text-gray-700 dark:text-gray-300"
+                }`}
+                title={s.error ? `Failed: ${s.error}` : s.title}
+              >
+                {s.title}
+              </span>
+
+              {s.status === "processing" && (
+                <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-amber-500">
+                  reading
+                </span>
+              )}
+              {s.status === "failed" && (
+                <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-red-500">
+                  failed
+                </span>
+              )}
+              {(s.status === "queued" || s.status === "failed") && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRetry(s); }}
+                  title={s.status === "failed"
+                    ? (s.error ?? "Retry")
+                    : "Queued — click to start processing"}
+                  className={`shrink-0 w-6 h-6 flex items-center justify-center rounded-lg transition-colors ${
+                    s.status === "failed"
+                      ? "text-red-400 hover:text-red-600 hover:bg-red-500/10"
+                      : "text-gray-400 hover:text-indigo-500 hover:bg-indigo-500/10"}`}
+                >
+                  <RefreshCw size={12} />
+                </button>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); setPendingRemove(s); }}
+                title="Remove this source"
+                className="shrink-0 w-6 h-6 flex items-center justify-center rounded-lg opacity-0
+                  group-hover:opacity-100 focus:opacity-100 text-gray-400 hover:text-red-500
+                  hover:bg-red-500/10 transition-all"
+              >
+                <X size={12} />
+              </button>
+
+              {/* still being read — an indeterminate sliver along the bottom edge */}
+              {working && (
+                <span className="absolute bottom-0 left-0 right-0 h-[2px] overflow-hidden">
+                  <span className="ws-indeterminate block h-full w-full bg-gradient-to-r from-transparent via-amber-400 to-transparent" />
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <input

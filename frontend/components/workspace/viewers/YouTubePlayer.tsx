@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fmtTime, wsApi, youtubeVideoId, type SendAction, type NoteSource } from "@/lib/workspace";
 import { useToast } from "@/app/providers";
+import { CaptureDock, type CaptureKind } from "./CaptureDock";
 
 declare global {
   interface Window {
@@ -40,11 +41,16 @@ interface YouTubePlayerProps {
 
 export function YouTubePlayer({ resource, onPosition, onAction, seekRef }: YouTubePlayerProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playerRef = useRef<any>(null);
   const [ready, setReady] = useState(false);
   const [clipStart, setClipStart] = useState<number | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState<CaptureKind | null>(null);
+  // timeRef is what the capture calls read (no re-render needed); `time` is the
+  // rendered copy, so the dock's readout actually ticks instead of sitting on
+  // whatever it happened to be at the last render.
+  const [time, setTime] = useState(0);
   const timeRef = useRef(0);
   const { showToast } = useToast();
 
@@ -59,7 +65,10 @@ export function YouTubePlayer({ resource, onPosition, onAction, seekRef }: YouTu
         videoId,
         width: "100%",
         height: "100%",
-        playerVars: { rel: 0, modestbranding: 1 },
+        // fs: 0 drops YouTube's own fullscreen button. Its button fullscreens
+        // the iframe, which would leave the capture rail behind — the rail's
+        // button fullscreens the wrapper instead. See CaptureDock.
+        playerVars: { rel: 0, modestbranding: 1, fs: 0 },
         events: {
           onReady: () => {
             setReady(true);
@@ -68,6 +77,7 @@ export function YouTubePlayer({ resource, onPosition, onAction, seekRef }: YouTu
                 const t = playerRef.current?.getCurrentTime?.() ?? 0;
                 if (Math.abs(t - timeRef.current) > 0.4) {
                   timeRef.current = t;
+                  setTime(t);
                   onPosition(t);
                 }
               } catch { /* player not ready */ }
@@ -94,19 +104,21 @@ export function YouTubePlayer({ resource, onPosition, onAction, seekRef }: YouTu
     return () => { seekRef.current = null; };
   }, [seekRef]);
 
-  async function captureNow(type: "frame" | "clip" | "audio") {
+  async function captureFrame() {
     const t = timeRef.current;
-    if (type === "frame") {
-      setBusy("frame");
-      try {
-        const r = await wsApi.capture(resource.id, "frame", t);
-        onAction({ type: "image", url: r.url, caption: `Frame @ ${fmtTime(t)}` });
-      } catch (e) {
-        showToast(e instanceof Error ? e.message : "Frame capture failed");
-      } finally { setBusy(null); }
-      return;
-    }
-    // clip / audio need a range
+    setBusy("frame");
+    try {
+      const r = await wsApi.capture(resource.id, "frame", t);
+      onAction({ type: "image", url: r.url, caption: `Frame @ ${fmtTime(t)}` });
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Frame capture failed");
+    } finally { setBusy(null); }
+  }
+
+  // Clips and audio need a range: the first press marks the start, the second
+  // closes it. Either button can close a range that the other one opened.
+  async function captureRange(type: "clip" | "audio") {
+    const t = timeRef.current;
     if (clipStart === null) {
       setClipStart(t);
       return;
@@ -123,54 +135,53 @@ export function YouTubePlayer({ resource, onPosition, onAction, seekRef }: YouTu
   }
 
   if (!videoId) {
-    return <div className="flex-1 flex items-center justify-center text-sm text-red-400">Invalid YouTube URL</div>;
+    return (
+      <div className="flex-1 flex items-center justify-center text-sm text-red-400">
+        Invalid YouTube URL
+      </div>
+    );
+  }
+
+  // Keys the iframe can no longer act on for itself, now that the rail keeps
+  // focus in this document (see CaptureDock).
+  function togglePlay() {
+    const p = playerRef.current;
+    try {
+      // 1 === YT.PlayerState.PLAYING
+      if (p?.getPlayerState?.() === 1) p.pauseVideo();
+      else p?.playVideo?.();
+    } catch { /* not ready */ }
+  }
+
+  function seekBy(delta: number) {
+    const p = playerRef.current;
+    try {
+      p?.seekTo?.(Math.max(0, (p.getCurrentTime?.() ?? 0) + delta), true);
+    } catch { /* not ready */ }
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-black min-h-0">
-      <div className="flex-1 min-h-0">
-        <div ref={hostRef} className="w-full h-full" />
-      </div>
-      <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-900 text-white text-xs shrink-0 flex-wrap">
-        <button
-          className="px-2 py-1 rounded bg-amber-600/80 hover:bg-amber-600 transition-colors"
-          disabled={!ready}
-          onClick={() => onAction({
-            type: "checkpoint", anchorType: "time", value: timeRef.current,
-          })}
-        >
-          📍 Checkpoint {fmtTime(timeRef.current)}
-        </button>
-        <button
-          className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 transition-colors"
-          disabled={!ready || busy !== null}
-          onClick={() => captureNow("frame")}
-        >
-          {busy === "frame" ? "Capturing…" : "🖼 Frame"}
-        </button>
-        <button
-          className={`px-2 py-1 rounded transition-colors ${clipStart !== null ? "bg-red-600" : "bg-gray-700 hover:bg-gray-600"}`}
-          disabled={!ready || busy !== null}
-          onClick={() => captureNow("clip")}
-        >
-          {busy === "clip" ? "Extracting…"
-            : clipStart !== null ? `⏹ End clip (from ${fmtTime(clipStart)})` : "🎬 Clip"}
-        </button>
-        <button
-          className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 transition-colors"
-          disabled={!ready || busy !== null}
-          onClick={() => captureNow("audio")}
-        >
-          {busy === "audio" ? "Extracting…"
-            : clipStart !== null ? "⏹ End audio" : "🎧 Audio"}
-        </button>
-        {clipStart !== null && (
-          <button className="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700"
-            onClick={() => setClipStart(null)}>
-            cancel
-          </button>
-        )}
-      </div>
+    <div
+      ref={stageRef}
+      tabIndex={-1}
+      className="relative flex-1 min-h-0 bg-[#08090d] outline-none"
+    >
+      <div ref={hostRef} className="w-full h-full" />
+      <CaptureDock
+        containerRef={stageRef}
+        time={time}
+        ready={ready}
+        busy={busy}
+        clipStart={clipStart}
+        onCheckpoint={() => onAction({
+          type: "checkpoint", anchorType: "time", value: timeRef.current,
+        })}
+        onFrame={captureFrame}
+        onRange={captureRange}
+        onCancelRange={() => setClipStart(null)}
+        onTogglePlay={togglePlay}
+        onSeekBy={seekBy}
+      />
     </div>
   );
 }

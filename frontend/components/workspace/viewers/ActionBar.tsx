@@ -9,8 +9,8 @@ export function ActionBar({
 }: { x: number; y: number; children: ReactNode }) {
   return (
     <div
-      className="absolute z-30 flex items-center gap-1 px-1.5 py-1 rounded-lg bg-gray-900 text-white shadow-xl text-xs"
-      style={{ left: x, top: y, transform: "translate(-50%, -110%)" }}
+      className="ws-glass-dark ws-rise absolute z-30 flex items-center gap-0.5 p-1 rounded-full text-white text-xs"
+      style={{ left: x, top: y, transform: "translate(-50%, -115%)" }}
       onMouseDown={(e) => e.preventDefault()} // keep text selection alive
     >
       {children}
@@ -19,15 +19,40 @@ export function ActionBar({
 }
 
 export function ActionButton({
-  onClick, children, title,
-}: { onClick: () => void; children: ReactNode; title?: string }) {
+  onClick, children, title, primary,
+}: {
+  onClick: () => void;
+  children: ReactNode;
+  title?: string;
+  /** The one action that matters most in this popover. */
+  primary?: boolean;
+}) {
   return (
     <button
       title={title}
-      className="px-2 py-1 rounded hover:bg-gray-700 whitespace-nowrap transition-colors"
+      className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full whitespace-nowrap font-medium
+        transition-all duration-150 active:scale-[0.97]
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
+        primary
+          ? "ws-accent"
+          : "text-white/70 hover:text-white hover:bg-white/10"
+      }`}
       onClick={onClick}
     >
       {children}
     </button>
   );
+}
+
+/** A non-interactive label inside the bar — the element's type, usually. */
+export function ActionLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="pl-2 pr-1 text-[11px] uppercase tracking-wide text-white/40 select-none">
+      {children}
+    </span>
+  );
+}
+
+export function ActionSeparator() {
+  return <span className="w-px h-4 bg-white/10 mx-0.5 shrink-0" />;
 }

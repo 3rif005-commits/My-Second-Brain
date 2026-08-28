@@ -5,8 +5,15 @@
 // the exact spot. Rendered as a drawer over the note pane: a third column in a
 // compact layout leaves nothing readable.
 import { useCallback, useRef, useState } from "react";
-import { Send, X } from "lucide-react";
+import { ArrowUp, MessagesSquare, X } from "lucide-react";
 import { anchorLabel, sourceColor, type Citation } from "@/lib/workspace";
+
+/** Openers for an empty thread — one tap instead of a blank page. */
+const STARTERS = [
+  "Summarise the key ideas",
+  "What should I remember first?",
+  "Explain the hardest part simply",
+];
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -65,8 +72,9 @@ export function WorkspaceChat({ noteId, colorIndex, onCitation, onClose }: Works
   const [streaming, setStreaming] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const send = useCallback(async () => {
-    const q = input.trim();
+  // `override` lets a starter chip send without a round trip through state.
+  const send = useCallback(async (override?: string) => {
+    const q = (override ?? input).trim();
     if (!q || streaming) return;
     setInput("");
     const history = [...messages, { role: "user" as const, content: q }];
@@ -134,31 +142,65 @@ export function WorkspaceChat({ noteId, colorIndex, onCitation, onClose }: Works
   }, [input, messages, streaming, noteId]);
 
   return (
-    <div className="absolute inset-y-0 right-0 z-30 w-[380px] max-w-full flex flex-col border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-2xl">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 shrink-0">
-        <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-          Ask your sources
+    <div className="ws-slide-in absolute inset-y-0 right-0 z-30 w-[400px] max-w-full flex flex-col
+      border-l border-gray-200/80 dark:border-white/10
+      bg-white/95 dark:bg-[#11141c]/95 backdrop-blur-xl
+      shadow-[-24px_0_48px_-24px_rgba(16,24,40,0.35)]">
+      <div className="flex items-center gap-2 px-3.5 h-[52px] shrink-0 border-b border-gray-100 dark:border-white/5">
+        <span className="w-7 h-7 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
+          <MessagesSquare size={15} />
         </span>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-          <X size={16} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-gray-900 dark:text-gray-50 leading-tight">
+            Ask your sources
+          </p>
+          <p className="text-[11px] text-gray-400 leading-tight">
+            Answers cite the exact spot
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          title="Close"
+          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl text-gray-400
+            hover:text-gray-800 dark:hover:text-gray-100 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+        >
+          <X size={15} />
         </button>
       </div>
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3.5 py-4 space-y-4">
         {messages.length === 0 && (
-          <p className="text-xs text-gray-400 leading-relaxed">
-            Ask anything about the sources attached to this note. Answers are
-            grounded in them — every claim carries a clickable citation that opens
-            the right source at the exact page or timestamp.
-          </p>
+          <div className="ws-rise">
+            <p className="text-[12.5px] text-gray-500 dark:text-gray-400 leading-relaxed">
+              Ask anything about the sources attached to this note. Every claim
+              carries a clickable citation that opens the right source at the exact
+              page or timestamp.
+            </p>
+            <div className="mt-3 flex flex-col items-start gap-1.5">
+              {STARTERS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => send(s)}
+                  className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-[12px]
+                    text-gray-600 dark:text-gray-300 bg-gray-100/80 dark:bg-white/[0.06]
+                    ring-1 ring-transparent hover:ring-indigo-400/40 hover:text-indigo-600
+                    dark:hover:text-indigo-300 transition-all duration-150"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         {messages.map((m, i) =>
           m.role === "user" ? (
-            <div key={i} className="ml-8 px-3 py-2 rounded-xl bg-indigo-500 text-white text-sm">
-              {m.content}
+            <div key={i} className="flex justify-end">
+              <div className="ws-accent max-w-[85%] px-3.5 py-2 rounded-2xl rounded-br-md text-[13px] leading-relaxed">
+                {m.content}
+              </div>
             </div>
           ) : (
-            <div key={i} className="mr-4">
+            <div key={i} className="mr-2">
               {m.content ? (
                 <CitedText
                   content={m.content}
@@ -167,17 +209,27 @@ export function WorkspaceChat({ noteId, colorIndex, onCitation, onClose }: Works
                   onCitation={onCitation}
                 />
               ) : (
-                <span className="text-xs text-gray-400 animate-pulse">Thinking…</span>
+                <span className="inline-flex items-center gap-1 text-gray-400" aria-label="Thinking">
+                  {[0, 1, 2].map((d) => (
+                    <span
+                      key={d}
+                      className="w-1.5 h-1.5 rounded-full bg-current animate-bounce"
+                      style={{ animationDelay: `${d * 140}ms` }}
+                    />
+                  ))}
+                </span>
               )}
             </div>
           )
         )}
       </div>
 
-      <div className="p-3 border-t border-gray-100 dark:border-gray-800 shrink-0">
-        <div className="flex items-end gap-2">
+      <div className="p-3 shrink-0 border-t border-gray-100 dark:border-white/5">
+        <div className="flex items-end gap-2 p-1.5 rounded-2xl bg-gray-100/70 dark:bg-white/[0.06]
+          ring-1 ring-transparent focus-within:ring-indigo-400/50 transition-shadow">
           <textarea
-            className="flex-1 resize-none rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-3 py-2 text-sm outline-none focus:border-indigo-400 text-gray-800 dark:text-gray-200 max-h-32"
+            className="flex-1 resize-none bg-transparent px-2 py-1.5 text-[13px] outline-none
+              text-gray-800 dark:text-gray-100 placeholder:text-gray-400 max-h-32"
             rows={1}
             placeholder="Ask about your sources…"
             value={input}
@@ -187,11 +239,13 @@ export function WorkspaceChat({ noteId, colorIndex, onCitation, onClose }: Works
             }}
           />
           <button
-            onClick={send}
+            onClick={() => send()}
             disabled={streaming || !input.trim()}
-            className="p-2 rounded-lg bg-indigo-600 text-white disabled:opacity-40 hover:bg-indigo-700 transition-colors"
+            title="Send"
+            className="ws-accent shrink-0 w-8 h-8 flex items-center justify-center rounded-xl
+              disabled:opacity-30 disabled:shadow-none transition-all duration-150 active:scale-95"
           >
-            <Send size={15} />
+            <ArrowUp size={16} />
           </button>
         </div>
       </div>

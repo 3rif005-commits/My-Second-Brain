@@ -5,6 +5,7 @@
 // element overlays and send-to-note actions need.
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { AlertCircle, Layers } from "lucide-react";
 import { wsApi, type NoteSource, type SendAction } from "@/lib/workspace";
 import { YouTubePlayer } from "./viewers/YouTubePlayer";
 import { VideoPlayer } from "./viewers/VideoPlayer";
@@ -31,11 +32,23 @@ interface SourceViewerProps {
   seekRef: React.MutableRefObject<((value: number) => void) | null>;
 }
 
-function Message({ children }: { children: React.ReactNode }) {
+function Message({ icon, children }: { icon?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="flex-1 flex items-center justify-center px-6 text-center text-xs text-gray-400">
-      {children}
+    <div className="flex-1 flex flex-col items-center justify-center gap-2.5 px-8 text-center">
+      {icon}
+      <p className="max-w-xs text-[12.5px] leading-relaxed text-gray-400">{children}</p>
     </div>
+  );
+}
+
+/** Slow, calm spinner for the states where the server is still working. */
+function Spinner({ tone = "indigo" }: { tone?: "indigo" | "gray" }) {
+  return (
+    <span
+      className={`w-6 h-6 rounded-full border-2 border-t-transparent animate-spin ${
+        tone === "indigo" ? "border-indigo-400" : "border-gray-300 dark:border-gray-600"
+      }`}
+    />
   );
 }
 
@@ -61,14 +74,35 @@ export function SourceViewer({ source, onPosition, onAction, seekRef }: SourceVi
     return () => { cancelled = true; };
   }, [sourceId, status]);
 
-  if (!source) return <Message>Select a source to open it here.</Message>;
+  if (!source) {
+    return (
+      <Message icon={<Layers size={22} className="text-gray-300 dark:text-gray-600" />}>
+        Pick a source above to open it here.
+      </Message>
+    );
+  }
   if (source.status === "failed") {
-    return <Message>Processing failed: {source.error ?? "unknown error"} — use retry in the rail.</Message>;
+    return (
+      <Message icon={
+        <span className="w-10 h-10 rounded-2xl bg-red-500/10 text-red-500 flex items-center justify-center">
+          <AlertCircle size={20} />
+        </span>
+      }>
+        Couldn’t read this one: {source.error ?? "unknown error"}.
+        Use the retry arrow in the rail to try again.
+      </Message>
+    );
   }
   if (source.status !== "ready") {
-    return <Message>Processing “{source.title}”… the note is written once every source is in.</Message>;
+    return (
+      <Message icon={<Spinner />}>
+        Reading “{source.title}” — the note gets written once every source is in.
+      </Message>
+    );
   }
-  if (!detail || detail.id !== source.id) return <Message>Loading source…</Message>;
+  if (!detail || detail.id !== source.id) {
+    return <Message icon={<Spinner tone="gray" />}>Opening source…</Message>;
+  }
 
   const common = { resource: detail, onPosition, onAction, seekRef };
   if (detail.kind === "pdf" || detail.kind === "document") return <PdfViewer {...common} />;

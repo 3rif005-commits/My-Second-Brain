@@ -10,9 +10,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
+import { Bookmark, Check, Copy, CornerDownRight, Sigma, X } from "lucide-react";
 import { wsApi, type SendAction, type WsElement, type NoteSource } from "@/lib/workspace";
 import { useToast } from "@/app/providers";
-import { ActionBar, ActionButton } from "./ActionBar";
+import { ActionBar, ActionButton, ActionLabel, ActionSeparator } from "./ActionBar";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url
@@ -42,6 +43,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
   const [active, setActive] = useState<{ el: WsElement; x: number; y: number } | null>(null);
   const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const { showToast } = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
@@ -146,23 +148,31 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
     onAction({ type: "text", text: el.content || "" });
   }
 
+  // Confirm in place rather than closing instantly — a popover that vanishes is
+  // indistinguishable from one that failed.
   function copyElement(el: WsElement) {
-    setActive(null);
     navigator.clipboard.writeText(el.content || el.image_url || "").catch(() => {});
+    setCopied(true);
+    setTimeout(() => { setCopied(false); setActive(null); }, 900);
   }
 
   if (!fileUrl) {
-    return <div className="flex-1 flex items-center justify-center text-sm text-gray-400">Loading PDF…</div>;
+    return (
+      <div className="flex-1 flex items-center justify-center gap-2 text-sm text-gray-400">
+        <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
+        Loading PDF…
+      </div>
+    );
   }
 
   return (
     <div
       ref={containerRef}
-      className="relative flex-1 overflow-y-auto bg-gray-100 dark:bg-gray-950"
+      className="ws-canvas relative flex-1 overflow-y-auto"
       onScroll={() => { handleScroll(); setActive(null); }}
       onMouseUp={handleMouseUp}
     >
-      <div className="flex flex-col items-center gap-4 py-4">
+      <div className="flex flex-col items-center gap-4 py-6">
         <Document
           file={fileUrl}
           onLoadSuccess={({ numPages: n }) => setNumPages(n)}
@@ -177,7 +187,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
               <div
                 key={pno}
                 ref={(el) => { pageRefs.current[pno] = el; }}
-                className="relative shadow-md mb-4 bg-white"
+                className="relative mb-5 bg-white rounded-lg overflow-hidden ring-1 ring-black/5 shadow-[0_2px_8px_-2px_rgba(16,24,40,0.12),0_18px_40px_-24px_rgba(16,24,40,0.5)]"
                 style={{ width: PAGE_WIDTH }}
               >
                 <Page pageNumber={pno} width={PAGE_WIDTH}
@@ -206,7 +216,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
                     />
                   );
                 })}
-                <div className="absolute bottom-1 right-2 text-[10px] text-gray-300 select-none">
+                <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-gray-900/5 text-[10px] font-medium tabular-nums text-gray-400 select-none">
                   {pno}
                 </div>
               </div>
@@ -217,30 +227,39 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
 
       {active && (
         <ActionBar x={active.x} y={active.y}>
-          <span className="px-1.5 text-gray-400 capitalize">{active.el.element_type}</span>
-          <ActionButton onClick={() => sendElement(active.el)} title="Send to note">
-            {busy ? "…" : "→ Note"}
+          <ActionLabel>{active.el.element_type}</ActionLabel>
+          <ActionButton primary onClick={() => sendElement(active.el)} title="Send to note">
+            {busy
+              ? <span className="w-3 h-3 rounded-full border-2 border-white/50 border-t-transparent animate-spin" />
+              : <CornerDownRight size={12} />}
+            Send to note
           </ActionButton>
           {active.el.element_type === "formula" && (
             <ActionButton onClick={() => sendElement(active.el)} title="Transcribe to LaTeX and insert">
-              LaTeX
+              <Sigma size={12} /> LaTeX
             </ActionButton>
           )}
-          <ActionButton onClick={() => copyElement(active.el)}>Copy</ActionButton>
-          <ActionButton onClick={() => setActive(null)}>✕</ActionButton>
+          <ActionButton onClick={() => copyElement(active.el)} title="Copy to clipboard">
+            {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+            {copied ? "Copied" : "Copy"}
+          </ActionButton>
+          <ActionSeparator />
+          <ActionButton onClick={() => setActive(null)} title="Dismiss">
+            <X size={12} />
+          </ActionButton>
         </ActionBar>
       )}
 
       {selection && (
         <ActionBar x={selection.x} y={selection.y}>
-          <ActionButton onClick={() => {
+          <ActionButton primary title="Send the selected text to the note" onClick={() => {
             onAction({ type: "text", text: selection.text });
             setSelection(null);
             window.getSelection()?.removeAllRanges();
           }}>
-            → Note
+            <CornerDownRight size={12} /> Send to note
           </ActionButton>
-          <ActionButton onClick={() => {
+          <ActionButton title="Bookmark this page in the note" onClick={() => {
             onAction({
               type: "checkpoint", anchorType: "page",
               value: currentPage.current,
@@ -248,20 +267,25 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
             });
             setSelection(null);
           }}>
-            📍 Checkpoint
+            <Bookmark size={12} /> Checkpoint
           </ActionButton>
         </ActionBar>
       )}
 
       {/* persistent checkpoint button */}
       <button
-        className="absolute bottom-4 right-4 z-20 px-2.5 py-1.5 rounded-lg bg-gray-900/80 text-white text-xs shadow-lg hover:bg-gray-900"
+        className="ws-glass-dark absolute bottom-4 right-4 z-20 inline-flex items-center gap-1.5 h-9 px-3.5
+          rounded-full text-white text-[12px] font-medium transition-all duration-150
+          hover:bg-black/80 active:scale-[0.97]
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70"
         onClick={() => onAction({
           type: "checkpoint", anchorType: "page", value: currentPage.current,
         })}
         title="Insert a checkpoint for the current page"
       >
-        📍 p.{currentPage.current}
+        <Bookmark size={13} />
+        Checkpoint
+        <span className="tabular-nums text-white/50">p.{currentPage.current}</span>
       </button>
     </div>
   );
