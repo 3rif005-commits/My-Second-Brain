@@ -192,3 +192,55 @@ average, median, min, max, range, earliest_date, latest_date, date_range,
 checked, unchecked — so the engine already covers these. Only the UI is missing.
 NOTE: this was captured on a TEXT property; numeric/date properties will offer
 more branches (Sum, Average, …). Re-capture on the Number and Date columns.
+
+================================================================
+KEYBOARD — established with REAL key events, 2026-08-29
+SCREENSHOT: screenshots/01b-header-menu-keyboard-down.jpg
+================================================================
+
+*** THIS MENU IS NOT KEYBOARD-NAVIGABLE AS A MENU. ***
+
+↓ ↓ (two presses from the freshly-opened menu)
+  NO row became active or highlighted. Focus stayed in the property-name input at
+  the top of the menu and the arrow keys moved the TEXT CARET.
+  There is no roving selection, no aria-activedescendant behaviour, nothing.
+
+Tab
+  Moved focus to the next focusable element in plain DOM order: the ⓘ button
+  beside the name input. Focus did NOT enter the row list as a menu would.
+  → Notion is using ordinary DOM focus order here, not the ARIA menu pattern
+    and not the combobox pattern either.
+
+  BONUS: focusing ⓘ revealed its tooltip — **"Add property description"**.
+  That resolves the spec's TBD on what ⓘ does: it adds a property description.
+  Our PropertyResponse HAS a `description` field; PropertyUpdate cannot write it
+  (plan gap B3). Confirmed needed.
+
+Escape
+  With focus on the ⓘ button: the FIRST Escape did not close the menu (it
+  presumably dismissed the tooltip); the SECOND closed it.
+  With focus in the name input: one Escape closed it.
+  → Escape closes, but a visible tooltip consumes the first press.
+
+typing
+  This menu has NO search field, unlike the row menu ("Search actions…") and the
+  property type picker. Confirmed absent, not merely uncaptured.
+
+*** CORRECTION TO THE DESIGN DOC ***
+  The design doc gives MenuList one keyboard contract "shared by every menu in
+  the app", built around ↑/↓ moving an active row while focus stays in a search
+  input. That is the COMBOBOX model, and it is right for the menus that HAVE a
+  search field (type picker, row menu, sidebar panels).
+  This menu has no search field and no arrow navigation at all.
+
+  So keyboard behaviour is a per-panel property, tied to whether the panel has a
+  search field:
+    - panel WITH search  → combobox model (input focused, ↑/↓ move an active row)
+    - panel WITHOUT search → plain DOM focus order, Tab/Shift+Tab, Escape closes
+
+  DECISION FOR US: do NOT copy the no-arrow-navigation behaviour. A 14-row menu
+  that cannot be driven from the keyboard is an accessibility regression against
+  the native <select> elements we are replacing. Implement arrow navigation on
+  every MenuList panel, search or not. This is a deliberate, documented deviation
+  from Notion — one of the few places where matching it exactly would make our
+  product worse.

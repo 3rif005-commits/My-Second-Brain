@@ -45,7 +45,9 @@ Above the first row, the menu carries an **editable name field**:
 
 - The property is **renamed in place, here**. There is no "Rename" row anywhere in the menu.
 - The leading icon shows the property's current type.
-- The trailing `ⓘ` is an info/description affordance. Its behaviour is `TBD`.
+- The trailing `ⓘ` is **"Add property description"** (confirmed from its tooltip). It adds a
+  description to the property. Our `PropertyResponse` already has a `description` field, but
+  `PropertyUpdate` cannot write it — **plan gap B3, confirmed needed**.
 
 This is a repeated Notion pattern, not a one-off: the view settings sidebar names a view the
 same way. Adopt it as the general "name an entity in its own config panel" shape.
@@ -172,22 +174,31 @@ unchecked. Only the UI is missing.
 
 ## Keyboard
 
-**Not established.** Every claim here needs real key events against this specific menu.
+Established with real key events, 2026-08-29.
 
-| Key | Expected | Status |
+**Notion's version of this menu is not keyboard-navigable as a menu.**
+
+| Key | Notion's actual behaviour | Our spec |
 |---|---|---|
-| ↑ / ↓ | Move the active row | `TBD` |
-| → | Open the active row's flyout | `TBD` |
-| ← | Close the current flyout | `TBD` |
-| Enter | Activate the active row | `TBD` |
-| Esc | Close the menu, return focus to the header cell | `TBD` for this menu |
-| Tab | `TBD` | `TBD` |
-| typing | This menu has **no search field**, unlike the row menu and the type picker | confirmed absent |
+| ↑ / ↓ | **Nothing.** Focus stays in the name input; arrows move the text caret. No active row, no roving selection | **Deviate:** move the active row |
+| → | Not observed | Open the active row's flyout |
+| ← | Not observed | Close the current flyout |
+| Enter | Not observed | Activate the active row |
+| Esc | **Closes.** One press from the name input; two when a tooltip is showing, because the first press dismisses the tooltip | Closes, returns focus to the header cell |
+| Tab | Plain DOM focus order — name input → ⓘ → … Does not enter the list as a menu | Keep DOM order, but arrows also work |
+| typing | No search field in this menu (confirmed absent, not merely uncaptured) | Same — no search |
 
-Confirmed elsewhere and adopted as our convention: **Escape closes**, returning focus to the
-trigger. Notion is not self-consistent on this (its create-database modal ignores Escape
-entirely); we take the majority behaviour, which also matches our existing
-`ConfirmDialog`/`PromptDialog`.
+### A deliberate deviation, and why
+
+Notion's keyboard model is **per-panel**, tied to whether the panel has a search field:
+panels *with* search (the type picker, the row menu, the sidebar panels) use the combobox
+model — input focused, ↑/↓ moving an active row. Panels *without* search, like this one,
+fall back to plain DOM focus order with no arrow navigation.
+
+**We implement arrow navigation on every panel, search or not.** A 14-row menu that cannot
+be driven from the keyboard is an accessibility regression against the native `<select>`
+elements this work replaces. This is one of the few places where matching Notion exactly
+would make our product worse, so we match its *shape* and not its *keyboard*.
 
 ---
 
