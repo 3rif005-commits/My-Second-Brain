@@ -1,0 +1,23 @@
+SURFACE: "Filter" toolbar button → filter entry popover
+CHECKLIST SHOT: 24-filter-property-picker.png (§4)
+CAPTURED: 2026-08-29, EMPTY full-page database (only the "Name" title property)
+METHOD: javascript_tool, pointer sequence on [aria-label="Filter"]
+CAVEAT: see 00-METHOD.md.
+
+--- innerText, verbatim ---
+Name
+Add advanced filter
+--- end ---
+
+STRUCTURE
+  <list of this data source's properties, one row each>   ← here just "Name"
+  Add advanced filter                                     → opens the nested AND/OR builder
+
+NOTES
+- Confirms the planned two-tier design: a quick property picker first, with the
+  advanced nested builder behind an explicit row, exactly as §4 assumed.
+- The container's classes are obfuscated (x-prefixed), unlike the settings
+  sidebar's semantic `notion-view-settings-sidebar`. Notion is inconsistent here;
+  do not rely on class names for either.
+- INCOMPLETE: only one property existed. Re-capture on the fixture to get the
+  full property list, its icons, and whether the list is searchable.

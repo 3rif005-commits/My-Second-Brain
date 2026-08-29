@@ -1,0 +1,63 @@
+SURFACE: "Settings" in the database view toolbar  →  view settings panel
+CHECKLIST SHOT: 18-view-options-top.png (§3)
+CAPTURED: 2026-08-29, app.notion.com, an EMPTY full-page database (1 property, 0 rows)
+METHOD: javascript_tool, full pointer-event sequence on [aria-label="Settings"]
+CAVEAT: see 00-METHOD.md. Rows/labels/values reliable. Keyboard NOT established.
+
+*** MAJOR CORRECTION TO THE PLANNED SPEC ***
+This is NOT an anchored popover. It is a right-hand SIDEBAR:
+  container class: notion-view-settings-sidebar
+  width: 483px (at a 1300px viewport)
+The plan's §3 assumed a `···` popover. It is a docked panel, which means the
+primitive is SidePeek-shaped, not Popover+MenuList. See the design doc.
+
+--- innerText, verbatim, in DOM order ---
+View settings
+Layout
+Table
+Property visibility
+1
+Filter
+Sort
+Group
+Conditional color
+Copy link to view
+Data source settings
+Source
+New database
+Edit properties
+Automations
+AI Autofill
+More settings
+Manage data sources
+Lock database
+--- end ---
+
+STRUCTURE (three labelled sections)
+  View settings
+    Layout               value: "Table"        → sub-panel
+    Property visibility  value: "1"            → sub-panel   (the count of visible properties)
+    Filter                                     → sub-panel
+    Sort                                       → sub-panel
+    Group                                      → sub-panel
+    Conditional color                          → sub-panel
+    Copy link to view                          → action, applies immediately
+  Data source settings
+    Source               value: "New database" → sub-panel
+    Edit properties                            → sub-panel
+    Automations                                → sub-panel
+    AI Autofill                                → sub-panel
+  More settings
+    Manage data sources                        → sub-panel
+    Lock database                              → toggle
+
+NOTES
+- Filter / Sort / Group appear BOTH here and as top-level toolbar buttons.
+  Two entry points to the same panel; the spec must cover both.
+- "Property visibility" carries a COUNT as its right-side value, not a name.
+- The "View settings" vs "Data source settings" split mirrors Notion's post-2025
+  database/data-source model, which our backend already implements
+  (db_databases -> db_data_sources). Our UI has no such split today.
+- Section dividers / icons: take from screenshot 18.
+- Captured on an empty database. Re-capture on the fixture to confirm no rows
+  appear/disappear with data present.

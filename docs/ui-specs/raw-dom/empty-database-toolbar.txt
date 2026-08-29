@@ -1,0 +1,58 @@
+SURFACE: A brand-new full-page database — its whole chrome, empty
+CHECKLIST SHOTS: 93-state-new-database.png (§16), 49-db-header.png (§8), 42-view-bar.png (§7)
+CAPTURED: 2026-08-29, immediately after "New database", 0 rows, 1 property
+METHOD: read_page (accessibility tree) + get_page_text
+CAVEAT: see 00-METHOD.md.
+
+--- get_page_text, verbatim ---
+Add icon
+Add cover
+Add description
+Table
+New
+Name
+Add property
+New page
+--- end ---
+
+--- accessibility tree, page region only ---
+button   "Share"
+button   "Favorite"
+button   "Actions"                  ← the page-level ··· (see database-page-menu.txt)
+button   "Add icon"
+button   "Add cover"
+button   "Add description"
+textbox  "New database"  placeholder="New database"     ← the title IS a textbox, always editable
+tablist
+  tab                               ← the single "Table" view tab
+button   "Filter"
+button   "Sort"
+button   "Automations"
+button   "AI Autofill"
+button   "Search"
+button   "Settings"
+button   "New"
+button   "More add options"         ← the split button's second half
+button   "Add property"
+--- end ---
+
+*** CORRECTIONS TO THE PLANNED SPEC INDEX ***
+1. Filter and Sort are TOP-LEVEL TOOLBAR BUTTONS, not rows inside a ··· menu.
+   The toolbar is: Filter · Sort · Automations · AI Autofill · Search · Settings.
+   Our DatabaseShell has none of these six.
+2. There is no "···" in the view toolbar at all — the equivalent is "Settings",
+   and it opens a sidebar (see view-settings-sidebar.txt).
+3. "Add icon" / "Add cover" / "Add description" are three separate always-present
+   buttons on an empty database, not hover-revealed. Confirm on a NON-empty one:
+   they may be hover-only once the database has content.
+4. The database title is a `textbox` with a placeholder, i.e. edit-in-place with no
+   explicit "rename" affordance. Ours is a static <h1> (DatabaseShell.tsx:388).
+5. "New" + "More add options" confirms the split-button shape §12 assumed.
+6. The empty state's body renders a single "New page" placeholder row — NOT an
+   empty-state message. Our TableView renders "No rows yet." (TableView.tsx:816).
+
+NOTES
+- Viewport at capture: 1300x593 content area.
+- No creation-time modal/menu was present. If Notion shows a data-source picker at
+  the moment of creation, it did not survive a page reload — re-trigger creation to
+  capture it (user specifically asked for this menu).
