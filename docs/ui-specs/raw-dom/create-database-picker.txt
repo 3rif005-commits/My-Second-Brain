@@ -1,0 +1,73 @@
+SURFACE: Creating a database — the data-source picker modal
+  Reached via: sidebar "New page" button → its dropdown → "Database"
+  (The user asked for this one specifically, and suspected the inline
+   `/database` path shows the same modal. UNCONFIRMED — test that separately.)
+CHECKLIST SHOT: 54 (this replaces the planned "54-slash-database.png" framing)
+SCREENSHOT: screenshots/54-create-database-datasource-picker-DARK.jpg  ← DARK MODE
+CAPTURED: 2026-08-29, app.notion.com
+METHOD: real click via `computer` (permission granted mid-session), DOM read via javascript_tool
+
+*** THIS IS THE MOST IMPORTANT CAPTURE SO FAR ***
+Creating a database in Notion does NOT go straight to an empty table. It opens a
+full-viewport modal that asks WHICH DATA SOURCE the new database should show.
+That is the post-2025 database/data-source split — the exact model our backend
+already implements (db_databases -> db_data_sources) and our UI exposes NOWHERE.
+Our Sidebar.tsx `handleNewDatabase` POSTs {title:"Untitled Database"} and
+navigates straight to the result.
+
+GEOMETRY
+  Full-viewport modal, 1300x593 at a 1300px viewport (i.e. it fills the frame).
+  Vertical scroll, with a visible scrollbar track on the right.
+
+--- the "New page" dropdown that precedes it ---
+Page
+Chat
+AI Meeting Notes
+Database
+--- end ---
+
+--- modal innerText, verbatim, in DOM order ---
+Add to
+Private
+Empty database
+Existing data sources
+Academic studies (2)
+  <preview: property names Module / Type / Name, with coloured option chips>
+Remote Sensing
+  <preview: Source / Course Name / Name>
+python …
+  <preview: Tags / URL / Verification>
+Linux
+  <preview: URL / Course Name / Name>
+Show more
+Templates
+Tasks Tracker
+Stay organized with tasks, your way.
+  <preview: Task name / Status / Assignee>
+--- end (personal row content stripped; see 00-METHOD.md) ---
+
+STRUCTURE
+  header row
+    ×                       close
+    "Add to"  [Private ▾]   destination picker — where the new database is created
+    [Search]                text input, AUTOFOCUSED on open (verified:
+                            document.activeElement === the input, placeholder "Search")
+  section (unlabelled, first)
+    card: "Empty database"  with a table icon — the only non-preview card
+  section "Existing data sources"   (has a ↗ icon on the section header)
+    grid of 2 cards per row, each: data-source name as a title, then a LIVE
+    MINI-PREVIEW of that source (its first ~3 property names as columns and ~3
+    rows of real values, coloured select chips rendered as chips)
+    "Show more"             expands the list
+  section "Templates"
+    cards with a name, a one-line description, and the same mini-preview
+
+NOTES
+- The search field filters across all three sections (assumed — not yet verified;
+  type into it and re-capture).
+- Card previews are real rendered data, not static images. That is a meaningful
+  build cost if we copy it; flag before committing to it.
+- Dark mode: this workspace is in dark mode. A light-mode retake is needed before
+  any token values are derived from it.
+- The "Add to / Private" destination picker has no analogue in our app (we have no
+  page tree to place a database into). Likely out of scope — note, don't build.
