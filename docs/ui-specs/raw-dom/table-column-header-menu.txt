@@ -66,3 +66,66 @@ STILL TO CAPTURE for this surface
   - the same menu on the TITLE column (shot 07) — expected to differ
   - the same menu on a Formula column (shot 08)
   - keyboard: arrows/Enter/Esc on this menu, with real key events
+
+================================================================
+SUB-PANEL: "Change type"
+SCREENSHOT: screenshots/05-header-change-type-flyout.jpg
+================================================================
+
+*** TWO STRUCTURAL CORRECTIONS TO THE DESIGN DOC ***
+
+CORRECTION A — sub-panels are FLYOUTS, not push/pop panels.
+  Clicking "Change type" opened a SECOND panel to the RIGHT of the menu
+  (x≈877..1077, top-aligned near the viewport top), and THE PARENT MENU STAYED
+  FULLY VISIBLE AND OPEN beside it. There is no back arrow, because there is
+  nothing to go back from — both panels are on screen at once.
+
+  The design doc specifies:
+     "MenuList — ... push/pop sub-panels with a back arrow"
+     "Esc — Pop one sub-panel; at the root, close"
+  That is the WRONG MODEL for this surface. Notion uses an adjacent flyout, the
+  way a classic nested menu does.
+
+  NOTE the inconsistency: TemplateManager/AutomationManager in OUR code already
+  use push/pop-with-back-arrow, and the create-database modal is a full overlay.
+  Notion itself may use push/pop elsewhere — the settings sidebar's sub-panels
+  are not yet captured. DO NOT generalise from this one observation the way
+  FINDING 3 was over-generalised earlier. Capture the sidebar sub-panels before
+  deciding whether MenuList needs flyout mode, push/pop mode, or both.
+
+CORRECTION B — the type list is SINGLE-COLUMN here.
+  The "+ Add property" type picker is a TWO-column grid (property-type-picker.txt).
+  This "Change type" list of the same types is ONE column.
+  So the layout is a property of the SURFACE, not of the data. MenuList needs the
+  column count as a per-panel option.
+
+--- rows, verbatim, in DOM order ---
+Text              ✓      ← current type, marked with a trailing checkmark
+Number
+Select
+Multi-select
+Status
+Date
+Person
+Files & media
+Checkbox
+URL
+Email
+Phone
+Formula
+Relation                 ← rendered DISABLED/greyed
+… (list scrolls; below-the-fold rows not yet captured)
+--- end ---
+
+NOTES
+- The CURRENT type carries a trailing ✓. MenuRow.checked covers this.
+- "Relation" is greyed out: a Text property cannot be converted to a Relation.
+  So this list is a filtered/annotated view of the type set, not the same list as
+  "add property" — conversions have legality rules. Our backend has the same
+  concept (PropertyUpdate accepts `config`, and relation properties must be
+  created through POST .../relations, never the generic properties endpoint —
+  TableView.tsx:482-489). The UI must express which conversions are legal.
+  THIS IS A REAL SPEC QUESTION: our backend has no "which types can this convert
+  to" endpoint. Flag as a possible backend sub-task.
+- Not captured: the rest of the scrolled list, and whether disabled rows show a
+  reason on hover.
