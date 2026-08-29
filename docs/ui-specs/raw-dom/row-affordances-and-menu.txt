@@ -1,0 +1,79 @@
+SURFACE: Row hover affordances (§9), the row menu, and the bulk-selection bar
+CHECKLIST SHOTS: 57-row-hover.jpg, 58-row-menu-and-bulk-bar.jpg (also covers 61)
+CAPTURED: 2026-08-29, light mode, one row named "Row one", 11 properties
+METHOD: real hover + real click via `computer`
+
+================= ROW HOVER (§9) =================
+Hovering a row reveals FIVE affordances, in two groups:
+
+  OUTSIDE the table, in the left gutter (x≈299..356), in this order:
+    +      (x≈299)  add a row below
+    ⠿      (x≈321)  drag handle — 6-dot grid
+    ☐      (x≈356)  selection checkbox
+  INSIDE the title cell:
+    📄     (x≈390)  the row's page icon
+    ▣ OPEN (x≈593..640, right-aligned in the cell)
+
+*** CORRECTIONS TO THE PLAN ***
+- The plan called the row menu trigger "⋮⋮". It is the DRAG HANDLE (⠿), and it
+  is BOTH the drag grip and the menu trigger — clicking opens the menu, dragging
+  reorders. One affordance, two gestures.
+- "OPEN" is a LABELLED BUTTON with an icon and the word OPEN, right-aligned
+  inside the title cell — not a bare icon. Our OpenNoteButton is icon-only.
+- The gutter affordances live OUTSIDE the table's left edge, in a gutter that
+  exists only on hover. That means the table needs left padding reserved
+  permanently, or rows shift on hover. Our TableView has no such gutter.
+- The hovered/selected cell also shows a small circle at its bottom-right corner
+  (x≈652,y≈238) — a fill/extend handle. Not in the plan at all. Capture its
+  behaviour before speccing; do not assume it is Excel-style drag-fill.
+
+================= ROW MENU (clicking ⠿) =================
+--- verbatim, in DOM order ---
+[ Search actions…  ]              ← autofocused text input at the TOP
+Page                              ← section header
+⭐  Add to Favorites
+☺   Edit icon
+☰   Edit property            >
+↗   Open in                  >
+💬  Comment          Ctrl+⇧+M
+🔗  Copy link
+⧉   Duplicate        Ctrl+D
+↱   Move to          Ctrl+⇧+P
+🗑   Move to Trash    Del
+  ── divider ──
+Last edited by <user>             ← FOOTER, muted
+Today at 12:15 PM
+--- end ---
+
+NOTES
+- Search-at-top ("Search actions…") again — a third surface with it, after the
+  type picker and the sidebar panels. It is Notion's default for any list of
+  more than a handful of rows.
+- Right-aligned keyboard hints on four rows (Ctrl+⇧+M, Ctrl+D, Ctrl+⇧+P, Del).
+  MenuRow.hint confirmed in use a second time.
+- Two rows have sub-panels: "Edit property" and "Open in".
+- Footer region carries last-edited metadata — MenuPanel.footer confirmed again.
+- "Move to Trash", not "Delete". Our row deletion goes through
+  DELETE /api/notes/{id}, which is a soft-delete to trash — the vocabulary
+  already matches. Good.
+- "Duplicate" is offered here for a ROW. Our backend has no row-duplicate
+  endpoint that copies the page body (gap B4 in the plan). Confirmed as needed.
+
+================= BULK SELECTION BAR (§9 shot 61) =================
+Clicking the drag handle ALSO SELECTED the row. This is worth noting on its own:
+the drag handle is a third gesture target — it selects, opens a menu, and drags.
+
+On selection:
+  - checkboxes appear in BOTH the header row and every row
+  - the header's checkbox becomes select-all
+  - a floating toolbar replaces the view toolbar area:
+        [ 1 selected ]  [≡] [#] [⊙] [☰] [⊙] [⊙]  [🗑]  [⋯]
+    The middle icons are PROPERTY-TYPE icons — i.e. bulk-edit a property across
+    the selection. Then a trash, then an overflow ⋯.
+  - the selected row is tinted
+
+NOT YET CAPTURED
+  - the "Open in" sub-panel (side peek / centre peek / full page) — shot 60
+  - the "Edit property" sub-panel
+  - what the bulk bar's ⋯ contains
+  - multi-row selection and shift-click range behaviour
