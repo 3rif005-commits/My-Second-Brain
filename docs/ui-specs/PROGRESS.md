@@ -25,13 +25,13 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 | # | Spec | Status | Raw DOM | Screenshots read |
 |---|---|---|---|---|
 | 1 | `table-column-header.md` | not-started | — | — |
-| 2 | `property-create-edit.md` | not-started | — | — |
-| 3 | `view-options-panel.md` | not-started | — | — |
-| 4 | `filter-panel.md` | not-started | — | — |
+| 2 | `property-create-edit.md` | dom-captured (partial) | `property-type-picker.txt` | 10, 12a, 12b |
+| 3 | `view-options-panel.md` | dom-captured (partial) | `view-settings-sidebar.txt` | — |
+| 4 | `filter-panel.md` | dom-captured (partial) | `filter-entry.txt` | — |
 | 5 | `sort-panel.md` | not-started | — | — |
 | 6 | `group-panel.md` | not-started | — | — |
 | 7 | `view-tab-bar.md` | not-started | — | — |
-| 8 | `database-header.md` | not-started | — | — |
+| 8 | `database-header.md` | dom-captured (partial) | `create-database-picker.txt`, `empty-database-toolbar.txt`, `database-page-menu.txt` | 54 |
 | 9 | `row-affordances.md` | not-started | — | — |
 | 10 | `row-peek.md` | not-started | — | — |
 | 11 | `calculations-row.md` | not-started | — | — |
@@ -39,19 +39,21 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 | 13 | `context-menus.md` | not-started | — | — |
 | 14 | `table-drag-resize.md` | not-started | — | — |
 | 15 | `cell-editing.md` | not-started | — | — |
-| 16 | `states.md` | not-started | — | — |
+| 16 | `states.md` | dom-captured (partial) | `empty-database-toolbar.txt` | — |
 
 ---
 
 ## Blocked on the user
 
-- [ ] **Notion tab** handed over via `claude-in-chrome`, logged in, on the fixture
-      database from `SCREENSHOT-CHECKLIST.md` §0. Needs site permission for `notion.so`
-      in the Chrome extension.
-- [ ] **Screenshots** captured per `SCREENSHOT-CHECKLIST.md` into `screenshots/`.
-
-Both are needed before any spec can move past `not-started`. DOM capture and screenshot
-capture run in parallel — the checklist is written first precisely so they can.
+- [x] **Notion tab** — done. `app.notion.com` (note: `notion.so` redirects there).
+- [x] **`computer` permission** — granted mid-session, so real clicks/keys/screenshots work
+      and the screenshots no longer have to be taken by hand.
+- [x] **Light mode** — user authorised the theme switch; `Ctrl+Shift+L` toggles it.
+      **Restore to DARK when capture is finished** — that is how the workspace was found.
+- [ ] **Fixture database** — user created an empty "New database" and authorised me to
+      build the §0 fixture into it. Not built yet. Needed for: §1 (header menus vary by
+      property type), §15 (cell editing per type), and the per-type config panels in §2.
+      Consider trimming §0's 21 properties to the ~12 that actually change a menu.
 
 ---
 
