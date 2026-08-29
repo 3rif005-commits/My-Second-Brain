@@ -49,7 +49,10 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 - [x] **`computer` permission** — granted mid-session, so real clicks/keys/screenshots work
       and the screenshots no longer have to be taken by hand.
 - [x] **Light mode** — user authorised the theme switch; `Ctrl+Shift+L` toggles it.
-      **Restore to DARK when capture is finished** — that is how the workspace was found.
+      **RESTORED TO DARK 2026-08-29** at the end of the autonomous capture session, as
+      found. Flip it back to light with `Ctrl+Shift+L` before resuming capture — every
+      light-mode screenshot in `screenshots/` was taken that way, and token values must
+      come from light.
 - [ ] **Fixture database** — user created an empty "New database" and authorised me to
       build the §0 fixture into it. Not built yet. Needed for: §1 (header menus vary by
       property type), §15 (cell editing per type), and the per-type config panels in §2.
@@ -67,8 +70,28 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 - `npx tsc --noEmit` — **clean** (exit 0), 2026-08-29.
 - `npm run test` — **clean** (exit 0): 41 files, 575 tests passed, 83s. 2026-08-29.
 
+## Fixture state (in the user's Notion, database "New database")
+
+Built by me, with the user's authorisation, 2026-08-29:
+- **11 properties**: Name (title), Text, Number, Select, Multi-select, Status, Date,
+  Person, Checkbox, URL, Files
+- **1 row**: "Row one", all values empty
+- **1 filter**: `Where Name Contains <empty>` — a no-op, left in place so the filter bar
+  is present for future captures
+- **Still missing** for full §0 coverage: Formula, Relation, Rollup, Created time;
+  option values on Select/Status; more rows; a second view; a row template
+
 ## Log
 
+- **2026-08-29 (autonomous session)** — Captured 13 surfaces live and wrote 4 specs.
+  Screenshots: 24. Raw DOM captures: 9. See the log entries and git history.
+  Key corrections to the plan and design doc, all committed with their evidence:
+  view settings is a docked 483px sidebar not a popover; Filter/Sort are top-level
+  toolbar buttons; sub-panels flyout from popovers but push from the sidebar; menus nest
+  3 levels and flip mid-chain; the type picker is a 2-column grid with a separate hidden
+  search; creating a database opens a data-source picker; the peek is URL-addressable and
+  non-modal; the column header menu has no keyboard navigation at all; Notion groups by
+  any property type where we support 3.
 - **2026-08-29** — Wrote the implementation plan's structure: 12 milestones + Phase 0
   (primitives) + Phase 0b (three backend endpoints), three review checkpoints, and the
   per-milestone definition of done whose gate is the user's visual diff. Per-milestone task
