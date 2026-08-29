@@ -1,0 +1,85 @@
+SURFACE: Row side peek (§10 row-peek.md)
+CHECKLIST SHOT: 62-peek-side.jpg
+CAPTURED: 2026-08-29, light mode, row "Row one", 11 properties, all values empty
+METHOD: real hover + real click on the row's OPEN button
+Today: components/database/RowPeek.tsx — a fixed max-w-2xl drawer with a dark backdrop.
+
+*** THE PEEK IS URL-ADDRESSABLE — AND ENCODES ITS MODE ***
+  Opening the peek changed the URL to:
+      ...?v=<viewId>&p=<pageId>&pm=s
+  - `v`  = the view
+  - `p`  = the peeked page (row)
+  - `pm` = peek mode; `s` for side peek
+  So the peek is deep-linkable AND the mode is part of the address. Reloading
+  restores it; sharing the link opens the same row in the same mode.
+
+  Our RowPeek is component state only (`peekRowId` in TableView.tsx:180) — not in
+  the URL, not restorable, not shareable. The design doc already calls for
+  "URL-addressable via a search param"; this confirms the exact shape to copy,
+  including the mode parameter. Suggest `?p=<noteId>&pm=s|c` to match.
+
+GEOMETRY (viewport 1300x593)
+  Occupies the RIGHT portion, x≈650..1300 — about half the viewport.
+  NO dark backdrop. The table remains fully visible and interactive on the left.
+  Our RowPeek renders `bg-black/30` over the whole viewport and traps interaction.
+  → Notion's side peek is NON-MODAL. Ours is modal. That is a behavioural
+    difference, not just a visual one.
+
+HEADER BAR (left to right)
+  »        (x≈674)  collapse / return
+  ⤢        (x≈700)  expand to full page
+  … then, right-aligned: Share, ★ favourite, ⋯ actions
+
+TITLE
+  "Row one" — large, directly editable (caret visible on open)
+
+PROPERTY LIST
+  Each row:  [type icon]  [property name]  ..........  [value]
+
+  --- verbatim, in DOM order ---
+  👥  Checkbox      Empty
+  ⊙   Date          Empty
+  🔗  Files         Empty
+  ☰   Multi-select  Empty
+  #   Number        Empty
+  ⁘   Person        ● Not started
+  ⊙   Select        Empty
+  ⊙   Status        Empty
+  ≡   Text          Empty
+  👥  URL           Empty
+  +   Add a property
+  --- end ---
+
+  *** ORDERING IS ALPHABETICAL, NOT TABLE ORDER ***
+    Peek order:  Checkbox, Date, Files, Multi-select, Number, Person, Select,
+                 Status, Text, URL
+    Table order: Name, Text, Number, Select, Multi-select, Status, Date, Person,
+                 Checkbox, URL, Files
+
+    But the "Property visibility" sidebar panel lists them in TABLE order.
+    So Notion uses BOTH orderings deliberately:
+      - Property visibility panel → table order (you are reordering the table)
+      - Peek / Group / Sort pickers → alphabetical (you are finding a property)
+    Our RowPeek sorts by `position` (RowPeek.tsx:69-72), i.e. table order.
+    This is a real, checkable difference.
+
+  - Empty values render the literal muted word **"Empty"**, not a blank cell.
+    Ours renders whatever the cell component renders for null.
+  - The title property is NOT in this list (it is the heading instead).
+  - "+ Add a property" is the last row — inline property creation from inside the
+    peek. Ours has no such affordance.
+
+BELOW THE PROPERTIES
+  "Comments" section header, then the page body below (not captured — scroll).
+
+TABLE-SIDE FEEDBACK
+  While the peek is open, the row's hover button changes from **OPEN** to
+  **CLOSE**, and the row stays highlighted. The button is a toggle, not a
+  one-way action.
+
+NOT YET CAPTURED
+  - the ⋯ menu in the peek header (shot 64)
+  - centre peek (`pm=c`?) for comparison
+  - the resize handle on the peek's left edge, and whether width persists
+  - what "+ Add a property" opens (probably the same type picker)
+  - the page body / comments area (shot 68)
