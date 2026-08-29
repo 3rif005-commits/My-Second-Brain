@@ -70,3 +70,55 @@ NOT YET CAPTURED (next passes)
   - picking a type → its per-type config panel (13)
   - the Summarize/Translate sub-panels
   - keyboard: arrow behaviour across a 2-column grid
+
+================================================================
+ADDENDUM — search behaviour, captured with real clicks + real typing
+SCREENSHOTS: 12a-type-picker-name-typed-not-filtered.jpg
+             12b-type-picker-search-filtered.jpg
+================================================================
+
+FINDING 1 — the name field is NOT the type filter.
+  Typed "sel" into the autofocused property-name input. The type grid did NOT
+  filter: Text / Number / Select / Multi-select / Status / Date / Person /
+  Files & media all still shown, unchanged and unreordered.
+  The name input names the property. That is all it does.
+  → This invalidates the planned checklist shot 12 ("type `sel` into its search
+    field"), which assumed one combined field. Two separate inputs exist.
+
+FINDING 2 — type search is a separate, INITIALLY HIDDEN input.
+  The "Select type" section header carries a magnifier icon at its right.
+  Clicking it EXPANDS a full-width text input directly beneath the section
+  header, inside the popover, and focuses it. The section header stays visible
+  above the input.
+
+FINDING 3 — filtering changes the LAYOUT, not just the contents.
+  Query "rel" produced:
+
+    AI Autofill                    ← section unchanged, NOT filtered
+      Summarize   Basic   >
+      Translate   Basic   >
+    Select type          [search input: "rel"]
+      ↗ Relation                   ← SINGLE COLUMN, not the 2-col grid
+      ────────────────             ← divider
+      [G] Google Drive File  ⬆     ← integration group, blue upgrade badge
+
+  So: the grid is 2 columns when unfiltered and 1 column when filtered.
+  A MenuList grid mode must handle that transition, and the arrow-key model has
+  to change with it (←/→ meaningful in grid mode, meaningless in list mode).
+
+FINDING 4 — the "AI Autofill" section is exempt from the type search.
+  It stays fully rendered while the type list is filtered down to one match.
+  So search scope is per-section, matching the search icon living on the
+  "Select type" header rather than on the popover.
+
+FINDING 5 — third-party types are grouped and badged.
+  "Google Drive File" appears below a divider with a blue upward-arrow badge,
+  i.e. an upgrade/connect affordance rather than a plain selectable row. The
+  four integration types are out of scope for us, but the BADGE + DIVIDER
+  pattern is reusable for our own "requires setup" rows.
+
+STILL NOT CAPTURED
+  - keyboard: arrows across the 2-column grid, and whether Enter picks the
+    active cell. Needs real key events (available now).
+  - picking a type → its per-type config panel (shot 13).
+  - the Summarize / Translate sub-panels behind the chevrons.
