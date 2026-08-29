@@ -129,3 +129,66 @@ NOTES
   to" endpoint. Flag as a possible backend sub-task.
 - Not captured: the rest of the scrolled list, and whether disabled rows show a
   reason on hover.
+
+================================================================
+SUB-PANEL: "Calculate"  →  and its own sub-panel "Count"
+SCREENSHOTS: screenshots/70-calculate-flyout-l2.jpg
+             screenshots/71-calculate-count-flyout-l3.jpg
+Also serves §11 (calculations-row.md) — same function set.
+================================================================
+
+LEVEL 2 — "Calculate" flyout (opens RIGHT, x≈877..1077)
+--- verbatim ---
+None      ✓        ← current, checkmark
+Count     >        ← has its OWN sub-panel
+Percent   >        ← has its OWN sub-panel
+--- end ---
+
+LEVEL 3 — "Count" flyout
+*** THIS PANEL OPENS TO THE LEFT (x≈632..882), NOT THE RIGHT. ***
+  There was no room on the right (level-2 already ended at x≈1077, viewport 1300).
+  This is genuine flip behaviour observed live, and it is the concrete
+  justification for taking Radix's collision handling rather than hand-rolling:
+  a three-level nested menu has to flip mid-chain.
+
+--- verbatim ---
+[toggle] Show large counts as 99+                    ← a SWITCH, currently off
+         This improves performance for large databases.   ← description line
+  ── divider ──
+Count all
+Count values
+Count unique values
+Count empty
+Count not empty
+--- end ---
+
+*** THREE MORE CORRECTIONS TO THE DESIGN DOC ***
+
+CORRECTION C — menus nest at least THREE levels.
+  Calculate (L1 menu) → Count (L2 flyout) → the count functions (L3 flyout).
+  The design doc's MenuList models one level of sub-panel. It needs arbitrary
+  depth, and each level needs its own independent flip/shift decision.
+
+CORRECTION D — a menu row can be a TOGGLE, and can carry a DESCRIPTION.
+  "Show large counts as 99+" is a switch with a two-line explanatory caption
+  underneath, sitting inside a menu above a divider.
+  MenuRow in the design doc has: id, icon, label, hint, value, checked, danger,
+  disabled, disabledReason, submenu, onSelect.
+  It needs at minimum: `description` (caption under the label) and a control
+  kind (`row` | `toggle`). Combined with the `badge` field already found in the
+  type picker, MenuRow is meaningfully wider than designed.
+
+CORRECTION E — calculations are NOT only a footer-row feature.
+  The plan puts "Calculations row" in M11 as its own surface. The same function
+  set is reachable here in the column header menu, at M1. Either M1 ships the
+  Calculate sub-panel (and M11 only adds the footer presentation), or M1 ships a
+  header menu with one row that does nothing. Sequencing decision for the plan.
+
+FUNCTION SET so far: Count all / Count values / Count unique values / Count empty /
+Count not empty, plus a Percent branch (not yet captured) and None.
+Our backend's aggregations (services/db/query/aggregations.py) include count,
+count_values, unique, empty, not_empty, percent_empty, percent_checked, sum,
+average, median, min, max, range, earliest_date, latest_date, date_range,
+checked, unchecked — so the engine already covers these. Only the UI is missing.
+NOTE: this was captured on a TEXT property; numeric/date properties will offer
+more branches (Sum, Average, …). Re-capture on the Number and Date columns.
