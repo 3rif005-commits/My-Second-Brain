@@ -61,3 +61,81 @@ NOTES
 - Section dividers / icons: take from screenshot 18.
 - Captured on an empty database. Re-capture on the fixture to confirm no rows
   appear/disappear with data present.
+
+================================================================
+LIGHT-MODE RE-CAPTURE + the "Property visibility" sub-panel
+SCREENSHOTS: screenshots/18-view-settings-sidebar-light.jpg
+             screenshots/20-view-property-visibility.jpg
+CAPTURED: 2026-08-29, same database, now with 11 properties
+================================================================
+
+*** RESOLVES THE OPEN QUESTION: the sidebar PUSHES, it does not fly out ***
+
+  Clicking "Property visibility" REPLACED the sidebar's contents. The new panel
+  has a BACK ARROW (←) at its top left, beside the panel title, with the × close
+  still at the top right.
+
+  So Notion uses BOTH navigation models, chosen by host surface:
+    - column header menu (a popover)  → adjacent FLYOUTS, parent stays visible
+    - config sidebar (docked panel)   → PUSH/POP with a back arrow
+
+  `MenuList` therefore needs both modes as an explicit option. Neither is "the"
+  Notion pattern. Our own TemplateManager/AutomationManager already do push/pop,
+  which matches the sidebar half.
+
+ROOT PANEL — with properties present, every row now carries a chevron
+--- verbatim ---
+[icon] [ View name  (editable input, placeholder "View name") ] [ⓘ]
+Layout               Table        >
+Property visibility  11           >
+Filter                            >
+Sort                              >
+Group                             >
+Conditional color                 >
+Copy link to view                       (no chevron — immediate action)
+  ── divider ──
+Data source settings                    (section header)
+Source               New database       (rendered greyed/inactive)
+Edit properties                   >
+Automations                       >
+… (scrolls; AI Autofill / More settings / Manage data sources / Lock database below)
+--- end ---
+
+  NOTE a consistent Notion pattern, now seen twice: THE ENTITY'S NAME IS AN
+  EDITABLE INPUT AT THE TOP OF ITS OWN CONFIG PANEL, with a leading icon button
+  and a trailing ⓘ. Same shape as the column header menu's rename field.
+  There is no "Rename" row anywhere. Our UI has no rename affordance at all for
+  views or databases (ViewTabs renders a bare button; DatabaseShell a static h1).
+
+SUB-PANEL — "Property visibility"
+--- verbatim ---
+←  Property visibility                                   ×
+[ Search for a property…  ]        ← autofocused text input
+Shown in table                              Hide all     ← section header + bulk action
+⠿  Aa  Name          👁
+⠿  ≡   Text          👁
+⠿  #   Number        👁
+⠿  ⊙   Select        👁
+⠿  ☰   Multi-select  👁
+⠿  ⊙   Status        👁
+⠿  ⊙   Date          👁
+⠿  ⁘   Person        👁
+⠿  ☑   Checkbox      👁
+⠿  🔗  URL           👁
+… (scrolls; "Files" and a hidden section presumably below)
+--- end ---
+
+ROW ANATOMY
+  [drag handle ⠿] [property type icon] [name] ............ [eye toggle 👁]
+  - Every row is DRAG-REORDERABLE here. This is where per-view property ORDER is
+    set — confirming the design decision that order lives in view config, not in
+    db_properties.position, and needs no backend change.
+  - The eye is a per-row visibility toggle.
+  - The SECTION HEADER carries a bulk action ("Hide all") aligned right. A
+    MenuSection therefore needs an optional `action`, which the design doc's
+    `MenuSection { label?, rows }` does not have.
+  - A second section for hidden properties is expected below the fold
+    (Notion's usual "Hidden in table"); not yet captured.
+
+CORRECTION TO THE DESIGN DOC
+  MenuSection needs: { label?, action?: {label, onSelect}, rows }.

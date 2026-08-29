@@ -137,7 +137,11 @@ interface MenuRow {
   onSelect?: () => void;
 }
 
-interface MenuSection { label?: string; rows: MenuRow[] }
+interface MenuSection {
+  label?: string;
+  action?: { label: string; onSelect: () => void };  // right-aligned bulk action, e.g. "Hide all"
+  rows: MenuRow[];
+}
 interface MenuPanel {
   title?: string;
   columns?: 1 | 2;                                          // per-panel, not global
@@ -185,9 +189,24 @@ This breaks the clean "Popover+MenuList for menus, SidePeek for the row peek" sp
 Either this becomes its own primitive (`ConfigSidebar`) or `SidePeek` grows a panel-stack
 mode. 483px is a token, not a per-surface choice.
 
-**Unresolved:** whether the sidebar's own sub-panels push/pop or flyout. Not yet captured
-— and an earlier finding this session was already over-generalised from one observation,
-so it stays open rather than assumed.
+**RESOLVED 2026-08-29: the sidebar pushes.** Clicking "Property visibility" replaced the
+sidebar's contents and rendered a back arrow (←) beside the panel title, × still top right.
+
+So Notion uses **both** navigation models, chosen by host surface:
+
+| Host | Sub-panel model |
+|---|---|
+| Column header menu (popover) | adjacent **flyout**, parent stays visible |
+| Config sidebar (docked panel) | **push/pop** with a back arrow |
+
+`MenuList` needs both as an explicit mode. Neither is "the" Notion pattern, and our
+existing `TemplateManager`/`AutomationManager` push/pop matches the sidebar half.
+
+**A consistent pattern worth copying, seen twice:** the entity's name is an *editable
+input at the top of its own config panel*, with a leading icon button and a trailing ⓘ —
+in the column header menu for a property, and in the view settings sidebar for a view.
+There is no "Rename" row anywhere. We have no rename affordance at all for views or
+databases (`ViewTabs` renders a bare button, `DatabaseShell.tsx:388` a static `<h1>`).
 
 ### `SidePeek`
 
