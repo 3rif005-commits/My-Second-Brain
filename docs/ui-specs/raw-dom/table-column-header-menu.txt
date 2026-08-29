@@ -1,0 +1,68 @@
+SURFACE: Table column header → its dropdown menu
+CHECKLIST SHOT: 02-header-menu-text.png (§1) — captured as .jpg
+SCREENSHOT: screenshots/02-header-menu-text.jpg (LIGHT MODE)
+CAPTURED: 2026-08-29, on a "Text"-typed property, database with 11 properties, 0 rows
+METHOD: real click via `computer` on the header cell; text via javascript_tool
+THIS IS MILESTONE 1. Our TableView.tsx:326-331 renders `property.name` as a plain
+string for every type except Button. This entire menu is missing.
+
+GEOMETRY (viewport 1300x593, measured off the screenshot)
+  Trigger : the column header cell itself. A plain left-click opens the menu —
+            there is no separate chevron affordance to hit.
+  Menu    : x≈648, width≈245px. Opens BELOW-LEFT, its left edge aligned to the
+            header cell's left edge. Vertically scrollable (scrollbar visible on
+            the right; "Delete property" sits below the fold at this height).
+
+HEADER OF THE MENU — not a row, an editable field
+  [type icon] [ text input containing the property name, "Text" ] [ⓘ]
+  The property is RENAMED IN PLACE at the top of its own menu. There is no
+  "Rename" row. The ⓘ at the right is an info/description affordance.
+
+--- rows, verbatim, in DOM order ---
+Change type            >     (sub-panel)
+AI Autofill  [Now with agents]  >   (sub-panel; the badge is promotional, not a plan tier)
+  ── divider ──
+Filter
+Sort                   >     (sub-panel)
+Group
+Calculate              >     (sub-panel)
+Freeze
+Hide
+Unwrap content
+  ── divider ──
+Insert left
+Insert right
+Duplicate property           (rendered DISABLED/greyed in this capture — see note)
+Delete property
+--- end ---
+
+ROW COUNT: 14, plus the rename field.
+
+NOTES / CORRECTIONS TO THE PLAN
+- The plan guessed "rename, edit property, filter, sort asc/desc, hide, duplicate,
+  insert left, insert right, wrap, freeze, delete + a nested type picker".
+  Close, but the real labels differ and two rows were missed:
+    * "Change type", not "Edit property".
+    * "Unwrap content" — a TOGGLE label showing the inverse of current state
+      (content is currently wrapped, so the action offered is to unwrap). Our spec
+      must render the label from state, not a static "Wrap".
+    * "Calculate" — a sub-panel, not in the plan's list at all. Column
+      calculations are reachable from the HEADER menu as well as the footer row.
+    * "AI Autofill" — not in the plan's list.
+    * "Group" is a plain row here (no chevron) though Group is a whole panel
+      elsewhere; presumably it groups by this property immediately.
+    * "Filter" and "Group" have no chevron; "Sort", "Calculate", "Change type"
+      and "AI Autofill" do.
+- "Duplicate property" appears greyed. Unverified why — possibly disabled on a
+  brand-new/empty property, or a rendering artifact. MUST be re-checked on a
+  populated property before the spec claims a disabled state.
+- No "Edit property" row: the rename field + "Change type" together do the job
+  the plan assumed one "Edit property" panel would.
+
+STILL TO CAPTURE for this surface
+  - the "Change type" sub-panel (is it the same 2-column type grid?)
+  - the "Sort" sub-panel (asc/desc?)
+  - the "Calculate" sub-panel (the full function list)
+  - the same menu on the TITLE column (shot 07) — expected to differ
+  - the same menu on a Formula column (shot 08)
+  - keyboard: arrows/Enter/Esc on this menu, with real key events
