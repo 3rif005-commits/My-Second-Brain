@@ -62,6 +62,17 @@ STRUCTURE
   section "Templates"
     cards with a name, a one-line description, and the same mini-preview
 
+KEYBOARD  (established with REAL key events — computer permission granted)
+- **Escape does NOT dismiss this modal.** Pressed twice, with focus in the Search
+  input both times; the modal stayed open and focus stayed in the input. Closing
+  requires clicking the × at the top left.
+  This is unusual and is exactly the assumption a memory-written spec would get
+  backwards. Our own modals close on Escape; if we copy this surface we must decide
+  deliberately whether to copy the non-dismissal too (recommendation: do NOT — it
+  reads as a bug, and our ConfirmDialog/PromptDialog convention is Escape-closes).
+- Focus on open: the Search input, verified via document.activeElement.
+- Not yet established: arrow-key navigation across the card grid, Enter to pick.
+
 NOTES
 - The search field filters across all three sections (assumed — not yet verified;
   type into it and re-capture).

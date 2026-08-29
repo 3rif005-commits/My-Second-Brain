@@ -11,7 +11,7 @@ extension permissions).
 | `read_page` (accessibility tree) | ✅ granted | ARIA roles, labels, structure |
 | `javascript_tool` | ✅ granted | opening menus, reading `innerText`, walking the overlay container |
 | `get_page_text` | ✅ granted | page-level text |
-| `computer` (click / hover / screenshot / real keys) | ❌ **denied** | — |
+| `computer` (click / hover / screenshot / real keys) | ✅ **granted mid-session** | real clicks, real keys, screenshots |
 
 Menus are opened with **synthetic** `element.click()` from `javascript_tool`, which
 works: Notion's buttons respond to it and their overlay renders normally.
@@ -28,10 +28,17 @@ synthetic key events are not a valid instrument for that question. React's synth
 event system and Notion's own key handling both discriminate against untrusted events
 (`event.isTrusted === false`).
 
+**`computer` permission was granted partway through the session**, so real key events are
+now available and keyboard behaviour IS establishable. Everything captured *before* that
+grant used synthetic events; anything keyboard-related from that window must be re-tested.
+
 Therefore:
 
-- **Every spec's Keyboard section is `TBD` until `computer` permission is granted**, which
-  provides real, trusted key events. Do not fill one in from a synthetic-event result.
+- **A spec's Keyboard section may only cite a capture taken with real key events.** Mark
+  each capture with which instrument it used. Do not fill one in from a synthetic result.
+- Because `computer` now works, screenshots no longer have to be taken by hand — the
+  SCREENSHOT-CHECKLIST can largely be executed from here, EXCEPT that this workspace is in
+  **dark mode**, and §1–§16 need light mode for token derivation.
 - Hover-only affordances have the same problem in weaker form: a dispatched `mouseover`
   triggers CSS `:hover`-independent JS handlers but not the CSS `:hover` state itself.
   Treat hover findings as provisional and confirm against the user's screenshots.
