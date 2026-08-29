@@ -1,0 +1,72 @@
+SURFACE: "+ Add property" → the new-property popover and its type picker
+CHECKLIST SHOTS: 09/10/11/12 (§2)
+SCREENSHOT: screenshots/10-new-property-type-picker.jpg  (LIGHT MODE)
+CAPTURED: 2026-08-29, empty full-page database, light mode
+METHOD: real click via `computer`; geometry + text via javascript_tool
+
+GEOMETRY  (viewport 1300x593)
+  Trigger: the "+ Add property" cell at the right end of the header row.
+  On click the header cell itself BECOMES a text input (see below); the popover
+  opens BELOW it.
+  Popover: x=654, y=170, width=378px. Vertically scrollable (scrollbar visible,
+  list continues past "Checkbox / URL" at the fold).
+
+*** CORRECTIONS TO THE PLANNED SPEC ***
+1. The property NAME field is NOT inside the popover. Clicking "+ Add property"
+   turns the header cell into an inline input, placeholder "Type property name…",
+   AUTOFOCUSED (verified: document.activeElement is that input). The popover hangs
+   below it. Our §2 draft assumed name+type both inside one popover.
+2. To the left of that input is an ICON button (emoji) — a property can have its
+   own icon. We have no such concept.
+3. The type list is a **TWO-COLUMN GRID**, not a single-column list. This changes
+   the MenuList primitive: it needs an optional grid mode, and ←/→ arrow handling,
+   not just ↑/↓.
+4. "AI Autofill" is its own section ABOVE "Select type", with two rows carrying a
+   plan-tier badge ("Basic") and a chevron indicating a sub-panel.
+5. The "Select type" SECTION HEADER carries its own search icon — search is
+   attached to the section, not to the popover as a whole.
+
+--- innerText, verbatim, in DOM order ---
+AI Autofill
+Summarize      Basic     >
+Translate      Basic     >
+Select type              [search icon]
+Text                | Number
+Select              | Multi-select
+Status              | Date
+Person              | Files & media
+Checkbox            | URL
+Phone               | Email
+Relation            | Rollup
+Formula             | Button
+ID                  | Place
+Created time        | Last edited time
+Created by          | Last edited by
+Google Drive File   | Figma File
+GitHub Pull Requests| Zendesk Ticket
+--- end ---
+
+TYPE COUNT: 26 offered (22 native + 4 third-party integrations).
+Our ADDABLE_PROPERTY_TYPES (TableView.tsx:130) offers **11**.
+  We offer:      rich_text, number, select, multi_select, status, date,
+                 checkbox, relation, formula, rollup, button
+  Notion also:   Person, Files & media, URL, Phone, Email, ID, Place,
+                 Created time, Last edited time, Created by, Last edited by
+  Integrations:  Google Drive File, Figma File, GitHub Pull Requests, Zendesk Ticket
+  NOTE: our BACKEND supports most of the 11 missing native ones already (see
+  services/db/properties/). They are absent from the UI list only. Whether to add
+  them is an M2 scope decision — flag to the user, do not silently widen.
+  The 4 integration types are out of scope (no such integrations exist here).
+
+ROW ANATOMY (from the screenshot)
+  [leading type icon]  [label]              — grid cell, two per row
+  AI Autofill rows:    [icon] [label] [badge "Basic"] [chevron ">"]
+  So MenuRow needs: icon, label, badge, chevron/submenu — badge is a NEW field
+  not in the design doc's MenuRow. Add it.
+
+NOT YET CAPTURED (next passes)
+  - the list scrolled to the bottom (11-new-property-bottom)
+  - typing in the search to see filtering behaviour (12)
+  - picking a type → its per-type config panel (13)
+  - the Summarize/Translate sub-panels
+  - keyboard: arrow behaviour across a 2-column grid
