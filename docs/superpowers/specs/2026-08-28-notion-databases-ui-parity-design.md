@@ -97,43 +97,97 @@ interface PopoverProps {
 
 ### `MenuList`
 
-The heart of the layer. Rendered inside a `Popover`; owns its own sub-panel stack.
+The heart of the layer. Rendered inside a `Popover`.
+
+> **REVISED 2026-08-29 against live Notion captures.** The original sketch — one level of
+> push/pop sub-panel behind a back arrow — did not survive contact with the product.
+> Evidence: `docs/ui-specs/raw-dom/table-column-header-menu.txt`,
+> `property-type-picker.txt`.
+
+**Sub-panels are adjacent flyouts, not a push/pop stack.** Opening "Change type" from the
+column header menu renders a second panel to the *right* while the parent stays fully
+visible. There is no back arrow because nothing is hidden. Our own
+`TemplateManager.tsx:116` / `AutomationManager.tsx:99` use push/pop — that is *our*
+convention, and it is not what this surface does.
+
+**Nesting runs at least three levels and flips mid-chain.** `Calculate` → `Count` → the
+count functions. The third level opened to the *left*, because the second already ran to
+x≈1077 in a 1300px viewport. Each level makes its own flip/shift decision — the concrete
+reason to take Radix's collision handling rather than approximate it.
+
+**Column count is per-panel.** The "+ Add property" type picker is a two-column grid; the
+"Change type" list of *the same types* is one column. A single search match fills one cell
+of the grid rather than collapsing to a list.
 
 ```ts
 interface MenuRow {
   id: string;
   icon?: React.ReactNode;
   label: string;
-  hint?: string;                     // right-aligned secondary text
-  value?: string;                    // right-aligned current value
-  checked?: boolean;
+  description?: string;              // caption under the label ("This improves performance…")
+  badge?: string;                    // "Basic", "Now with agents"
+  hint?: string;                     // right-aligned shortcut, e.g. "Ctrl+Alt+L"
+  value?: string;                    // right-aligned current value, e.g. "Table"
+  kind?: "row" | "toggle";           // rows can be switches
+  checked?: boolean;                 // confirmed: current type / current calculation carry ✓
   danger?: boolean;
-  disabled?: boolean;
-  disabledReason?: string;           // shown, never a silently dead row
-  submenu?: () => MenuPanel;         // pushes a sub-panel
+  disabled?: boolean;                // confirmed and SEMANTIC — see below
+  disabledReason?: string;
+  submenu?: () => MenuPanel;         // opens an adjacent FLYOUT, at any depth
   onSelect?: () => void;
 }
 
 interface MenuSection { label?: string; rows: MenuRow[] }
-interface MenuPanel   { title?: string; search?: { placeholder: string }; sections: MenuSection[]; footer?: React.ReactNode }
+interface MenuPanel {
+  title?: string;
+  columns?: 1 | 2;                                          // per-panel, not global
+  search?: { placeholder: string; scope: "panel" | "section" };
+  sections: MenuSection[];
+  footer?: React.ReactNode;
+}
 
 interface MenuListProps { root: MenuPanel; onClose: () => void }
 ```
 
-A row with `submenu` pushes; the pushed panel renders a back affordance built from its
-`title`. `TemplateManager.tsx:116` and `AutomationManager.tsx:99` already implement this
-push/pop-with-back-arrow shape as modals — `MenuList` generalises it rather than forking it.
+`disabled` is semantic, not cosmetic: "Relation" is greyed in Change type because a Text
+property cannot convert to one. Conversion legality is a rule the UI expresses, and **our
+backend has no endpoint describing it** — flagged as a possible backend sub-task, not
+absorbed into M1.
 
-**Keyboard contract**, shared by every menu in the app:
+**Search is scoped per section and can hide behind an icon.** In the type picker the
+magnifier sits on the "Select type" *section header* and expands an input beneath it,
+while the "AI Autofill" section above stays unfiltered. That expansion does not persist
+reliably across reopens.
 
-| Key | Behavior |
-|---|---|
-| ↑ / ↓ | Move the active row. Focus stays in the search input. |
-| Enter | Activate the active row. |
-| Esc | Pop one sub-panel; at the root, close and return focus to the trigger. |
-| ← | Pop one sub-panel (no-op at the root). |
-| Tab | Close and return focus to the trigger. |
-| typing | Filters rows; resets the active index to the first match. |
+**Keyboard — partially established. Notion is not self-consistent.**
+Confirmed with real key events: Escape cancels the new-property popover and discards the
+typed name; Escape does **not** dismiss the create-database modal at all. We adopt
+Escape-closes everywhere — the majority behaviour, and it matches our existing
+`ConfirmDialog`/`PromptDialog` convention.
+
+| Key | Behavior | Status |
+|---|---|---|
+| ↑ / ↓ | Move the active row; focus stays in the search input | **TBD** — not yet observed |
+| ← / → | Move across columns in a 2-column panel | **TBD** |
+| Enter | Activate the active row | **TBD** |
+| Esc | Close, returning focus to the trigger | confirmed on the property popover |
+| Tab | Close and return focus to the trigger | **TBD** |
+| typing | Filters rows within the searchable section | confirmed |
+
+### The config sidebar — a third surface the design missed
+
+`view-settings-sidebar.txt` and `relation-config-panel.txt` show the *same* container,
+`notion-view-settings-sidebar`, **483px wide and docked right**, hosting both the view
+settings panel and per-type property configuration. Notion reuses one sidebar and swaps
+its contents rather than opening a bespoke popover per surface.
+
+This breaks the clean "Popover+MenuList for menus, SidePeek for the row peek" split.
+Either this becomes its own primitive (`ConfigSidebar`) or `SidePeek` grows a panel-stack
+mode. 483px is a token, not a per-surface choice.
+
+**Unresolved:** whether the sidebar's own sub-panels push/pop or flyout. Not yet captured
+— and an earlier finding this session was already over-generalised from one observation,
+so it stays open rather than assumed.
 
 ### `SidePeek`
 
