@@ -122,3 +122,14 @@ STILL NOT CAPTURED
     active cell. Needs real key events (available now).
   - picking a type → its per-type config panel (shot 13).
   - the Summarize / Translate sub-panels behind the chevrons.
+
+KEYBOARD — Escape (real key events)
+  Escape CANCELS the new-property popover and discards the typed name: after two
+  presses the header row was back to just "Name" + "Add property", with no
+  property created and no "sel" left behind.
+  CONTRAST: the create-database data-source picker IGNORES Escape entirely
+  (see create-database-picker.txt). So Notion is NOT internally consistent here —
+  a popover cancels on Escape, that full-screen modal does not.
+  For our build: adopt Escape-cancels everywhere. It is the majority behaviour,
+  it matches our existing ConfirmDialog/PromptDialog convention, and the modal's
+  non-dismissal reads as a bug rather than a decision.
