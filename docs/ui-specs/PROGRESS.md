@@ -24,7 +24,7 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 | # | Spec | Status | Raw DOM | Screenshots read |
 |---|---|---|---|---|
-| 1 | `table-column-header.md` | dom-captured | `table-column-header-menu.txt` | 02, 05, 70, 71 |
+| 1 | `table-column-header.md` | **written** (Keyboard TBD) | `table-column-header-menu.txt` | 02, 05, 70, 71 |
 | 2 | `property-create-edit.md` | dom-captured | `property-type-picker.txt`, `relation-config-panel.txt` | 10, 12a, 12b, 13 |
 | 3 | `view-options-panel.md` | dom-captured | `view-settings-sidebar.txt` | 18, 20 |
 | 4 | `filter-panel.md` | dom-captured (partial) | `filter-entry.txt` | — |
