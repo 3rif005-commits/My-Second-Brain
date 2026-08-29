@@ -178,6 +178,19 @@ Escape-closes everywhere — the majority behaviour, and it matches our existing
 | Tab | Close and return focus to the trigger | **TBD** |
 | typing | Filters rows within the searchable section | confirmed |
 
+### Panels are host-agnostic — keep them as data
+
+Sort opened from the **toolbar** renders as an anchored popover. The *same* Sort opened
+from **view settings** renders as a pushed sidebar panel — same placeholder, same
+alphabetical list, same rows. Filter behaves the same way, and additionally renders from a
+third host (the filter-bar chip).
+
+So a panel's **content** is independent of its **container**. Build panels as `MenuPanel`
+data and let the host decide whether to render it in a `Popover`, in the config sidebar's
+panel stack, or as a flyout. Do **not** build a bespoke `FilterPopover` and a separate
+`FilterSidebarPanel` — that is exactly how this codebase ended up with 40 native
+`<select>` elements.
+
 ### The config sidebar — a third surface the design missed
 
 `view-settings-sidebar.txt` and `relation-config-panel.txt` show the *same* container,
