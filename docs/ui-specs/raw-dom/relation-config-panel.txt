@@ -1,0 +1,53 @@
+SURFACE: Choosing property type "Relation" → its configuration panel
+CHECKLIST SHOT: 13 (per-type config, §2)
+SCREENSHOT: screenshots/13-relation-config-sidebar.jpg (LIGHT MODE)
+CAPTURED: 2026-08-29, accidentally (a mis-aimed click during fixture build) — kept
+          because it answers a question §2 needed answered anyway.
+METHOD: real click via `computer`; geometry + text via javascript_tool
+
+*** ARCHITECTURAL FINDING — ONE SHARED SIDEBAR, MANY PANELS ***
+  container class : notion-view-settings-sidebar
+  geometry        : x=898, y=166, width=483, height=427
+
+  This is the SAME container and the SAME 483px width as the view settings panel
+  (view-settings-sidebar.txt). Notion does not open a bespoke popover per
+  configuration surface — it reuses ONE right-hand sidebar and swaps its contents.
+
+  Consequences for our design:
+  - `SidePeek` is not just for row peeks. It is the host for view settings,
+    property configuration, relation configuration — probably more.
+  - The design doc's split (Popover+MenuList for menus, SidePeek for row peek) is
+    too clean. There is a third thing: a docked CONFIG SIDEBAR with a panel stack.
+    It needs its own primitive, or SidePeek needs a panel-stack mode.
+  - Width 483px is a token, not a per-surface decision.
+
+--- innerText, verbatim ---
+Related to
+Existing data sources
+New database          ← this database itself; self-relation is offered first
+  New page            ← its parent page, shown as a second line
+Academic studies (2)
+Remote Sensing
+python …
+Linux
+Show 9 more
+--- end (data-source names are the user's own; kept because the STRUCTURE needs them) ---
+
+STRUCTURE
+  header: "Related to"           + a × close button at the panel's top right
+  search input, AUTOFOCUSED, placeholder "Link to a data source…"
+  section "Existing data sources"
+    rows, each: [data-source icon] [name] and, for the first, a second muted line
+    giving its PARENT PAGE ("New page") plus a trailing ⓘ info affordance
+    "Show 9 more"  — the list is truncated with an explicit expander, not scrolled
+
+NOTES
+- The relation target is chosen from DATA SOURCES, not databases. Same
+  distinction as the create-database picker. Our RelationPicker/TableView
+  relation form asks for a "target database" and resolves a data source id
+  behind the scenes (TableView.tsx:675-690) — the vocabulary differs from Notion's.
+- Self-relation is offered and listed FIRST. Our UI allows it too and does not
+  filter it out (TableView.tsx:196-203 comment) — agrees with Notion.
+- The ⓘ on the current database's row is unexplained; hover it and re-capture.
+- NOT captured: what appears after a target is chosen (two-way toggle, reverse
+  property name). That is the half our own form models. Capture next pass.
