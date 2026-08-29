@@ -21,3 +21,84 @@ NOTES
   do not rely on class names for either.
 - INCOMPLETE: only one property existed. Re-capture on the fixture to get the
   full property list, its icons, and whether the list is searchable.
+
+================================================================
+FULL CAPTURE with 11 properties present — light mode, real clicks
+SCREENSHOTS: 24-filter-property-picker.jpg, 30-filter-advanced-builder.jpg,
+             31-filter-add-rule-or-group.jpg, 32b-sort-from-toolbar-popover.jpg
+================================================================
+
+*** ONE PANEL, TWO HOSTS ***
+  Sort opened from the TOOLBAR renders as an anchored POPOVER below the toolbar.
+  Sort opened from Settings renders as a PUSHED SIDEBAR PANEL.
+  Same placeholder ("Sort by…"), same alphabetical property list, same rows.
+  → Panel CONTENT is host-agnostic; the HOST decides popover vs docked panel.
+    Our components must be renderable into either container. Strong argument for
+    keeping panel content as DATA (MenuPanel) that a host renders, rather than
+    bespoke components per surface.
+
+STEP 1 — the Filter entry popover (toolbar → Filter)
+--- verbatim ---
+[ Filter by…  ]              ← autofocused text input
+Aa  Name
+👥  Checkbox
+⊙   Date
+🔗  Files
+☰   Multi-select
+#   Number
+⁘   Person
+⊙   Select
+⊙   Status
+≡   Text
+👥  URL
+  ── divider ──
++   Add advanced filter
+--- end ---
+  - ALL property types are filterable, including Files. Contrast Group, which
+    omits Files. Confirms the per-panel eligibility predicate.
+  - Alphabetical ordering again.
+
+STEP 2 — after "Add advanced filter": a FILTER BAR appears under the toolbar
+--- verbatim ---
+[⧩ 1 rule ▾]   [+ Filter]
+--- end ---
+  - A chip showing the RULE COUNT ("1 rule"), chevron reopens the builder.
+  - A separate "+ Filter" adds another.
+  - Persistent chrome while filters exist. Our app has no such bar.
+
+STEP 3 — the advanced builder popover, anchored under the chip
+--- verbatim ---
+Where   [Aa Name ▾]   [Contains ▾]   [ Value ]   [⋯]
++ Add filter rule ▾
+🗑 Delete filter
+--- end ---
+
+  RULE ROW ANATOMY
+    "Where"        leading conjunction label. For rules 2+ this becomes the
+                   AND/OR selector (not yet captured — add a second rule).
+    [property ▾]   dropdown showing the property's TYPE ICON + name
+    [operator ▾]   dropdown; default for a title/text property is "Contains"
+    [value]        input, placeholder "Value"; shape varies by property type
+    [⋯]            per-rule menu (duplicate / remove / turn into group?) — TBD
+
+  Maps 1:1 onto our backend AST (backend/services/db/query/ast.py):
+      FilterCondition { type:"condition", property, operator, value }
+      FilterGroup     { type:"group", op:"and"|"or", children[] }
+  No backend change needed. MAX_FILTER_DEPTH is 10, far beyond what this UI makes.
+
+STEP 4 — "Add filter rule ▾" opens a two-row menu
+--- verbatim ---
++   Add filter rule
+⧉   Add filter group
+    A group to nest more filters          ← description line
+--- end ---
+  - Nesting is created explicitly, matching FilterGroup exactly.
+  - MenuRow.description confirmed a THIRD time.
+
+STILL TO CAPTURE
+  - a second rule, to see the AND/OR conjunction selector replace "Where"
+  - the operator list per property type (Text vs Date vs Select vs Checkbox)
+  - the value editor per type (a Select filter's picker, a Date filter's
+    relative-date options)
+  - the per-rule [⋯] menu
+  - a nested group rendered inside the builder (indentation, its own AND/OR)
