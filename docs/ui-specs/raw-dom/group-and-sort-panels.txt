@@ -1,0 +1,85 @@
+SURFACE: View settings sidebar → "Group" and → "Sort"
+CHECKLIST SHOTS: 36 (§6 group-panel.md), 32 (§5 sort-panel.md)
+SCREENSHOTS: screenshots/36-group-by-panel.jpg, screenshots/32-sort-new-panel.jpg
+CAPTURED: 2026-08-29, light mode, 11 properties, no existing sort or group
+METHOD: real clicks via `computer`
+Both reached by: Settings → (row) → panel PUSHES with a back arrow.
+
+================= "Group by" =================
+--- verbatim ---
+←  Group by                                      ×
+[ Search for a property…  ]      ← autofocused
+None                                    ✓        ← current
+Aa  Name
+👥  Checkbox
+⊙   Date
+☰   Multi-select
+#   Number
+⁘   Person
+⊙   Select
+⊙   Status
+≡   Text
+🔗  URL
+… (scrolls)
+--- end ---
+
+*** MAJOR SCOPE FINDING — Notion groups by ANY property type ***
+  The list offers Name (title), Checkbox, Date, Multi-select, Number, Person,
+  Select, Status, Text, URL.
+
+  Our `GROUPABLE_PROPERTY_TYPES` (lib/database/types.ts:134) is:
+      ["select", "status", "multi_select"]
+  — three types. Notion offers at least ten, including Text, Number, Date,
+  Checkbox, Person and URL.
+
+  This is a genuine M6 scope decision, and it is NOT purely frontend: the
+  backend's `services/db/query/grouping.py` GroupBySpec would have to group by
+  ranges/buckets for Number and Date, and by boolean for Checkbox. That is real
+  engine work, not a UI change.
+  → FLAG TO THE USER. Do not silently widen M6. Options: (a) ship the 3 types we
+    support and show the rest disabled with a reason, (b) add engine support for
+    the scalar types first as a backend sub-task, (c) mirror Notion's list and
+    accept that some choices 400.
+  Recommendation: (a) for M6 — a disabled row with a reason is honest and keeps
+  M6 frontend-only; (b) as a separate, later, backend-scoped task.
+
+  ORDERING: the list is ALPHABETICAL by property name (Name first as the title,
+  then Checkbox, Date, Multi-select, Number, Person, Select, Status, Text, URL),
+  NOT in table/position order. Our pickers use position order everywhere.
+
+================= "Sort" =================
+--- verbatim ---
+←  New sort                                      ×
+[ Sort by…  ]                    ← autofocused, DIFFERENT placeholder text
+Aa  Name
+👥  Checkbox
+⊙   Date
+🔗  Files                                        ← PRESENT here
+☰   Multi-select
+#   Number
+⁘   Person
+⊙   Select
+⊙   Status
+≡   Text
+🔗  URL
+… (scrolls)
+--- end ---
+
+NOTES / DIFFERENCES BETWEEN THE TWO PANELS
+- Title differs by state: "Group by" (a setting with a current value) vs
+  "New sort" (an additive action — sorts are a LIST, groups are singular).
+- Search placeholder differs: "Search for a property…" vs "Sort by…".
+  Placeholders are per-panel copy, not one shared string.
+- Group has a "None ✓" row; Sort has none, because there is no sort yet and the
+  panel is titled "New sort" rather than "Sort".
+- **"Files" appears in Sort but NOT in Group.** Per-type capability differs per
+  panel, and the UI filters the property list accordingly. So each panel needs
+  its own "is this property eligible" predicate — a single shared
+  `isGroupable`/`isSortable` pair, not one "supported types" list.
+- Both lists are alphabetical.
+
+STILL TO CAPTURE
+  - what Group looks like AFTER choosing a property (sort groups, hide empty,
+    colour columns, the group list itself)
+  - what Sort looks like with one and two sorts applied (asc/desc, drag handles)
+  - whether Sort's list is truncated for types that cannot sort
