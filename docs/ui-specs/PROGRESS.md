@@ -24,17 +24,17 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 | # | Spec | Status | Raw DOM | Screenshots read |
 |---|---|---|---|---|
-| 1 | `table-column-header.md` | not-started | — | — |
-| 2 | `property-create-edit.md` | dom-captured (partial) | `property-type-picker.txt` | 10, 12a, 12b |
-| 3 | `view-options-panel.md` | dom-captured (partial) | `view-settings-sidebar.txt` | — |
+| 1 | `table-column-header.md` | dom-captured | `table-column-header-menu.txt` | 02, 05, 70, 71 |
+| 2 | `property-create-edit.md` | dom-captured | `property-type-picker.txt`, `relation-config-panel.txt` | 10, 12a, 12b, 13 |
+| 3 | `view-options-panel.md` | dom-captured | `view-settings-sidebar.txt` | 18, 20 |
 | 4 | `filter-panel.md` | dom-captured (partial) | `filter-entry.txt` | — |
-| 5 | `sort-panel.md` | not-started | — | — |
-| 6 | `group-panel.md` | not-started | — | — |
+| 5 | `sort-panel.md` | dom-captured (partial) | `group-and-sort-panels.txt` | 32 |
+| 6 | `group-panel.md` | dom-captured (partial) | `group-and-sort-panels.txt` | 36 |
 | 7 | `view-tab-bar.md` | not-started | — | — |
 | 8 | `database-header.md` | dom-captured (partial) | `create-database-picker.txt`, `empty-database-toolbar.txt`, `database-page-menu.txt` | 54 |
-| 9 | `row-affordances.md` | not-started | — | — |
+| 9 | `row-affordances.md` | dom-captured | `row-affordances-and-menu.txt` | 57, 58, 60 |
 | 10 | `row-peek.md` | not-started | — | — |
-| 11 | `calculations-row.md` | not-started | — | — |
+| 11 | `calculations-row.md` | dom-captured (partial) | `table-column-header-menu.txt` | 70, 71 |
 | 12 | `new-row-button.md` | not-started | — | — |
 | 13 | `context-menus.md` | not-started | — | — |
 | 14 | `table-drag-resize.md` | not-started | — | — |
@@ -54,6 +54,11 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
       build the §0 fixture into it. Not built yet. Needed for: §1 (header menus vary by
       property type), §15 (cell editing per type), and the per-type config panels in §2.
       Consider trimming §0's 21 properties to the ~12 that actually change a menu.
+      **UPDATE 2026-08-29:** built 11 properties into the user's "New database"
+      (Name, Text, Number, Select, Multi-select, Status, Date, Person, Checkbox,
+      URL, Files) plus one row "Row one". Enough for every capture so far.
+      Still missing: Formula, Relation, Rollup, Created time; option values on
+      Select/Status; more rows; a second view; a template.
 
 ---
 

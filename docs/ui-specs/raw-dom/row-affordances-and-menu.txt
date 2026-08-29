@@ -77,3 +77,29 @@ NOT YET CAPTURED
   - the "Edit property" sub-panel
   - what the bulk bar's ⋯ contains
   - multi-row selection and shift-click range behaviour
+
+================= SUB-PANEL: "Open in" (shot 60) =================
+SCREENSHOT: screenshots/60-row-open-in.jpg
+Opens as a FLYOUT to the right; the parent row menu stays fully visible.
+(Consistent with the column header menu. Popover-hosted menus fly out; the
+docked config sidebar pushes. Two observations each way now.)
+
+--- verbatim ---
+↗  New tab      Ctrl+⇧+↵
+▣  Side peek    Alt+Click
+--- end ---
+
+*** CORRECTION TO THE PLAN ***
+  The plan's §9 says: "side peek / center peek / full page" — three options.
+  The real per-row menu offers TWO: New tab and Side peek.
+  "Center peek" and "Full page" are NOT here. Notion sets the default open mode
+  at the VIEW level, via view settings → "Open pages in" (seen in the settings
+  sidebar root as its own row). So:
+    - per-row menu  = override where THIS row opens, 2 choices
+    - view setting  = the default for EVERY row, more choices
+  Our spec must not conflate them. Capture the view-level "Open pages in"
+  sub-panel to get the full set of modes.
+
+- Both rows carry keyboard hints, and "Alt+Click" is a MOUSE hint rendered in
+  the same right-aligned slot as keyboard shortcuts. MenuRow.hint is not
+  strictly a keyboard shortcut — it is a generic "how else to do this" slot.
