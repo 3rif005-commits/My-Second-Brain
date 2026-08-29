@@ -91,7 +91,8 @@ FINDING 2 — type search is a separate, INITIALLY HIDDEN input.
   header, inside the popover, and focuses it. The section header stays visible
   above the input.
 
-FINDING 3 — filtering changes the LAYOUT, not just the contents.
+FINDING 3 — [CORRECTED 2026-08-29, see correction note at the end of this file]
+  filtering changes the LAYOUT, not just the contents.
   Query "rel" produced:
 
     AI Autofill                    ← section unchanged, NOT filtered
@@ -133,3 +134,25 @@ KEYBOARD — Escape (real key events)
   For our build: adopt Escape-cancels everywhere. It is the majority behaviour,
   it matches our existing ConfirmDialog/PromptDialog convention, and the modal's
   non-dismissal reads as a bug rather than a decision.
+
+
+================================================================
+CORRECTION to FINDING 3 — the grid does NOT collapse to one column
+================================================================
+FINDING 3 above was written from a single observation (query "rel", one match)
+and generalised wrongly.
+
+Re-tested with query "select", which matches TWO types:
+    Select            |  Multi-select
+...rendered side by side, i.e. still the 2-column grid.
+
+CORRECT STATEMENT:
+  The type list is ALWAYS a two-column grid. A single match simply occupies the
+  first cell of a one-row grid; it does not switch to a list layout.
+  Implication for MenuList: grid mode is constant, not conditional. ←/→ arrow
+  handling is always required, and does not need to change with the filter.
+  The earlier claim that the arrow-key model must swap on filtering is void.
+
+Recorded rather than silently edited: the wrong version was already committed
+(ca5a9fa / 616b77b), and knowing which observations were over-generalised is
+useful when auditing the rest of these captures.
