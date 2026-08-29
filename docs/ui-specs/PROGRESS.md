@@ -32,8 +32,8 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 | 6 | `group-panel.md` | dom-captured (partial) | `group-and-sort-panels.txt` | 36 |
 | 7 | `view-tab-bar.md` | not-started | — | — |
 | 8 | `database-header.md` | dom-captured (partial) | `create-database-picker.txt`, `empty-database-toolbar.txt`, `database-page-menu.txt` | 54 |
-| 9 | `row-affordances.md` | dom-captured | `row-affordances-and-menu.txt` | 57, 58, 60 |
-| 10 | `row-peek.md` | not-started | — | — |
+| 9 | `row-affordances.md` | **written** (Keyboard TBD) | `row-affordances-and-menu.txt` | 57, 58, 60 |
+| 10 | `row-peek.md` | dom-captured | `row-peek.txt` | 62 |
 | 11 | `calculations-row.md` | dom-captured (partial) | `table-column-header-menu.txt` | 70, 71 |
 | 12 | `new-row-button.md` | not-started | — | — |
 | 13 | `context-menus.md` | not-started | — | — |
