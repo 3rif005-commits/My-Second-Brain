@@ -26,7 +26,7 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 |---|---|---|---|---|
 | 1 | `table-column-header.md` | **written** (Keyboard TBD) | `table-column-header-menu.txt` | 02, 05, 70, 71 |
 | 2 | `property-create-edit.md` | dom-captured | `property-type-picker.txt`, `relation-config-panel.txt` | 10, 12a, 12b, 13 |
-| 3 | `view-options-panel.md` | dom-captured | `view-settings-sidebar.txt` | 18, 20 |
+| 3 | `view-options-panel.md` | **written** (Keyboard TBD) | `view-settings-sidebar.txt`, `layout-and-open-pages-in.txt` | 18, 20, 21, 22 |
 | 4 | `filter-panel.md` | dom-captured (partial) | `filter-entry.txt` | — |
 | 5 | `sort-panel.md` | dom-captured (partial) | `group-and-sort-panels.txt` | 32 |
 | 6 | `group-panel.md` | dom-captured (partial) | `group-and-sort-panels.txt` | 36 |
