@@ -1,0 +1,38 @@
+SURFACE: Database page-level "Actions" menu (the ··· at the top right of a database page)
+CHECKLIST SHOT: 53-db-page-menu.png
+CAPTURED: 2026-08-29, app.notion.com, a full-page database in board-view layout
+METHOD: javascript_tool — clicked [aria-label="Actions"], read .notion-overlay-container innerText
+CAVEAT: see 00-METHOD.md. Row order and labels are reliable. Keyboard behaviour is NOT.
+
+--- innerText of the overlay, verbatim, in DOM order ---
+Copy link
+Ctrl+Alt+L
+Duplicate
+Move to
+Ctrl+⇧+P
+Move to Trash
+Customize layout
+Lock database
+Import
+Merge with CSV
+Export
+Updates & analytics
+Version history
+Notify me
+Mentions
+Connections
+None
+Learn about databases
+--- end ---
+
+NOTES
+- "Copy link" and "Move to" carry right-aligned keyboard shortcut hints
+  (Ctrl+Alt+L, Ctrl+⇧+P). No other row does. This is the `hint` field in MenuRow.
+- "Connections" shows a right-aligned current value ("None"). This is the `value`
+  field in MenuRow, distinct from `hint`.
+- The trailing block carries last-edited-by and a timestamp (stripped here: personal),
+  followed by a "Learn about databases" help link. So the panel has a FOOTER region
+  distinct from its rows — MenuPanel.footer exists for a reason.
+- Section dividers are not recoverable from innerText; take them from screenshot 53.
+- This was captured on a database whose active view is a Board. Re-capture on the
+  fixture's Table view to confirm the row set does not vary by view type.
