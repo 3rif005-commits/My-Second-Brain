@@ -123,7 +123,11 @@ Centre peek and full page are **not** here. Notion sets the default open mode at
 level (view settings → **Open pages in**). So:
 
 - **per-row menu** — override where *this* row opens; two choices
-- **view setting** — the default for *every* row; more choices, `TBD`
+- **view setting** — the default for *every* row. **Captured** (view settings → Layout →
+  "Open pages in"): three modes, each with a description line —
+  **Side peek** *("Open pages on the side. Keeps the view behind interactive." — annotated
+  "Default for Table")*, **Center peek** *("Open pages in a focused, centered modal.")*,
+  **Full page** *("Open pages in full page.")*
 
 The spec must not conflate them.
 
@@ -172,6 +176,7 @@ globally when a row is merely *hovered* versus *selected* is unverified.
 | Peek open for this row | `OPEN` reads `CLOSE`; the row stays highlighted |
 | Row selected | Checkbox filled, row tinted, bulk bar shown |
 | Read-only source (`is_virtual`) | Our case. Suppress `+`, drag handle, checkbox and the destructive menu rows; keep `OPEN`. Matches `DatabaseShell.tsx:400`'s hidden-not-disabled rule |
+| Peek is non-modal | Notion's own copy: *"Keeps the view behind interactive."* The table stays usable while a side peek is open. Our `RowPeek` renders a `bg-black/30` backdrop and blocks interaction — **must change** |
 | Sub-item row | We render an expand triangle and indentation (`TableView.tsx:836-848`). Notion's equivalent is `TBD` |
 
 ---

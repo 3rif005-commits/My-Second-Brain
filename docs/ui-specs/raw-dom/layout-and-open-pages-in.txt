@@ -1,0 +1,71 @@
+SURFACE: View settings → "Layout", and its "Open pages in" sub-popover
+CHECKLIST SHOTS: 21-view-layout-panel.jpg, 22-open-pages-in.jpg (§3)
+CAPTURED: 2026-08-29, light mode
+METHOD: real clicks via `computer`
+
+================= "Layout" =================
+Reached by: Settings → Layout. PUSHES with a back arrow (← Layout ×).
+
+TOP: a 3x3 GRID OF VIEW-TYPE CARDS, each an icon above a label.
+  Table (SELECTED — blue border + blue label) | Board    | Timeline
+  Calendar                                    | List     | Gallery
+  Chart                                       | Feed     | Map
+
+  NINE view types. Form is absent — a Form view is created some other way.
+  Our ViewTabs offers TEN in a native <select> (table, board, gallery, list,
+  feed, calendar, timeline, chart, form, dashboard). Notion has Map (we cut it,
+  deliberately: no geocoding/tile provider) and lacks Dashboard/Form here.
+
+  *** This card grid is ALSO the answer for §7's "+ New view" popover. ***
+  The plan described "a grid of view-type cards" for view creation — this is
+  what those cards look like: icon above label, 3 per row, selected state is a
+  blue border plus blue label text.
+
+THEN: display toggles, each a labelled row with a switch on the right.
+--- verbatim ---
+Show vertical lines      [toggle ON]
+Show page icon           [toggle ON]
+Wrap all content         [toggle ON]
+Open pages in            Side peek   >
+--- end ---
+
+  - "Wrap all content" is the VIEW-LEVEL counterpart of the column header menu's
+    per-column "Unwrap content". Both exist; the spec must cover both.
+  - "Show page icon" controls the 📄 icon seen in the row's title cell.
+  - "Open pages in" carries its current value ("Side peek") and a chevron.
+
+================= "Open pages in" =================
+Opens as a POPOVER OVERLAYING the Layout panel, anchored to its row — not a push,
+not a docked flyout. A third positioning behaviour inside the sidebar.
+
+--- verbatim ---
+▣  Side peek                                        ✓
+   Open pages on the side. Keeps the view behind interactive.
+   Default for Table                    ← a link/annotation, styled as a link
+▤  Center peek
+   Open pages in a focused, centered modal.
+▥  Full page
+   Open pages in full page.
+--- end ---
+
+*** RESOLVES TWO TBDs ***
+
+1. The plan's §9 "side peek / center peek / full page" WAS the right set of three
+   — it was just at the wrong level. These are the VIEW's default open mode.
+   The per-row "Open in" menu offers only New tab / Side peek as an override.
+
+2. "Keeps the view behind interactive" is Notion's OWN COPY confirming the side
+   peek is NON-MODAL. Our RowPeek renders a bg-black/30 backdrop over the whole
+   viewport and blocks interaction. Direct textual confirmation of the
+   behavioural difference recorded in row-peek.txt.
+
+ROW ANATOMY — every row here is icon + label + description line, and the current
+one carries a ✓ plus an extra annotation link ("Default for Table").
+MenuRow.description confirmed a second time (first: "Show large counts as 99+").
+The annotation link is a NEW element — a per-row secondary link, distinct from
+`description`. Add `annotation?: {label, href|onSelect}` to MenuRow, or treat it
+as part of description with inline markup. Decide in the design doc.
+
+NOTE ON MAPPING TO OUR CONFIG
+  All four of these are per-view display settings and belong in `view.config` —
+  a JSONB pass-through. No backend change needed for any of them.
