@@ -24,6 +24,34 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 Phase 0 ships nothing user-visible. That is the intended outcome.
 
+## Phase 0b — COMPLETE (2026-08-31)
+
+| id | Endpoint | State |
+|---|---|---|
+| B1 | `DELETE /db/views/{id}` | done — refuses to delete the last view, in a transaction |
+| B2 | `PATCH` + `DELETE /db/databases/{id}` | done — delete is **soft** (`deleted_at`), rows deliberately not trashed |
+| B3 | `PropertyUpdate.description` | done — explicit `null` clears, via `model_fields_set` |
+| B5 | `PropertyUpdate.type` | done — **grew well past its estimate**, see below |
+
+**Backend suite 1829 passed** (was 1797; +32).
+
+### B5 was mis-scoped in the plan, and by how much
+
+The plan called it "`PropertyUpdate` must accept `type`" — about five lines. It
+became `services/db/properties/convert.py` (~180 lines) plus 32 tests, because a bare
+type flip is not merely untidy: values are §3.3 discriminated wrappers and `rows.py`
+rejects a wrapper whose tag does not match its property, so every stored value would
+have been invalidated at once.
+
+Chosen semantics: coerce a defined subset, refuse the rest with a 400. Nothing is
+destroyed silently. `legal_targets()` serves the greying list the UI needs, so there is
+no second copy to drift.
+
+**Currently convertible:** text-family (`rich_text`/`url`/`email`/`phone_number`),
+`select` ↔ `status` ↔ `multi_select`, and into `number` where the text parses.
+**Refused:** relation, formula, rollup, title, date, and checkbox as a target.
+The matrix is extensible — widening it is a change to one dict.
+
 ## Session artifacts
 
 | Artifact | Status |
