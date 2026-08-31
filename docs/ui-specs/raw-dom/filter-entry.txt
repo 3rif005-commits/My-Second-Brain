@@ -156,3 +156,61 @@ COMPARE WITH OURS (services/db/query/operators.py)
 
 STILL TO CAPTURE: operator lists for Select, Checkbox, Number, Person, Files,
 Multi-select, Status, URL, and their value editors.
+
+================================================================
+THE SELECT FILTER, and the operator-set comparison
+SCREENSHOTS: 28-filter-value-select.jpg, 28b-filter-operators-select.jpg
+CAPTURED: 2026-08-31
+================================================================
+
+--- the chip and editor ---
+⊙ Select ▾
+[ Select is ▾ ]                                   [⋯]
+[ Select one or more options…  ]                  ← search input
+☐  [Alpha]                                        ← CHECKBOX + the option's chip
+--- end ---
+
+  - The operator control's label reads **"Select is"** — it CONCATENATES the
+    property name and the operator into one compact control, unlike the advanced
+    builder's separate [property][operator] dropdowns. The quick-filter chip
+    editor is a more compact form of the same rule.
+  - The value editor is a **multi-select CHECKBOX list**, not a single pick. So
+    "is" accepts MULTIPLE options — the value is an array.
+    ⚠ Our FilterCondition.value is a single `Any`; for select "is" it must carry
+    a list. Verify `_SELECT_OPS` semantics before M4.
+  - Options render as their coloured chips inside the list.
+
+--- SELECT OPERATORS, verbatim (4) ---
+Is        ← current
+Is not
+Is empty
+Is not empty
+--- end ---
+
+================================================================
+OPERATOR-SET SIZES DIFFER SHARPLY BY TYPE
+================================================================
+  Text / Title : 8   Is, Is not, Contains, Does not contain, Starts with,
+                     Ends with, Is empty, Is not empty
+  Date         : 9   Is, Is before, Is after, Is on or before, Is on or after,
+                     Is between, Is relative to today, Is empty, Is not empty
+  Select       : 4   Is, Is not, Is empty, Is not empty
+
+  Three types, three very different sets — 4 to 9 operators, with date adding a
+  sub-property selector and a compound value builder that neither other type has.
+
+  *** THE SPEC RULE THIS ESTABLISHES ***
+  Do NOT hardcode operator lists in the UI. DERIVE them from the backend's
+  `TYPE_OPERATORS` / `RESULT_TYPE_OPERATORS` maps
+  (services/db/query/operators.py:146,179), which already encode exactly this
+  per-type variation. That keeps the server's 400 for an illegal pair
+  unreachable, and means new property types get correct operators for free.
+
+  The VALUE EDITOR is a separate per-type dispatch from the operator list:
+    text     → a text input
+    select   → a searchable multi-select checkbox list of the property's options
+    date     → sub-property selector + relative-value builder + calendar
+    checkbox → TBD
+  Both dispatches are needed; neither implies the other.
+
+STILL TO CAPTURE: Checkbox, Number, Person, Files, Multi-select, Status, URL.

@@ -92,9 +92,39 @@ Where   [Aa Name ▾]   [Contains ▾]   [ Value ]   [⋯]
 |---|---|---|
 | Conjunction | `Where` for the first rule | For rules 2+ this becomes an **AND/OR selector**. `TBD` — capture with a second rule |
 | Property | Dropdown showing the property's **type icon** + name | Opens the same alphabetical picker |
-| Operator | Dropdown; default `Contains` for a title/text property | **Text/title: 8 operators** — Is, Is not, Contains, Does not contain, Starts with, Ends with, Is empty, Is not empty. Other types `TBD` |
-| Value | Input, placeholder `Value` | **Editor shape varies by property type.** `TBD` per type |
+| Operator | Dropdown, **per type** | See the per-type table below |
+| Value | Varies by type | See the per-type table below |
 | `⋯` | Per-rule menu | `TBD` — likely duplicate / remove / turn into group |
+
+### Operators and value editors are two separate per-type dispatches
+
+| Type | Operators | Value editor |
+|---|---|---|
+| **Text / Title** | **8** — Is, Is not, Contains, Does not contain, Starts with, Ends with, Is empty, Is not empty | A text input |
+| **Date** | **9** — Is, Is before, Is after, Is on or before, Is on or after, **Is between**, **Is relative to today**, Is empty, Is not empty | A **sub-property selector** (`Start date`/end), plus a compound relative-value builder (`This` + `week`) and a calendar |
+| **Select** | **4** — Is, Is not, Is empty, Is not empty | A searchable **multi-select checkbox list** of the property's options, rendered as chips |
+| Checkbox, Number, Person, Files, Multi-select, Status, URL | `TBD` | `TBD` |
+
+Three captured types gave sets of 4, 8 and 9 operators. **Do not hardcode these.** Derive
+them from the backend's `TYPE_OPERATORS` / `RESULT_TYPE_OPERATORS`
+(`services/db/query/operators.py:146,179`), which already encode this variation — that
+keeps the server's 400 for an illegal pair unreachable and gives new types correct
+operators for free.
+
+The value editor is a **separate** dispatch from the operator list. Neither implies the
+other.
+
+### Two AST questions this raises — for the user, before M4
+
+1. **`Is between` takes two values**, and **select `is` takes an array** (its value editor
+   is a multi-select checkbox list). `FilterCondition.value` is a single `Any` — it can
+   carry either, but the UI and any validation must handle it deliberately. **Verify
+   `_DATE_OPS` includes a between operator; if not, that is a backend sub-task.**
+2. **A date filter targets a sub-property** (start vs end). `FilterCondition` is
+   `{property, operator, value}` with **no representation for this**. It needs either a
+   convention inside `property` or a new field.
+
+**Flag both. Do not invent an encoding.**
 
 ### Footer rows
 

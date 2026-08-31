@@ -75,10 +75,14 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 Everything below is marked `TBD` inside a written spec. None blocks starting Phase 0.
 
 **Blocks a specific milestone if not closed first**
-1. §15 — cell editors for Text, Number, Status (grouped options), Multi-select, Person,
-   Files, URL, Checkbox. Only Select and Date are captured. **Blocks M11.**
-2. §4 — filter operator lists for Date, Select, Checkbox, Number, Person, Relation, and
-   the per-type value editors. Only text/title's 8 operators are captured. **Blocks M4.**
+1. §15 — cell editors for Text, Number, Multi-select, Person, Files, URL, Checkbox.
+   **Select, Status and Date are captured.** The three captured differ from each other in
+   placeholder copy, option rendering, create-on-type and footer rows, so the rest must be
+   captured rather than inferred. **Blocks M11.**
+2. §4 — filter operator lists for Checkbox, Number, Person, Files, Multi-select, Status,
+   URL. **Text (8), Date (9) and Select (4) are now captured**, which was enough to
+   establish the derive-from-TYPE_OPERATORS rule and surface two AST questions. The
+   remaining seven are lower risk. **Partially unblocks M4.**
 3. §14 — the column-drag and row-drag drop indicators. **Blocks part of M11.**
 
 **Wanted but not blocking**
