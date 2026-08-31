@@ -102,3 +102,57 @@ STILL TO CAPTURE
     relative-date options)
   - the per-rule [⋯] menu
   - a nested group rendered inside the builder (indentation, its own AND/OR)
+
+================================================================
+THE DATE FILTER — structurally different from a text filter
+SCREENSHOTS: 29a-filter-date-editor.jpg, 29-filter-operators-date.jpg
+CAPTURED: 2026-08-31, light mode, real clicks, on a correctly-typed Date property
+================================================================
+
+*** A DATE FILTER HAS THREE CONTROLS, NOT TWO ***
+  A text filter is:  [property] [operator] [value]
+  A date filter is:  [SUB-PROPERTY] [operator] [COMPOUND VALUE BUILDER]
+
+--- the chip ---
+📅 Date: This week ▾          ← the chip summarises property + current value
+--- the editor ---
+[ Start date ▾ ]  [ is relative to today ▾ ]  [⋯]
+[ This ▾ ] [ week ▾ ]                       ← compound relative-value builder
+Aug 2026                    ‹  ›
+Su Mo Tu We Th Fr Sa
+<calendar grid>
+--- end ---
+
+  1. **Sub-property selector** — "Start date". A Date property has start AND end,
+     so the filter must say which one it targets. No other captured type has this.
+  2. **Operator** — see the list below.
+  3. **Compound value** — for "is relative to today", the value is built from TWO
+     dropdowns: a quantifier ("This") and a unit ("week"). Plus a calendar for
+     absolute modes.
+
+--- DATE OPERATORS, verbatim (9) ---
+Is
+Is before
+Is after
+Is on or before
+Is on or after
+Is between
+Is relative to today          ← current
+Is empty
+Is not empty
+--- end ---
+
+COMPARE WITH OURS (services/db/query/operators.py)
+  `_DATE_OPS` is defined at :86 and `_RELATIVE_DATE_KEYWORDS` at :191, so
+  relative dates are already modelled server-side.
+  ⚠ **"Is between" is a TWO-VALUE operator.** Our `FilterCondition.value` is a
+  single `Any` — it can carry a two-element array or an object, but the UI and
+  any validation must handle it deliberately. **Verify `_DATE_OPS` includes a
+  between operator before M4; if not, that is a backend sub-task.**
+  ⚠ The **sub-property** (start vs end) has no representation in
+  `FilterCondition` at all — it is `{property, operator, value}`. Targeting the
+  end date needs either a convention in `property` or a new field.
+  **BOTH are real questions for the user before M4. Flag, do not invent.**
+
+STILL TO CAPTURE: operator lists for Select, Checkbox, Number, Person, Files,
+Multi-select, Status, URL, and their value editors.
