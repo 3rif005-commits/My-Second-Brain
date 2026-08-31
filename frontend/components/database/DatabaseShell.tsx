@@ -222,6 +222,18 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             subItemDisplayMode={getSubtaskDisplayMode(activeView.config)}
             templates={templates}
             onInstantiateTemplate={instantiateTemplate}
+            view={activeView}
+            // Routed through patchViewConfig, not a fresh closure over
+            // activeView.config: the header menu fires several config writes
+            // in quick succession (hide, then wrap, then a calculation), which
+            // is precisely the case the stale-merge bug fixed at :79-125 was
+            // about.
+            onPatchConfig={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
+            onSetSorts={(sorts) => {
+              updateView(activeView.id, { sorts }).catch((e) =>
+                showToast(e instanceof Error ? e.message : "Could not sort", "error")
+              );
+            }}
           />
         );
       case "board": {

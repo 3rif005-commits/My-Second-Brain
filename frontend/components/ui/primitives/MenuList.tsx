@@ -197,6 +197,8 @@ export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps
         </div>
       )}
 
+      {panel.header && <div className="px-2 pb-1">{panel.header}</div>}
+
       {panel.search && (
         <div className="px-2 pb-1">
           <input

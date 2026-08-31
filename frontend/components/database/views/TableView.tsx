@@ -44,6 +44,7 @@ import type {
   RowResponse,
   RowTemplateResponse,
   SubtaskDisplayMode,
+  ViewResponse,
 } from "@/lib/database/types";
 import { renderCellValue } from "../cells/renderCellValue";
 import { buildSubItemTree } from "@/lib/database/subItemTree";
@@ -51,6 +52,7 @@ import { FormulaEditor } from "../FormulaEditor";
 import { ButtonPropertyConfigPopover } from "../ButtonPropertyConfigPopover";
 import { OpenNoteButton } from "../OpenNoteButton";
 import { RowPeek } from "../RowPeek";
+import { ColumnHeader } from "../ColumnHeader";
 
 interface TableViewProps {
   properties: PropertyResponse[];
@@ -107,6 +109,18 @@ interface TableViewProps {
   // behaviour before this task existed (the brief's own regression bar for
   // this file: the plain "+ New" click path must stay unchanged).
   templates?: RowTemplateResponse[];
+  // M1: the column header menu. All four are optional on the same
+  // "an older/other caller gets a degraded but non-crashing behaviour"
+  // convention the relation props above already established — omit them and
+  // headers render as the plain strings they were before M1, which is exactly
+  // what the read-only All Notes source should get.
+  /** The active view. The menu writes per-view state (hidden, wrap,
+   * calculation, order), so without it there is nothing to write to. */
+  view?: ViewResponse | null;
+  /** Receives a PATCH of changed keys only; DatabaseShell merges it through
+   * its serialised queue. */
+  onPatchConfig?: (patch: Record<string, unknown>) => void;
+  onSetSorts?: (sorts: { property: string; direction: "asc" | "desc" }[]) => void;
   /** useDatabaseView's `instantiateTemplate` — creates a row from a chosen
    * (non-default) template right now. Does not itself refetch rows; this
    * component calls `refetchRows` afterward, same as `handleAddRow` does
@@ -170,6 +184,9 @@ export function TableView({
   subItemDisplayMode,
   templates,
   onInstantiateTemplate,
+  view,
+  onPatchConfig,
+  onSetSorts,
 }: TableViewProps) {
   const { showToast } = useToast();
 
@@ -323,12 +340,34 @@ export function TableView({
           // Milestone 12 (task-42) decision 2: a button-typed column's
           // header becomes a clickable config-popover trigger; every other
           // type keeps the plain string header unchanged.
+          // M1. A button column keeps its existing config popover: a button's
+          // settings ARE per-type property config, which is M2's "Edit
+          // property" panel, so folding it in belongs there rather than as a
+          // half-built row here. Everything else gets the header menu.
+          //
+          // The menu is suppressed entirely — not disabled — when the source
+          // is read-only or the caller supplied no view/handlers. All Notes
+          // has no db_properties to rename, hide or delete, and
+          // DatabaseShell.tsx:400 already establishes hidden-over-disabled for
+          // exactly that case.
           header:
             property.type === "button"
               ? () => (
                   <ButtonPropertyConfigPopover property={property} properties={orderedProperties} onSaved={refetch} />
                 )
-              : property.name,
+              : editable && dataSourceId && onPatchConfig && onSetSorts
+                ? () => (
+                    <ColumnHeader
+                      property={property}
+                      properties={orderedProperties}
+                      dataSourceId={dataSourceId}
+                      view={view ?? null}
+                      onPatchConfig={onPatchConfig}
+                      onSetSorts={onSetSorts}
+                      onPropertiesChanged={() => refetch?.()}
+                    />
+                  )
+                : property.name,
           cell: (info) => {
             const rowId = info.row.original.id;
             const relationExtras =
@@ -352,7 +391,19 @@ export function TableView({
           },
         })
       ),
-    [orderedProperties, editable, onCellChange, relationLinks, ensureRelationLinks, setRelationLinks, refetch]
+    [
+      orderedProperties,
+      editable,
+      onCellChange,
+      relationLinks,
+      ensureRelationLinks,
+      setRelationLinks,
+      refetch,
+      dataSourceId,
+      view,
+      onPatchConfig,
+      onSetSorts,
+    ]
   );
 
   const table = useReactTable({

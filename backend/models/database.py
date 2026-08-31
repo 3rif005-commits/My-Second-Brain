@@ -20,7 +20,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 
 class DatabaseCreate(BaseModel):
@@ -133,6 +133,21 @@ class PropertyResponse(BaseModel):
     is_volatile: bool = False
     position: int = 0
     created_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def convertible_to(self) -> list[str]:
+        """Every type this property may be changed into (Phase 0b, B5).
+
+        Served with the property rather than from a separate endpoint so the
+        UI's "Change type" list greys the illegal rows using the SAME source
+        of truth the PATCH enforces. A hardcoded client-side matrix would be a
+        second copy, and it would drift the first time the rules change.
+
+        Cheap: a dict lookup per property, no query."""
+        from services.db.properties.convert import legal_targets
+
+        return legal_targets(self.type)
 
 
 class ViewResponse(BaseModel):

@@ -51,6 +51,13 @@ export interface MenuSection {
 
 export interface MenuPanel {
   title?: string;
+  /** Rendered above the search and rows.
+   *
+   * Exists because Notion names things IN their own config panel rather than
+   * through a "Rename" row: a property's name is an editable input at the top
+   * of its column header menu, and a view's name at the top of the settings
+   * sidebar. `title` is a string and cannot carry an input. */
+  header?: ReactNode;
   /** Per-panel, not global: the property type list is a 2-column grid in the
    * "+ Add property" popover and a 1-column list in "Change type". */
   columns?: 1 | 2;

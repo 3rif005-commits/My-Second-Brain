@@ -1757,3 +1757,26 @@ async def test_setting_the_same_type_is_a_no_op_not_a_conversion(client, db_conn
     body = (await client.patch(f"/db/properties/{prop['id']}", json={"type": "select"})).json()
     # config survives, because nothing actually changed
     assert body["config"] == {"options": []}
+
+
+async def test_property_response_carries_its_legal_conversion_targets(client):
+    """The UI greys illegal "Change type" rows against this, so it must come
+    from the same source of truth the PATCH enforces — not a second copy in
+    the front end that can drift."""
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+
+    select = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Stage", "type": "select"}
+        )
+    ).json()
+    assert "multi_select" in select["convertible_to"]
+    assert "status" in select["convertible_to"]
+    assert "relation" not in select["convertible_to"]
+    assert "select" not in select["convertible_to"]  # never lists itself
+
+    # And it agrees with what the endpoint actually allows.
+    assert (
+        await client.patch(f"/db/properties/{select['id']}", json={"type": "multi_select"})
+    ).status_code == 200

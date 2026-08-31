@@ -49,6 +49,17 @@ export interface PropertyResponse {
   is_volatile: boolean;
   position: number;
   created_at: string;
+  /** Every type this property may be changed into (backend Phase 0b, B5).
+   *
+   * Served with the property so the "Change type" list greys illegal rows
+   * against the SAME source of truth the PATCH enforces. Do not hardcode a
+   * client-side matrix — it would be a second copy and it would drift.
+   *
+   * OPTIONAL because it is DERIVED: the backend always sends it, but callers
+   * that construct a PropertyResponse locally (the public form page, test
+   * fixtures) legitimately have no conversion rules to state. Consumers
+   * default to `[]`, which greys every conversion — the safe direction. */
+  convertible_to?: string[];
 }
 
 export interface ViewResponse {
