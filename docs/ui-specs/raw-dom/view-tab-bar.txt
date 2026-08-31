@@ -151,3 +151,57 @@ GROUP HEADER ANATOMY (bonus, feeds §6 group-panel.md)
     ● In progress   0
   Empty groups ARE shown by default (In progress has 0). Each column has its own
   "+ New page" row at the bottom.
+
+================================================================
+THE SAME MENU WITH TWO VIEWS — four rows change state
+SCREENSHOT: screenshots/44c-view-tab-menu-two-views.jpg
+CAPTURED: 2026-08-31, after creating a Board alongside the Table
+================================================================
+
+--- verbatim ---
+✏   Rename
+🎨  Display as                        >
+⚙   Edit view
+⇄   Source          New database      >     ← NOW ACTIVE, with a chevron
+  ── divider ──
+🔗  Copy link to view
+▤   Add view to sidebar                     ← NOW GREYED
+  ── divider ──
+⧉   Duplicate view
+🗑   Delete view                             ← NOW PRESENT
+--- end ---
+
+DIFFERENCES vs the one-view capture (44-view-tab-menu.jpg):
+  1. **"Delete view" APPEARS.** Hypothesis confirmed: the last view cannot be
+     deleted, so the row is present iff view count > 1. Our UI must enforce the
+     same rule, and plan gap B1 (DELETE /db/views/{id}) is scoped to this case.
+  2. **"Source" becomes ACTIVE and gains a chevron.** It was greyed with one
+     view. Cause not established — possibly it needs more than one view, or the
+     board's creation registered a second data-source association. DO NOT infer
+     a rule; re-capture deliberately.
+  3. **"Add view to sidebar" becomes GREYED.** The inverse of Source. Cause not
+     established either.
+  4. The tab auto-named itself **"Board"**, not "New view". At creation the tab
+     read "New view" and the sidebar's name input was empty/placeholdered. Once
+     the sidebar closed without a name being typed, the tab took the VIEW TYPE
+     as its label. So an unnamed view displays its type, rather than persisting
+     a literal "New view" string.
+     → Our createView defaults `name` to "New view" and stores it
+       (ViewTabs.tsx:131, useDatabaseView.createView). Notion appears to leave
+       the name EMPTY and render the type as a fallback. That is a data-model
+       difference, not just a label: renaming to "" should show the type again.
+       Confirm before implementing.
+
+  Rows 2 and 3 are recorded as OBSERVED-BUT-UNEXPLAINED on purpose. Two data
+  points is not a rule.
+
+BOARD RENDERING (bonus for the later Board phase)
+  With Status having three options, the board shows three columns, all of them,
+  including the two that are empty:
+     ● Not started  1   |   ● In progress  0   |   ● Done  0
+  Each column: [status dot] [name] [count], and its own "+ New page" footer row.
+  Empty groups are shown by DEFAULT (matching our `hide_empty_groups: false`).
+
+PAGE TITLE
+  document.title became "New database | Board | Notion" — the active view's name
+  is part of the page title. Ours is not.
