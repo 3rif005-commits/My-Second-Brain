@@ -71,6 +71,9 @@ const TYPE_ICONS: Record<string, React.ReactNode> = {
   email: <AtSign size={14} />,
   phone_number: <AtSign size={14} />,
   formula: <Sigma size={14} />,
+  unique_id: <Hash size={14} />,
+  created_time: <Calendar size={14} />,
+  last_edited_time: <Calendar size={14} />,
 };
 
 export function propertyTypeIcon(type: string): React.ReactNode {
@@ -95,6 +98,9 @@ const TYPE_LABELS: Record<string, string> = {
   formula: "Formula",
   relation: "Relation",
   rollup: "Rollup",
+  unique_id: "ID",
+  created_time: "Created time",
+  last_edited_time: "Last edited time",
 };
 
 /** The Calculate tree, mirroring live Notion's shape: None / Count / Percent,

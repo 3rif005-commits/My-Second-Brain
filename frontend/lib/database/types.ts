@@ -298,6 +298,14 @@ export interface DateValue {
   date: { start: string; end: string | null; time_zone: string | null } | null;
 }
 export interface CheckboxValue { type: "checkbox"; checkbox: boolean }
+// M2b. All three are the same shape as rich_text on the wire — the backend's
+// _TEXT_SHAPE_TYPES already groups them with title/rich_text — but they are
+// separate types here because their CELLS differ: a URL is a link, an email
+// opens a mail client, a phone is tel:. Collapsing them to one alias would
+// lose exactly the difference that makes them worth having.
+export interface UrlValue { type: "url"; url: string }
+export interface EmailValue { type: "email"; email: string }
+export interface PhoneValue { type: "phone_number"; phone_number: string }
 
 /** Any wrapper shape not in the 8 above — rendered by the generic fallback cell. */
 export interface UnknownValue {
@@ -314,6 +322,9 @@ export type PropertyValue =
   | StatusValue
   | DateValue
   | CheckboxValue
+  | UrlValue
+  | EmailValue
+  | PhoneValue
   | UnknownValue;
 
 // ── Milestone 7: relations, sub-items, dependencies ────────────────────────

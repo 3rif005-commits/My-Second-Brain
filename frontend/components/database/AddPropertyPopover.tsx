@@ -54,6 +54,18 @@ const ADDABLE: { type: string; label: string }[] = [
   { type: "status", label: "Status" },
   { type: "date", label: "Date" },
   { type: "checkbox", label: "Checkbox" },
+  // M2b — types the backend has always implemented but the picker never
+  // offered. Six of the eleven ship here. The other five are held back with
+  // reasons rather than shipped broken: `people`, `created_by` and
+  // `last_edited_by` would render a raw user id until there is a name lookup;
+  // `files` needs an upload pipeline; `place` needs geocoding, which is why
+  // Map view was cut in the first place.
+  { type: "url", label: "URL" },
+  { type: "email", label: "Email" },
+  { type: "phone_number", label: "Phone" },
+  { type: "unique_id", label: "ID" },
+  { type: "created_time", label: "Created time" },
+  { type: "last_edited_time", label: "Last edited time" },
   { type: "relation", label: "Relation" },
   { type: "formula", label: "Formula" },
   { type: "rollup", label: "Rollup" },

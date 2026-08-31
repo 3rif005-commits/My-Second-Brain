@@ -8,6 +8,9 @@
 // renderer"). Anything not in the 8 known types falls back to GenericCell,
 // always read-only.
 import type {
+  EmailValue,
+  PhoneValue,
+  UrlValue,
   CheckboxValue,
   DateValue,
   MultiSelectValue,
@@ -30,6 +33,7 @@ import { StatusCell } from "./StatusCell";
 import { DateCell } from "./DateCell";
 import { CheckboxCell } from "./CheckboxCell";
 import { GenericCell } from "./GenericCell";
+import { TextLikeCell } from "./TextLikeCell";
 import { RelationCell } from "./RelationCell";
 import { FormulaCell } from "./FormulaCell";
 import { ButtonCell } from "./ButtonCell";
@@ -116,6 +120,21 @@ export function renderCellValue(
           links={relation.links}
           onEnsureLoaded={relation.onEnsureLoaded}
           onLinksChange={relation.onLinksChange}
+        />
+      );
+    // M2b. These three share rich_text's wire shape but not its cell: a URL
+    // is a link, an email opens a mail client, a phone dials. Routed here
+    // rather than to GenericCell, which is read-only — without this they
+    // would be columns you could create and never fill.
+    case "url":
+    case "email":
+    case "phone_number":
+      return (
+        <TextLikeCell
+          kind={property.type as "url" | "email" | "phone_number"}
+          value={value as UrlValue | EmailValue | PhoneValue | undefined}
+          editable={editable}
+          onChange={onChange}
         />
       );
     case "button":

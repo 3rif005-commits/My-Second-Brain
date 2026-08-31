@@ -100,7 +100,7 @@ describe("the picker", () => {
     expect(within(screen.getByRole("listbox")).queryByLabelText("Property name")).toBeNull();
   });
 
-  it("offers the 11 addable types", async () => {
+  it("offers every type M2b delivers", async () => {
     const user = userEvent.setup();
     setup();
     const list = await openPicker(user);
@@ -113,12 +113,31 @@ describe("the picker", () => {
       "Status",
       "Date",
       "Checkbox",
+      "URL",
+      "Email",
+      "Phone",
+      "ID",
+      "Created time",
+      "Last edited time",
       "Relation",
       "Formula",
       "Rollup",
       "Button",
     ]) {
       expect(within(list).getByText(label)).toBeInTheDocument();
+    }
+  });
+
+  it("holds back the five types that would ship broken", async () => {
+    const user = userEvent.setup();
+    setup();
+    const list = await openPicker(user);
+
+    // Not an oversight — each has a concrete blocker recorded at the list:
+    // people/created_by/last_edited_by render a raw user id with no name
+    // lookup, files needs an upload pipeline, place needs geocoding.
+    for (const label of ["Person", "Created by", "Last edited by", "Files & media", "Place"]) {
+      expect(within(list).queryByText(label)).toBeNull();
     }
   });
 
