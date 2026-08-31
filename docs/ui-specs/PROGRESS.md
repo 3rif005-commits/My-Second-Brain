@@ -30,13 +30,13 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 | 4 | `filter-panel.md` | **written** (Keyboard TBD) | `filter-entry.txt` | 24, 30, 31 |
 | 5 | `sort-panel.md` | dom-captured (partial) | `group-and-sort-panels.txt` | 32, 32b |
 | 6 | `group-panel.md` | dom-captured (partial) | `group-and-sort-panels.txt` | 36 |
-| 7 | `view-tab-bar.md` | not-started | — | — |
+| 7 | `view-tab-bar.md` | **written** (Keyboard TBD) | `view-tab-bar.txt` | 44, 44b, 44c, 46, 46b |
 | 8 | `database-header.md` | dom-captured (partial) | `create-database-picker.txt`, `empty-database-toolbar.txt`, `database-page-menu.txt` | 54 |
 | 9 | `row-affordances.md` | **written** (Keyboard TBD) | `row-affordances-and-menu.txt` | 57, 58, 60 |
 | 10 | `row-peek.md` | dom-captured | `row-peek.txt` | 62 |
-| 11 | `calculations-row.md` | dom-captured (partial) | `table-column-header-menu.txt` | 70, 71 |
-| 12 | `new-row-button.md` | not-started | — | — |
-| 13 | `context-menus.md` | not-started | — | — |
+| 11 | `calculations-row.md` | dom-captured | `calculations.txt` | 70, 70b, 70c, 71, 72 |
+| 12 | `new-row-button.md` | dom-captured | `new-button-and-context-menus.txt` | 74 |
+| 13 | `context-menus.md` | dom-captured — **scope shrank**, row menu is §9's | `new-button-and-context-menus.txt` | 77 |
 | 14 | `table-drag-resize.md` | not-started | — | — |
 | 15 | `cell-editing.md` | not-started | — | — |
 | 16 | `states.md` | dom-captured (partial) | `empty-database-toolbar.txt` | — |

@@ -58,7 +58,7 @@ times.
 | 10 | Row peek panel internals | `row-peek.md` | M10 |
 | 11 | Calculations row | `calculations-row.md` | M11 |
 | 12 | `+ New` split button + templates menu | `new-row-button.md` | M11 |
-| 13 | Right-click context menus — cell, row, header | `context-menus.md` | M11 |
+| 13 | Right-click context menus — **header and empty space only**; the row context menu is §9's menu with a third trigger | `context-menus.md` | M11 |
 | 14 | Column resize + column/row drag-reorder | `table-drag-resize.md` | M11 |
 | 15 | Cell edit interactions, per property type | `cell-editing.md` | M11 |
 | 16 | Empty / loading / error states | `states.md` | M11 |
