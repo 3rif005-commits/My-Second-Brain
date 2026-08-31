@@ -56,3 +56,35 @@ NOTES
 - No creation-time modal/menu was present. If Notion shows a data-source picker at
   the moment of creation, it did not survive a page reload — re-trigger creation to
   capture it (user specifically asked for this menu).
+
+================================================================
+CORRECTION — "Add icon / Add cover / Add description" ARE hover-revealed
+SCREENSHOT: screenshots/50-db-header-hover.jpg
+CAPTURED: 2026-08-31, light mode, database WITH content (11 properties, 1 row)
+================================================================
+
+This file's note 3 said:
+  "'Add icon' / 'Add cover' / 'Add description' are three separate always-present
+   buttons on an empty database, not hover-revealed. Confirm on a NON-empty one:
+   they may be hover-only once the database has content."
+
+CONFIRMED HOVER-ONLY. On a database with content they are INVISIBLE at rest and
+appear only when the pointer is over the title area, rendered in a row ABOVE the
+title:
+
+--- verbatim, in DOM order, left to right ---
+☺   Add icon
+🖼   Add cover
+ⓘ   Add description
+--- end ---
+
+The original observation came from the ACCESSIBILITY TREE of an empty database,
+where they are present as buttons regardless of visual state — read_page reports
+them whether or not they are visually revealed. That is a general hazard of the
+a11y-tree method and is worth remembering: **the tree tells you an element
+exists, not that it is visible.** Hover-revealed affordances must be confirmed
+from a screenshot, never from read_page alone.
+
+For §8's spec: the header's three affordances follow the same reserved-space
+hover pattern as the row gutter (§9) — they must not shift the title when they
+appear.
