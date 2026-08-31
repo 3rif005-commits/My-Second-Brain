@@ -34,8 +34,8 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 | 8 | `database-header.md` | dom-captured (partial) | `create-database-picker.txt`, `empty-database-toolbar.txt`, `database-page-menu.txt` | 54 |
 | 9 | `row-affordances.md` | **written** (Keyboard TBD) | `row-affordances-and-menu.txt` | 57, 58, 60 |
 | 10 | `row-peek.md` | **written** (centre peek TBD) | `row-peek.txt` | 62, 64, 65 |
-| 11 | `calculations-row.md` | dom-captured | `calculations.txt` | 70, 70b, 70c, 71, 72 |
-| 12 | `new-row-button.md` | dom-captured | `new-button-and-context-menus.txt` | 74 |
+| 11 | `calculations-row.md` | **written** (footer hover, Percent, other types TBD) | `calculations.txt` | 70, 70b, 70c, 71, 72 |
+| 12 | `new-row-button.md` | **written** (templates-present state TBD) | `new-button-and-context-menus.txt` | 74 |
 | 13 | ~~`context-menus.md`~~ | **REMOVED** — no distinct context menus exist; folded into §1 and §9 as extra triggers | `new-button-and-context-menus.txt` | 77, 78 |
 | 14 | `table-drag-resize.md` | not-started | — | — |
 | 15 | `cell-editing.md` | not-started | — | — |
