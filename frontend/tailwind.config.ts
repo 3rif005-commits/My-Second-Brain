@@ -19,14 +19,9 @@ const config: Config = {
           600: "#4f46e5",
           700: "#4338ca",
         },
-      },
-      fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
-      },
-      // Database-UI primitives. Values live as CSS vars in globals.css so the
-      // light/dark swap happens in one place; these just surface them to
-      // Tailwind. Measured from live Notion — see the design doc §5.
-      colors: {
+        // Database-UI primitives. Values are CSS vars (globals.css) so the
+        // light/dark swap lives in one place; these surface them to Tailwind.
+        // Measured from live Notion — see the design doc §5.
         menu: {
           bg: "var(--menu-bg)",
           fg: "var(--menu-fg)",
@@ -37,6 +32,12 @@ const config: Config = {
           badge: "var(--menu-badge-bg)",
         },
       },
+      fontFamily: {
+        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+      },
+      // Database-UI primitives. Values live as CSS vars in globals.css so the
+      // light/dark swap happens in one place; these just surface them to
+      // Tailwind. Measured from live Notion — see the design doc §5.
       borderRadius: { menu: "var(--menu-radius)" },
       boxShadow: { menu: "var(--menu-shadow)" },
       spacing: {

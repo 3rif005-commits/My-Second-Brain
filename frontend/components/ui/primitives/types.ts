@@ -1,0 +1,71 @@
+// The data contract every menu-shaped surface in the database UI is built from.
+//
+// Panels are DATA, not components. The same MenuPanel renders into a Popover
+// (toolbar Sort), into the config sidebar's panel stack (Settings -> Sort), or
+// as a flyout beside a parent menu (header menu -> Change type). That is not a
+// design preference — it is what live Notion does, and building a bespoke
+// component per host is how this codebase ended up with 40 native <select>s.
+// Evidence: docs/ui-specs/raw-dom/filter-entry.txt, "ONE PANEL, TWO HOSTS".
+
+import type { ReactNode } from "react";
+
+export interface MenuRow {
+  id: string;
+  icon?: ReactNode;
+  label: string;
+  /** Caption line under the label. Live example: "This improves performance
+   * for large databases." under the "Show large counts as 99+" toggle. */
+  description?: string;
+  /** Inline pill after the label — "Basic", "Now with agents". */
+  badge?: string;
+  /** Right-aligned secondary text. NOT strictly a keyboard shortcut: Notion
+   * puts "Alt+Click" in the same slot as "Ctrl+D". */
+  hint?: string;
+  /** Right-aligned current value — "Table", "Side peek", a count like "11". */
+  value?: string;
+  /** A row can be a switch, not only an activatable row. */
+  kind?: "row" | "toggle";
+  /** Trailing checkmark (current type, current calculation) or toggle state. */
+  checked?: boolean;
+  danger?: boolean;
+  /** Semantic, not cosmetic: Text -> Relation is disabled because that
+   * conversion is illegal, not because it is unavailable right now. */
+  disabled?: boolean;
+  disabledReason?: string;
+  /** Opens a nested panel. Depth is unbounded — live Notion nests at least
+   * three levels (Calculate -> Count -> the count functions). */
+  submenu?: () => MenuPanel;
+  onSelect?: () => void;
+}
+
+export interface MenuSection {
+  label?: string;
+  /** Whether this section participates in the panel's search. Notion's type
+   * picker filters "Select type" while leaving "AI Autofill" above it intact,
+   * so search scope is per-section rather than per-panel. Defaults to true. */
+  searchable?: boolean;
+  /** Right-aligned bulk action on the section header, e.g. "Hide all". */
+  action?: { label: string; onSelect: () => void };
+  rows: MenuRow[];
+}
+
+export interface MenuPanel {
+  title?: string;
+  /** Per-panel, not global: the property type list is a 2-column grid in the
+   * "+ Add property" popover and a 1-column list in "Change type". */
+  columns?: 1 | 2;
+  /** `scope: "section"` matches Notion's type picker, where the magnifier sits
+   * on the "Select type" section header and the AI Autofill section above is
+   * left unfiltered. */
+  search?: { placeholder: string; scope?: "panel" | "section" };
+  sections: MenuSection[];
+  footer?: ReactNode;
+}
+
+/** How a submenu is presented.
+ *  - "flyout": a second panel beside the parent, parent stays visible.
+ *             Used by popover-hosted menus (column header, row menu).
+ *  - "push":  replaces the panel, with a back arrow beside the title.
+ *             Used by the docked config sidebar.
+ *  Both exist in Notion; neither is "the" pattern. */
+export type MenuNav = "flyout" | "push";
