@@ -83,3 +83,48 @@ STILL TO CAPTURE
     colour columns, the group list itself)
   - what Sort looks like with one and two sorts applied (asc/desc, drag handles)
   - whether Sort's list is truncated for types that cannot sort
+
+================================================================
+SORT APPLIED — one sort, then two (§5)
+SCREENSHOTS: 33-sort-one-applied.jpg, 34-sort-multi.jpg
+CAPTURED: 2026-08-31, light mode, real clicks
+================================================================
+
+THE BAR
+  Applying a sort adds a chip to the same bar the filter uses, placed BEFORE the
+  filter chip:
+      [↑ Name ▾]   [⧩ 1 rule ▾]   [+ Filter]        ← one sort
+      [⇅ 2 sorts ▾] [⧩ 1 rule ▾]  [+ Filter]        ← two sorts
+  - ONE sort  → chip shows a direction arrow + the PROPERTY NAME ("↑ Name").
+  - TWO sorts → chip collapses to a COUNT ("⇅ 2 sorts"), like the filter's
+    "1 rule". So the chip label is singular-specific and plural-generic.
+
+THE EDITOR (popover anchored under the chip)
+--- verbatim, two sorts ---
+⠿  [Aa Name   ▾]  [Sort A → Z      ▾]  [×]
+⠿  [#  Number ▾]  [Sort low → high ▾]  [×]
++  Add sort
+🗑  Delete sort
+--- end ---
+
+ROW ANATOMY
+  [drag handle ⠿] [property ▾] [direction ▾] [× remove this sort]
+  - Each row is individually removable via its own ×.
+  - "Delete sort" at the bottom removes ALL sorts (distinct from the per-row ×).
+  - Rows are drag-reorderable — sort PRECEDENCE is the row order.
+
+*** DIRECTION LABELS ARE TYPE-AWARE — now proven with two data points ***
+      Text / Title  →  "Sort A → Z"      / "Sort Z → A"
+      Number        →  "Sort low → high" / "Sort high → low"
+  Date presumably "Sort earliest → latest"; NOT captured.
+  Our backend's SortSpec is {property, direction: "asc"|"desc"} — the wire format
+  needs no change. This is a LABEL concern only: render the label from the
+  property type, never a generic "Ascending/Descending".
+
+"ADD SORT" PROPERTY PICKER
+  - Autofocused "Search for a property…"
+  - **Already-sorted properties are EXCLUDED.** "Name" was absent from the list
+    once it was sorted. So the picker is filtered against the current sort list.
+  - "Status" rendered GREYED. Cause not established — possibly because the Status
+    property has no options configured. OBSERVED, NOT EXPLAINED; re-test with
+    options present before the spec claims a rule.
