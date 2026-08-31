@@ -23,18 +23,22 @@
 //     an ordinary column has 14. Deriving beats one array plus conditionals.
 import { useState } from "react";
 import {
+  ArrowLeftToLine,
+  ArrowRightToLine,
+  ArrowUpDown,
   AtSign,
   Calendar,
   CheckSquare,
-  ChevronsLeftRight,
   Circle,
+  Copy,
   Eye,
   Filter,
   Hash,
   Link2,
   List,
   Pin,
-  Copy,
+  RefreshCw,
+  Rows3,
   Sigma,
   Trash2,
   Type as TypeIcon,
@@ -211,7 +215,7 @@ export function buildColumnHeaderMenu(args: ColumnHeaderMenuArgs): MenuPanel {
 
   const changeType: MenuRow = {
     id: "change-type",
-    icon: <ChevronsLeftRight size={14} />,
+    icon: <RefreshCw size={14} />,
     label: "Change type",
     submenu: () => ({
       // SINGLE column here, though "+ Add property" shows the same types as a
@@ -263,7 +267,7 @@ export function buildColumnHeaderMenu(args: ColumnHeaderMenuArgs): MenuPanel {
     },
     {
       id: "sort",
-      icon: <List size={14} />,
+      icon: <ArrowUpDown size={14} />,
       label: "Sort",
       submenu: () => ({
         sections: [
@@ -286,6 +290,7 @@ export function buildColumnHeaderMenu(args: ColumnHeaderMenuArgs): MenuPanel {
     },
     {
       id: "group",
+      icon: <Rows3 size={14} />,
       label: "Group",
       disabled: !groupable,
       // Notion groups by any type; we support three until the grouping engine
@@ -325,13 +330,24 @@ export function buildColumnHeaderMenu(args: ColumnHeaderMenuArgs): MenuPanel {
 
   queryRows.push({
     id: "wrap",
+    icon: <ArrowRightToLine size={14} />,
     label: wrapped ? "Unwrap content" : "Wrap content",
     onSelect: () => onPatchConfig(patchWrapped(config, property.key, !wrapped)),
   });
 
   const structuralRows: MenuRow[] = [
-    { id: "insert-left", label: "Insert left", onSelect: () => onInsert("left") },
-    { id: "insert-right", label: "Insert right", onSelect: () => onInsert("right") },
+    {
+      id: "insert-left",
+      icon: <ArrowLeftToLine size={14} />,
+      label: "Insert left",
+      onSelect: () => onInsert("left"),
+    },
+    {
+      id: "insert-right",
+      icon: <ArrowRightToLine size={14} />,
+      label: "Insert right",
+      onSelect: () => onInsert("right"),
+    },
   ];
 
   if (!isTitle) {
@@ -405,7 +421,9 @@ export function ColumnRenameHeader({
             // is silently lost.
             if (e.key.startsWith("Arrow") || e.key === "Tab") e.stopPropagation();
           }}
-          className="h-menu-row min-w-0 flex-1 rounded bg-menu-field px-2 outline-none"
+          // Flat at rest, filled only on hover/focus — Notion's reads as the
+          // property's NAME, not as a form input sitting in a menu.
+          className="h-menu-row min-w-0 flex-1 rounded bg-transparent px-2 outline-none hover:bg-menu-field focus:bg-menu-field"
         />
         <button
           type="button"

@@ -317,9 +317,11 @@ function Row({ row, id, isActive, nav, onActivate, onHover, onClose }: RowProps)
         row.danger && !row.disabled ? "text-red-500" : "",
       ].join(" ")}
     >
-      {row.icon !== undefined && (
-        <span className="flex w-menu-icon shrink-0 items-center justify-center">{row.icon}</span>
-      )}
+      {/* The box is ALWAYS reserved, even when the row has no icon. Rendering
+        * it conditionally let icon-less rows pull their labels left, giving
+        * the menu a ragged left edge — the single most visible parity break in
+        * M1's first visual diff. */}
+      <span className="flex w-menu-icon shrink-0 items-center justify-center">{row.icon}</span>
       <span className="flex min-w-0 flex-col py-1">
         <span className="flex items-center gap-1.5">
           <span className="truncate">{row.label}</span>

@@ -32,9 +32,46 @@
   reload → `Count all ✓` still set.
 - **No console errors** at any point.
 
-## Differences I can already see — do not let these bias your own read
+## The diff was run (2026-08-31) — five differences found, four fixed
 
-Listing them so you are not re-finding what I already know about.
+I originally assigned this comparison to the user. That was over-delegation: the
+plan's argument is that a CODE REVIEW cannot catch this defect class, which is true
+and does not imply the images cannot be read side by side. Four of the five were
+mechanical and are now fixed.
+
+### Fixed
+
+1. **Four rows had no icon at all** — Group, Unwrap content, Insert left, Insert
+   right. Their labels therefore started where the icons should have been, giving the
+   menu a **ragged left edge** while Notion's labels all align. This was the single
+   most visible parity break and I had not spotted it in my first pass.
+   Fixed at the primitive: `MenuList` now ALWAYS reserves the icon box, so no future
+   surface can reintroduce it by omitting an icon.
+2. **Change type used the wrong glyph** — `<>` (code brackets) where Notion uses
+   circular convert arrows.
+3. **Sort used a list glyph** where Notion uses up/down arrows.
+4. **The rename field had a filled background at rest.** Notion's is flat and fills
+   only on hover/focus, so it reads as the property's NAME rather than as a form
+   input sitting in a menu.
+
+### Still open
+
+5. **`Show large counts as 99+` is missing** from the Count panel — a toggle with the
+   description *"This improves performance for large databases."* We have no
+   equivalent performance concern, so it was never built. **This is a product
+   decision, not a mechanical fix, and is the one thing genuinely left for the user:**
+   build a no-op-shaped equivalent, or record it as a deliberate omission.
+
+### Deliberate, not defects
+
+- **`AI Autofill` is absent** — out of scope. Its badge-and-chevron pattern is
+  captured for reuse.
+- **Divider placement follows from that**: Notion's first divider falls after AI
+  Autofill, ours after Change type.
+- **`Delete property` renders red.** Notion's fell below the fold in the capture, so
+  its colour is UNVERIFIED — left as-is rather than matched to a guess.
+
+## Original notes from before the fixes
 
 1. **`Show large counts as 99+` is missing** from the Count panel. Notion has it as a
    toggle with the description *"This improves performance for large databases."*
