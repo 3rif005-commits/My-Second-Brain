@@ -1,0 +1,80 @@
+SURFACE: Calculations — the Number column's branches, and the applied footer row
+CHECKLIST SHOTS: 70b, 70c, 72 (§11 calculations-row.md, and §1's Calculate sub-panel)
+SCREENSHOTS: 70b-calculate-number-branches.jpg, 70c-calculate-more-options.jpg,
+             72-calc-applied-sum.jpg
+CAPTURED: 2026-08-31, light mode, on the "Number" property
+METHOD: real clicks via `computer`
+
+================= THE NUMBER COLUMN'S HEADER MENU DIFFERS =================
+*** "Edit property" is present on Number and ABSENT on Text. ***
+
+--- Number column menu, verbatim ---
+[#] [ Number (editable input) ] [ⓘ]
+⚙   Edit property          >          ← NOT on the Text column
+⟳   Change type            >
+✴   AI Autofill  [Now with agents]  >
+  ── divider ──
+≡   Filter
+⇅   Sort                   >
+⊞   Group
+Σ   Calculate              >
+📌  Freeze
+👁   Hide
+→|  Unwrap content
+  ── divider ──
+|←  Insert left
+→|  Insert right                      ← rendered greyed here
+--- end ---
+
+  "Edit property" appears for types that HAVE per-type configuration (Number has
+  a number format; Text has none). This is a THIRD dimension of the type-
+  dependent row set, on top of title-vs-ordinary.
+  → The header menu's rows are: base rows + type-conditional rows. Model it that
+    way, not as three hardcoded arrays.
+  → "Insert right" greyed on the last-but-one column is OBSERVED, cause not
+    established. Do not assert a rule.
+
+================= CALCULATE: NUMBER HAS FOUR BRANCHES =================
+Text offered: None ✓ / Count > / Percent >
+Number offers: None ✓ / Count > / Percent > / **More options >**
+
+--- "More options" flyout (opened LEFT again — second confirmed flip) ---
+Sum
+Average
+Median
+Min
+Max
+Range
+--- end ---
+
+*** EXACT MATCH WITH OUR BACKEND ***
+  services/db/query/aggregations.py:31
+      _NUMERIC_AGGREGATORS = {"sum","average","median","min","max","range"}
+  Six functions, same six names, same order-independent set. The engine is done;
+  only the UI is missing. Likewise _CHECKBOX_AGGREGATORS and _DATE_AGGREGATORS
+  should map onto Checkbox's and Date's own branches — NOT YET CAPTURED, and the
+  spec must not assume the mapping holds without checking.
+
+================= THE APPLIED FOOTER ROW =================
+After picking Sum, a footer row rendered beneath "+ New page":
+
+--- verbatim ---
+                                   SUM  0
+--- end ---
+
+  - Right-aligned within its own column's width.
+  - The function name renders in SMALL UPPERCASE, muted ("SUM"), followed by the
+    value in normal weight ("0").
+  - The row only exists for columns that have a calculation; columns with None
+    render nothing (the rest of the footer row is empty).
+  - Value is 0 because the single row's Number cell is empty.
+
+  BEFORE a calculation is set, the footer cell is EMPTY and reveals a "Calculate"
+  affordance on hover — NOT captured (hovering the band at two positions did not
+  reveal it). TBD: find the exact hover target, or accept that the header-menu
+  path is the primary entry point and the footer hover is secondary.
+
+NOTE FOR §11's SEQUENCING
+  This confirms the M1/M11 overlap flagged earlier: the calculation is fully
+  settable from the column header menu at M1. M11's footer work is then only the
+  PRESENTATION of an already-set value plus the hover entry point.
