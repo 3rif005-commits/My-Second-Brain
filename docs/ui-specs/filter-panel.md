@@ -92,7 +92,7 @@ Where   [Aa Name ▾]   [Contains ▾]   [ Value ]   [⋯]
 |---|---|---|
 | Conjunction | `Where` for the first rule | For rules 2+ this becomes an **AND/OR selector**. `TBD` — capture with a second rule |
 | Property | Dropdown showing the property's **type icon** + name | Opens the same alphabetical picker |
-| Operator | Dropdown; default `Contains` for a title/text property | Per-type list — see below |
+| Operator | Dropdown; default `Contains` for a title/text property | **Text/title: 8 operators** — Is, Is not, Contains, Does not contain, Starts with, Ends with, Is empty, Is not empty. Other types `TBD` |
 | Value | Input, placeholder `Value` | **Editor shape varies by property type.** `TBD` per type |
 | `⋯` | Per-rule menu | `TBD` — likely duplicate / remove / turn into group |
 
@@ -154,7 +154,7 @@ model (input focused, ↑/↓ moving an active row), unlike the column header me
 |---|---|
 | No filter | No filter bar. The toolbar `Filter` button opens the property picker directly |
 | One filter | Filter bar shows `1 rule` |
-| Filter matches nothing | `TBD` — capture the empty result state (checklist shot 94) |
+| Filter matches nothing | **Captured.** The **entire table disappears** — headers, group headers, `+ New page` and the calc footer all gone — replaced by two centred buttons, `⧩ Edit filters` and `+ New page`, with **no text message**. The filter bar stays visible above. Ours renders the text "No rows yet." with no action |
 | Filter references a deleted property | Our backend "tolerates dangling property refs at read, sweeps on delete" (`2026-08-08` spec §7). The UI must render such a rule without crashing — `TBD` how Notion does it |
 | Read-only source (`is_virtual`) | All Notes supports filtering server-side; keep the filter UI enabled |
 | Locked view (`is_locked`) | `TBD` — presumably the filter bar becomes read-only |

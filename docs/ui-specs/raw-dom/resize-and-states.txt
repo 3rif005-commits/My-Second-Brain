@@ -1,0 +1,69 @@
+SURFACE: Column resize (§14) and the no-results state (§16)
+CHECKLIST SHOTS: 79, 80, 94
+SCREENSHOTS: 79-resize-hover-grip.png (zoomed), 80-resize-applied.jpg,
+             94-state-no-results.jpg
+CAPTURED: 2026-08-31, light mode, real hover / drag / keys
+
+================= COLUMN RESIZE (§14) =================
+HOVER the border between two column headers:
+  - A **blue vertical grip bar** appears at the border, within the header row.
+  - A faint **vertical guide line** extends down through the table body.
+  - The cursor becomes a horizontal-resize cursor.
+  (Zoomed capture 79 shows the grip and guide clearly.)
+
+DRAG it horizontally:
+  - The column resizes live; all columns to its right shift accordingly.
+  - Dragged Name from x≈653 to x≈780 and the change held.
+
+  Column width is PER-VIEW state → `view.config`, a JSONB pass-through.
+  **No backend change.** Do NOT use a schema-level field.
+
+  NOT CAPTURED: a minimum width, a double-click-to-autofit, and whether the
+  guide line persists for the whole drag or only on press. TBD.
+
+================= NO-RESULTS STATE (§16) =================
+Applied `Where Name Contains "zzzz"` — matching no rows.
+
+*** THE ENTIRE TABLE DISAPPEARS. ***
+  Not "headers with no rows underneath" — the column header row, the group
+  header, the "+ New page" row and the calculations footer are ALL gone.
+
+  What remains, centred in the content area:
+--- verbatim ---
+[ ⧩ Edit filters ]   [ + New page ]
+--- end ---
+
+  TWO BUTTONS, side by side. **No text message at all.**
+
+  Notion's empty state offers ACTIONS — "the filter is why you see nothing, here
+  is how to change it" and "here is how to add something" — rather than a
+  sentence. Our TableView renders the text "No rows yet." (TableView.tsx:816)
+  with no action.
+
+  Note the filter/sort BAR stays visible above (2 sorts · 1 rule · + Filter), so
+  the user can see a filter is active. The empty state and the bar work together.
+
+  NOT CAPTURED: the empty state for a database with genuinely zero rows and NO
+  filter — that may differ (shot 93 showed a "New page" placeholder row instead
+  of any empty state, on a brand-new database). So there are at least TWO empty
+  states: "no rows at all" (a placeholder row) and "no rows match" (two buttons).
+  Capture the third case — an empty GROUP — separately.
+
+================= TEXT/TITLE FILTER OPERATORS (§4) =================
+Opened the operator dropdown on a title property:
+--- verbatim ---
+Is
+Is not
+Contains          ← current, highlighted
+Does not contain
+Starts with
+Ends with
+Is empty
+Is not empty
+--- end ---
+  EIGHT operators. Maps cleanly onto our backend's `_TEXT_OPS`
+  (services/db/query/operators.py:43). The UI list should be DERIVED from
+  TYPE_OPERATORS rather than hardcoded, so an illegal pair is unreachable and
+  the server's 400 never fires in normal use.
+  NOT CAPTURED: operator lists for Date, Select, Checkbox, Number, Person,
+  Files, Relation. Each differs; capture before M4.
