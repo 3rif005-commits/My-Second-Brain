@@ -52,6 +52,56 @@ no second copy to drift.
 **Refused:** relation, formula, rollup, title, date, and checkbox as a target.
 The matrix is extensible — widening it is a change to one dict.
 
+## M1 / M2 / M2b — COMPLETE (2026-08-31)
+
+| Milestone | State |
+|---|---|
+| M1 — table column header menu | done, visual-diffed, 4 defects fixed |
+| M2 — property creation popover | done, visual-diffed |
+| M2b — the 5 held-back property types | done; one defect found (types sharing an icon) |
+| **M2 completion — `Edit property`** | **done, visual-diffed, 4 defects fixed** |
+
+**Frontend 50 files / 676 tests green. Backend 1385 passed, 0 failed** (448 errors
+are all `ConnectionRefusedError` — no local Postgres on this machine; pre-existing).
+`npx tsc --noEmit` clean.
+
+### What `Edit property` settled
+
+- **The row is conditional on the property type.** A Text column's menu opens
+  straight onto `Change type`; Notion shows no `Edit property` row at all.
+  `hasEditableConfig()` is the one place that rule lives: `number`, `select`,
+  `multi_select`, `status`.
+- `NumberConfig` gained `decimal_places` / `show_as` / `bar_color` / `divide_by` /
+  `show_number`. No endpoint change was needed — `config` is an unvalidated
+  pass-through for non-computed types — but the model is the written-down schema
+  and would otherwise have gone stale against what the UI writes.
+- `NumberCell` **formats** now (39 formats, decimal places, bar/ring). Without
+  that, `Number format` would have been a control nothing reads.
+- The select cells read the configured option **colour**, matched by name. They
+  are still free-text; rebuilding them as option pickers is `cell-editing.md`.
+
+### Primitive additions this needed
+
+| Addition | Why |
+|---|---|
+| `MenuSection.action.label: ReactNode` | the `Options` header's action is a `+` icon, not text |
+| `MenuSection.content` | the `Show as` cards and the scope disclaimer are not rows, and `footer` would draw a divider the captured panel does not have |
+| `MenuPanel.width` | widths are per-panel: 248px menu, 299px `Edit property` flyout |
+| `MenuRow.labelNode` | an option row renders as the option's own coloured pill; `label` still drives search |
+| flyout side inheritance | a chain that flipped left must keep going left, or the third level covers the first |
+
+### Deferred, tracked
+
+- `formula` / `relation` / `rollup` are excluded from `hasEditableConfig` — their
+  config is already reachable through the creation popover's push-panel, and two
+  entry points with two shapes is how the old inline forms drifted. Unifying them
+  is the one named follow-up in `property-create-edit.md`.
+- Option drag-reorder (`⠿`) waits for M11's drag work.
+- Whether Notion keeps its colour list open on select is **unverified** — see
+  `M1-VISUAL-DIFF.md`.
+
+---
+
 ## Session artifacts
 
 | Artifact | Status |
