@@ -1,0 +1,89 @@
+SURFACE: The view tab bar — a view's own menu, "Display as", and "+ Add a new view"
+CHECKLIST SHOTS: 44, 44b, 46 (§7)
+SCREENSHOTS: 44-view-tab-menu.jpg, 44b-view-display-as.jpg, 46-new-view-popover.jpg
+CAPTURED: 2026-08-31, light mode, a database with exactly ONE view
+METHOD: real clicks via `computer`
+
+================= A VIEW'S OWN MENU =================
+Trigger: click the ALREADY-ACTIVE view tab. (Clicking an inactive tab switches
+to it; clicking the active one opens this menu.) Our ViewTabs only ever switches.
+
+--- verbatim ---
+✏   Rename
+🎨  Display as                    >
+⚙   Edit view
+    Source            New database     ← greyed/inactive
+  ── divider ──
+🔗  Copy link to view
+▤   Add view to sidebar
+  ── divider ──
+⧉   Duplicate view
+--- end ---
+
+*** THERE IS NO "DELETE VIEW" ROW ***
+  Because this database has exactly ONE view, and the last view cannot be
+  deleted. The row is STATE-DEPENDENT, not absent from the design.
+  → Re-capture with two views to confirm Delete appears. Until then the spec
+    says: Delete is present iff view count > 1.
+  → This also means our plan gap **B1** (no DELETE /db/views/{id}) is needed
+    only for the >1 case, and the UI must enforce the same rule client-side.
+
+- "Rename" IS a row here — unlike the property menu and the view settings panel,
+  which both rename via an inline input at the top of their own panel. So Notion
+  is inconsistent: a view can be renamed from a menu row OR from the settings
+  sidebar's name field. Both exist.
+- "Edit view" opens the view settings sidebar (the M3 surface).
+- "Add view to sidebar" has no analogue for us — we have no per-view sidebar
+  entries. Omit deliberately.
+- "Source" greyed, same as in the settings sidebar.
+
+================= SUB-PANEL: "Display as" =================
+Flyout, opens right. Governs THE TAB'S OWN PRESENTATION, not the view type.
+--- verbatim ---
+Text and icon        ✓
+Text only
+Icon only
+  ── divider ──
+Only applies to you              ← FOOTER, muted
+--- end ---
+  - "Only applies to you" marks this as a PER-USER preference, not view config.
+    A new MenuPanel.footer use: a scope disclaimer.
+  - Single-user app, so for us this is informational; if built, it belongs in
+    local/user prefs, NOT in view.config which is shared.
+
+================= "+ Add a new view" =================
+Trigger: the `+` immediately right of the last view tab. It appears only on
+hover/focus of the tab bar (it was not visible before the tab menu was opened).
+
+Header: "Add a new view"
+A **FOUR-COLUMN** card grid, each card an icon above a label:
+--- verbatim, in DOM order ---
+Table*   Board      Gallery    List
+Chart    Dashboard  Timeline   Feed
+Map      Calendar   Form
+  ── divider ──
+⧉  New data source
+--- end ---
+(*Table rendered as the highlighted/default card)
+
+*** ELEVEN TYPES HERE vs NINE IN LAYOUT ***
+  Settings → Layout offers: Table, Board, Timeline, Calendar, List, Gallery,
+                            Chart, Feed, Map            (9, in a 3-COLUMN grid)
+  "+ Add a new view" offers: the same 9 PLUS **Dashboard** and **Form**
+                            (11, in a 4-COLUMN grid)
+
+  The sets differ because Layout CONVERTS an existing view's type, and you
+  cannot convert a table into a Form or a Dashboard — those can only be created.
+  → Two different card grids with two different type sets and two different
+    column counts. Do NOT build one shared "view type picker" component and
+    assume it serves both. Same data shape, different eligible set + layout.
+
+  OUR COVERAGE IS GOOD HERE: ViewTabs offers table, board, gallery, list, feed,
+  calendar, timeline, chart, form, dashboard — exactly Notion's 11 minus Map,
+  which we cut deliberately (no geocoding/tile provider). The gap is the
+  PRESENTATION (a native <select> vs a card grid), not the set.
+
+- "New data source" creates an additional data source under this database —
+  the database↔data-source split again. Our schema supports it
+  (db_databases → db_data_sources, 1:N) but create_database only ever mints one
+  and we have no endpoint to add another. Out of scope; note, do not build.
