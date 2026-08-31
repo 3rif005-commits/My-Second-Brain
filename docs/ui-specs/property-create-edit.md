@@ -98,8 +98,19 @@ Our `ADDABLE_PROPERTY_TYPES` (`TableView.tsx:130`) offers 11.
 The eleven missing native types are **absent from the UI list only** —
 `backend/services/db/properties/` implements them.
 
-**This materially resizes M2 and is the user's call, not mine.** Options: (a) ship our 11,
-(b) add the 11 backend-supported types to the list, (c) add them in a later phase.
+**DECIDED 2026-08-31: adopt the 11 backend-supported types.** The picker ships 22 native
+types, not 11.
+
+Sequenced as **M2 + M2b** so the work stays reviewable:
+
+| | Scope |
+|---|---|
+| **M2** | The picker and edit panel themselves — two-input creation flow, 2-column grid, per-type config, scope disclaimer — over the **existing 11** types |
+| **M2b** | The **11 additional** types: their picker entries, cell renderers, and per-type config panels |
+
+Splitting is a sequencing choice, not a reduction: the picker rewrite and eleven new cell
+renderers are different kinds of risk and should not land in one review. The four
+third-party integration types stay out of scope.
 
 ---
 

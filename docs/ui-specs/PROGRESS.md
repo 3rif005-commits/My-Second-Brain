@@ -70,6 +70,18 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 - `npx tsc --noEmit` — **clean** (exit 0), 2026-08-29.
 - `npm run test` — **clean** (exit 0): 41 files, 575 tests passed, 83s. 2026-08-29.
 
+## Decisions taken (2026-08-31)
+
+| Decision | Choice | Effect on the plan |
+|---|---|---|
+| Property types (26 vs our 11) | **Adopt the 11 backend-supported natives** | New **M2b**; picker ships 22 types |
+| Grouping (10 types vs our 3) | **Add engine support first** | New **Phase 0c** — backend grouping engine, before M6 |
+| Calculate sub-panel placement | **M1 ships it** | M11 reduced to the footer row |
+
+Plus one gap found while reconciling: **Phase 0b needs a fourth endpoint (B5)** —
+`PropertyUpdate` must accept `type`, or M1's `Change type` row is dead from the first
+milestone.
+
 ## Remaining TBDs, ranked
 
 Everything below is marked `TBD` inside a written spec. None blocks starting Phase 0.

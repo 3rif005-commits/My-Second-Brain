@@ -65,23 +65,29 @@ types are a named final phase — prove the pattern once before copying it nine 
 
 ## Milestone sequence
 
+> **Reconciled 2026-08-31** against the 15 written specs. Eight entries in the previous
+> version were stale — they described surfaces as the plan *assumed* them, before capture.
+> Changes are called out inline.
+
 | # | Milestone | Spec | Ships |
 |---|---|---|---|
 | **0** | Primitive layer + design tokens | design doc §3, §5 | Nothing user-visible — correct for this phase |
-| **0b** | Three backend endpoints | — | Unblocks M2, M7, M8 |
-| **1** | Table column header menu | `table-column-header.md` | The single biggest win |
-| **2** | Property creation + edit panel | `property-create-edit.md` | Searchable type picker, per-type config |
-| **3** | View options `···` panel | `view-options-panel.md` | Properties / Layout / Load limit / Open-pages-in, and the entry points to M4–M6 |
-| — | **review checkpoint (M1–M3)** | | |
-| **4** | Filter panel — simple, then nested AND/OR | `filter-panel.md` | First time a filter is settable from the UI at all |
-| **5** | Sort panel — multi-level, drag-reorder | `sort-panel.md` | Same |
-| **6** | Group panel — group, sub-group, hidden/empty, counts | `group-panel.md` | Same |
-| — | **review checkpoint (M4–M6)** | | |
-| **7** | View tab bar — per-view `···`, `+` type cards, view icon | `view-tab-bar.md` | Rename/duplicate/delete a view; fixes the header-chrome collision |
-| **8** | Database creation, title, icon, description | `database-header.md` | A database can be renamed for the first time |
-| **9** | Row hover affordances + open-as | `row-affordances.md` | Drag handle, `⋮⋮`, selection, OPEN |
-| **10** | Row peek internals | `row-peek.md` | Resizable, URL-addressable, add-property, comments |
-| **11** | Calculations row, `+ New`, resize, drag-reorder, cell editing, states | `calculations-row.md`, `new-row-button.md`, `table-drag-resize.md`, `cell-editing.md`, `states.md` | The remainder of Table parity. **Context menus dropped** — right-click opens the existing §1 and §9 menus; no separate surface exists |
+| **0b** | **Four** backend endpoints | — | Unblocks M1, M2, M7, M8 |
+| **1** | Table column header menu **+ the Calculate sub-panel** | `table-column-header.md`, `calculations-row.md` | 14 rows, in-place rename, `Change type`, and the 3-level Calculate tree. *Decision 2026-08-31: M1 owns Calculate so no row is ever dead* |
+| **2** | Property creation + edit panel | `property-create-edit.md` | Two-input creation flow, 2-column type grid, per-type config, scope disclaimer |
+| **2b** | **The 11 additional property types** | `property-create-edit.md`, `cell-editing.md` | Person, URL, Email, Phone, ID, Place, Created/Last-edited time/by. *Decision 2026-08-31: adopt them; split from M2 so the picker rewrite and 11 new cell renderers are separately reviewable* |
+| **3** | **View settings sidebar** *(was "view options `···` panel")* | `view-options-panel.md` | The whole toolbar (Filter · Sort · Automations · AI Autofill · Search · Settings), the 483px docked sidebar, Layout, Property visibility, Open pages in. **No "Load limit" — no such row exists** |
+| — | **review checkpoint (M1–M3, M2b)** | | |
+| **0c** | **Grouping engine** *(backend)* | `group-panel.md` §scope | Range/bucket grouping for Number and Date, boolean for Checkbox, value grouping for Text/URL/Person in `services/db/query/grouping.py`. *Decision 2026-08-31: engine first, so M6 can match Notion rather than disable 7 types* |
+| **4** | Filter panel — quick picker, filter bar, advanced nested builder | `filter-panel.md` | First time a filter is settable from the UI at all. Operators **derived from `TYPE_OPERATORS`**, not hardcoded |
+| **5** | Sort panel — multi-level, drag-reorder, type-aware direction labels | `sort-panel.md` | Same |
+| **6** | Group panel — group by, group ordering, per-group visibility and order | `group-panel.md` | *Corrected: **no sub-group** and **no per-group counts** were found in a table view; both were plan assumptions* |
+| — | **review checkpoint (0c, M4–M6)** | | |
+| **7** | View tab bar — per-view menu, `+` type card grid, create-first-configure-after | `view-tab-bar.md` | Rename/duplicate/delete a view; fixes the header-chrome collision. *Corrected: **no view icon picker** was found — `Display as` is tab presentation (Text and icon / Text only / Icon only)* |
+| **8** | Database header — creation modal, title, icon, description | `database-header.md` | A database can be renamed for the first time. **Entirely blocked on 0b/B2 — nothing here ships before it** |
+| **9** | Row hover affordances + open-as | `row-affordances.md` | *Corrected: the trigger is the **drag handle**, not a separate `⋮⋮`. It carries three gestures: click opens the menu, drag reorders, click also selects* |
+| **10** | Row peek internals | `row-peek.md` | Non-modal, URL-addressable (`?p=&pm=`), alphabetical property list, `+ Add a property`. *Corrected: the peek's `⋯` is the standard **page** menu — editor chrome, **out of scope**; comments deferred with it* |
+| **11** | Calculations **footer row**, `+ New` split button, resize, drag-reorder, remaining cell editors, states | `calculations-row.md`, `new-row-button.md`, `table-drag-resize.md`, `cell-editing.md`, `states.md` | *Corrected: **context menus dropped** — right-click opens the existing §1/§9 menus. Calculations reduced to the footer, since M1 ships the function tree* |
 | — | **review checkpoint (M7–M11), then whole-branch pass** | | |
 | **12** | **Apply the pattern to the other nine views** | — | Named and sized below; gets its own prompt |
 
@@ -102,20 +108,48 @@ a database embedded in a note and move the mouse over it. Radix portals render o
 `DatabaseBlock`'s `stopPropagation` wrapper, which is the only thing keeping BlockNote's
 `TableHandles` from crashing.
 
-### Phase 0b — the three backend endpoints
+### Phase 0b — the four backend endpoints
 
-No migration, no schema change, ~65 lines total.
+No migration, no schema change, ~85 lines total.
 
 | id | Endpoint | Unblocks |
 |---|---|---|
-| B1 | `DELETE /db/views/{view_id}` | M7 — view `···` → Delete |
-| B2 | `PATCH` + `DELETE /db/databases/{database_id}` | M8 — title, icon, description, delete |
-| B3 | `PropertyUpdate.description` (the column exists on `PropertyResponse`; the patch model cannot write it) | M2 — the property Description field |
+| B1 | `DELETE /db/views/{view_id}` | M7 — view menu → `Delete view`. **Only reachable when view count > 1**; the last view cannot be deleted, so enforce that both sides |
+| B2 | `PATCH` + `DELETE /db/databases/{database_id}` | **M8 entirely** — title, icon, description, delete |
+| B3 | `PropertyUpdate.description` — the column exists on `PropertyResponse`, the patch model cannot write it | M2 — the `ⓘ` beside a property name is literally "Add property description" |
+| **B5** | **`PropertyUpdate` must accept `type`** | **M1** — `Change type` is a row in the column header menu. Without this it is a dead row from the first milestone |
+
+> **B5 is new (2026-08-31).** It was missed when Phase 0b was first scoped, because the
+> column header menu had not been captured yet. Conversion legality is also a real rule
+> Notion expresses (Text → Relation is greyed) and **we have no endpoint describing which
+> conversions are legal** — either hardcode the matrix client-side or add a lookup. Decide
+> during 0b.
 
 **Not built, flagged:** duplicating a row cannot copy the page body without a new endpoint
 (B4). Duplicating a view and duplicating a property are done client-side (POST + PATCH)
 and are faithful. Deleting a row already works through the existing
 `DELETE /api/notes/{noteId}` — it needs wiring, not an endpoint.
+
+### Phase 0c — grouping engine (backend)
+
+*Added 2026-08-31 by decision: mirror Notion's grouping rather than disabling seven types.*
+
+Notion groups by at least ten property types; `GROUPABLE_PROPERTY_TYPES` is three. This is
+engine work, not UI:
+
+| Type | Group key derivation |
+|---|---|
+| Number | **Range buckets** — bucket size is a per-view setting |
+| Date | **Day / week / month / year** — the unit is a per-view setting |
+| Checkbox | Boolean — two groups |
+| Text, URL, Person | Exact value, with a `No <Property>` bucket for empties |
+
+Touches `services/db/query/grouping.py` (`GroupBySpec` gains a per-type key strategy) and
+the compiler. It has its own pytest surface and **must land before M6**, but is independent
+of M1–M5, so it can run in parallel with the M1–M3 batch.
+
+> The `No <PropertyName>` empty bucket already exists conceptually — the backend produces
+> the bucket, and `group-panel.md` fixes the naming convention as a UI concern.
 
 ---
 

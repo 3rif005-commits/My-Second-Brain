@@ -53,9 +53,23 @@ Notion groups by **at least ten** property types. Our `GROUPABLE_PROPERTY_TYPES`
 This is **not** a frontend-only gap. Grouping by Number or Date needs range/bucket support
 in `backend/services/db/query/grouping.py`; Checkbox needs boolean grouping.
 
-**Recommended for M6:** ship our three, render the rest **disabled with a visible reason**,
-and schedule engine support as a separate backend task. Do not silently widen M6.
-**Flagged for the user — this is their call, not mine.**
+**DECIDED 2026-08-31: add engine support first.** M6 matches Notion rather than disabling
+seven types.
+
+The engine work is **Phase 0c** in the plan, landing before M6 and running in parallel with
+the M1–M3 batch:
+
+| Type | Group key derivation |
+|---|---|
+| Number | **Range buckets** — bucket size a per-view setting |
+| Date | **Day / week / month / year** — unit a per-view setting |
+| Checkbox | Boolean — two groups |
+| Text, URL, Person | Exact value, plus the `No <Property>` empty bucket |
+
+Touches `services/db/query/grouping.py` and the compiler, with its own pytest surface.
+
+**Consequence for this spec:** the property picker lists every groupable type and none are
+disabled — so the "disabled with a reason" state below applies only if 0c slips.
 
 ---
 
@@ -158,7 +172,7 @@ order array for manual.
 | Not grouped | Panel titled **"Group by"**, `None ✓` present, no Groups section |
 | Grouped | Panel titled **"Group"**, `None` gone, Groups section listed |
 | `Hide empty groups` on | Empty groups greyed with eye-slash in the panel and absent from the table |
-| Ungroupable property | `TBD` — Notion appears to offer nearly everything; **our** UI must render the 7 unsupported types **disabled with a reason** |
+| Ungroupable property | After Phase 0c, every offered type groups. **If 0c slips**, render the 7 unsupported types disabled with a visible reason rather than hiding them |
 | Grouped by a deleted property | Backend tolerates dangling refs at read; UI must not crash — `TBD` |
 | Read-only source (`is_virtual`) | Grouping is a query concern; keep enabled |
 

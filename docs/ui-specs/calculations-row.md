@@ -16,10 +16,10 @@
 | Column header menu → **`Calculate`** | **M1** — already specced in `table-column-header.md` |
 | The footer row beneath the table, per column | M11 |
 
-> **Sequencing consequence.** The calculation is *fully settable* from the header menu at
-> M1. Either M1 ships the `Calculate` sub-panel, or M1 ships a row that does nothing.
-> M11 then owns only the **footer presentation** and the **footer hover entry point**.
-> Decide before M1 starts.
+> **DECIDED 2026-08-31: M1 ships the `Calculate` sub-panel** (the function tree, its
+> nesting and its flip behaviour). **M11 owns only the footer row's presentation and its
+> hover entry point.** The function-tree sections below are therefore M1's contract; the
+> "applied footer row" section is M11's.
 
 The footer's hover affordance was **not** captured — hovering the band under `+ New page`
 at two positions revealed nothing. `TBD`: find the exact hover target. The header-menu path

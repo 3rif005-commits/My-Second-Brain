@@ -174,9 +174,10 @@ already ran to x≈1077 in a 1300px viewport. Each level makes its own flip deci
 > property; numeric and date properties will offer more branches (Sum, Average, …).
 > `TBD` — re-capture on the Number and Date columns.
 >
-> **Sequencing consequence for the plan:** calculations are reachable from this menu at M1,
-> not only from the footer row at M11. Either M1 ships the Calculate sub-panel, or M1 ships
-> a row that does nothing. Decide before M1 starts.
+> **DECIDED 2026-08-31: M1 ships the Calculate sub-panel.** No row is ever dead, and it
+> exercises three-level nesting with a mid-chain flip early — the riskiest part of the
+> `Popover` primitive. M11 is reduced to the footer row's presentation and its hover entry
+> point.
 
 Our engine already implements every function seen — `services/db/query/aggregations.py`
 covers count, count_values, unique, empty, not_empty, percent_empty, percent_checked, sum,
