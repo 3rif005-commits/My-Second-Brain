@@ -26,10 +26,14 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   ArrowUpDown,
+  ArrowUpRight,
   AtSign,
   Calendar,
   CheckSquare,
-  Circle,
+  CircleChevronDown,
+  CircleDashed,
+  Clock,
+  Fingerprint,
   Copy,
   Eye,
   Filter,
@@ -37,8 +41,11 @@ import {
   Link2,
   List,
   Pin,
+  MousePointerClick,
+  Phone,
   RefreshCw,
   Rows3,
+  Search,
   Sigma,
   Trash2,
   Type as TypeIcon,
@@ -57,23 +64,30 @@ import {
 import type { MenuPanel, MenuRow } from "@/components/ui/primitives";
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
+  // One distinct glyph per type. Select and Status previously shared a plain
+  // circle, and relation/rollup/button fell through to the text glyph — the
+  // same defect class as the missing icons in the header menu: a picker where
+  // several rows carry the same or a fallback icon stops being scannable.
   title: <TypeIcon size={14} />,
   rich_text: <TypeIcon size={14} />,
   number: <Hash size={14} />,
-  select: <Circle size={14} />,
+  select: <CircleChevronDown size={14} />,
   multi_select: <List size={14} />,
-  status: <Circle size={14} />,
+  status: <CircleDashed size={14} />,
   date: <Calendar size={14} />,
   person: <Users size={14} />,
   people: <Users size={14} />,
   checkbox: <CheckSquare size={14} />,
   url: <Link2 size={14} />,
   email: <AtSign size={14} />,
-  phone_number: <AtSign size={14} />,
+  phone_number: <Phone size={14} />,
   formula: <Sigma size={14} />,
-  unique_id: <Hash size={14} />,
-  created_time: <Calendar size={14} />,
-  last_edited_time: <Calendar size={14} />,
+  relation: <ArrowUpRight size={14} />,
+  rollup: <Search size={14} />,
+  button: <MousePointerClick size={14} />,
+  unique_id: <Fingerprint size={14} />,
+  created_time: <Clock size={14} />,
+  last_edited_time: <Clock size={14} />,
 };
 
 export function propertyTypeIcon(type: string): React.ReactNode {

@@ -99,3 +99,40 @@ where that form is replaced anyway.
 The **inline-database check** — opening this menu from a database embedded in a note, to
 confirm Radix's portal does not trip BlockNote's `TableHandles` crash. It needs a note
 with an inline database; `Popover` has a `container` prop ready if it reproduces.
+
+
+---
+
+# M2 / M2b — live run
+
+Run 2026-08-31 against `localhost:3000`, same fixture.
+
+| Step | Ours |
+|---|---|
+| Creation picker, 17 types | `actual/M2-10-new-property-type-picker.jpg` |
+| A URL cell rendering as a link | `actual/M2b-url-cell-renders-a-link.jpg` |
+
+## Confirmed
+
+- The name field is in the **header cell**, the picker hangs below it, and the type
+  list is a **two-column grid** — matching `10-new-property-type-picker.jpg`.
+- All 17 types present, including M2b's six.
+- A URL cell round-trips: typed `example.com`, saved, and rendered as a link whose
+  href is `https://example.com/` with `target="_blank" rel="noreferrer"` — the scheme
+  is added, so the browser does not treat it as a relative path.
+
+## Found and fixed during the run
+
+**Every type shared or fell back to the wrong icon.** Relation, Rollup and Button all
+rendered the plain text glyph, and Select and Status shared one circle. A picker where
+several rows carry the same or a fallback icon stops being scannable — the same defect
+class as M1's missing row icons, one surface along. Each type now has a distinct glyph
+(Select a chevron-circle, Status a dashed circle, Relation ↗, Rollup a magnifier,
+Button a click, ID a fingerprint, the two timestamps a clock).
+
+## Not compared
+
+The M2 popover's own reference shot is Notion's `10-new-property-type-picker.jpg`,
+which shows **26 types in a taller panel** with an `AI Autofill` section above the grid.
+Ours shows 17 and no AI section — both deliberate and recorded, so this is not a
+pixel-comparable pair.
