@@ -76,13 +76,24 @@ Built by me, with the user's authorisation, 2026-08-29:
 - **11 properties**: Name (title), Text, Number, Select, Multi-select, Status, Date,
   Person, Checkbox, URL, Files
 - **1 row**: "Row one", all values empty
-- **1 filter**: `Where Name Contains <empty>` — a no-op, left in place so the filter bar
-  is present for future captures
+- **2 views**: `Table` and `Board` (Board auto-grouped by Status)
+- **1 Select option**: `Alpha`, created via create-on-type, applied to Row one
+- **1 calculation**: `Sum` on the Number column, so the footer row renders
 - **Still missing** for full §0 coverage: Formula, Relation, Rollup, Created time;
-  option values on Select/Status; more rows; a second view; a row template
+  Status option values; more rows; a row template
 
 ## Log
 
+- **2026-08-31 (second autonomous session)** — 13 more captures, 2 more specs (M7, and
+  M1/M9/M3/M4 extended). Confirmed live: view creation is create-first-configure-after;
+  Delete view is state-dependent on view count; the row context menu is the row menu with
+  a third trigger (so §13 shrank); calculations are settable from the header menu, and
+  Number's branches match `_NUMERIC_AGGREGATORS` exactly; cell editing is two-stage
+  (select, then edit) where ours is one-stage; Select cells offer create-on-type with a
+  coloured chip preview. Three self-corrections recorded rather than edited away: the
+  bulk bar shows labels not icons; the header affordances ARE hover-revealed; and the
+  a11y tree reports elements that are not visible, so hover states need screenshots.
+  Theme restored to dark at the end.
 - **2026-08-29 (autonomous session)** — Captured 13 surfaces live and wrote 4 specs.
   Screenshots: 24. Raw DOM captures: 9. See the log entries and git history.
   Key corrections to the plan and design doc, all committed with their evidence:
