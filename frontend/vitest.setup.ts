@@ -32,34 +32,45 @@ if (typeof globalThis.ResizeObserver === "undefined") {
 }
 
 if (typeof globalThis.DOMRect === "undefined") {
-  globalThis.DOMRect = class {
+  class DOMRectShim {
+    top = 0;
+    left = 0;
+    right = 0;
+    bottom = 0;
     constructor(
       public x = 0,
       public y = 0,
       public width = 0,
       public height = 0
     ) {}
-    top = 0;
-    left = 0;
-    right = 0;
-    bottom = 0;
     toJSON() {
       return this;
     }
     static fromRect(r?: DOMRectInit) {
-      return new (globalThis.DOMRect as never)(r?.x, r?.y, r?.width, r?.height);
+      return new DOMRectShim(r?.x, r?.y, r?.width, r?.height);
     }
-  } as unknown as typeof DOMRect;
-}
-
-for (const method of ["hasPointerCapture", "setPointerCapture", "releasePointerCapture"] as const) {
-  if (!(method in Element.prototype)) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (Element.prototype as any)[method] = () => false;
   }
+  globalThis.DOMRect = DOMRectShim as unknown as typeof DOMRect;
 }
 
-if (!("scrollIntoView" in Element.prototype)) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (Element.prototype as any).scrollIntoView = () => {};
+// GUARDED ON `Element`, not just on the method. This file is a global setup, and
+// some suites here run in the NODE environment, not jsdom — app/api/**/route.test.ts
+// are plain request/response tests with no DOM. An unguarded `Element.prototype`
+// reference throws at setup time and fails those files before a single test runs.
+if (typeof Element !== "undefined") {
+  for (const method of [
+    "hasPointerCapture",
+    "setPointerCapture",
+    "releasePointerCapture",
+  ] as const) {
+    if (!(method in Element.prototype)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (Element.prototype as any)[method] = () => false;
+    }
+  }
+
+  if (!("scrollIntoView" in Element.prototype)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (Element.prototype as any).scrollIntoView = () => {};
+  }
 }

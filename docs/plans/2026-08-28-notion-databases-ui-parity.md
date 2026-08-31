@@ -103,10 +103,20 @@ visual diff cannot check: ↑/↓ with focus retained in the search input, Enter
 one sub-panel then closing, ← popping, Tab returning focus to the trigger, type-to-search,
 outside-click, and `role="combobox"` + `aria-activedescendant` on the search input.
 
-Exit also requires the inline-database check from design doc §6.1: open a `MenuList` from
-a database embedded in a note and move the mouse over it. Radix portals render outside
-`DatabaseBlock`'s `stopPropagation` wrapper, which is the only thing keeping BlockNote's
-`TableHandles` from crashing.
+**The inline-database check moves to M1.** It was written as a Phase 0 exit criterion, but
+Phase 0 ships nothing *rendered* — the primitives are not wired into any surface, so there
+is no menu to open from inside an inline database and nothing to move a mouse over. Faking
+it with a throwaway harness would prove less than M1 proves for free.
+
+What Phase 0 *can* do, and has done, is prepare for it: `Popover` takes a `container` prop,
+so when M1 renders the column header menu inside `DatabaseBlock` the fix is a one-line
+change (portal into the wrapper) rather than re-adding ad-hoc listeners. The risk itself is
+unchanged and still real — Radix portals to `document.body` by default, outside the
+`stopPropagation` guard at `DatabaseBlock.tsx:188-199`.
+
+**M1 exit criteria therefore gain:** open the column header menu on a database embedded in
+a note, move the pointer across the menu and the table, and assert no
+`Cannot read properties of undefined (reading 'rows')` in the console.
 
 ### Phase 0b — the four backend endpoints
 

@@ -34,6 +34,16 @@ export interface PopoverProps {
   /** Test hook / a11y label for the surface. */
   label?: string;
   className?: string;
+  /** Portal target. Defaults to document.body.
+   *
+   * THE ESCAPE HATCH FOR INLINE DATABASES. DatabaseBlock.tsx:188-199 stops
+   * mousemove/mouseup at its wrapper because BlockNote's TableHandles walks up
+   * from the hovered element to the first td/th/.tableWrapper, resolves to the
+   * non-table `database` block, and crashes. A portal to document.body renders
+   * OUTSIDE that wrapper, so a menu opened from an inline database is not
+   * covered by the guard. If that reproduces, pass the wrapper here rather than
+   * re-adding ad-hoc listeners. See the design doc §6 risk 1. */
+  container?: HTMLElement | null;
 }
 
 export function Popover({
@@ -48,6 +58,7 @@ export function Popover({
   maxHeight = "min(70vh, 520px)",
   label,
   className = "",
+  container,
 }: PopoverProps) {
   const isNamedWidth = typeof width === "string" && width in WIDTH_CLASS;
   const widthClass = isNamedWidth ? WIDTH_CLASS[width as string] : "";
@@ -60,7 +71,7 @@ export function Popover({
   return (
     <RadixPopover.Root open={open} onOpenChange={onOpenChange}>
       <RadixPopover.Trigger asChild>{trigger}</RadixPopover.Trigger>
-      <RadixPopover.Portal>
+      <RadixPopover.Portal container={container ?? undefined}>
         <RadixPopover.Content
           side={side}
           align={align}
