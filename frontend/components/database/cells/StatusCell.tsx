@@ -3,9 +3,16 @@
 import { useState } from "react";
 import type { StatusValue } from "@/lib/database/types";
 import type { CellProps } from "./CellProps";
-import { pillStyleFor } from "./CellProps";
+import { pillStyleForOption, type ConfiguredOption } from "./CellProps";
 
-export function StatusCell({ value, editable, onChange }: CellProps<StatusValue>) {
+/** `options` is the property's configured option list. Optional so the older
+ * callers that predate the `Edit property` panel (Board/Gallery/List/Feed)
+ * keep working — they simply get the hash palette, as before. */
+export interface StatusCellProps extends CellProps<StatusValue> {
+  options?: ConfiguredOption[];
+}
+
+export function StatusCell({ value, editable, onChange, options }: StatusCellProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value?.status ?? "");
 
@@ -33,7 +40,7 @@ export function StatusCell({ value, editable, onChange }: CellProps<StatusValue>
 
   const content = value?.status ? (
     <span
-      className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${pillStyleFor(value.status)}`}
+      className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full font-medium ${pillStyleForOption(value.status, options)}`}
     >
       <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
       {value.status}

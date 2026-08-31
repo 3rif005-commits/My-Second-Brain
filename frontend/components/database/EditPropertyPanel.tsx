@@ -25,8 +25,10 @@ import {
   NUMBER_FORMATS,
   barColorClass,
   numberFormatLabel,
+  ringStyle,
   type NumberConfig,
 } from "@/lib/database/numberFormat";
+import { pillStyleForOption } from "./cells/CellProps";
 import type { MenuPanel, MenuRow } from "@/components/ui/primitives";
 
 /** The 10 option colors, in Notion's own order. Captured, not recalled. */
@@ -163,6 +165,9 @@ function numberPanel(args: EditPropertyArgs): MenuPanel {
   };
 
   return {
+    // Measured at 299px in the capture; `md` (285px) is the token that fits,
+    // and the point of it is the scope disclaimer sitting on one line.
+    width: "md",
     sections: [
       {
         rows: [formatRow, decimalsRow],
@@ -209,10 +214,9 @@ function ShowAsBlock({
       id: "ring",
       label: "Ring",
       preview: (
-        <span
-          className="block h-4 w-4 rounded-full"
-          style={{ background: "conic-gradient(currentColor 250deg, rgb(0 0 0 / 0.1) 0)" }}
-        />
+        // Same helper the cell uses, so the preview cannot promise a ring the
+        // column then renders as a pie.
+        <span className="block h-4 w-4 rounded-full" style={ringStyle(0.7, config.bar_color)} />
       ),
     },
   ];
@@ -401,8 +405,20 @@ function selectPanel(args: EditPropertyArgs): MenuPanel {
 
   const optionRows: MenuRow[] = sortOptions(options, sort).map((option) => ({
     id: option.id,
-    icon: optionSwatch(option.color),
+    // Notion renders the option row AS the option's own pill — the same pill
+    // the cell shows — rather than as a swatch beside plain text. `label` is
+    // kept as the plain name so search and the accessible name still work.
     label: option.name,
+    labelNode: (
+      <span
+        className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${pillStyleForOption(
+          option.name,
+          options
+        )}`}
+      >
+        {option.name}
+      </span>
+    ),
     submenu: () => optionEditorPanel(option, options, writeOptions),
   }));
 

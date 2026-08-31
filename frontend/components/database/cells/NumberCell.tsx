@@ -5,9 +5,9 @@ import type { NumberValue } from "@/lib/database/types";
 import type { CellProps } from "./CellProps";
 import {
   barColorClass,
-  barColorValue,
   barFraction,
   formatNumber,
+  ringStyle,
   type NumberConfig,
 } from "@/lib/database/numberFormat";
 
@@ -40,9 +40,7 @@ function ShowAs({ value, config }: { value: number | null | undefined; config: N
           role="img"
           aria-label={`${percent} percent`}
           className="h-3.5 w-3.5 shrink-0 rounded-full"
-          style={{
-            background: `conic-gradient(${barColorValue(config.bar_color)} ${fraction * 360}deg, rgb(0 0 0 / 0.1) 0)`,
-          }}
+          style={ringStyle(fraction, config.bar_color)}
         />
         {showNumber && <span className="tabular-nums">{text}</span>}
       </span>

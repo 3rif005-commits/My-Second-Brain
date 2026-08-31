@@ -3,9 +3,16 @@
 import { useState } from "react";
 import type { SelectValue } from "@/lib/database/types";
 import type { CellProps } from "./CellProps";
-import { pillStyleFor } from "./CellProps";
+import { pillStyleForOption, type ConfiguredOption } from "./CellProps";
 
-export function SelectCell({ value, editable, onChange }: CellProps<SelectValue>) {
+/** `options` is the property's configured option list. Optional so the older
+ * callers that predate the `Edit property` panel (Board/Gallery/List/Feed)
+ * keep working — they simply get the hash palette, as before. */
+export interface SelectCellProps extends CellProps<SelectValue> {
+  options?: ConfiguredOption[];
+}
+
+export function SelectCell({ value, editable, onChange, options }: SelectCellProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value?.select ?? "");
 
@@ -32,7 +39,7 @@ export function SelectCell({ value, editable, onChange }: CellProps<SelectValue>
   }
 
   const content = value?.select ? (
-    <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${pillStyleFor(value.select)}`}>
+    <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${pillStyleForOption(value.select, options)}`}>
       {value.select}
     </span>
   ) : (

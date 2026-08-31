@@ -15,6 +15,8 @@
 // enum, not dropped here. Adding one means editing `NumberFormat` in
 // backend/services/db/properties/scalar.py, then this list, then CURRENCY_CODES.
 
+import type { CSSProperties } from "react";
+
 export interface NumberConfig {
   format?: string;
   decimal_places?: number | null;
@@ -231,6 +233,25 @@ const BAR_COLOR_VALUES: Record<string, string> = {
 
 export function barColorValue(color: string | undefined): string {
   return BAR_COLOR_VALUES[color ?? "green"] ?? BAR_COLOR_VALUES.gray;
+}
+
+/** The inline style for a ring.
+ *
+ * A `conic-gradient` alone paints a filled PIE, not a ring — the hole has to be
+ * punched out, and a mask is the only way to do that without knowing the
+ * background behind the cell (an inner circle painted in the panel colour looks
+ * right in the popover and wrong in a table row). Shared by the cell and by the
+ * `Show as` preview card so the two cannot drift apart.
+ *
+ * `WebkitMask` is listed alongside `mask` because Safari still needs it. */
+export function ringStyle(fraction: number, color: string | undefined): CSSProperties {
+  const hole = "calc(100% - 3px)";
+  const mask = `radial-gradient(farthest-side, transparent ${hole}, #000 ${hole})`;
+  return {
+    background: `conic-gradient(${barColorValue(color)} ${fraction * 360}deg, rgb(128 128 128 / 0.25) 0)`,
+    mask,
+    WebkitMask: mask,
+  };
 }
 
 /** Exported for the test that keeps the class and value maps in step. */

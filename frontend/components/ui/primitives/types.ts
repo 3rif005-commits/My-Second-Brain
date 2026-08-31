@@ -13,6 +13,14 @@ export interface MenuRow {
   id: string;
   icon?: ReactNode;
   label: string;
+  /** Rendered in place of the text label. `label` still drives search matching
+   * and the accessible name, so this is presentation only.
+   *
+   * Exists because Notion renders a select option's row as the option's own
+   * COLOURED PILL, not as swatch-plus-text — and the same pill reappears in the
+   * filter value picker and the group panel. Widening `label` to a ReactNode
+   * instead would have broken search, which needs a string. */
+  labelNode?: ReactNode;
   /** Caption line under the label. Live example: "This improves performance
    * for large databases." under the "Show large counts as 99+" toggle. */
   description?: string;
@@ -90,6 +98,14 @@ export interface MenuPanel {
   };
   sections: MenuSection[];
   footer?: ReactNode;
+  /** Overrides the host's default width for THIS panel.
+   *
+   * Widths are per-panel in Notion, not per-menu: the column header menu is
+   * 248px, but the `Edit property` flyout it opens measured 299px — wide
+   * enough for "Changes apply to all views showing this property." to sit on
+   * one line. A flyout that inherited its parent's width would wrap it.
+   * Matches `PopoverWidth`; omitted means the host decides. */
+  width?: "sm" | "md" | "lg";
 }
 
 /** How a submenu is presented.

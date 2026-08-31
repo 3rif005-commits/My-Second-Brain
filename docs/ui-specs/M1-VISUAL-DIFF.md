@@ -136,3 +136,68 @@ The M2 popover's own reference shot is Notion's `10-new-property-type-picker.jpg
 which shows **26 types in a taller panel** with an `AI Autofill` section above the grid.
 Ours shows 17 and no AI section — both deliberate and recorded, so this is not a
 pixel-comparable pair.
+
+---
+
+# M2 completion — `Edit property` (2026-08-31)
+
+Run by me, in Chrome, against the live app and the live Notion fixture side by
+side. Four defects found, all four fixed in the same session. Two of them were
+in files this milestone did not otherwise touch — which is the case for keeping
+this step.
+
+## Defects found and fixed
+
+**1. The `Show as` ring rendered as a filled pie, not a ring.**
+`conic-gradient` alone paints a disc; the hole has to be masked out. Present in
+both the preview card and the cell. Fixed with a shared `ringStyle()` helper in
+`numberFormat.ts` so the preview cannot promise a shape the column then renders
+differently.
+
+**2. The third-level flyout bounced back rightward, hiding the header menu.**
+The chain went: header menu (right edge) -> options panel (flipped LEFT) ->
+option editor (flipped RIGHT again, landing on top of the header menu). Notion's
+chain keeps travelling in one direction and leaves all three panels visible.
+
+Root cause: `MenuList` hardcoded `side="right"` for every flyout, so each level
+re-decided independently. A panel now reads the side Radix actually placed it on
+and passes that to its children.
+
+The first fix for this did not work, and the reason matters: `data-side` was read
+**once on mount**, and Radix stamps a provisional value before floating-ui
+measures. The read caught the pre-flip value. It needs a `MutationObserver`, not
+a one-shot read — a class of bug no unit test would have caught, since jsdom does
+no positioning at all.
+
+**3. `Colors` was a control with no visible effect.**
+`SelectCell`, `MultiSelectCell` and `StatusCell` hashed the label to a fixed
+palette and never looked at `config.options` — so setting an option to Red
+changed nothing anywhere the user could see. Exactly the defect `Number format`
+would have had if `NumberCell` had not been taught to format.
+
+Fixed by matching the cell's value against the configured options **by name** and
+using that option's colour. Deliberately NOT by rebuilding these cells as option
+pickers: they are free-text today, that is `cell-editing.md`'s surface, and it
+would change what gets stored. The hash palette stays as the fallback for values
+that are in no option list.
+
+**4. Option rows were swatch-plus-text; Notion renders the option's own pill.**
+Fixed with `MenuRow.labelNode`, which is presentation-only — `label` still drives
+search and the accessible name.
+
+## Deltas accepted, not fixed
+
+- **Panel width 285px vs Notion's measured 299px.** `md` is the nearest measured
+  token. The visible consequence is that the scope disclaimer wraps to two lines
+  where Notion's sits on one. Not worth inventing a one-off token for; recorded
+  here so it is a decision rather than an oversight.
+- **The option list has no drag handle.** Notion shows `⠿` on hover. Reordering
+  is M11's drag-and-drop work, and a handle that does not drag is worse than no
+  handle.
+
+## Left as an open question
+
+Selecting a colour **closes** our panel, matching every other `MenuList` row.
+Whether Notion keeps its colour list open was not established — the attempt to
+verify it in Notion mis-clicked and closed the menu, and I did not want to assert
+behaviour I had not actually observed. Flagged rather than guessed.

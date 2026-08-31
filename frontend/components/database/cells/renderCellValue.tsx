@@ -33,6 +33,7 @@ import { StatusCell } from "./StatusCell";
 import { DateCell } from "./DateCell";
 import { CheckboxCell } from "./CheckboxCell";
 import { GenericCell } from "./GenericCell";
+import type { ConfiguredOption } from "./CellProps";
 import { TextLikeCell } from "./TextLikeCell";
 import { RelationCell } from "./RelationCell";
 import { FormulaCell } from "./FormulaCell";
@@ -95,7 +96,14 @@ export function renderCellValue(
       );
     case "select":
       return (
-        <SelectCell value={value as SelectValue | undefined} editable={editable} onChange={onChange} />
+        <SelectCell
+          value={value as SelectValue | undefined}
+          editable={editable}
+          onChange={onChange}
+          // Lets a configured option render in ITS OWN colour rather than a
+          // hashed one — the `Colors` list in `Edit property` writes this.
+          options={property.config?.options as ConfiguredOption[] | undefined}
+        />
       );
     case "multi_select":
       return (
@@ -103,11 +111,21 @@ export function renderCellValue(
           value={value as MultiSelectValue | undefined}
           editable={editable}
           onChange={onChange}
+          // Lets a configured option render in ITS OWN colour rather than a
+          // hashed one — the `Colors` list in `Edit property` writes this.
+          options={property.config?.options as ConfiguredOption[] | undefined}
         />
       );
     case "status":
       return (
-        <StatusCell value={value as StatusValue | undefined} editable={editable} onChange={onChange} />
+        <StatusCell
+          value={value as StatusValue | undefined}
+          editable={editable}
+          onChange={onChange}
+          // Lets a configured option render in ITS OWN colour rather than a
+          // hashed one — the `Colors` list in `Edit property` writes this.
+          options={property.config?.options as ConfiguredOption[] | undefined}
+        />
       );
     case "date":
       return <DateCell value={value as DateValue | undefined} editable={editable} onChange={onChange} />;

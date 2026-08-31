@@ -3,9 +3,16 @@
 import { useState } from "react";
 import type { MultiSelectValue } from "@/lib/database/types";
 import type { CellProps } from "./CellProps";
-import { pillStyleFor } from "./CellProps";
+import { pillStyleForOption, type ConfiguredOption } from "./CellProps";
 
-export function MultiSelectCell({ value, editable, onChange }: CellProps<MultiSelectValue>) {
+/** `options` is the property's configured option list. Optional so the older
+ * callers that predate the `Edit property` panel (Board/Gallery/List/Feed)
+ * keep working — they simply get the hash palette, as before. */
+export interface MultiSelectCellProps extends CellProps<MultiSelectValue> {
+  options?: ConfiguredOption[];
+}
+
+export function MultiSelectCell({ value, editable, onChange, options }: MultiSelectCellProps) {
   const items = value?.multi_select ?? [];
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(items.join(", "));
@@ -42,7 +49,7 @@ export function MultiSelectCell({ value, editable, onChange }: CellProps<MultiSe
         {items.map((item) => (
           <span
             key={item}
-            className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${pillStyleFor(item)}`}
+            className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${pillStyleForOption(item, options)}`}
           >
             {item}
           </span>

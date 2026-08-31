@@ -23,7 +23,7 @@
 // navigation on EVERY panel regardless: a 14-row menu that cannot be driven
 // from the keyboard is an accessibility regression against the native <select>
 // elements this work replaces. See docs/ui-specs/table-column-header.md.
-import { useCallback, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Popover } from "./Popover";
 import type { MenuNav, MenuPanel, MenuRow } from "./types";
 
@@ -33,6 +33,14 @@ export interface MenuListProps {
   nav?: MenuNav;
   onClose: () => void;
   label?: string;
+  /** Which side this panel's own flyouts open on.
+   *
+   * Normally left unset: a panel READS the side it was itself placed on (Radix
+   * stamps `data-side` on the popover content) and hands that to its children,
+   * so a chain that has flipped leftward keeps going leftward. Without this,
+   * the third level bounces back rightward over the grandparent menu and hides
+   * it — Notion's keeps travelling in one direction. */
+  side?: "left" | "right";
 }
 
 interface FlatRow {
@@ -45,7 +53,7 @@ function matches(row: MenuRow, query: string): boolean {
   return row.label.toLowerCase().includes(query.toLowerCase());
 }
 
-export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps) {
+export function MenuList({ root, nav = "flyout", onClose, label, side }: MenuListProps) {
   // `push` keeps a stack so the back arrow has somewhere to go. `flyout`
   // never pushes — its submenus are nested Popovers rendered by the row.
   // `stack` holds only the PUSHED panels. The base level always reads the
@@ -65,6 +73,31 @@ export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps
   const baseId = useId();
   const searchRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+
+  // The side Radix actually placed THIS panel on, after its own collision
+  // handling. Read from the DOM because it is only known post-placement — an
+  // explicit `side` prop wins when a host has an opinion. Falls back to
+  // "right", which is where a first-level flyout opens when there is room.
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [placedSide, setPlacedSide] = useState<"left" | "right" | null>(null);
+  useEffect(() => {
+    const host = rootRef.current?.closest("[data-side]");
+    if (!host) return;
+    // MUST be observed, not read once. Radix stamps a provisional `data-side`
+    // on mount and rewrites it after floating-ui measures — a single read on
+    // mount catches the pre-flip value, which is how the third level ended up
+    // bouncing back rightward over the header menu it had already flipped away
+    // from. Only left/right matter here; a first-level flyout sits on "bottom".
+    const read = () => {
+      const attr = host.getAttribute("data-side");
+      if (attr === "left" || attr === "right") setPlacedSide(attr);
+    };
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(host, { attributes: true, attributeFilter: ["data-side"] });
+    return () => observer.disconnect();
+  }, []);
+  const childSide: "left" | "right" = side ?? placedSide ?? "right";
 
   const columns = panel.columns ?? 1;
   const canPop = nav === "push" && stack.length > 0;
@@ -189,7 +222,7 @@ export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps
   const listboxId = `${baseId}-listbox`;
 
   return (
-    <div className="py-1 text-menu text-menu-fg" onKeyDown={onKeyDown} data-testid="menu-list">
+    <div ref={rootRef} className="py-1 text-menu text-menu-fg" onKeyDown={onKeyDown} data-testid="menu-list">
       {(panel.title || canPop) && (
         <div className="flex items-center gap-1 px-2 pb-1">
           {canPop && (
@@ -269,6 +302,7 @@ export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps
                     onActivate={() => activate(row)}
                     onHover={() => flatIndex >= 0 && !row.disabled && setActive(flatIndex)}
                     onClose={onClose}
+                    side={childSide}
                   />
                 );
               })}
@@ -299,9 +333,12 @@ interface RowProps {
   onActivate: () => void;
   onHover: () => void;
   onClose: () => void;
+  /** Which side this row's flyout opens on — inherited from the panel so a
+   * chain that flipped leftward keeps going leftward. */
+  side: "left" | "right";
 }
 
-function Row({ row, id, isActive, nav, onActivate, onHover, onClose }: RowProps) {
+function Row({ row, id, isActive, nav, onActivate, onHover, onClose, side }: RowProps) {
   const body = (
     <div
       id={id}
@@ -326,7 +363,7 @@ function Row({ row, id, isActive, nav, onActivate, onHover, onClose }: RowProps)
       <span className="flex w-menu-icon shrink-0 items-center justify-center">{row.icon}</span>
       <span className="flex min-w-0 flex-col py-1">
         <span className="flex items-center gap-1.5">
-          <span className="truncate">{row.label}</span>
+          <span className="truncate">{row.labelNode ?? row.label}</span>
           {row.badge && (
             <span className="shrink-0 rounded bg-menu-badge px-1 text-[11px]">{row.badge}</span>
           )}
@@ -356,16 +393,24 @@ function Row({ row, id, isActive, nav, onActivate, onHover, onClose }: RowProps)
   // gets its own collision handling — which is what makes a third level able
   // to flip leftward independently of its parent.
   if (row.submenu && nav === "flyout" && !row.disabled) {
+    // Built once and reused, rather than called twice — `submenu()` is a pure
+    // builder, but reading `width` off a second invocation would silently
+    // double the work on every render of every row that has one.
+    const submenu = row.submenu();
     return (
       <Popover
         trigger={body}
-        side="right"
+        side={side}
         align="start"
         sideOffset={2}
-        width="sm"
+        width={submenu.width ?? "sm"}
         label={row.label}
       >
-        <MenuList root={row.submenu()} nav="flyout" onClose={onClose} label={row.label} />
+        {/* The child is NOT given `side` — it reads the side Radix actually
+          * placed it on. Forcing the parent's side down would keep telling a
+          * panel that itself had to flip back the other way to go on opening
+          * its own children in the impossible direction. */}
+        <MenuList root={submenu} nav="flyout" onClose={onClose} label={row.label} />
       </Popover>
     );
   }
