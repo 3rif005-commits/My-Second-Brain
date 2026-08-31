@@ -270,35 +270,53 @@ Table view and are scheduled, not forgotten.
 
 ## 5. Design tokens
 
-Derived from the screenshots (`docs/ui-specs/screenshots/`), defined once in
-`app/globals.css` and surfaced through `tailwind.config.ts`. Today `globals.css` defines
-**five** CSS variables and the Tailwind config adds only `brand` and Inter — there is
-effectively no token set for a popover to inherit, which is why every existing panel
-hard-codes its own greys and radii.
+**Measured from live Notion on 2026-08-31 via `getComputedStyle`, not eyeballed from
+screenshots.** Method: open the column header menu in the fixture database, walk up from
+an inner node to the styled container, and read computed values for the container, an
+enabled row (`Hide`), a disabled row (`Freeze`), the divider and a hovered row — then
+repeat with the theme toggled. This is why the values are odd numbers rather than round
+ones.
 
-| Token | Purpose | Light | Dark |
-|---|---|---|---|
-| `--menu-width-sm` / `-md` / `-lg` | Notion uses a small set of fixed menu widths | TBD | — |
-| `--menu-max-height` | Before the list scrolls | TBD | — |
-| `--menu-radius` | Popover corner radius | TBD | — |
-| `--menu-shadow` | Popover elevation | TBD | TBD |
-| `--menu-border` | Popover border | TBD | TBD |
-| `--menu-bg` | Popover background | TBD | TBD |
-| `--menu-row-height` | One icon+label row | TBD | — |
-| `--menu-row-padding-x` | Row horizontal padding | TBD | — |
-| `--menu-row-hover-bg` | Row hover fill | TBD | TBD |
-| `--menu-icon-size` | Leading icon box | TBD | — |
-| `--menu-section-gap` | Space around a section divider | TBD | — |
-| `--menu-label-size` | Row label type | TBD | — |
-| `--menu-hint-size` | Right-side hint/value type | TBD | — |
-| `--menu-section-size` | Section header type | TBD | — |
-| `--menu-disabled-opacity` | Disabled row treatment | TBD | — |
-| `--popover-offset` | Gap between trigger and popover | TBD | — |
+Defined as CSS variables in `app/globals.css` (so the theme swap happens in one place) and
+surfaced to Tailwind in `tailwind.config.ts`.
 
-**No value is filled in from memory.** A token with no screenshot behind it stays `TBD`
-and blocks the milestone that needs it.
+| Token | Light | Dark |
+|---|---|---|
+| `--menu-bg` | `#ffffff` | `rgb(37, 37, 37)` |
+| `--menu-radius` | `10px` | same |
+| `--menu-shadow` | `rgba(25,25,25,.05) 0 20px 24px 0`, `rgba(25,25,25,.027) 0 5px 8px 0`, `rgba(42,28,0,.07) 0 0 0 1px` | `rgb(56,56,54) 0 0 0 1px`, `rgba(25,25,25,.2) 0 14px 28px -6px`, `rgba(25,25,25,.118) 0 2px 4px -1px` |
+| `--menu-divider` | `rgba(42,28,0,.07)` | `rgba(255,255,243,.082)` |
+| `--menu-row-height` | `28px` | same |
+| `--menu-row-padding-x` | `8px` | same |
+| `--menu-row-hover-bg` | `rgba(33,27,23,.051)` | `rgba(255,255,255,.055)` |
+| `--menu-fg` | `rgb(44,44,43)` | `rgb(240,239,237)` |
+| `--menu-fg-disabled` | `rgb(188,186,182)` | `rgb(95,94,89)` |
+| `--menu-label-size` | `14px` | same |
+| `--menu-icon-box` | `20px` (glyph ≈15.3px wide) | same |
+| `--menu-field-bg` | `rgba(66,35,3,.03)` | `rgba(252,252,252,.03)` |
+| `--menu-badge-bg` | `rgba(0,124,215,.094)` | `rgba(67,155,255,.24)` |
+| `--menu-width-sm` | `248px` — column header menu, row menu | |
+| `--menu-width-md` | `285px` — filter quick-picker | |
+| `--menu-width-lg` | `378px` — property type picker | |
+| `--config-sidebar-width` | `483px` — view settings / property config | |
 
----
+### Two things that are NOT a colour swap
+
+1. **The shadow geometry changes with the theme.** Light is `0 20px 24px 0` + `0 5px 8px 0`;
+   dark is `0 14px 28px -6px` + `0 2px 4px -1px`. Do not write one shadow and recolour it.
+2. **Neither theme uses a real border.** The 1px edge is a spread layer *inside* the
+   box-shadow — at 7% alpha in light, and an **opaque** `rgb(56,56,54)` ring in dark.
+   `border: 0` in both.
+
+### Notes
+
+- Rows have `border-radius: 0` and no background at rest; the hover fill is applied to the
+  full-width row, inset by the panel's own padding.
+- The disabled colour is a real token, used by `Freeze` and by illegal conversions in
+  `Change type` — it is not `opacity`.
+- The palette is warm, not neutral grey: light-mode alphas are built on a brown-black
+  (`rgba(33,27,23,…)`, `rgba(42,28,0,…)`), and the dark divider is warm white
+  (`rgba(255,255,243,…)`). Using pure greys will read subtly wrong.
 
 ## 6. Risks
 

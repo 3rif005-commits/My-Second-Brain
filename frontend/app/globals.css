@@ -19,6 +19,67 @@
   --foreground: #f9fafb;
 }
 
+/* ---------------------------------------------------------------------------
+ * Database UI primitives — design tokens
+ *
+ * MEASURED from live Notion via getComputedStyle on 2026-08-31, not eyeballed
+ * from screenshots. Provenance and the measuring method are recorded in
+ * docs/superpowers/specs/2026-08-28-notion-databases-ui-parity-design.md §5.
+ *
+ * Two things here are NOT simple light/dark colour swaps, and must not be
+ * "simplified" into one:
+ *   1. --menu-shadow has different OFFSETS AND BLUR per theme, not just colour.
+ *   2. In light the 1px edge is the shadow's third layer at 7% alpha; in dark
+ *      it is an OPAQUE rgb(56,56,54) ring. Neither theme uses a real border.
+ * ------------------------------------------------------------------------- */
+:root {
+  /* surface */
+  --menu-bg: #ffffff;
+  --menu-radius: 10px;
+  --menu-shadow:
+    rgba(25, 25, 25, 0.05) 0 20px 24px 0,
+    rgba(25, 25, 25, 0.027) 0 5px 8px 0,
+    rgba(42, 28, 0, 0.07) 0 0 0 1px;
+  --menu-divider: rgba(42, 28, 0, 0.07);
+
+  /* rows */
+  --menu-row-height: 28px;
+  --menu-row-padding-x: 8px;
+  --menu-row-hover-bg: rgba(33, 27, 23, 0.051);
+  --menu-fg: rgb(44, 44, 43);
+  --menu-fg-disabled: rgb(188, 186, 182);
+
+  /* type + icon */
+  --menu-label-size: 14px;
+  --menu-icon-box: 20px;
+
+  /* embedded controls */
+  --menu-field-bg: rgba(66, 35, 3, 0.03);
+  --menu-badge-bg: rgba(0, 124, 215, 0.094);
+
+  /* widths — each observed on a real surface, see the design doc §5 */
+  --menu-width-sm: 248px;   /* column header menu, row menu */
+  --menu-width-md: 285px;   /* filter quick-picker */
+  --menu-width-lg: 378px;   /* property type picker */
+  --config-sidebar-width: 483px; /* view settings / property config sidebar */
+}
+
+.dark {
+  --menu-bg: rgb(37, 37, 37);
+  --menu-shadow:
+    rgb(56, 56, 54) 0 0 0 1px,
+    rgba(25, 25, 25, 0.2) 0 14px 28px -6px,
+    rgba(25, 25, 25, 0.118) 0 2px 4px -1px;
+  --menu-divider: rgba(255, 255, 243, 0.082);
+
+  --menu-row-hover-bg: rgba(255, 255, 255, 0.055);
+  --menu-fg: rgb(240, 239, 237);
+  --menu-fg-disabled: rgb(95, 94, 89);
+
+  --menu-field-bg: rgba(252, 252, 252, 0.03);
+  --menu-badge-bg: rgba(67, 155, 255, 0.24);
+}
+
 /* @mention inline links */
 .mention-link {
   color: #6366f1;

@@ -23,6 +23,33 @@ const config: Config = {
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
       },
+      // Database-UI primitives. Values live as CSS vars in globals.css so the
+      // light/dark swap happens in one place; these just surface them to
+      // Tailwind. Measured from live Notion — see the design doc §5.
+      colors: {
+        menu: {
+          bg: "var(--menu-bg)",
+          fg: "var(--menu-fg)",
+          disabled: "var(--menu-fg-disabled)",
+          divider: "var(--menu-divider)",
+          hover: "var(--menu-row-hover-bg)",
+          field: "var(--menu-field-bg)",
+          badge: "var(--menu-badge-bg)",
+        },
+      },
+      borderRadius: { menu: "var(--menu-radius)" },
+      boxShadow: { menu: "var(--menu-shadow)" },
+      spacing: {
+        "menu-row": "var(--menu-row-height)",
+        "menu-icon": "var(--menu-icon-box)",
+      },
+      width: {
+        "menu-sm": "var(--menu-width-sm)",
+        "menu-md": "var(--menu-width-md)",
+        "menu-lg": "var(--menu-width-lg)",
+        "config-sidebar": "var(--config-sidebar-width)",
+      },
+      fontSize: { menu: "var(--menu-label-size)" },
     },
   },
   plugins: [],
