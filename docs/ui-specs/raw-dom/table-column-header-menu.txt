@@ -244,3 +244,60 @@ typing
   every MenuList panel, search or not. This is a deliberate, documented deviation
   from Notion — one of the few places where matching it exactly would make our
   product worse.
+
+================================================================
+THE TITLE COLUMN'S MENU (shot 07) + the "Sort" sub-panel (shot 04)
+SCREENSHOTS: screenshots/07-header-menu-title.jpg
+             screenshots/04-header-sort-flyout.jpg
+CAPTURED: 2026-08-31, light mode, on the "Name" (title) property
+================================================================
+
+--- TITLE COLUMN, verbatim, in DOM order ---
+[Aa] [ Name  (editable input) ] [ⓘ]
+😊  Show page icon           [toggle ON]     ← UNIQUE TO THE TITLE COLUMN
+✴   AI Autofill  [Now with agents]    >
+  ── divider ──
+≡   Filter
+⇅   Sort                              >
+⊞   Group
+Σ   Calculate                         >
+📌  Freeze
+→|  Unwrap content
+  ── divider ──
+|←  Insert left
+→|  Insert right
+--- end ---
+
+ELEVEN rows, against FOURTEEN on a Text column.
+
+ABSENT on the title column (all four as predicted):
+  - Change type        a title property cannot change type
+  - Hide               the title column cannot be hidden
+  - Duplicate property
+  - Delete property    the title property cannot be deleted
+
+PRESENT only on the title column:
+  - **Show page icon** — a TOGGLE, on by default. Controls the 📄 icon in each
+    row's title cell.
+    NOTE: the SAME setting also exists at view level in Settings → Layout
+    ("Show page icon"). Two entry points to one view-config value, exactly like
+    Filter/Sort/Group. Our spec must keep them in sync — flipping one must
+    update the other.
+
+IMPLICATION FOR OUR BUILD
+  The header menu's row set is a FUNCTION OF PROPERTY TYPE, not a constant.
+  Minimum three shapes to model: title, ordinary, and computed (formula/rollup —
+  still uncaptured). Do not build one static array and hide rows; derive the row
+  list from the property.
+
+--- SUB-PANEL: "Sort" (flyout, opens right) ---
+Sort A → Z
+Sort Z → A
+--- end ---
+
+  Two rows only. **The labels are TYPE-AWARE**: "A → Z" for a text/title
+  property. A Number column presumably reads "1 → 9", a Date "Earliest →
+  Latest". NOT captured for other types — TBD, but the spec must render the
+  label from the property type rather than a generic "Ascending/Descending".
+  Our backend's SortSpec is `{property, direction: "asc"|"desc"}` — the wire
+  format is direction-based and needs no change; this is purely a label concern.

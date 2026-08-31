@@ -64,7 +64,7 @@ Fourteen rows, in three divider-separated groups, in this exact order.
 | 2 | sparkle | **AI Autofill** | badge `Now with agents` | ✅ flyout | `TBD` — not captured. Out of scope for us (no equivalent), spec as omitted |
 | — | | *divider* | | | |
 | 3 | filter | **Filter** | — | ❌ | Adds a filter on this property and opens the filter surface. Exact behaviour `TBD` |
-| 4 | sort | **Sort** | — | ✅ flyout | `TBD` — not captured. Expected asc/desc |
+| 4 | sort | **Sort** | — | ✅ flyout | Two rows: **Sort A → Z** / **Sort Z → A**. Labels are **type-aware** — render from the property type, not a generic asc/desc |
 | 5 | group | **Group** | — | ❌ | Groups the view by this property immediately |
 | 6 | sigma | **Calculate** | — | ✅ flyout | Sets this column's calculation. See Sub-panels §B |
 | 7 | pin | **Freeze** | — | ❌ | Freezes columns up to and including this one |
@@ -84,6 +84,18 @@ Fourteen rows, in three divider-separated groups, in this exact order.
 None of it. For comparison, the closest existing thing is
 `ButtonPropertyConfigPopover.tsx`, which is a single anchored popover on button-typed
 columns only.
+
+### The row set is a function of property type
+
+Not a constant with rows hidden. At least three shapes to model:
+
+| Property | Rows |
+|---|---|
+| **Title** | 11 — no Change type / Hide / Duplicate / Delete; adds a `Show page icon` toggle |
+| **Ordinary** (Text, Number, Select, …) | 14, as tabled above |
+| **Computed** (Formula, Rollup) | `TBD` — checklist shot 08 |
+
+Derive the list from the property. Do not ship one static array.
 
 ### Rows this surface implies we cannot yet build
 
@@ -206,7 +218,7 @@ would make our product worse, so we match its *shape* and not its *keyboard*.
 
 | State | Behaviour |
 |---|---|
-| Title column | The menu **differs** — fewer rows. `TBD`, checklist shot 07. A title property cannot be deleted or type-changed |
+| Title column | **Captured.** Eleven rows, not fourteen. `Change type`, `Hide`, `Duplicate property` and `Delete property` are all **absent**; a `Show page icon` **toggle** is present instead (also settable at view level in Layout — the two must stay in sync). See shot 07 |
 | Formula column | `TBD`, checklist shot 08 |
 | Button column | Ours currently shows `ButtonPropertyConfigPopover`. Must be folded into this menu, not left as a parallel surface |
 | Empty database (0 rows) | Menu renders identically — captured in exactly this state |
