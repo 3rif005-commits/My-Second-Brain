@@ -37,9 +37,9 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 | 11 | `calculations-row.md` | **written** (footer hover, Percent, other types TBD) | `calculations.txt` | 70, 70b, 70c, 71, 72 |
 | 12 | `new-row-button.md` | **written** (templates-present state TBD) | `new-button-and-context-menus.txt` | 74 |
 | 13 | ~~`context-menus.md`~~ | **REMOVED** — no distinct context menus exist; folded into §1 and §9 as extra triggers | `new-button-and-context-menus.txt` | 77, 78 |
-| 14 | `table-drag-resize.md` | not-started | — | — |
-| 15 | `cell-editing.md` | not-started | — | — |
-| 16 | `states.md` | dom-captured (partial) | `empty-database-toolbar.txt` | — |
+| 14 | `table-drag-resize.md` | **written** (reorder drags TBD) | `resize-and-states.txt` | 79, 80 |
+| 15 | `cell-editing.md` | **written** (Select + Date only; other types TBD) | `cell-editing.txt` | 85a-d, 88 |
+| 16 | `states.md` | **written** (loading/error/empty-group TBD) | `resize-and-states.txt`, `empty-database-toolbar.txt` | 94 |
 
 ---
 
@@ -69,6 +69,27 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 - `npx tsc --noEmit` — **clean** (exit 0), 2026-08-29.
 - `npm run test` — **clean** (exit 0): 41 files, 575 tests passed, 83s. 2026-08-29.
+
+## Remaining TBDs, ranked
+
+Everything below is marked `TBD` inside a written spec. None blocks starting Phase 0.
+
+**Blocks a specific milestone if not closed first**
+1. §15 — cell editors for Text, Number, Status (grouped options), Multi-select, Person,
+   Files, URL, Checkbox. Only Select and Date are captured. **Blocks M11.**
+2. §4 — filter operator lists for Date, Select, Checkbox, Number, Person, Relation, and
+   the per-type value editors. Only text/title's 8 operators are captured. **Blocks M4.**
+3. §14 — the column-drag and row-drag drop indicators. **Blocks part of M11.**
+
+**Wanted but not blocking**
+4. §11 — the footer's hover "Calculate" affordance; the `Percent` branch; Checkbox/Date
+   branches.
+5. §16 — the loading state, the error state, a visible empty group.
+6. §10 — centre peek (`pm=c`); whether prev/next row navigation exists at all.
+7. §2 — the Select/Status option editors, Date format, Formula, Rollup config panels.
+8. §8 — whether the inline `/database` slash command opens the same data-source picker.
+9. Keyboard behaviour on every surface except the column header menu.
+10. Several **observed-but-unexplained** disabled states — collected in `states.md`.
 
 ## Fixture state (in the user's Notion, database "New database")
 
