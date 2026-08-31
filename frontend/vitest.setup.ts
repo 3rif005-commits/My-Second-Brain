@@ -15,3 +15,51 @@ import { cleanup } from "@testing-library/react";
 afterEach(() => {
   cleanup();
 });
+
+// ---------------------------------------------------------------------------
+// jsdom shims for Radix (added with the database-UI primitive layer).
+//
+// Radix's popper/dismissable-layer code calls browser APIs jsdom does not
+// implement. Without these, every Popover/Dialog test throws before it can
+// assert anything. Guarded so a real browser env (Playwright) is untouched.
+// ---------------------------------------------------------------------------
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
+
+if (typeof globalThis.DOMRect === "undefined") {
+  globalThis.DOMRect = class {
+    constructor(
+      public x = 0,
+      public y = 0,
+      public width = 0,
+      public height = 0
+    ) {}
+    top = 0;
+    left = 0;
+    right = 0;
+    bottom = 0;
+    toJSON() {
+      return this;
+    }
+    static fromRect(r?: DOMRectInit) {
+      return new (globalThis.DOMRect as never)(r?.x, r?.y, r?.width, r?.height);
+    }
+  } as unknown as typeof DOMRect;
+}
+
+for (const method of ["hasPointerCapture", "setPointerCapture", "releasePointerCapture"] as const) {
+  if (!(method in Element.prototype)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (Element.prototype as any)[method] = () => false;
+  }
+}
+
+if (!("scrollIntoView" in Element.prototype)) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (Element.prototype as any).scrollIntoView = () => {};
+}

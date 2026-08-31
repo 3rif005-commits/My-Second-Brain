@@ -167,6 +167,15 @@ export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps
     }
   }
 
+  // "No results" keys off the SEARCHABLE sections only. A section exempt from
+  // search (Notion's "AI Autofill" stays put while "Select type" filters) is
+  // still on screen, so reporting "no results" because only it survived would
+  // be a lie — but reporting nothing when the searched section is empty is
+  // worse. So: query present, and every searchable section came back empty.
+  const noSearchResults =
+    query.trim().length > 0 &&
+    sections.filter((sec) => sec.searchable !== false).every((sec) => sec.rows.length === 0);
+
   const activeId = flat[active] ? `${baseId}-row-${flat[active].index}` : undefined;
   const listboxId = `${baseId}-listbox`;
 
@@ -254,7 +263,7 @@ export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps
             </div>
           </div>
         ))}
-        {flat.length === 0 && (
+        {noSearchResults && (
           <div className="px-2 py-2 text-menu-disabled">No results</div>
         )}
       </div>
