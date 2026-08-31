@@ -10,6 +10,20 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 ---
 
+## Phase 0 — COMPLETE (2026-08-31)
+
+| Item | State |
+|---|---|
+| `@radix-ui/react-popover`, `-dialog`, `-tooltip` | installed |
+| Design tokens | **measured** from live Notion via `getComputedStyle`, in `globals.css` + `tailwind.config.ts` |
+| `Popover`, `MenuList`, `SidePeek`, `HoverAffordance`, `IconPicker`, `DragHandle` | written, `components/ui/primitives/` |
+| Keyboard + dismissal tests | 24 tests, 4 files |
+| Full suite | **45 files / 599 tests green** (baseline was 41 / 575) |
+| `npx tsc --noEmit` | clean |
+| Inline-database crash check | **moved to M1** — Phase 0 renders nothing, so there is nothing to run it against. `Popover` gained a `container` prop so the fix is one line when M1 needs it |
+
+Phase 0 ships nothing user-visible. That is the intended outcome.
+
 ## Session artifacts
 
 | Artifact | Status |
