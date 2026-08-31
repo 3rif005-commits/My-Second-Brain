@@ -191,3 +191,16 @@ THE GROUPED TABLE
     column headers did show counts ("Not started 1"). Either table groups omit
     the count or it is hover-revealed. OBSERVED, NOT EXPLAINED — capture again
     with more rows before the spec claims either.
+
+--- SUB-PANEL: Group → "Sort" (group ORDERING, not row sorting) ---
+SCREENSHOT: 37b-group-sort-options.jpg
+Opens as a popover overlaying the panel, anchored to its row.
+Manual              ✓
+Alphabetical
+Reverse alphabetical
+--- end ---
+  Three options only. "Manual" is the default and is what makes the per-group
+  drag handles meaningful. Not to be confused with the view's row Sort.
+  Our GroupBySpec has no equivalent field — this is new view.config state
+  (e.g. `group_by.group_order: "manual"|"alphabetical"|"reverse_alphabetical"`
+  plus an explicit order array for manual). JSONB pass-through, no backend change.
