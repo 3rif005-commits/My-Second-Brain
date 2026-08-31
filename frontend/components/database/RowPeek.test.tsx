@@ -134,13 +134,20 @@ describe("RowPeek", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("clicking the backdrop calls onClose, clicking inside the panel does not", async () => {
+  it("center mode: clicking the backdrop calls onClose, clicking inside the panel does not", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ id: "row-1", content: [] })));
     const onClose = vi.fn();
     const user = userEvent.setup();
 
     render(
-      <RowPeek row={ROW} properties={PROPERTIES} editable={true} onCellChange={vi.fn()} onClose={onClose} />
+      <RowPeek
+        row={ROW}
+        properties={PROPERTIES}
+        editable={true}
+        onCellChange={vi.fn()}
+        onClose={onClose}
+        mode="center"
+      />
     );
 
     await user.click(screen.getByText("Kind"));
@@ -148,6 +155,22 @@ describe("RowPeek", () => {
 
     await user.click(screen.getByRole("dialog"));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // view-options-panel.md §C: "side" (the default) is Notion's own default
+  // and its own copy for it is "Keeps the view behind interactive" — direct
+  // textual confirmation this mode must be non-modal. There is no backdrop
+  // to click here, unlike "center" above.
+  it("side mode (the default) is non-modal: no backdrop, aria-modal absent", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ id: "row-1", content: [] })));
+
+    render(
+      <RowPeek row={ROW} properties={PROPERTIES} editable={true} onCellChange={vi.fn()} onClose={vi.fn()} />
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).not.toHaveAttribute("aria-modal");
+    expect(dialog.className).not.toContain("bg-black");
   });
 
   it("saving the body PATCHes /api/notes/{id} with the new blocks", async () => {

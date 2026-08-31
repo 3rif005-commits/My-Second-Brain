@@ -57,9 +57,17 @@ export interface RowPeekProps {
   editable: boolean;
   onCellChange: (rowId: string, propertyKey: string, value: PropertyValue | null) => void;
   onClose: () => void;
+  /** M3's "Open pages in" (view-options-panel.md §C) — the view-wide default
+   * this row was opened under. "side" is Notion's own default and its own
+   * copy for it ("Keeps the view behind interactive") is a direct textual
+   * confirmation this must be NON-modal — no backdrop, table stays clickable
+   * — which this component got wrong before now (a `bg-black/30` backdrop
+   * blocked the whole viewport regardless of mode). "center" keeps that
+   * backdrop and centers instead of docking right. */
+  mode?: "side" | "center";
 }
 
-export function RowPeek({ row, properties, editable, onCellChange, onClose }: RowPeekProps) {
+export function RowPeek({ row, properties, editable, onCellChange, onClose, mode = "side" }: RowPeekProps) {
   const router = useRouter();
   const [content, setContent] = useState<AnyBlock[] | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
@@ -129,17 +137,37 @@ export function RowPeek({ row, properties, editable, onCellChange, onClose }: Ro
 
   if (typeof document === "undefined") return null;
 
+  const isCenter = mode === "center";
+
   return createPortal(
     <div
-      className="fixed inset-0 bg-black/30 flex justify-end z-[9999]"
+      className={
+        isCenter
+          ? "fixed inset-0 z-[9999] flex items-center justify-center bg-black/30"
+          // Non-modal: no backdrop, and the wrapper itself does not intercept
+          // clicks — only the panel does — so the table stays interactive
+          // underneath, matching Notion's own "Keeps the view behind
+          // interactive" copy for this mode.
+          : "fixed inset-0 z-[9999] flex justify-end pointer-events-none"
+      }
       role="dialog"
-      aria-modal="true"
+      aria-modal={isCenter || undefined}
       aria-label="Row details"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      onClick={
+        isCenter
+          ? (e) => {
+              if (e.target === e.currentTarget) onClose();
+            }
+          : undefined
+      }
     >
-      <div className="h-full w-full max-w-2xl bg-white dark:bg-gray-900 shadow-xl overflow-y-auto">
+      <div
+        className={
+          isCenter
+            ? "max-h-[85vh] w-[min(90vw,880px)] rounded-lg bg-white dark:bg-gray-900 shadow-xl overflow-y-auto"
+            : "pointer-events-auto h-full w-full max-w-2xl bg-white dark:bg-gray-900 shadow-xl overflow-y-auto"
+        }
+      >
         <div className="sticky top-0 flex items-center justify-between gap-2 px-6 py-3 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
           <div className="flex items-center gap-3 text-xs">
             <button

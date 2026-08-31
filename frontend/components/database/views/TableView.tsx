@@ -43,7 +43,16 @@ import type {
   SubtaskDisplayMode,
   ViewResponse,
 } from "@/lib/database/types";
+import { FileText } from "lucide-react";
 import { renderCellValue } from "../cells/renderCellValue";
+import {
+  getHiddenKeys,
+  getOpenPagesInMode,
+  getShowPageIcon,
+  getShowVerticalLines,
+  orderProperties,
+} from "@/lib/database/viewConfig";
+import { useOpenNote } from "@/lib/database/useOpenNote";
 import { buildSubItemTree } from "@/lib/database/subItemTree";
 import { ButtonPropertyConfigPopover } from "../ButtonPropertyConfigPopover";
 import { OpenNoteButton } from "../OpenNoteButton";
@@ -158,12 +167,29 @@ export function TableView({
   onSetSorts,
 }: TableViewProps) {
   const { showToast } = useToast();
+  const openNote = useOpenNote();
 
   // Controller addition: clicking a row's Open-note icon opens a RowPeek
   // (side panel, properties + body over the table) instead of navigating
   // straight to Workspace — see RowPeek.tsx / OpenNoteButton.tsx's own
   // `onOpen` prop. `null` = no peek open.
   const [peekRowId, setPeekRowId] = useState<string | null>(null);
+  const config = view?.config ?? {};
+  // M3's Layout panel default ("Open pages in") — "full" bypasses RowPeek
+  // entirely and reuses the exact navigation List/Feed/Board/Gallery already
+  // use (useOpenNote), rather than growing RowPeek a mode it would never
+  // render itself.
+  const openPagesInMode = getOpenPagesInMode(config);
+  function openRow(noteId: string) {
+    if (openPagesInMode === "full") openNote(noteId);
+    else setPeekRowId(noteId);
+  }
+  // Two entry points write this same key — the title column's own header
+  // menu (M1's "Show page icon") and M3's Layout panel — this is the read
+  // half neither had before now.
+  const showPageIcon = getShowPageIcon(config);
+  const showVerticalLines = getShowVerticalLines(config);
+  const cellBorderClass = showVerticalLines ? "border-r border-gray-100 dark:border-gray-800" : "";
   const [rowSubmitting, setRowSubmitting] = useState(false);
   // Milestone 12 (task-40): the "+ New" split-button's dropdown open state,
   // and a separate submitting flag so picking a template disables/re-enables
@@ -177,10 +203,22 @@ export function TableView({
   // every row starts expanded (empty set), matching Notion's own default.
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
-  const orderedProperties = useMemo(
-    () => [...properties].sort((a, b) => a.position - b.position),
-    [properties]
-  );
+  // Wired to the SAME view.config keys the column header menu's "Hide" row
+  // and Insert-left/right already write (M1) and M3's Property visibility
+  // panel now writes — this was the missing read half: those controls set
+  // `hidden_properties`/`property_order` and nothing here consulted either,
+  // so a hidden column stayed rendered and a reorder had no visible effect.
+  // The title property is EXEMPT from hiding: it is the only place
+  // OpenNoteButton/the sub-item tree's expand toggle render, and Notion's
+  // own capture shows an eye icon on "Name" without confirming it is
+  // enabled — kept visible here rather than guessed away.
+  const orderedProperties = useMemo(() => {
+    const ordered = orderProperties(properties, config);
+    const hidden = new Set(getHiddenKeys(config));
+    if (hidden.size === 0) return ordered;
+    return ordered.filter((p) => p.type === "title" || !hidden.has(p.key));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [properties, config.property_order, config.hidden_properties]);
 
   const titleProperty = useMemo(() => orderedProperties.find((p) => p.type === "title"), [orderedProperties]);
   // The one sub-item relation pair on this data source, if enabled
@@ -413,7 +451,7 @@ export function TableView({
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
-                  className="text-left font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap"
+                  className={`text-left font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap ${cellBorderClass}`}
                 >
                   {flexRender(header.column.columnDef.header, header.getContext())}
                 </th>
@@ -458,7 +496,7 @@ export function TableView({
                     className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                   >
                     {tableRow.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-3 py-1.5 align-middle max-w-xs">
+                      <td key={cell.id} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
                         {cell.column.id === titleProperty?.key ? (
                           <div className="flex items-center gap-1" style={{ paddingLeft: depth * 16 }}>
                             {hasChildren ? (
@@ -473,13 +511,16 @@ export function TableView({
                             ) : (
                               <span className="w-3 shrink-0" />
                             )}
+                            {showPageIcon && (
+                              <FileText size={12} className="shrink-0 text-gray-300 dark:text-gray-600" aria-hidden />
+                            )}
                             <div className="flex-1 min-w-0">
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </div>
                             <OpenNoteButton
                               noteId={entryRow.id}
                               className="shrink-0 opacity-0 group-hover:opacity-100"
-                              onOpen={setPeekRowId}
+                              onOpen={openRow}
                             />
                           </div>
                         ) : (
@@ -509,9 +550,12 @@ export function TableView({
                     className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-3 py-1.5 align-middle max-w-xs">
+                      <td key={cell.id} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
                         {cell.column.id === titleProperty?.key ? (
                           <div className="flex items-center gap-1">
+                            {showPageIcon && (
+                              <FileText size={12} className="shrink-0 text-gray-300 dark:text-gray-600" aria-hidden />
+                            )}
                             <div className="flex-1 min-w-0">
                               {parentTitle && (
                                 <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
@@ -523,7 +567,7 @@ export function TableView({
                             <OpenNoteButton
                               noteId={row.original.id}
                               className="shrink-0 opacity-0 group-hover:opacity-100"
-                              onOpen={setPeekRowId}
+                              onOpen={openRow}
                             />
                           </div>
                         ) : (
@@ -598,6 +642,7 @@ export function TableView({
         editable={editable}
         onCellChange={onCellChange}
         onClose={() => setPeekRowId(null)}
+        mode={openPagesInMode === "center" ? "center" : "side"}
       />
     )}
     </>

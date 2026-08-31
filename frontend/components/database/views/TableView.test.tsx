@@ -115,6 +115,101 @@ describe("TableView", () => {
     expect(headers).toEqual(["Title", "Notes", "Count", "Kind", "Topics", "Mastery", "Due", "Done", "URL"]);
   });
 
+  describe("M3: view.config is the read half of column visibility/order/wrap/vertical-lines/page-icon", () => {
+    // M1's column header menu ("Hide", Insert left/right) and M3's Property
+    // visibility panel both WRITE hidden_properties/property_order — this
+    // suite is the read half neither had before now (M1-VISUAL-DIFF.md's
+    // "a control that writes a setting nothing reads" defect class, one
+    // surface over).
+    function view(config: Record<string, unknown>) {
+      return {
+        id: "view-1",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Table",
+        icon: null,
+        type: "table",
+        config,
+        filter: null,
+        sorts: [],
+        is_locked: false,
+        position: 0,
+      };
+    }
+
+    it("hides a column listed in config.hidden_properties, but never the title column", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={false}
+          onCellChange={vi.fn()}
+          view={view({ hidden_properties: ["notes", "title"] })}
+        />
+      );
+      const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+      expect(headers).not.toContain("Notes");
+      expect(headers).toContain("Title");
+    });
+
+    it("orders columns from config.property_order over schema position", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={false}
+          onCellChange={vi.fn()}
+          view={view({ property_order: ["title", "count", "notes"] })}
+        />
+      );
+      const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
+      // Only the three named properties' relative order is asserted — the
+      // rest fall back to position order after them, per orderProperties.
+      expect(headers.indexOf("Title")).toBeLessThan(headers.indexOf("Count"));
+      expect(headers.indexOf("Count")).toBeLessThan(headers.indexOf("Notes"));
+    });
+
+    it("show_vertical_lines: false removes the column-separator border class", () => {
+      const { container } = render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={false}
+          onCellChange={vi.fn()}
+          view={view({ show_vertical_lines: false })}
+        />
+      );
+      const headerCell = container.querySelector("th");
+      expect(headerCell?.className).not.toContain("border-r");
+    });
+
+    it("show_vertical_lines defaults to true (border class present)", () => {
+      const { container } = render(
+        <TableView properties={PROPERTIES} rows={ROWS} editable={false} onCellChange={vi.fn()} />
+      );
+      const headerCell = container.querySelector("th");
+      expect(headerCell?.className).toContain("border-r");
+    });
+
+    it("show_page_icon: false hides the title cell's page icon", () => {
+      const { container: shown } = render(
+        <TableView properties={PROPERTIES} rows={ROWS} editable={false} onCellChange={vi.fn()} />
+      );
+      expect(shown.querySelector("svg.lucide-file-text")).toBeInTheDocument();
+
+      const { container: hidden } = render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={false}
+          onCellChange={vi.fn()}
+          view={view({ show_page_icon: false })}
+        />
+      );
+      expect(hidden.querySelector("svg.lucide-file-text")).not.toBeInTheDocument();
+    });
+  });
+
   it("shows an empty state when there are no rows", () => {
     render(<TableView properties={PROPERTIES} rows={[]} editable={false} onCellChange={vi.fn()} />);
     expect(screen.getByText(/no rows yet/i)).toBeInTheDocument();
