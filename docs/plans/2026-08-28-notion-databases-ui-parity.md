@@ -81,7 +81,7 @@ types are a named final phase — prove the pattern once before copying it nine 
 | **8** | Database creation, title, icon, description | `database-header.md` | A database can be renamed for the first time |
 | **9** | Row hover affordances + open-as | `row-affordances.md` | Drag handle, `⋮⋮`, selection, OPEN |
 | **10** | Row peek internals | `row-peek.md` | Resizable, URL-addressable, add-property, comments |
-| **11** | Calculations row, `+ New`, context menus, resize, drag-reorder, cell editing, states | `calculations-row.md`, `new-row-button.md`, `context-menus.md`, `table-drag-resize.md`, `cell-editing.md`, `states.md` | The remainder of Table parity |
+| **11** | Calculations row, `+ New`, resize, drag-reorder, cell editing, states | `calculations-row.md`, `new-row-button.md`, `table-drag-resize.md`, `cell-editing.md`, `states.md` | The remainder of Table parity. **Context menus dropped** — right-click opens the existing §1 and §9 menus; no separate surface exists |
 | — | **review checkpoint (M7–M11), then whole-branch pass** | | |
 | **12** | **Apply the pattern to the other nine views** | — | Named and sized below; gets its own prompt |
 

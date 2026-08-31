@@ -75,3 +75,36 @@ Last edited by <user> / <timestamp>
   NOTE: the anchor differs — the menu opened at the POINTER position on
   right-click, versus anchored to the handle on click. Same content, different
   anchor. Another instance of the host/content separation already established.
+
+================================================================
+§13 RESOLVED — there are NO distinct context menus. The surface dissolves.
+SCREENSHOT: 78-context-header-rightclick.jpg
+CAPTURED: 2026-08-31, all four cases tested with real right-clicks
+================================================================
+
+| Right-click target | Result |
+|---|---|
+| A row's cell        | THE ROW MENU (§9) — identical rows, and it also selects the row |
+| A row               | THE ROW MENU (§9) |
+| A column header     | THE COLUMN HEADER MENU (§1) — identical, anchored to the header cell |
+| Empty space below the table | **NOTHING.** No menu at all |
+
+  Notion has no bespoke context menus in a database table. Right-click is simply
+  a SECOND TRIGGER for menus that already exist, and there is no menu for empty
+  space.
+
+*** CONSEQUENCE: DELETE §13 AS A SEPARATE SPEC ***
+  `context-menus.md` has no content of its own. Everything it would say belongs
+  in two lines added to two existing specs:
+    - table-column-header.md → Trigger: "left-click OR right-click the header cell"
+    - row-affordances.md     → Trigger: "click the drag handle, OR right-click the row"
+  The surface index drops from 16 to 15, and M11 loses one item.
+
+  This is a real simplification, not a scope cut: the behaviour is fully
+  specified, just in the right places. Recorded here so the decision is
+  traceable rather than looking like something quietly dropped.
+
+  ONE anchoring nuance worth keeping: the ROW menu opens at the POINTER position
+  on right-click but anchored to the handle on click, whereas the COLUMN HEADER
+  menu appears anchored to the header cell either way. So right-click anchoring
+  is per-surface, not a global rule.

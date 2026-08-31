@@ -28,6 +28,10 @@ Hovering **anywhere on the row**. Five affordances appear, in two groups.
 | 📄 page icon | ≈390 | inside title cell | The row's own icon |
 | `▣ OPEN` | ≈593–640 | inside title cell, right-aligned | Opens the side peek |
 
+**Right-click anywhere on the row opens the same menu** and also selects the row — but it
+is anchored at the **pointer position**, not to the drag handle. There is no separate
+context menu. (Confirmed 2026-08-31.)
+
 ### The drag handle carries three gestures
 
 This is the most easily-missed detail on the surface:

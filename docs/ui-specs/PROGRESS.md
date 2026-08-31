@@ -36,7 +36,7 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 | 10 | `row-peek.md` | dom-captured | `row-peek.txt` | 62 |
 | 11 | `calculations-row.md` | dom-captured | `calculations.txt` | 70, 70b, 70c, 71, 72 |
 | 12 | `new-row-button.md` | dom-captured | `new-button-and-context-menus.txt` | 74 |
-| 13 | `context-menus.md` | dom-captured — **scope shrank**, row menu is §9's | `new-button-and-context-menus.txt` | 77 |
+| 13 | ~~`context-menus.md`~~ | **REMOVED** — no distinct context menus exist; folded into §1 and §9 as extra triggers | `new-button-and-context-menus.txt` | 77, 78 |
 | 14 | `table-drag-resize.md` | not-started | — | — |
 | 15 | `cell-editing.md` | not-started | — | — |
 | 16 | `states.md` | dom-captured (partial) | `empty-database-toolbar.txt` | — |

@@ -18,7 +18,8 @@ menu — there is no separate chevron or `⋮` affordance to aim at, and none ap
 Hover state of the header cell itself: `TBD` — needs a light-mode hover screenshot of a
 header cell with nothing open (checklist shot 01).
 
-Right-click on a header: `TBD` (checklist shot 78) — may differ from the left-click menu.
+**Right-click on a header opens the same menu**, anchored to the header cell exactly as
+left-click does. There is no separate context menu. (Confirmed 2026-08-31.)
 
 ---
 
