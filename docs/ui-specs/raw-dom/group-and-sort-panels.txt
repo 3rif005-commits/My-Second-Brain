@@ -128,3 +128,66 @@ ROW ANATOMY
   - "Status" rendered GREYED. Cause not established — possibly because the Status
     property has no options configured. OBSERVED, NOT EXPLAINED; re-test with
     options present before the spec claims a rule.
+
+================================================================
+GROUP APPLIED — the settings panel and the grouped table (§6)
+SCREENSHOT: 37-group-settings-applied.jpg
+CAPTURED: 2026-08-31, grouped by "Select" (one option "Alpha"), light mode
+================================================================
+
+THE PANEL (pushed, back arrow, titled just "Group" — not "Group by")
+--- verbatim ---
+←  Group                                          ×
+Group by                          Select     >
+Sort                              Manual     >
+Hide empty groups                 [toggle ON]
+Groups                                    Hide all      ← section header + bulk action
+⠿  [Alpha]                                     👁        ← the option, as its CHIP
+⠿  No Select                                   👁̸        ← greyed, eye-with-slash = hidden
+🗑  Remove grouping
+?   Learn about grouping
+--- end ---
+
+  NOTE the title changes with state: the picker was "Group by", the applied
+  panel is "Group". Same pattern as Sort ("New sort" → the editor).
+
+ROWS
+  - "Group by"  → value = the property name, chevron opens the property picker.
+  - "Sort"      → value = **"Manual"**, chevron opens the group-ordering options.
+                  Other values TBD (alphabetical? by count?). NOT captured.
+  - "Hide empty groups" → a TOGGLE, ON by default here.
+                  Maps to our `GroupBySpec.hide_empty_groups` (types.ts:97).
+  - "Groups" section → one row PER GROUP, each with:
+        [drag handle ⠿] [the group's chip or label] [eye visibility toggle]
+    So groups are individually reorderable AND individually hideable — beyond
+    the single `hide_empty_groups` boolean our GroupBySpec models.
+  - Section header carries a right-aligned **"Hide all"** bulk action (same
+    element as Property visibility's).
+  - "Remove grouping" clears it.
+  - "Learn about grouping" is a HELP LINK with a "?" icon — a footer-ish row.
+
+*** "No Select" — the automatic empty group ***
+  Rows with no value for the grouped property fall into a group named
+  **"No <PropertyName>"** — here "No Select". It appears in the Groups list like
+  any other group, and here it is HIDDEN (greyed, eye-with-slash) because
+  "Hide empty groups" is on.
+  Our backend's grouping produces groups from values; the "no value" bucket's
+  NAMING CONVENTION ("No Select") is a UI concern and must be specified.
+
+THE GROUPED TABLE
+--- structure ---
+▼  [Alpha]                          ← collapse triangle + the option's CHIP
+   <the full table header row>
+   <rows in this group>
+   +  New page                      ← per-group row-add
++  New group                        ← at the very bottom of the table
+--- end ---
+
+  - Each group renders its own copy of the column header row.
+  - **"+ New group"** at the bottom: creating a group creates a NEW SELECT OPTION
+    on the property. That is a schema write from the table body — worth flagging,
+    our UI has no equivalent and it would POST to the property's config.
+  - NO per-group COUNT was visible in the table header here, whereas the BOARD's
+    column headers did show counts ("Not started 1"). Either table groups omit
+    the count or it is hover-revealed. OBSERVED, NOT EXPLAINED — capture again
+    with more rows before the spec claims either.
