@@ -1,0 +1,77 @@
+SURFACE: The "New ▾" split button (§12) and right-click context menus (§13)
+CHECKLIST SHOTS: 74, 77
+SCREENSHOTS: 74-new-row-templates-empty.jpg, 77-context-row-rightclick.jpg
+CAPTURED: 2026-08-31, light mode, database with 0 templates
+METHOD: real click / real right-click via `computer`
+
+================= "New ▾" SPLIT BUTTON (§12) =================
+The primary half ("New") creates a row. The chevron half opens:
+
+--- verbatim ---
+Templates for New database                                  [?]
+Create a reusable page template for this database.          ← EMPTY-STATE COPY
+  ── divider ──
++   New template
+  ── divider ──
+▤   Add shortcut to sidebar
+--- end ---
+
+*** DIFFERENCE FROM OURS ***
+  Our TableView renders the chevron ONLY when at least one non-default template
+  exists (task-40 decision 3: "zero non-default templates -> no chevron at all,
+  no dropdown with nothing in it", TableView.tsx:925).
+
+  Notion ALWAYS renders the chevron, and uses the empty state to offer template
+  CREATION — "Create a reusable page template for this database." + "New template".
+  So the dropdown is the entry point to authoring templates, not merely a picker
+  for existing ones. Hiding it hides the only affordance for creating one.
+
+  → Our "Manage templates" lives in DatabaseSettingsMenu (the ⚙) instead. That is
+    a different information architecture, not just a hidden chevron. Decide
+    deliberately: adopt Notion's (templates authored from the New button) or keep
+    ours (templates authored from a settings menu). Flag for the user; do not
+    silently restructure.
+
+  - The section header carries a "?" HELP icon — another MenuRow/section element
+    we have not modelled.
+  - "Add shortcut to sidebar" — no analogue for us.
+
+================= RIGHT-CLICK ON A ROW (§13) =================
+*** THE ROW CONTEXT MENU IS NOT A SEPARATE SURFACE. ***
+
+  Right-clicking a row's cell opened THE EXACT SAME MENU as clicking the drag
+  handle: same "Search actions…" field, same "Page" section, same nine rows in
+  the same order, same last-edited footer. It ALSO selected the row and raised
+  the same "1 selected" bulk bar.
+
+--- verbatim (identical to row-affordances-and-menu.txt) ---
+[ Search actions…  ]
+Page
+⭐  Add to Favorites
+☺   Edit icon
+☰   Edit property          >
+↗   Open in                >
+💬  Comment        Ctrl+⇧+M
+🔗  Copy link
+⧉   Duplicate      Ctrl+D
+↱   Move to        Ctrl+⇧+P
+🗑   Move to Trash  Del
+  ── divider ──
+Last edited by <user> / <timestamp>
+--- end ---
+
+  So the row menu has (at least) THREE triggers:
+    1. click the drag handle ⠿
+    2. right-click anywhere on the row
+    3. presumably a keyboard shortcut — TBD
+  All three also SELECT the row.
+
+  → SPEC CONSEQUENCE: `context-menus.md` (§13) does not need to re-specify the
+    row menu. It should reference `row-affordances.md` and cover only what is
+    genuinely distinct — a right-click on a COLUMN HEADER, and on empty space.
+    Those are still TBD.
+  → This shrinks §13 considerably. Update the surface index.
+
+  NOTE: the anchor differs — the menu opened at the POINTER position on
+  right-click, versus anchored to the handle on click. Same content, different
+  anchor. Another instance of the host/content separation already established.
