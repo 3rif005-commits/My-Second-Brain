@@ -1,0 +1,66 @@
+SURFACE: Database header — icon, cover, description, title (§8)
+CHECKLIST SHOTS: 50 (hover), 51 (icon picker), 52 (description), 53 (page ⋯ menu)
+SCREENSHOTS: 50-db-header-hover.jpg, 51-db-icon-picker.jpg,
+             52-db-description-toggled.jpg, 54-...-DARK.jpg
+CAPTURED: 2026-08-29 / 2026-08-31, light mode
+METHOD: real hover + real clicks via `computer`
+
+================= HOVER AFFORDANCES =================
+Invisible at rest. On hovering the title area, a row appears ABOVE the title:
+    ☺ Add icon     🖼 Add cover     ⓘ Add description
+Reserved space — they must not shift the title when they appear.
+
+  "Add description" is a TOGGLE: once on, the button reads **"Hide description"**
+  and a description field appears under the title with placeholder
+  "Add a description…".
+  So description visibility is itself state, separate from whether a description
+  has content. Our DatabaseResponse has `description: list[Any]` (rich text) but
+  no "shown/hidden" flag — TBD whether Notion stores one or infers it from
+  emptiness.
+
+================= "ADD ICON" ASSIGNS IMMEDIATELY =================
+*** Clicking "Add icon" applied a RANDOM icon straight away (a 🚋 appeared on
+    the title and in the breadcrumb) AND opened the picker. ***
+  It is not "open a picker, then choose". It is "assign something now, refine
+  if you like". Same create-first spirit as view creation.
+  Our Sidebar creates databases with no icon and offers no way to set one.
+
+================= THE ICON PICKER =================
+--- structure ---
+[ Emoji ] [ Icons ] [ Upload ]                         Remove     ← tabs + a right-aligned action
+[🔍 Filter…                    ]  [🔀]  [✋]            ← search + shuffle + skin-tone
+People                                                  ← category section header
+  <emoji grid, ~12 columns, scrollable>
+  ── category bar, ~11 icons ──
+  [🕐 recent] [☺ smileys] [🌿 nature] [🍕 food] [⚽ activities]
+  [✈ travel] [💡 objects] [✅ symbols] [🏳 flags] [▦] [+]
+--- end ---
+
+  Elements our planned `IconPicker` does not have:
+    - THREE TABS (Emoji / Icons / Upload). "Icons" is Notion's own line-icon set;
+      "Upload" is a custom image.
+    - A SHUFFLE button (random icon).
+    - A SKIN-TONE selector.
+    - A CATEGORY BAR for jumping within the emoji grid.
+    - Category SECTION HEADERS inside the grid ("People").
+
+  SCOPE RECOMMENDATION for us: Emoji tab + search + categories + Remove.
+  Skip "Icons" (we have no icon set) and "Upload" (no asset pipeline for this).
+  Shuffle is cheap and pairs with the assign-immediately behaviour — include it.
+  Skin tone is cheap if the emoji data carries variants; otherwise defer.
+
+  PRIOR ART: NoteEditorPage.tsx:17 has a fixed EMOJIS array with a grid and an
+  outside-click ref — no search, no categories, no remove. That is the component
+  to extend, per the design doc.
+
+================= TITLE =================
+The title is a `textbox` with placeholder "New database" — always editable in
+place, no rename affordance. (From empty-database-toolbar.txt's a11y read.)
+Ours is a static <h1> (DatabaseShell.tsx:388).
+
+================= PAGE-LEVEL ⋯ MENU =================
+Already captured — see database-page-menu.txt:
+  Copy link (Ctrl+Alt+L) · Duplicate · Move to (Ctrl+⇧+P) · Move to Trash ·
+  Customize layout · Lock database · Import · Merge with CSV · Export ·
+  Updates & analytics · Version history · Notify me · Mentions ·
+  Connections (None) · [footer: last edited by/at] · Learn about databases

@@ -31,7 +31,7 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 | 5 | `sort-panel.md` | **written** (Keyboard TBD) | `group-and-sort-panels.txt` | 32, 32b, 33, 34 |
 | 6 | `group-panel.md` | **written** (Keyboard TBD) | `group-and-sort-panels.txt` | 36, 37, 37b |
 | 7 | `view-tab-bar.md` | **written** (Keyboard TBD) | `view-tab-bar.txt` | 44, 44b, 44c, 46, 46b |
-| 8 | `database-header.md` | dom-captured (partial) | `create-database-picker.txt`, `empty-database-toolbar.txt`, `database-page-menu.txt` | 54 |
+| 8 | `database-header.md` | **written** (blocked on B2) | `database-header.txt`, `create-database-picker.txt`, `database-page-menu.txt` | 50, 51, 52, 53, 54 |
 | 9 | `row-affordances.md` | **written** (Keyboard TBD) | `row-affordances-and-menu.txt` | 57, 58, 60 |
 | 10 | `row-peek.md` | **written** (centre peek TBD) | `row-peek.txt` | 62, 64, 65 |
 | 11 | `calculations-row.md` | **written** (footer hover, Percent, other types TBD) | `calculations.txt` | 70, 70b, 70c, 71, 72 |
