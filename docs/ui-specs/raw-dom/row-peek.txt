@@ -83,3 +83,59 @@ NOT YET CAPTURED
   - the resize handle on the peek's left edge, and whether width persists
   - what "+ Add a property" opens (probably the same type picker)
   - the page body / comments area (shot 68)
+
+================================================================
+THE PEEK'S ⋯ MENU, and its "+ Add a property"
+SCREENSHOTS: 64-peek-menu.jpg, 65-peek-add-property.jpg
+CAPTURED: 2026-08-31, light mode
+================================================================
+
+*** THE ⋯ IS THE STANDARD NOTION *PAGE* MENU, NOT A ROW MENU ***
+  Because a database row IS a page, the peek's ⋯ is the same menu any Notion
+  page has. It is NOT the row menu (§9) — different rows entirely.
+
+--- verbatim ---
+🔍 [ Search actions…  ]                        ← autofocused
+   [Ag Default]  [Ag Serif]  [Ag Mono]         ← a 3-CARD FONT PICKER at the top
+🔗  Copy link              Ctrl+Alt+L
+📋  Copy page contents
+⧉   Duplicate              Ctrl+D
+↱   Move to                Ctrl+⇧+P
+🗑   Move to Trash
+  ── divider ──
+A↓  Small text             [toggle OFF]
+↔   Full width             [toggle OFF]
+☰   Table of contents      [toggle ON]
+▦   Customize layout
+  ── divider ──
+🔒  Lock page              [toggle OFF]
+✴   Use with AI                          >
+… (scrolls; more below the fold — TBD)
+--- end ---
+
+  - FOUR inline toggles in one menu. MenuRow's toggle kind is now confirmed
+    across three separate surfaces.
+  - The font picker is a CARD GRID inside a menu — the same card idiom as view
+    types and Number's "Show as". Third distinct use; build it once.
+  - This maps to OUR note-page menu, not to anything database-specific. Much of
+    it (Small text, Full width, Table of contents, fonts) is editor chrome we
+    may not have. Scope deliberately: the peek's ⋯ is mostly OUT of the database
+    parity phase.
+
+================= "+ Add a property" INSIDE THE PEEK =================
+Opens the type picker — but rendered DIFFERENTLY from the table header's version.
+
+| | Table header `+ Add property` | Peek `+ Add a property` |
+|---|---|---|
+| Name placeholder | `Type property name…` | **`Property name`** |
+| Section label | `Select type` | **`Type`** |
+| Type layout | **TWO-column grid** | **SINGLE-column list** |
+| Search icon on section header | yes | yes |
+| AI Autofill section | yes | yes |
+
+  Same conceptual picker, three cosmetic differences, two hosts. This is more
+  evidence for host-parameterised panels — but also a caution: Notion is not
+  perfectly self-consistent, so we should pick ONE set of copy and one layout
+  rule rather than reproducing both. RECOMMEND: single-column in narrow hosts
+  (peek, sidebar), two-column in wide ones (the header popover), one shared
+  copy string.
