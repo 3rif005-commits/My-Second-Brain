@@ -105,6 +105,17 @@ class PropertyUpdate(BaseModel):
     # a user removes one. That is why it is applied with an explicit
     # `exclude_unset` check below rather than `COALESCE`, unlike `name`.
     description: str | None = None
+    # Phase 0b (B5). "Change type" is a row in Notion's column header menu,
+    # which is milestone M1 — without this the row is dead from the first
+    # milestone.
+    #
+    # NOT a plain column write. Values live as §3.3 discriminated wrappers and
+    # `rows.py` rejects a wrapper whose tag does not match the property, so a
+    # bare type flip would invalidate every stored value. The router converts
+    # them through `services/db/properties/convert.py`, which also decides
+    # which conversions are legal at all — illegal ones 400 rather than
+    # destroying data. See that module's header for the reasoning.
+    type: str | None = None
 
 
 class PropertyResponse(BaseModel):

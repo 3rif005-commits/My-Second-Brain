@@ -1635,3 +1635,125 @@ async def test_property_description_is_untouched_by_an_unrelated_patch(client):
     renamed = (await client.patch(f"/db/properties/{prop['id']}", json={"name": "Lead"})).json()
     assert renamed["name"] == "Lead"
     assert renamed["description"] == "keep me"
+
+
+async def test_changing_a_property_type_converts_every_stored_value(client, db_conn):
+    """A type change is not a column write. Values are §3.3 wrappers and
+    rows.py rejects a wrapper whose tag does not match the property, so
+    leaving them would invalidate every row."""
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Stage", "type": "select"}
+        )
+    ).json()
+    key = prop["key"]
+
+    row = (await client.post(f"/db/data-sources/{ds_id}/rows")).json()
+    await client.patch(
+        f"/db/data-sources/{ds_id}/rows/{row['id']}",
+        json={"property_key": key, "value": {"type": "select", "select": "Done"}},
+    )
+
+    res = await client.patch(f"/db/properties/{prop['id']}", json={"type": "multi_select"})
+    assert res.status_code == 200, res.text
+    assert res.json()["type"] == "multi_select"
+
+    stored = await db_conn.fetchval(
+        "SELECT properties FROM db_row_props WHERE note_id = $1", row["id"]
+    )
+    assert stored[key] == {"type": "multi_select", "multi_select": ["Done"]}
+
+
+async def test_illegal_type_change_400s_and_changes_nothing(client, db_conn):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Notes", "type": "rich_text"}
+        )
+    ).json()
+
+    res = await client.patch(f"/db/properties/{prop['id']}", json={"type": "relation"})
+    assert res.status_code == 400
+    assert "relation" in res.json()["detail"]
+
+    # The refusal must be total — no half-applied rename, no changed type.
+    after = await db_conn.fetchrow(
+        "SELECT type, name FROM db_properties WHERE id = $1", prop["id"]
+    )
+    assert after["type"] == "rich_text"
+    assert after["name"] == "Notes"
+
+
+async def test_type_change_drops_the_old_config_unless_a_new_one_is_supplied(client, db_conn):
+    """A select's options mean nothing to a number."""
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Stage", "type": "select"}
+        )
+    ).json()
+    await db_conn.execute(
+        "UPDATE db_properties SET config = $1 WHERE id = $2",
+        {"options": [{"name": "Done", "color": "green"}]},
+        prop["id"],
+    )
+
+    body = (await client.patch(f"/db/properties/{prop['id']}", json={"type": "rich_text"})).json()
+    assert body["config"] == {}
+
+
+async def test_type_change_that_cannot_coerce_a_value_drops_that_key(client, db_conn):
+    """Converting a column of mixed notes to Number must not fail because one
+    row says "about ten" — that row simply empties."""
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Amount", "type": "rich_text"}
+        )
+    ).json()
+    key = prop["key"]
+
+    numeric = (await client.post(f"/db/data-sources/{ds_id}/rows")).json()
+    wordy = (await client.post(f"/db/data-sources/{ds_id}/rows")).json()
+    for note_id, text in ((numeric["id"], "12"), (wordy["id"], "about ten")):
+        await client.patch(
+            f"/db/data-sources/{ds_id}/rows/{note_id}",
+            json={"property_key": key, "value": {"type": "rich_text", "rich_text": text}},
+        )
+
+    assert (
+        await client.patch(f"/db/properties/{prop['id']}", json={"type": "number"})
+    ).status_code == 200
+
+    kept = await db_conn.fetchval(
+        "SELECT properties FROM db_row_props WHERE note_id = $1", numeric["id"]
+    )
+    dropped = await db_conn.fetchval(
+        "SELECT properties FROM db_row_props WHERE note_id = $1", wordy["id"]
+    )
+    assert kept[key] == {"type": "number", "number": 12}
+    # Dropped, not blanked: an absent key and an empty wrapper are different
+    # states elsewhere in this codebase.
+    assert key not in dropped
+
+
+async def test_setting_the_same_type_is_a_no_op_not_a_conversion(client, db_conn):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Stage", "type": "select"}
+        )
+    ).json()
+    await db_conn.execute(
+        "UPDATE db_properties SET config = $1 WHERE id = $2", {"options": []}, prop["id"]
+    )
+
+    body = (await client.patch(f"/db/properties/{prop['id']}", json={"type": "select"})).json()
+    # config survives, because nothing actually changed
+    assert body["config"] == {"options": []}

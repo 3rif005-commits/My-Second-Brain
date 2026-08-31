@@ -120,6 +120,7 @@ from services.db.rows import (
 )
 from services.db import templates as templates_service
 from services.db.templates import DuplicateDefaultTemplateError, TemplateConfigError
+from services.db.properties.convert import ConversionError, convert_value, is_legal
 from services.db.views import sweep_property_from_views
 from services.indexer import try_index_note
 
@@ -1853,6 +1854,22 @@ async def update_property(
     result_type = current["result_type"]
     is_volatile = current["is_volatile"]
     needs_recompute = False
+
+    # Phase 0b (B5): a type change rewrites every stored value, or is refused.
+    new_type = body.type if body.type is not None else current["type"]
+    type_changed = new_type != current["type"]
+    if type_changed:
+        if not is_legal(current["type"], new_type):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"cannot convert a {current['type']} property to {new_type}",
+            )
+        # The old config describes the old type (a select's options mean
+        # nothing to a number), so it is dropped unless the same request
+        # supplies a replacement.
+        if body.config is None:
+            config = {}
+
     if body.config is not None:
         config = body.config
         if current["type"] in ("formula", "rollup"):
@@ -1875,8 +1892,9 @@ async def update_property(
                 config = $2,
                 result_type = $3,
                 is_volatile = $4,
-                description = CASE WHEN $5 THEN $6 ELSE description END
-            WHERE id = $7 AND user_id = $8
+                description = CASE WHEN $5 THEN $6 ELSE description END,
+                type = $7
+            WHERE id = $8 AND user_id = $9
             RETURNING *
             """,
             body.name,
@@ -1885,11 +1903,50 @@ async def update_property(
             is_volatile,
             description_provided,
             body.description,
+            new_type,
             property_id,
             user_id,
         )
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "property not found")
+
+        if type_changed:
+            # Same transaction as the column write: a half-converted data
+            # source — new type, old wrappers — is exactly the invalid state
+            # this whole mechanism exists to avoid.
+            key = row["key"]
+            existing_rows = await conn.fetch(
+                """
+                SELECT note_id, properties FROM db_row_props
+                WHERE data_source_id = $1 AND user_id = $2
+                """,
+                row["data_source_id"],
+                user_id,
+            )
+            for existing in existing_rows:
+                props = dict(existing["properties"] or {})
+                if key not in props:
+                    continue
+                try:
+                    converted = convert_value(props[key], current["type"], new_type)
+                except ConversionError as exc:  # pragma: no cover - guarded above
+                    raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+                if converted is None:
+                    # An absent key and an empty wrapper are different states
+                    # elsewhere in this codebase, so drop rather than blank.
+                    props.pop(key)
+                else:
+                    props[key] = converted
+                await conn.execute(
+                    """
+                    UPDATE db_row_props SET properties = $1
+                    WHERE note_id = $2 AND user_id = $3
+                    """,
+                    props,
+                    existing["note_id"],
+                    user_id,
+                )
+
         if needs_recompute:
             try:
                 await recompute.validate_save(conn, user_id)
