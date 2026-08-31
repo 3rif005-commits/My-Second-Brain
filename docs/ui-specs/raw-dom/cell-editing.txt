@@ -1,0 +1,64 @@
+SURFACE: Cell editing (§15) — the Select cell, end to end
+CHECKLIST SHOTS: 85a–85d
+CAPTURED: 2026-08-31, light mode, "Row one", Select property with NO options yet
+METHOD: real clicks and real keys via `computer`
+
+================= CELL INTERACTION IS TWO-STAGE =================
+  1st click  → SELECTS the cell. A blue border appears, plus a small circle at
+               the cell's bottom-right corner. NO editor opens.
+  2nd click  → OPENS the editor in place.
+  Enter on a selected cell did NOT open the editor in this test (pressed once
+  after the first click, nothing happened) — TBD whether Enter opens editors for
+  other types, or whether a second click is the only route.
+
+  → This two-stage model is a real difference. Our cells (cells/SelectCell.tsx
+    etc.) open their editor on the FIRST click. Notion's first click is a
+    spreadsheet-style selection.
+  → The corner circle is the same unexplained affordance noted in
+    row-affordances-and-menu.txt. Still TBD; it appears on cell SELECTION.
+
+================= THE SELECT EDITOR =================
+Opens IN PLACE — the cell itself becomes a search input; a panel hangs below it.
+
+STATE: no options exist yet
+--- verbatim ---
+[ Search for an option…  ]        ← the cell becomes this input, autofocused
+Select an option or create one    ← EMPTY-STATE copy, muted
+--- end ---
+
+STATE: after typing "Alpha"
+--- verbatim ---
+[ Alpha ]
+Select an option or create one
+Create  [Alpha]                   ← "Alpha" rendered as a COLOURED CHIP PREVIEW
+--- end ---
+
+  *** The create row PREVIEWS the chip with its auto-assigned colour. ***
+  You see what the option will look like before committing. Notion assigns the
+  colour itself; the user does not pick it at creation time.
+  Our RelationPicker/SelectCell have no create-on-type at all — a select option
+  can only be added by editing the property.
+
+STATE: after Enter
+  The option is created, applied to the cell, and rendered as a chip in the cell.
+  One keystroke does: create option + assign value + close editor.
+
+================= CORRECTION TO row-affordances-and-menu.txt =================
+  That file recorded the bulk-selection bar as:
+      [ 1 selected ]  [≡] [#] [⊙] [☰] [⊙] [⊙]  [🗑]  [⋯]
+      "The middle icons are PROPERTY-TYPE icons"
+
+  At this width the labels are legible, and they are **icon + LABEL**, not icons:
+      [ 1 selected ] [≡ Text] [# Number] [⊙ Select] [☰ Multi-select] [🗑] [⋯]
+
+  So the bar offers one labelled button PER PROPERTY, for bulk-editing that
+  property across the selection. It is not a row of anonymous icons. The earlier
+  description was read off a too-small screenshot and was wrong.
+  (Recorded rather than silently edited — same convention as the FINDING 3
+  correction in property-type-picker.txt.)
+
+STILL TO CAPTURE for §15
+  - Text cell (expanded editor), Number, Date (calendar + end date + reminder),
+    Status (grouped options), Multi-select (multiple chips), Person, Files, URL
+  - whether Enter opens the editor for any type
+  - the corner circle's behaviour
