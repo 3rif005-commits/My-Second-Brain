@@ -94,6 +94,17 @@ class PropertyUpdate(BaseModel):
 
     name: str | None = None
     config: dict[str, Any] | None = None
+    # Phase 0b (B3). The column has existed since 014_databases_core.sql and
+    # `PropertyResponse` has always returned it, but nothing could ever write
+    # it. Notion's UI reaches it through the `ⓘ` beside a property's name in
+    # the column header menu, whose tooltip is literally "Add property
+    # description" -- so the field is not decorative, it is a first-class
+    # affordance on the surface M1 builds.
+    #
+    # Nullable on purpose: sending `null` CLEARS the description, which is how
+    # a user removes one. That is why it is applied with an explicit
+    # `exclude_unset` check below rather than `COALESCE`, unlike `name`.
+    description: str | None = None
 
 
 class PropertyResponse(BaseModel):
@@ -150,6 +161,32 @@ class ViewUpdate(BaseModel):
     sorts: list[Any] | None = None
     is_locked: bool | None = None
     position: int | None = None
+
+
+class DatabaseUpdate(BaseModel):
+    """Partial update for `PATCH /db/databases/{database_id}` (Phase 0b, B2).
+
+    Until this existed a database could never be renamed and could never be
+    given an icon or a description -- `create_database` set a title once and
+    nothing could change it. Notion edits all three in place in the page
+    header, with no rename affordance at all: the title is a textbox, and
+    "Add icon"/"Add description" are hover-revealed buttons above it.
+
+    Same partial-update contract as `ViewUpdate`: only fields present in the
+    request body are touched. `icon` and `cover_url` are nullable columns, so
+    an explicit `null` clears them; `title` and `description` are `NOT NULL`,
+    so a `null` for either is dropped rather than raising a
+    NotNullViolationError -- the rest of the request still applies.
+
+    `description` is JSONB rich text (a list of blocks), matching the column
+    and `DatabaseResponse`, not a plain string.
+    """
+
+    title: str | None = None
+    description: list[Any] | None = None
+    icon: str | None = None
+    cover_url: str | None = None
+    is_locked: bool | None = None
 
 
 class DatabaseSummary(BaseModel):

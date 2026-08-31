@@ -1413,3 +1413,225 @@ async def test_update_row_property_succeeds_even_if_indexing_fails(client, db_co
 
     assert res.status_code == 200, res.text
     assert res.json()["properties"][prop["key"]] == {"type": "rich_text", "rich_text": "still works"}
+
+
+# ---------------------------------------------------------------------------
+# Phase 0b — the four endpoints the UI-parity work is gated on.
+#
+# Each of these existed as a gap flagged from a live capture, not as a
+# speculative API: a database could never be renamed, a view could never be
+# deleted, and a property's description could never be written even though the
+# column and the response field had been there since migration 014.
+# ---------------------------------------------------------------------------
+
+
+async def test_update_database_sets_title_icon_and_description(client):
+    created = await _create_database(client)
+    db_id = created["database"]["id"]
+
+    res = await client.patch(
+        f"/db/databases/{db_id}",
+        json={
+            "title": "Renamed",
+            "icon": "🚀",
+            "description": [{"type": "text", "text": "what this is for"}],
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["title"] == "Renamed"
+    assert body["icon"] == "🚀"
+    assert body["description"] == [{"type": "text", "text": "what this is for"}]
+
+    # and it round-trips through the read path, not just the RETURNING
+    fetched = (await client.get(f"/db/databases/{db_id}")).json()
+    assert fetched["database"]["title"] == "Renamed"
+
+
+async def test_update_database_is_partial_and_leaves_untouched_fields_alone(client):
+    created = await _create_database(client, title="Keep me")
+    db_id = created["database"]["id"]
+
+    await client.patch(f"/db/databases/{db_id}", json={"icon": "📊"})
+    body = (await client.patch(f"/db/databases/{db_id}", json={"is_locked": True})).json()
+
+    assert body["title"] == "Keep me"
+    assert body["icon"] == "📊"
+    assert body["is_locked"] is True
+
+
+async def test_update_database_null_clears_icon_but_is_dropped_for_title(client):
+    created = await _create_database(client, title="Original")
+    db_id = created["database"]["id"]
+    await client.patch(f"/db/databases/{db_id}", json={"icon": "📊"})
+
+    # icon is nullable -> an explicit null CLEARS it (that is how a user
+    # removes an icon).
+    cleared = (await client.patch(f"/db/databases/{db_id}", json={"icon": None})).json()
+    assert cleared["icon"] is None
+
+    # title is NOT NULL -> a null must be dropped, not raise a
+    # NotNullViolationError, and the rest of the same request still applies.
+    body = (
+        await client.patch(f"/db/databases/{db_id}", json={"title": None, "icon": "🔥"})
+    ).json()
+    assert body["title"] == "Original"
+    assert body["icon"] == "🔥"
+
+
+async def test_update_database_404s_for_another_users_database(client, db_conn):
+    created = await _create_database(client)
+
+    other_user = str(uuid.uuid4())
+    await db_conn.execute(
+        "INSERT INTO auth.users (id, email) VALUES ($1, $2)", other_user, f"{other_user}@t.local"
+    )
+    app.dependency_overrides[get_user_id] = lambda: other_user
+
+    res = await client.patch(
+        f"/db/databases/{created['database']['id']}", json={"title": "mine now"}
+    )
+    assert res.status_code == 404
+
+
+async def test_delete_database_is_soft_and_hides_it_from_reads(client, db_conn):
+    created = await _create_database(client)
+    db_id = created["database"]["id"]
+
+    res = await client.delete(f"/db/databases/{db_id}")
+    assert res.status_code == 204
+
+    # Soft, not hard: the row survives with deleted_at set...
+    row = await db_conn.fetchrow("SELECT deleted_at FROM db_databases WHERE id = $1", db_id)
+    assert row is not None
+    assert row["deleted_at"] is not None
+
+    # ...but every read path filters it out.
+    assert (await client.get(f"/db/databases/{db_id}")).status_code == 404
+    listed = (await client.get("/db/databases")).json()["databases"]
+    assert all(d["database"]["id"] != db_id for d in listed)
+
+
+async def test_delete_database_does_not_trash_its_rows(client, db_conn):
+    """A row is a `notes` row with its own trash. Cascading into notes from
+    here would delete content that is reachable and restorable elsewhere."""
+    created = await _create_database(client)
+    db_id = created["database"]["id"]
+    ds_id = created["data_source"]["id"]
+
+    row = (await client.post(f"/db/data-sources/{ds_id}/rows")).json()
+
+    await client.delete(f"/db/databases/{db_id}")
+
+    note = await db_conn.fetchrow("SELECT deleted_at FROM notes WHERE id = $1", row["id"])
+    assert note is not None
+    assert note["deleted_at"] is None
+
+
+async def test_delete_database_twice_404s_rather_than_silently_succeeding(client):
+    created = await _create_database(client)
+    db_id = created["database"]["id"]
+
+    assert (await client.delete(f"/db/databases/{db_id}")).status_code == 204
+    assert (await client.delete(f"/db/databases/{db_id}")).status_code == 404
+
+
+async def test_patching_a_trashed_database_404s_rather_than_resurrecting_it(client):
+    created = await _create_database(client)
+    db_id = created["database"]["id"]
+    await client.delete(f"/db/databases/{db_id}")
+
+    res = await client.patch(f"/db/databases/{db_id}", json={"title": "back from the dead"})
+    assert res.status_code == 404
+
+
+async def test_delete_view_removes_it_once_a_second_view_exists(client, db_conn):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    first_view = created["views"][0]["id"]
+
+    second = (
+        await client.post(f"/db/data-sources/{ds_id}/views", json={"name": "Board", "type": "board"})
+    ).json()
+
+    res = await client.delete(f"/db/views/{second['id']}")
+    assert res.status_code == 204
+
+    remaining = await db_conn.fetch("SELECT id FROM db_views WHERE data_source_id = $1", ds_id)
+    assert [str(r["id"]) for r in remaining] == [first_view]
+
+
+async def test_cannot_delete_the_only_view(client):
+    """Captured from live Notion: a database with one view has no "Delete
+    view" row at all, and it appears only once a second view exists. A data
+    source with zero views has nothing to render and useDatabaseView's
+    `views[0]` fallback would be undefined."""
+    created = await _create_database(client)
+    only_view = created["views"][0]["id"]
+
+    res = await client.delete(f"/db/views/{only_view}")
+    assert res.status_code == 400
+    assert "only view" in res.json()["detail"]
+
+
+async def test_delete_view_404s_for_unknown_and_for_another_users_view(client, db_conn):
+    assert (await client.delete(f"/db/views/{uuid.uuid4()}")).status_code == 404
+
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    second = (
+        await client.post(f"/db/data-sources/{ds_id}/views", json={"name": "Board", "type": "board"})
+    ).json()
+
+    other_user = str(uuid.uuid4())
+    await db_conn.execute(
+        "INSERT INTO auth.users (id, email) VALUES ($1, $2)", other_user, f"{other_user}@t.local"
+    )
+    app.dependency_overrides[get_user_id] = lambda: other_user
+
+    # Scoped by user_id, so another user cannot delete it — and must not be
+    # able to tell whether it exists, hence 404 rather than 403.
+    assert (await client.delete(f"/db/views/{second['id']}")).status_code == 404
+
+
+async def test_property_description_can_be_written_and_cleared(client):
+    """The column and the response field have existed since migration 014,
+    but PropertyUpdate could never write it. Notion reaches this through the
+    `ⓘ` beside a property name, tooltip "Add property description"."""
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Owner", "type": "rich_text"}
+        )
+    ).json()
+    assert prop["description"] is None
+
+    written = (
+        await client.patch(
+            f"/db/properties/{prop['id']}", json={"description": "Who is accountable"}
+        )
+    ).json()
+    assert written["description"] == "Who is accountable"
+
+    # An explicit null CLEARS it — COALESCE could not express this, which is
+    # why the endpoint checks model_fields_set instead.
+    cleared = (
+        await client.patch(f"/db/properties/{prop['id']}", json={"description": None})
+    ).json()
+    assert cleared["description"] is None
+
+
+async def test_property_description_is_untouched_by_an_unrelated_patch(client):
+    created = await _create_database(client)
+    ds_id = created["data_source"]["id"]
+    prop = (
+        await client.post(
+            f"/db/data-sources/{ds_id}/properties", json={"name": "Owner", "type": "rich_text"}
+        )
+    ).json()
+    await client.patch(f"/db/properties/{prop['id']}", json={"description": "keep me"})
+
+    renamed = (await client.patch(f"/db/properties/{prop['id']}", json={"name": "Lead"})).json()
+    assert renamed["name"] == "Lead"
+    assert renamed["description"] == "keep me"

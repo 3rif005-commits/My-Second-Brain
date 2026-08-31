@@ -39,6 +39,7 @@ from models.database import (
     DatabaseCreate,
     DatabaseDetailResponse,
     DatabaseResponse,
+    DatabaseUpdate,
     DataSourceResponse,
     DependencySettingsUpdate,
     FormulaValidateRequest,
@@ -757,6 +758,100 @@ async def get_database(
         properties=[PropertyResponse(**_row(r)) for r in prop_rows],
         views=[ViewResponse(**_row(r)) for r in view_rows],
     )
+
+
+# Phase 0b (B2). Until these existed a database could be created and read but
+# never changed or removed: `create_database` set a title once and nothing
+# could rename it, give it an icon, or delete it. That made the whole database
+# header surface unbuildable, which is why M8 is gated on this.
+_DATABASE_UPDATABLE_FIELDS = frozenset(
+    {"title", "description", "icon", "cover_url", "is_locked"}
+)
+# `icon`/`cover_url` are the only nullable columns among those, so only they
+# can be cleared by sending an explicit `null`. A `null` for `title`,
+# `description` or `is_locked` (all NOT NULL) is dropped rather than raising a
+# NotNullViolationError -- the same contract, and the same reasoning, as
+# `_VIEW_NULLABLE_FIELDS` above.
+_DATABASE_NULLABLE_FIELDS = frozenset({"icon", "cover_url"})
+
+
+@router.patch("/databases/{database_id}", response_model=DatabaseResponse)
+async def update_database(
+    database_id: str,
+    body: DatabaseUpdate,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> DatabaseResponse:
+    """Partial update. Mirrors `update_view`'s shape deliberately, including
+    binding `database_id`/`user_id` to the fixed `$1`/`$2` placeholders no
+    matter how many optional fields are set, so the WHERE clause's scope
+    predicate is always the same literal text even though the SET clause
+    varies.
+
+    Already-trashed databases are invisible here (`deleted_at IS NULL`), so a
+    PATCH against one 404s rather than silently resurrecting it."""
+    database_id = _parse_uuid_or_404(database_id, "database")
+    updates = {
+        field: value
+        for field, value in body.model_dump(exclude_unset=True).items()
+        if field in _DATABASE_UPDATABLE_FIELDS
+        and (value is not None or field in _DATABASE_NULLABLE_FIELDS)
+    }
+
+    if not updates:
+        row = await conn.fetchrow(
+            "SELECT * FROM db_databases WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL",
+            database_id,
+            user_id,
+        )
+    else:
+        set_sql = ", ".join(f"{field} = ${i + 3}" for i, field in enumerate(updates))
+        row = await conn.fetchrow(
+            f"""
+            UPDATE db_databases SET {set_sql}, updated_at = NOW()
+            WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+            RETURNING *
+            """,
+            database_id,
+            user_id,
+            *updates.values(),
+        )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "database not found")
+    return DatabaseResponse(**_row(row))
+
+
+@router.delete("/databases/{database_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_database(
+    database_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> None:
+    """SOFT delete -- sets `deleted_at`, matching Notion's own wording ("Move
+    to Trash", not "Delete") and this schema's existing shape: `db_databases`
+    has a `deleted_at` column and every read path already filters on
+    `deleted_at IS NULL`, including the data-source lookups that reach rows.
+    So one UPDATE makes the database, its data sources, properties and views
+    all unreachable without touching a single other table.
+
+    Deliberately does NOT trash the database's ROWS. A row is a `notes` row
+    with its own `deleted_at` and its own trash UI; cascading into notes from
+    here would delete user content that is reachable and restorable elsewhere.
+
+    Idempotent-ish: a second delete 404s rather than succeeding silently, so a
+    double-click surfaces rather than looking like it worked twice."""
+    database_id = _parse_uuid_or_404(database_id, "database")
+    row = await conn.fetchrow(
+        """
+        UPDATE db_databases SET deleted_at = NOW(), updated_at = NOW()
+        WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+        RETURNING id
+        """,
+        database_id,
+        user_id,
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "database not found")
 
 
 @router.get("/data-sources/{data_source_id}/rows", response_model=RowsResponse)
@@ -1766,18 +1861,30 @@ async def update_property(
             )
             needs_recompute = True
 
+    # Phase 0b (B3). `description` is nullable and an explicit `null` must
+    # CLEAR it, so COALESCE (which `name` uses) would be wrong -- it cannot
+    # distinguish "not sent" from "sent as null". `model_fields_set` is the
+    # only thing that can, hence the boolean flag threaded into the CASE.
+    description_provided = "description" in body.model_fields_set
+
     async with conn.transaction():
         row = await conn.fetchrow(
             """
             UPDATE db_properties
-            SET name = COALESCE($1, name), config = $2, result_type = $3, is_volatile = $4
-            WHERE id = $5 AND user_id = $6
+            SET name = COALESCE($1, name),
+                config = $2,
+                result_type = $3,
+                is_volatile = $4,
+                description = CASE WHEN $5 THEN $6 ELSE description END
+            WHERE id = $7 AND user_id = $8
             RETURNING *
             """,
             body.name,
             config,
             result_type,
             is_volatile,
+            description_provided,
+            body.description,
             property_id,
             user_id,
         )
@@ -2186,6 +2293,57 @@ async def update_view(
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "view not found")
     return ViewResponse(**_row(row))
+
+
+@router.delete("/views/{view_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_view(
+    view_id: str,
+    user_id: str = Depends(get_user_id),
+    conn: asyncpg.Connection = Depends(get_conn),
+) -> None:
+    """Phase 0b (B1). Hard delete -- a view is pure configuration (name, type,
+    filter, sorts, config); deleting one destroys no user data, so unlike a
+    database it needs no trash.
+
+    *** THE LAST VIEW CANNOT BE DELETED. *** Captured from live Notion: a
+    database with one view has no "Delete view" row in its view menu at all,
+    and the row appears only once a second view exists
+    (docs/ui-specs/view-tab-bar.md). That is not cosmetic -- a data source
+    with zero views has nothing to render, and `useDatabaseView` falls back to
+    `views[0]`, which would be `undefined`. Enforced here as well as in the UI
+    because the UI is not the only caller.
+
+    The count and the delete run in one transaction so two concurrent deletes
+    cannot each see two views and both succeed, leaving zero."""
+    view_id = _parse_uuid_or_404(view_id, "view")
+    async with conn.transaction():
+        existing = await conn.fetchrow(
+            "SELECT data_source_id FROM db_views WHERE id = $1 AND user_id = $2",
+            view_id,
+            user_id,
+        )
+        if existing is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "view not found")
+
+        remaining = await conn.fetchval(
+            """
+            SELECT count(*) FROM db_views
+            WHERE data_source_id = $1 AND user_id = $2
+            """,
+            existing["data_source_id"],
+            user_id,
+        )
+        if remaining <= 1:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "cannot delete the only view of a data source",
+            )
+
+        await conn.execute(
+            "DELETE FROM db_views WHERE id = $1 AND user_id = $2",
+            view_id,
+            user_id,
+        )
 
 
 # ---------------------------------------------------------------------------
