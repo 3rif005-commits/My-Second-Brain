@@ -62,3 +62,53 @@ STILL TO CAPTURE for §15
     Status (grouped options), Multi-select (multiple chips), Person, Files, URL
   - whether Enter opens the editor for any type
   - the corner circle's behaviour
+
+================================================================
+THE DATE CELL EDITOR — the most complex one
+SCREENSHOT: 88-cell-date.jpg
+CAPTURED: 2026-08-31, light mode, real clicks
+NOTE: reached after using "Change type" to convert a mistyped fixture property
+      to Date. The type change auto-populated today's date.
+================================================================
+
+Opens as a popover anchored to the cell, ~250px wide.
+
+--- structure, top to bottom ---
+[ Aug 31, 2026 ]  [ Aug 31, 2026 ]        ← TWO date inputs: start | end
+                                             (the second exists because End date is ON)
+Aug 2026                Today   ‹  ›       ← month label, "Today" shortcut, prev/next
+Su  Mo  Tu  We  Th  Fr  Sa                 ← weekday header, week starts SUNDAY
+26  27  28  29  30  31   1                 ← adjacent-month days, greyed
+ 2   3   4   5   6   7   8
+ …
+30  [31]  1   2   3   4   5                ← today highlighted with a filled blue circle
+  ── divider ──
+End date                    [toggle ON]
+Date format          Full date        >
+Include time                [toggle OFF]
+Remind                    None        >
+  ── divider ──
+Clear
+?  Learn about reminders                   ← help link, same idiom as "Learn about grouping"
+--- end ---
+
+ELEMENTS
+  - TWO text inputs when End date is on, ONE when off. The second appears/
+    disappears with the toggle.
+  - "Today" is a text shortcut in the calendar header, not a row.
+  - Two TOGGLES (End date, Include time) and two VALUE+CHEVRON rows
+    (Date format, Remind) in one panel — the same MenuRow kinds already
+    established.
+  - "Clear" is a plain row above the help link, not a danger-styled one.
+  - A "? Learn about …" help link appears here AND in the Group panel. It is a
+    recurring footer idiom.
+
+MAPS TO OUR DateValue (lib/database/types.ts:285)
+  Our DateValue models start/end/time — the wire format is adequate.
+  "Date format" and "Remind" are new config we do not model. Date format is
+  presentation (per-property, schema-level); Remind is a notification feature
+  we have no equivalent for — OUT OF SCOPE, note and skip.
+
+NOT CAPTURED: the "Date format" and "Remind" sub-panels; the time picker when
+"Include time" is on; the relative-date options in a DATE FILTER (different
+surface, still TBD for §4).
