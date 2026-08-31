@@ -40,17 +40,33 @@ export function patchHidden(
   return { hidden_properties: hidden ? [...current, key] : current };
 }
 
+/** View-level default for content wrapping — M3's "Wrap all content" toggle
+ * in the Layout panel. Falls back to TRUE, matching `isWrapped`'s own prior
+ * hardcoded default, so a view that has never touched either setting still
+ * renders wrapped. */
+export function getWrapAllContent(config: Record<string, unknown>): boolean {
+  return config.wrap_all_content !== false;
+}
+
+export function patchWrapAllContent(config: Record<string, unknown>, wrapped: boolean): Record<string, unknown> {
+  return { wrap_all_content: wrapped };
+}
+
 /** Content wrapping, per column.
  *
- * Defaults to TRUE because Notion's header menu offers "Unwrap content" on a
- * fresh column — the label names the ACTION, so the current state is wrapped.
- * Rendering a static "Wrap" label would be wrong in both directions. */
+ * A PER-COLUMN override (`wrapped_properties`, set by the column header
+ * menu's "Unwrap content") beats the VIEW-level default (`wrap_all_content`,
+ * set by the Layout panel's "Wrap all content") — the same two-entry-points
+ * shape "Show page icon" has (table-column-header.md vs view-options-panel.md
+ * writing the same key). Absent either, both default to wrapped, because
+ * Notion's header menu offers "Unwrap content" on a fresh column — the label
+ * names the ACTION, so the current state is wrapped. */
 export function isWrapped(config: Record<string, unknown>, key: string): boolean {
   const raw = config.wrapped_properties;
   if (raw && typeof raw === "object" && key in (raw as Record<string, unknown>)) {
     return Boolean((raw as Record<string, boolean>)[key]);
   }
-  return true;
+  return getWrapAllContent(config);
 }
 
 export function patchWrapped(
@@ -60,6 +76,43 @@ export function patchWrapped(
 ): Record<string, unknown> {
   const raw = (config.wrapped_properties ?? {}) as Record<string, boolean>;
   return { wrapped_properties: { ...raw, [key]: wrapped } };
+}
+
+/** Column separator lines, view-wide. Defaults to TRUE — Notion ships every
+ * fresh table with vertical lines on. */
+export function getShowVerticalLines(config: Record<string, unknown>): boolean {
+  return config.show_vertical_lines !== false;
+}
+
+export function patchShowVerticalLines(config: Record<string, unknown>, shown: boolean): Record<string, unknown> {
+  return { show_vertical_lines: shown };
+}
+
+/** The 📄 page icon in the title cell. Two entry points write the SAME key:
+ * the title column's own header-menu toggle (table-column-header.md) and
+ * this view's Layout panel (view-options-panel.md) — both read/write
+ * `show_page_icon`, matching how Filter/Sort are reachable from both the
+ * toolbar and this sidebar. Defaults to TRUE. */
+export function getShowPageIcon(config: Record<string, unknown>): boolean {
+  return config.show_page_icon !== false;
+}
+
+export function patchShowPageIcon(config: Record<string, unknown>, shown: boolean): Record<string, unknown> {
+  return { show_page_icon: shown };
+}
+
+export type OpenPagesInMode = "side" | "center" | "full";
+
+/** Where a row opens when clicked. Defaults to "side" — Notion's own default
+ * for Table, and the only mode that keeps the table "behind interactive"
+ * (Notion's own copy, view-options-panel.md §C). */
+export function getOpenPagesInMode(config: Record<string, unknown>): OpenPagesInMode {
+  const raw = config.open_pages_in;
+  return raw === "center" || raw === "full" ? raw : "side";
+}
+
+export function patchOpenPagesInMode(config: Record<string, unknown>, mode: OpenPagesInMode): Record<string, unknown> {
+  return { open_pages_in: mode };
 }
 
 /** The column footer's calculation, per column. `undefined` = none. */

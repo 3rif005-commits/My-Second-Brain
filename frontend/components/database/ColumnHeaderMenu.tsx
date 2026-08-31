@@ -173,7 +173,7 @@ export interface ColumnHeaderMenuArgs {
 /** Direction labels are TYPE-AWARE. Notion writes "Sort A → Z" for text and
  * "Sort low → high" for a number; a generic "Ascending" would be wrong on
  * every column. */
-function sortLabels(type: string): { asc: string; desc: string } {
+export function sortLabels(type: string): { asc: string; desc: string } {
   if (type === "number") return { asc: "Sort low → high", desc: "Sort high → low" };
   if (type === "date" || type === "created_time" || type === "last_edited_time") {
     return { asc: "Sort earliest → latest", desc: "Sort latest → earliest" };

@@ -26,6 +26,14 @@ export interface SidePeekProps {
   /** Starting width in px for side mode; the user's drag is remembered here. */
   defaultWidth?: number;
   onWidthChange?: (width: number) => void;
+  /** False removes the drag handle and fixes the width at `defaultWidth`.
+   *
+   * The row peek's 640px is a per-viewer preference, remembered across
+   * sessions — Notion lets you drag it. The view settings sidebar's 483px is
+   * a TOKEN (view-options-panel.md: "a token, not a per-surface choice"),
+   * not a preference, so it does not resize. Defaults to true so the row
+   * peek's own behaviour is unchanged. */
+  resizable?: boolean;
 }
 
 const MIN_WIDTH = 380;
@@ -38,6 +46,7 @@ export function SidePeek({
   mode = "side",
   defaultWidth = 640,
   onWidthChange,
+  resizable = true,
 }: SidePeekProps) {
   const [width, setWidth] = useState(defaultWidth);
   const dragging = useRef(false);
@@ -86,7 +95,7 @@ export function SidePeek({
           }
         >
           <RadixDialog.Title className="sr-only">{title}</RadixDialog.Title>
-          {isSide && (
+          {isSide && resizable && (
             <div
               role="separator"
               aria-label="Resize"

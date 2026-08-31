@@ -24,6 +24,12 @@ export interface MenuRow {
   /** Caption line under the label. Live example: "This improves performance
    * for large databases." under the "Show large counts as 99+" toggle. */
   description?: string;
+  /** A second line under `description`, styled as a link — distinct from it
+   * because it carries its own click target. Live example: "Open pages in"
+   * -> "Side peek" shows both "Open pages on the side. Keeps the view behind
+   * interactive." (description) AND "Default for Table" (annotation) under
+   * the currently-selected row. */
+  annotation?: { label: string; onSelect?: () => void };
   /** Inline pill after the label — "Basic", "Now with agents". */
   badge?: string;
   /** Right-aligned secondary text. NOT strictly a keyboard shortcut: Notion

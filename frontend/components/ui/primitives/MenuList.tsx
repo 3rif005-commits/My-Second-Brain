@@ -41,6 +41,13 @@ export interface MenuListProps {
    * the third level bounces back rightward over the grandparent menu and hides
    * it — Notion's keeps travelling in one direction. */
   side?: "left" | "right";
+  /** Renders a persistent × that always fully closes the host, regardless of
+   * push depth — distinct from the back arrow's `pop`. Only the docked config
+   * sidebar needs this (view-options-panel.md's ×): every popover-hosted menu
+   * dismisses via outside-click/Esc on the Popover itself, so this defaults
+   * to false and leaves every other surface's title row byte-for-byte
+   * unchanged. */
+  dismissible?: boolean;
 }
 
 interface FlatRow {
@@ -53,7 +60,7 @@ function matches(row: MenuRow, query: string): boolean {
   return row.label.toLowerCase().includes(query.toLowerCase());
 }
 
-export function MenuList({ root, nav = "flyout", onClose, label, side }: MenuListProps) {
+export function MenuList({ root, nav = "flyout", onClose, label, side, dismissible = false }: MenuListProps) {
   // `push` keeps a stack so the back arrow has somewhere to go. `flyout`
   // never pushes — its submenus are nested Popovers rendered by the row.
   // `stack` holds only the PUSHED panels. The base level always reads the
@@ -223,23 +230,53 @@ export function MenuList({ root, nav = "flyout", onClose, label, side }: MenuLis
 
   return (
     <div ref={rootRef} className="py-1 text-menu text-menu-fg" onKeyDown={onKeyDown} data-testid="menu-list">
-      {(panel.title || canPop) && (
-        <div className="flex items-center gap-1 px-2 pb-1">
-          {canPop && (
+      {dismissible ? (
+        (panel.title || canPop || panel.header) && (
+          <div className="flex items-center gap-1 px-2 pb-1">
+            {canPop && (
+              <button
+                type="button"
+                aria-label="Back"
+                onClick={pop}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-menu-hover"
+              >
+                ←
+              </button>
+            )}
+            {panel.title && <span className="flex-1 truncate font-medium">{panel.title}</span>}
+            {panel.header && <div className="min-w-0 flex-1">{panel.header}</div>}
+            {!panel.title && !panel.header && <span className="flex-1" />}
             <button
               type="button"
-              aria-label="Back"
-              onClick={pop}
-              className="flex h-5 w-5 items-center justify-center rounded hover:bg-menu-hover"
+              aria-label="Close"
+              onClick={onClose}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-menu-disabled hover:bg-menu-hover hover:text-menu-fg"
             >
-              ←
+              ×
             </button>
+          </div>
+        )
+      ) : (
+        <>
+          {(panel.title || canPop) && (
+            <div className="flex items-center gap-1 px-2 pb-1">
+              {canPop && (
+                <button
+                  type="button"
+                  aria-label="Back"
+                  onClick={pop}
+                  className="flex h-5 w-5 items-center justify-center rounded hover:bg-menu-hover"
+                >
+                  ←
+                </button>
+              )}
+              {panel.title && <span className="font-medium">{panel.title}</span>}
+            </div>
           )}
-          {panel.title && <span className="font-medium">{panel.title}</span>}
-        </div>
-      )}
 
-      {panel.header && <div className="px-2 pb-1">{panel.header}</div>}
+          {panel.header && <div className="px-2 pb-1">{panel.header}</div>}
+        </>
+      )}
 
       {panel.search && (
         <div className="px-2 pb-1">
@@ -370,6 +407,22 @@ function Row({ row, id, isActive, nav, onActivate, onHover, onClose, side }: Row
         </span>
         {row.description && (
           <span className="text-[12px] text-menu-disabled">{row.description}</span>
+        )}
+        {row.annotation && (
+          <span
+            role={row.annotation.onSelect ? "button" : undefined}
+            onClick={
+              row.annotation.onSelect
+                ? (e) => {
+                    e.stopPropagation();
+                    row.annotation!.onSelect!();
+                  }
+                : undefined
+            }
+            className="text-[12px] text-brand hover:underline"
+          >
+            {row.annotation.label}
+          </span>
         )}
       </span>
       <span className="ml-auto flex shrink-0 items-center gap-1.5 text-menu-disabled">
