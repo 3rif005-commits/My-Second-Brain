@@ -156,3 +156,49 @@ CORRECT STATEMENT:
 Recorded rather than silently edited: the wrong version was already committed
 (ca5a9fa / 616b77b), and knowing which observations were over-generalised is
 useful when auditing the rest of these captures.
+
+================================================================
+"Edit property" — the per-type config flyout (Number)
+SCREENSHOT: 13b-edit-property-number.jpg
+CAPTURED: 2026-08-31, light mode, on the Number property
+================================================================
+
+Reached by: column header menu → "Edit property" (present only for types that HAVE
+per-type config; absent on Text). Opens as a FLYOUT to the LEFT here — the menu
+was already near the right edge, so it flipped. Parent menu stays visible.
+
+--- verbatim ---
+Number format      Number     >
+Decimal places     Default    >
+Show as
+   [ 42        ]  [ ▬        ]  [ ◐       ]
+   [ Number    ]  [ Bar      ]  [ Ring    ]      ← a 3-card grid, "Number" selected
+Changes apply to all views showing this property.   ← FOOTER, muted
+--- end ---
+
+*** THE FOOTER IS THE IMPORTANT PART ***
+  "Changes apply to all views showing this property."
+
+  Notion explicitly tells the user the SCOPE of what they are editing —
+  data-source-level (schema), not view-level. That matters because the same panel
+  stack also hosts view-level settings, and the two are visually identical.
+
+  This is directly relevant to us: our backend has the same split
+  (db_properties belongs to a data source; view.config belongs to a view), and
+  the UI currently makes no distinction at all. ADOPT THIS PATTERN — any panel
+  editing schema-level state carries a scope disclaimer in its footer.
+
+  MenuPanel.footer now has THREE established uses:
+    1. metadata      ("Last edited by …", row menu)
+    2. scope         ("Only applies to you", Display as)
+    3. scope         ("Changes apply to all views…", Edit property)
+  Uses 2 and 3 are opposite scopes — per-user vs all-views. The footer is where
+  Notion disambiguates them.
+
+ROW ANATOMY
+  - "Number format" and "Decimal places" are value+chevron rows (sub-panels).
+  - "Show as" is a SECTION containing a CARD GRID (icon/preview above label),
+    the same card idiom as the view-type grids but at 3 columns and with a live
+    preview rather than an icon ("42" rendered, a bar, a ring).
+  → The card-grid element is reused across unrelated surfaces (view types,
+    number display). Build it once as a primitive, parameterised by column count.
