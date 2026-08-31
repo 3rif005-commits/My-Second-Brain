@@ -87,3 +87,67 @@ Map      Calendar   Form
   the database↔data-source split again. Our schema supports it
   (db_databases → db_data_sources, 1:N) but create_database only ever mints one
   and we have no endpoint to add another. Out of scope; note, do not build.
+
+================================================================
+CREATING A VIEW — confirmed: create first, configure after
+SCREENSHOT: screenshots/46b-view-created-configure-after.jpg
+CAPTURED: 2026-08-31, clicked the "Board" card in "+ Add a new view"
+================================================================
+
+*** THE PLAN'S CENTRAL CLAIM ABOUT VIEW CREATION IS CONFIRMED ***
+  The plan said: "Notion opens a popover with a grid of view-type cards, creates
+  immediately, and configures group-by afterwards in the view options panel."
+  That is exactly what happens.
+
+WHAT HAPPENED ON ONE CLICK
+  1. The view was CREATED IMMEDIATELY. No name prompt, no group-by prompt, no
+     Create button, no validation gate.
+  2. It was named "New view" by default and became the active tab.
+  3. The board RENDERED AT ONCE, already grouped by **Status**, with real
+     columns: "Not started  1" and "In progress  0" (count beside each group name).
+     → Notion AUTO-SELECTED a groupable property. It did not ask, and it did not
+       leave the board unconfigured.
+     → It picked an EXISTING Status property. It did NOT invent one. That
+       distinction matters for the comparison below.
+  4. A settings sidebar opened on the right, titled "New view", for configuring
+     AFTER creation: an autofocused View-name input, the view-type card grid,
+     and the display toggles (Show page icon, Wrap all content, …).
+
+CONTRAST WITH OURS  (ViewTabs.tsx:99-122, DatabaseShell.tsx:169-202)
+  Our flow: an inline form collects name + type + group-by BEFORE creating, and
+  `canSubmit` BLOCKS creation when a Board has no group-by chosen
+  (`boardMissingSelection`), or when no groupable property exists at all
+  (`boardNeedsPropertyButHasNone`).
+
+  task-16-brief.md justified this as a deliberate deviation: "Notion auto-creates
+  a status property and mutates the schema... A Board view here requires picking
+  an existing groupable property... never silently falls back to inventing one."
+
+  THAT JUSTIFICATION IS ONLY HALF RIGHT, on this evidence. Notion did not invent
+  or mutate anything — a Status property already existed and it simply auto-
+  selected it. So the real difference is AUTO-SELECT vs REQUIRE-SELECT, not
+  invent vs not-invent.
+  → OPEN QUESTION for the user, not for me to settle: what does Notion do when
+    NO groupable property exists at all? That is the case the original deviation
+    was really guarding. Re-test on a database with no select/status/multi-select
+    before deciding whether to keep our gate.
+
+*** A THIRD VIEW-TYPE CARD GRID, WITH A THIRD SET ***
+  This sidebar's grid (on a newly created BOARD) shows TEN types in 3 columns:
+    Table, Board, Timeline, Calendar, List, Gallery, Chart, Feed, Map, Dashboard
+  Settings → Layout on the TABLE view showed NINE in 3 columns (no Dashboard).
+  "+ Add a new view" showed ELEVEN in 4 columns (Dashboard AND Form).
+
+  So there are at least three different eligible sets. The Table-vs-Board
+  difference (Dashboard present here, absent there) is OBSERVED, and its CAUSE IS
+  NOT ESTABLISHED — do not infer a rule from two data points. Re-capture Layout
+  on several view types before the spec claims anything.
+  (Recording this explicitly because an earlier finding in this work was already
+  over-generalised from a single observation.)
+
+GROUP HEADER ANATOMY (bonus, feeds §6 group-panel.md)
+  Each board column header renders: [status dot] [group name] [count]
+    ● Not started   1
+    ● In progress   0
+  Empty groups ARE shown by default (In progress has 0). Each column has its own
+  "+ New page" row at the bottom.
