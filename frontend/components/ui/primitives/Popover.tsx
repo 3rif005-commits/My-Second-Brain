@@ -44,6 +44,13 @@ export interface PopoverProps {
    * covered by the guard. If that reproduces, pass the wrapper here rather than
    * re-adding ad-hoc listeners. See the design doc §6 risk 1. */
   container?: HTMLElement | null;
+  /** Keep focus where it already is when the popover opens.
+   *
+   * Radix focuses the content's first focusable element on open, which is
+   * usually right. It is wrong when the TRIGGER is itself the primary input —
+   * property creation focuses the name field in the header cell, and Radix
+   * would immediately pull focus into the panel's search instead. */
+  preventAutoFocus?: boolean;
 }
 
 export function Popover({
@@ -59,6 +66,7 @@ export function Popover({
   label,
   className = "",
   container,
+  preventAutoFocus,
 }: PopoverProps) {
   const isNamedWidth = typeof width === "string" && width in WIDTH_CLASS;
   const widthClass = isNamedWidth ? WIDTH_CLASS[width as string] : "";
@@ -77,6 +85,7 @@ export function Popover({
           align={align}
           sideOffset={sideOffset}
           collisionPadding={8}
+          onOpenAutoFocus={preventAutoFocus ? (e) => e.preventDefault() : undefined}
           aria-label={label}
           style={style}
           // No border: the 1px edge is the third layer of --menu-shadow, in

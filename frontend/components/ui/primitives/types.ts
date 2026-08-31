@@ -64,7 +64,14 @@ export interface MenuPanel {
   /** `scope: "section"` matches Notion's type picker, where the magnifier sits
    * on the "Select type" section header and the AI Autofill section above is
    * left unfiltered. */
-  search?: { placeholder: string; scope?: "panel" | "section" };
+  search?: {
+    placeholder: string;
+    scope?: "panel" | "section";
+    /** Defaults to true. Set false when the HOST owns the primary input —
+     * property creation focuses the name field in the header cell, and a
+     * self-focusing search inside the panel would steal it. */
+    autoFocus?: boolean;
+  };
   sections: MenuSection[];
   footer?: ReactNode;
 }

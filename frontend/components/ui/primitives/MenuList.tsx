@@ -48,8 +48,17 @@ function matches(row: MenuRow, query: string): boolean {
 export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps) {
   // `push` keeps a stack so the back arrow has somewhere to go. `flyout`
   // never pushes — its submenus are nested Popovers rendered by the row.
-  const [stack, setStack] = useState<MenuPanel[]>([root]);
-  const panel = stack[stack.length - 1];
+  // `stack` holds only the PUSHED panels. The base level always reads the
+  // live `root` prop rather than a snapshot.
+  //
+  // This matters more than it looks: a host rebuilds its panel every render,
+  // so its row handlers close over current state. Snapshotting root into
+  // state on mount froze those closures — property creation POSTed the
+  // DEFAULT name because the handler still held the empty string from the
+  // first render. Any host whose panel depends on changing state would hit
+  // the same thing.
+  const [stack, setStack] = useState<MenuPanel[]>([]);
+  const panel = stack.length > 0 ? stack[stack.length - 1] : root;
 
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -58,7 +67,7 @@ export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const columns = panel.columns ?? 1;
-  const canPop = nav === "push" && stack.length > 1;
+  const canPop = nav === "push" && stack.length > 0;
 
   // Visible rows, flattened in DOM order, so arrow keys can walk them
   // regardless of section boundaries. Disabled rows stay in the list and are
@@ -112,7 +121,7 @@ export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps
   );
 
   const pop = useCallback(() => {
-    setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
+    setStack((s) => (s.length > 0 ? s.slice(0, -1) : s));
     setQuery("");
     setActive(0);
   }, []);
@@ -203,7 +212,7 @@ export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps
         <div className="px-2 pb-1">
           <input
             ref={searchRef}
-            autoFocus
+            autoFocus={panel.search.autoFocus !== false}
             role="combobox"
             aria-expanded
             aria-controls={listboxId}
