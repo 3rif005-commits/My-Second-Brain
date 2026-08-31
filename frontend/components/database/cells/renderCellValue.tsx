@@ -83,7 +83,15 @@ export function renderCellValue(
       );
     case "number":
       return (
-        <NumberCell value={value as NumberValue | undefined} editable={editable} onChange={onChange} />
+        <NumberCell
+          value={value as NumberValue | undefined}
+          editable={editable}
+          onChange={onChange}
+          // The one cell whose `config` changes what it RENDERS, not just what
+          // it accepts — `Number format` / `Decimal places` / `Show as` are all
+          // display-only settings stored on the property.
+          config={property.config}
+        />
       );
     case "select":
       return (

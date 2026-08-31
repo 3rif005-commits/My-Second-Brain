@@ -158,13 +158,87 @@ at all.
 
 **Adopt the pattern: any panel editing schema-level state carries a scope disclaimer.**
 
-`MenuPanel.footer` now has three established uses — metadata, per-user scope
-(`Only applies to you`), and all-views scope (`Changes apply to all views…`).
+**Correction after building it (2026-08-31):** the disclaimer does *not* go in
+`MenuPanel.footer`. The captured number panel has **no dividers anywhere**, and
+`footer` draws a rule above itself and mutes its contents — which would also be
+wrong for the interactive `Show as` cards sitting just above it. Both live in
+`MenuSection.content` instead, a field added for exactly this. `footer` keeps its
+two other established uses (metadata, and the per-user `Only applies to you`).
 
-### Other types
+The three `Show as` cards are Number / Bar / Ring. Choosing **Bar or Ring reveals
+a bordered sub-form**: `Color` (a swatch list, expanded in place — not a native
+`<select>`, and not a nested popover, which would make Escape ambiguous three
+dismissal layers deep), `Divide by` (a number input Notion pre-fills with `100`
+on selection), and a `Show number` switch.
 
-`TBD` — Select/Status option editors, Date format, Formula editor, Rollup config.
-Select's option list is reachable and was **not** captured; capture before M2 starts.
+`Number format` carries **its own search** (`Filter formats…`) — Notion lists 45
+formats, the backend enum carries 39, and we render that intersection in Notion's
+order. `Decimal places` is `Default` / `0`–`5`; `Default` is written as an
+explicit `null` so a previously-set value is actually cleared rather than merged
+over.
+
+### The `Edit property` row is conditional — captured 2026-08-31
+
+A `Text` column's header menu opens straight onto `Change type`. **There is no
+`Edit property` row at all** for a type with no per-type config. This was the
+last open question in this spec and it is now settled: the row is derived from
+the type, not always rendered.
+
+`hasEditableConfig()` in `EditPropertyPanel.tsx` is the single place that rule
+lives. Today it returns true for `number`, `select`, `multi_select` and `status`.
+
+### Select / Multi-select — the option editor
+
+```
+[↑↓] Sort                     Manual   >
+
+Options                                +
+[⠿] (Alpha)                            >     ← the option renders as its own pill
+
+[✨] Generate with AI
+```
+
+- `Options` is a **section header with a trailing `+` icon button**, not a row.
+  This is why `MenuSection.action.label` is a `ReactNode` rather than a string.
+- The option's own `>` opens a third-level panel:
+
+```
+[ Alpha                    ] (i)     ← autofocused, text SELECTED
+[🗑] Delete
+
+Colors
+[▪] Default   [▪] Gray   [▪] Brown   [▪] Orange   [▪] Yellow
+[▪] Green     [▪] Blue   [▪] Purple ✓ [▪] Pink    [▪] Red
+```
+
+Exactly **10 colours**, in that order, each with a filled swatch as its icon and
+a trailing `✓` on the current one. Deleting an option is **not** confirmed —
+unlike deleting a property, it loses one label rather than every row's value.
+
+- The options list's own `Sort` (Manual / Alphabetical / Reverse alphabetical)
+  sorts the **option list**, not the table rows. It is a different control from
+  the header menu's `Sort` row, which sorts the table. Choosing an alphabetical
+  order **rewrites the stored order** rather than being a display-time flag, so
+  that switching back to `Manual` cannot silently restore a stale order.
+
+**Not adopted:** `Generate with AI`. Out of this phase's scope; tracked, not built.
+
+### Status — the same editor, split into three groups
+
+`StatusOption` carries a `group` field closed to `To-do` / `In progress` /
+`Complete` (backend `choice.py`, a deliberate simplification of Notion's
+parallel `options[]`/`groups[]` schema). The editor therefore renders **three
+labelled sections, each with its own `+`**, instead of one flat `Options` list —
+a flat list could never set `group`, and every option created would silently
+land in `To-do`.
+
+### Still not captured
+
+Date format, Formula editor, Rollup config. `formula`, `relation` and `rollup`
+are deliberately **excluded** from `hasEditableConfig` for now: their config is
+already reachable through the push-panel the creation popover uses, and routing
+one editor through two entry points with two different shapes is exactly how the
+old inline forms drifted apart. Unifying them is the one named follow-up here.
 
 ---
 
@@ -188,8 +262,8 @@ Both live in the **column header menu**, not in a separate panel:
 | Focus on open | The **name input** in the header cell | confirmed |
 | Tab | Plain DOM order — name input → `ⓘ` → … | confirmed |
 | ↑ / ↓ | **Nothing** in the header menu; arrows move the text caret | confirmed |
-| ↑ / ↓ in the *type grid* | `TBD` — untested, and it is a 2-column grid so ←/→ matter too |
-| Enter | `TBD` |
+| ↑ / ↓ in the *type grid* | Not observable — Notion does not receive synthetic KeyboardEvents (raw-dom/00-METHOD.md), and the grid was not re-tested with real events. We implement grid-aware ↑/↓/←/→ regardless. |
+| Enter | Same — not observed; we activate the focused row. |
 | Esc | **Cancels and discards the typed name** — no property is created | confirmed |
 
 We implement arrow navigation on every panel regardless — see `table-column-header.md`

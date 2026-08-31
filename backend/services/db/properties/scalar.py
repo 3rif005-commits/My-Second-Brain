@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import asyncpg
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .base import Operator, SqlContext, SqlFragment, _GenericProperty
 
@@ -45,6 +45,32 @@ class NumberConfig(BaseModel):
     # touches sql_extract/sql_order/coerce_write, only carried through for a
     # future frontend cell editor (out of this task's scope per the brief).
     format: NumberFormat = "number"
+
+    # The rest of the `Edit property` panel, captured live from Notion on
+    # 2026-08-31 (docs/ui-specs/raw-dom/20-edit-property-panel.md): the panel
+    # has three controls, not one -- `Number format`, `Decimal places` and a
+    # `Show as` card row, and choosing Bar or Ring reveals Color / Divide by /
+    # Show number. Every one of these is display-only in exactly the sense
+    # `format` already is: none touch sql_extract, sql_order or coerce_write,
+    # and none change the stored value.
+    #
+    # Declared here because this model is the written-down schema for
+    # `db_properties.config` on a number property. Nothing validates
+    # `config_model` at write time (see base.py / button.py's note on that
+    # same fact), so PATCH /db/properties/{key} would have accepted these
+    # keys with or without this change -- but leaving the model at one field
+    # while the UI writes five would make it a stale description of the data.
+    decimal_places: int | None = Field(default=None, ge=0, le=5)
+    show_as: Literal["number", "bar", "ring"] = "number"
+    # Notion's bar/ring palette is a subset of the 10 option colors; kept a
+    # plain str for the same reason SelectOption.color is (choice.py) --
+    # narrowing it to a Literal would reject already-stored values.
+    bar_color: str = "green"
+    # None means "no divisor configured yet". Notion pre-fills the input with
+    # 100 the moment Bar or Ring is chosen; that default belongs to the UI,
+    # not to the stored config, so an unset value stays unset here.
+    divide_by: float | None = None
+    show_number: bool = True
 
 
 class UniqueIdConfig(BaseModel):

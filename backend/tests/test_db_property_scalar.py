@@ -52,8 +52,37 @@ def test_number_config_rejects_unknown_format():
 
 
 def test_number_config_forbids_extra_fields():
+    # `show_as` used to be the example of a rejected key here. It is a real
+    # field now (the Edit property panel writes it), so the assertion moved
+    # to a key Notion's panel genuinely has no control for.
     with pytest.raises(ValidationError):
-        NumberConfig(show_as="bar")
+        NumberConfig(precision=2)
+
+
+def test_number_config_display_only_fields_default_to_plain_number():
+    config = NumberConfig()
+    assert config.decimal_places is None
+    assert config.show_as == "number"
+    assert config.bar_color == "green"
+    assert config.divide_by is None
+    assert config.show_number is True
+
+
+def test_number_config_accepts_the_show_as_values_notion_offers():
+    for show_as in ("number", "bar", "ring"):
+        assert NumberConfig(show_as=show_as).show_as == show_as
+    with pytest.raises(ValidationError):
+        NumberConfig(show_as="gauge")
+
+
+def test_number_config_bounds_decimal_places_to_notions_range():
+    # Notion's `Decimal places` flyout offers Default, 0, 1, 2, 3, 4, 5.
+    for places in range(6):
+        assert NumberConfig(decimal_places=places).decimal_places == places
+    with pytest.raises(ValidationError):
+        NumberConfig(decimal_places=6)
+    with pytest.raises(ValidationError):
+        NumberConfig(decimal_places=-1)
 
 
 def test_number_coerce_write_accepts_int_float_none():

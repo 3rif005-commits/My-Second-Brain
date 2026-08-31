@@ -247,6 +247,7 @@ export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps
                 {section.action && (
                   <button
                     type="button"
+                    aria-label={section.action.aria}
                     onClick={section.action.onSelect}
                     className="hover:text-menu-fg"
                   >
@@ -272,6 +273,7 @@ export function MenuList({ root, nav = "flyout", onClose, label }: MenuListProps
                 );
               })}
             </div>
+            {section.content}
           </div>
         ))}
         {noSearchResults && (

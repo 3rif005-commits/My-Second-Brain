@@ -126,6 +126,10 @@ export function ColumnHeader({
     onPatchConfig,
     onSetSorts,
     onChangeType: (targetType) => patchProperty({ type: targetType }),
+    // `config` is merged server-side, so only the changed keys go over the
+    // wire — the same patch-not-whole-object rule the view-config queue uses.
+    onPatchPropertyConfig: (patch) =>
+      patchProperty({ config: { ...(property.config ?? {}), ...patch } }),
     onInsert: insertProperty,
     onDuplicate: duplicateProperty,
     onDelete: () => setConfirmingDelete(true),

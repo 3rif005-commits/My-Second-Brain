@@ -47,6 +47,7 @@ import {
   Rows3,
   Search,
   Sigma,
+  SlidersHorizontal,
   Trash2,
   Type as TypeIcon,
   Users,
@@ -62,6 +63,7 @@ import {
   patchWrapped,
 } from "@/lib/database/viewConfig";
 import type { MenuPanel, MenuRow } from "@/components/ui/primitives";
+import { editPropertyPanel, hasEditableConfig } from "./EditPropertyPanel";
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
   // One distinct glyph per type. Select and Status previously shared a plain
@@ -153,6 +155,11 @@ export interface ColumnHeaderMenuArgs {
   onPatchConfig: (patch: Record<string, unknown>) => void;
   onSetSorts: (sorts: { property: string; direction: "asc" | "desc" }[]) => void;
   onChangeType: (targetType: string) => void;
+  /** Writes a PATCH onto the PROPERTY's `config` (schema-level), not the
+   * view's. Kept separate from `onPatchConfig` above precisely because they
+   * hit different endpoints and different scopes — the number format is the
+   * same in every view, the column's width is not. */
+  onPatchPropertyConfig: (patch: Record<string, unknown>) => void;
   onInsert: (side: "left" | "right") => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -221,6 +228,7 @@ export function buildColumnHeaderMenu(args: ColumnHeaderMenuArgs): MenuPanel {
     onPatchConfig,
     onSetSorts,
     onChangeType,
+    onPatchPropertyConfig,
     onInsert,
     onDuplicate,
     onDelete,
@@ -262,6 +270,25 @@ export function buildColumnHeaderMenu(args: ColumnHeaderMenuArgs): MenuPanel {
   const groupable = (GROUPABLE_PROPERTY_TYPES as readonly string[]).includes(property.type);
 
   const rows: MenuRow[] = [];
+
+  // FIRST row, above `Change type` — and only for a type that actually has
+  // per-type config. A Text column's menu in live Notion opens straight onto
+  // `Change type` with no `Edit property` row at all (captured 2026-08-31,
+  // raw-dom/20-edit-property-panel.md), so this is conditional by design, not
+  // an unfinished branch.
+  if (!isTitle && hasEditableConfig(property.type)) {
+    rows.push({
+      id: "edit-property",
+      icon: <SlidersHorizontal size={14} />,
+      label: "Edit property",
+      submenu: () =>
+        editPropertyPanel({
+          type: property.type,
+          config: property.config ?? {},
+          onPatchConfig: onPatchPropertyConfig,
+        })!,
+    });
+  }
 
   if (!isTitle) rows.push(changeType);
   if (isTitle) {

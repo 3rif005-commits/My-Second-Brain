@@ -44,9 +44,25 @@ export interface MenuSection {
    * picker filters "Select type" while leaving "AI Autofill" above it intact,
    * so search scope is per-section rather than per-panel. Defaults to true. */
   searchable?: boolean;
-  /** Right-aligned bulk action on the section header, e.g. "Hide all". */
-  action?: { label: string; onSelect: () => void };
+  /** Right-aligned bulk action on the section header, e.g. "Hide all".
+   *
+   * `label` is a ReactNode, not a string, because the action is not always
+   * text: the select/status option editor's "Options" header carries a bare
+   * `+` icon button (captured 2026-08-31, raw-dom/20-edit-property-panel.md),
+   * while the property-visibility panel's carries the words "Hide all".
+   * `aria` names the icon form, which has no readable text of its own. */
+  action?: { label: ReactNode; aria?: string; onSelect: () => void };
   rows: MenuRow[];
+  /** Arbitrary content rendered AFTER this section's rows, inside the same
+   * section (so it gets no divider of its own).
+   *
+   * Exists for the parts of a real Notion panel that are not rows at all: the
+   * number property's `Show as` card triplet and the Color / Divide by / Show
+   * number sub-form it reveals, and the trailing "Changes apply to all views
+   * showing this property." disclaimer. Putting those in `MenuPanel.footer`
+   * would be wrong twice over — the footer is muted (these cards are
+   * interactive) and it draws a divider the captured panel does not have. */
+  content?: ReactNode;
 }
 
 export interface MenuPanel {
