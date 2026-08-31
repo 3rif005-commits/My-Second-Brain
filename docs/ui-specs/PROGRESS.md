@@ -38,7 +38,7 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 | 12 | `new-row-button.md` | **written** (templates-present state TBD) | `new-button-and-context-menus.txt` | 74 |
 | 13 | ~~`context-menus.md`~~ | **REMOVED** — no distinct context menus exist; folded into §1 and §9 as extra triggers | `new-button-and-context-menus.txt` | 77, 78 |
 | 14 | `table-drag-resize.md` | **written** (reorder drags TBD) | `resize-and-states.txt` | 79, 80 |
-| 15 | `cell-editing.md` | **written** (Select + Date only; other types TBD) | `cell-editing.txt` | 85a-d, 88 |
+| 15 | `cell-editing.md` | **written** (Select, Status, Date; 7 types TBD) | `cell-editing.txt` | 85a-d, 87, 88 |
 | 16 | `states.md` | **written** (loading/error/empty-group TBD) | `resize-and-states.txt`, `empty-database-toolbar.txt` | 94 |
 
 ---
@@ -100,8 +100,12 @@ Built by me, with the user's authorisation, 2026-08-29:
 - **2 views**: `Table` and `Board` (Board auto-grouped by Status)
 - **1 Select option**: `Alpha`, created via create-on-type, applied to Row one
 - **1 calculation**: `Sum` on the Number column, so the footer row renders
+- **TYPES CORRECTED 2026-08-31.** Four properties had been created with the wrong type
+  during the build (Status was Select, Person was Status, Checkbox and URL were both
+  Person; Date was Select). All fixed via Change type and verified by reading the header
+  type icons. The fixture is now honestly typed.
 - **Still missing** for full §0 coverage: Formula, Relation, Rollup, Created time;
-  Status option values; more rows; a row template
+  more rows; a row template
 
 ## Log
 

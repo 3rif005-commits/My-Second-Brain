@@ -84,13 +84,44 @@ is on.
 
 ---
 
+## Status — and why it could not be inferred from Select
+
+```
+[ Search for an option ]        ← no ellipsis, unlike Select's "Search for an option…"
+To-do
+  ● Not started                 ← coloured DOT + label, not a filled chip
+─────────────
+In progress
+  ● In progress
+─────────────
+Complete
+  ● Done
+─────────────
+⚙  Edit property                ← a row inside the cell editor
+```
+
+**Four differences from Select**, three of which a "same as Select" spec would have got
+wrong:
+
+| | Select | Status |
+|---|---|---|
+| Grouping | flat list | **grouped** under To-do / In progress / Complete, with headers and dividers |
+| Create-on-type | ✅ `Create [x]` | **❌ none** — options are managed on the property |
+| Option rendering | filled **chip** | **coloured dot** + label |
+| Footer | none | **`Edit property`** row linking to the property config |
+| Search placeholder | `Search for an option…` | `Search for an option` — **copy differs per type** |
+
+Our `StatusCell` renders a flat list. Our backend already models status groups
+(`GroupBySpec.mode: "option" | "group"`), so the data exists.
+
 ## Other types
 
-`TBD` — **capture before M11.** Text (expanded editor), Number, Status (grouped options),
-Multi-select (multiple chips), Person, Files & media, URL, Checkbox.
+`TBD` — **capture before M11.** Text (expanded editor), Number, Multi-select (multiple
+chips), Person, Files & media, URL, Checkbox.
 
-**Do not write these from the Select and Date patterns.** Status in particular groups its
-options into To-do / In progress / Complete, which neither captured editor shows.
+**Do not write these from the Select, Status and Date patterns.** Three captured editors
+have now differed from one another in placeholder copy, option rendering, create-on-type
+and footer rows. Assume each type differs until captured.
 
 ---
 

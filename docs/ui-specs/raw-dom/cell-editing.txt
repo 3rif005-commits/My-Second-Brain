@@ -112,3 +112,73 @@ MAPS TO OUR DateValue (lib/database/types.ts:285)
 NOT CAPTURED: the "Date format" and "Remind" sub-panels; the time picker when
 "Include time" is on; the relative-date options in a DATE FILTER (different
 surface, still TBD for §4).
+
+================================================================
+FIXTURE CORRECTION, then the STATUS cell editor
+SCREENSHOT: 87-cell-status.jpg
+CAPTURED: 2026-08-31, light mode, real clicks
+================================================================
+
+FIXTURE AUDIT AND FIX (2026-08-31)
+  Four properties had been created with the WRONG TYPE during the fixture build,
+  because a batched click landed on the unfiltered type grid when the type-search
+  input had collapsed (see property-type-picker.txt, FINDING 2 — the expansion
+  does not persist).
+
+  Audited by zooming on the header row and reading the TYPE ICONS — the DOM does
+  not expose property type as text, and the header's only <svg> is the drag handle.
+
+  | Property  | Was      | Now      |
+  |-----------|----------|----------|
+  | Status    | Select   | Status   |
+  | Person    | Status   | Person   |
+  | Checkbox  | Person   | Checkbox |
+  | URL       | Person   | URL      |
+  | Date      | Select   | Date     | (fixed earlier)
+  All others (Name, Text, Number, Select, Multi-select, Files) were already correct.
+
+  METHOD NOTE: to read a property's true type, either zoom on the header row and
+  read the icon, or open the header menu → "Change type" and read the ✓. The
+  latter is authoritative. Property type is NOT recoverable from innerText.
+
+  BONUS FINDING while fixing: a STATUS property's header menu has an extra row
+  the others lack — **"Display as    Select  >"** — letting a status render as a
+  plain select. Another type-conditional row, on top of "Edit property".
+
+================================================================
+THE STATUS CELL EDITOR
+================================================================
+Opened by clicking the cell THREE times in this run (select, then open). The
+two-stage model holds but the second click did not always register — TBD whether
+that is Notion or synthetic-click timing.
+
+--- verbatim ---
+[ Search for an option ]          ← note: NO ellipsis, unlike Select's
+                                    "Search for an option…". Copy differs per type.
+To-do                             ← GROUP HEADER
+  ● Not started                   ← grey dot
+  ── divider ──
+In progress                       ← GROUP HEADER
+  ● In progress                   ← blue dot
+  ── divider ──
+Complete                          ← GROUP HEADER
+  ● Done                          ← green dot
+  ── divider ──
+⚙  Edit property                  ← A ROW INSIDE THE CELL EDITOR
+--- end ---
+
+*** FOUR DIFFERENCES FROM THE SELECT EDITOR ***
+  1. Options are GROUPED under the three status groups (To-do / In progress /
+     Complete), each with a group header and a divider. Select has no grouping.
+  2. NO CREATE-ON-TYPE. Select offers "Create [x]"; Status does not — status
+     options are managed on the property, not invented from a cell.
+  3. Options render as a COLOURED DOT + label, not as a filled chip.
+  4. There is an **"Edit property"** row at the BOTTOM of the editor, linking
+     from the cell straight to the property config. Select's editor has none.
+
+  This is exactly why the spec refused to write Status from the Select pattern.
+  Three of these four would have been wrong.
+
+  Our StatusCell (cells/StatusCell.tsx) renders a flat list with no groups. Our
+  backend DOES model status groups (GroupBySpec's `mode: "option" | "group"`,
+  and DatabaseShell.tsx:180 defaults to "option"), so the data is there.
