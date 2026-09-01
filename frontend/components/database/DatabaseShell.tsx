@@ -549,37 +549,46 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
           }
         />
 
-        <ViewTabs
-          views={views}
-          activeViewId={activeView?.id ?? ""}
-          onSelect={setActiveViewId}
-          properties={properties}
-          onCreateView={handleCreateView}
-          dataSourceName={dataSource.name}
-          onUpdateView={updateView}
-          onDeleteView={deleteView}
-          onOpenSettings={() => setSettingsOpen(true)}
-          // Hidden for the same read-only source the settings sidebar below
-          // is hidden for — a toolbar whose only enabled button opens
-          // nothing (Filter/Sort still render but write nowhere useful for
-          // All Notes) is worse than no toolbar.
-          trailing={
-            editable && activeView ? (
-              <ViewToolbar
-                view={activeView}
-                properties={properties}
-                onSetSorts={(updater) => queueSortsUpdate(activeView.id, activeView.sorts, updater)}
-                onSetFilter={(updater) => queueFilterUpdate(activeView.id, activeView.filter, updater)}
-                dataSourceId={dataSourceId}
-                automations={automations}
-                onCreateAutomation={createAutomation}
-                onUpdateAutomation={updateAutomation}
-                onDeleteAutomation={deleteAutomation}
-                onOpenSettings={() => setSettingsOpen(true)}
-              />
-            ) : undefined
-          }
-        />
+        {/* view-tab-bar.md's own States table: "Read-only source (is_virtual):
+         * All Notes has no db_views rows at all. Suppress the whole bar" —
+         * live-checklist finding: this rendered the full bar anyway, menu
+         * and all (Rename/Edit view/Duplicate view included), because only
+         * `trailing` below was gated on `editable`. The tab's own `views[0]`
+         * id (a synthesized `"all-notes-table"`, not a real `db_views` row —
+         * see `routers/databases.py`'s `_all_notes_database`) is still what
+         * `renderActiveView` below reads, so removing the BAR here doesn't
+         * remove the view itself, only the now-dangerous tab-switcher UI
+         * (its writes -- rename, duplicate, delete -- would PATCH/DELETE a
+         * view id that doesn't exist in `db_views` and fail). */}
+        {editable && (
+          <ViewTabs
+            views={views}
+            activeViewId={activeView?.id ?? ""}
+            onSelect={setActiveViewId}
+            properties={properties}
+            onCreateView={handleCreateView}
+            dataSourceName={dataSource.name}
+            onUpdateView={updateView}
+            onDeleteView={deleteView}
+            onOpenSettings={() => setSettingsOpen(true)}
+            trailing={
+              activeView ? (
+                <ViewToolbar
+                  view={activeView}
+                  properties={properties}
+                  onSetSorts={(updater) => queueSortsUpdate(activeView.id, activeView.sorts, updater)}
+                  onSetFilter={(updater) => queueFilterUpdate(activeView.id, activeView.filter, updater)}
+                  dataSourceId={dataSourceId}
+                  automations={automations}
+                  onCreateAutomation={createAutomation}
+                  onUpdateAutomation={updateAutomation}
+                  onDeleteAutomation={deleteAutomation}
+                  onOpenSettings={() => setSettingsOpen(true)}
+                />
+              ) : undefined
+            }
+          />
+        )}
       </div>
 
       {/* Active view */}

@@ -10,7 +10,7 @@
 // Renders nothing at all when there is neither a sort nor a filter — same
 // "No filter -> no filter bar" rule filter-panel.md states, extended to
 // "no sort either" since this bar is now shared.
-import { useState } from "react";
+import { forwardRef, useState } from "react";
 import { ArrowUpDown, Filter as FilterIcon, Plus } from "lucide-react";
 import { MenuList, Popover } from "@/components/ui/primitives";
 import type { PropertyResponse, ViewResponse } from "@/lib/database/types";
@@ -29,19 +29,31 @@ function asSorts(raw: unknown[]) {
   );
 }
 
-function Chip({ label, icon, onClick }: { label: string; icon: React.ReactNode; onClick?: () => void }) {
+// `forwardRef` + `...rest`, same fix and same reason as `ToolbarButton`
+// (ViewToolbar.tsx) and the two Radix-trigger fixes already made elsewhere
+// in this codebase (`DropdownButton`, `TriggerButton`): this component is
+// always used as a `Popover.Trigger asChild` anchor, so it needs to accept
+// the `ref` Slot clones onto it for floating-ui's position computation.
+// Without it, the click still worked (Slot's composed `onClick` merges into
+// the props Chip already destructures) but the popover rendered at Radix's
+// pre-measurement placeholder position -- hundreds of pixels off-screen.
+const Chip = forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; icon: React.ReactNode }
+>(function Chip({ label, icon, className = "", ...rest }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
-      onClick={onClick}
-      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+      {...rest}
+      className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 ${className}`}
     >
       {icon}
       {label}
       <span aria-hidden>▾</span>
     </button>
   );
-}
+});
 
 export interface QueryBarProps {
   view: ViewResponse;

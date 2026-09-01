@@ -292,13 +292,77 @@ Sort both now open correctly anchored under their toolbar buttons.
 `screenshots/actual/M4-05-filter-popover-fixed.jpg`,
 `M5-04-sort-popover-fixed.jpg`. `ViewToolbar.test.tsx` 8/8 green, `tsc` clean.
 
-**This unblocks, for a future session**: `states.md`'s empty-filter-state checklist
-(steps 2-7) and any other Filter/Sort-toolbar-dependent live checks across M4-M6 that
-were previously marked "can't verify, known environment limitation" — that framing was
-wrong. A follow-up attempt at the empty-filter-state check this session was abandoned
-partway (the filter builder's own value-picker UI, in this narrow 248px popover near
-the viewport's right edge, proved fiddly to drive via coordinate clicks in the time
-available) — not blocked anymore, just not finished.
+**A second instance of the same bug found and fixed in the same pass**: `QueryBar.tsx`'s
+`Chip` (the persistent sort/filter chips under the toolbar, e.g. "1 rule ▾") had the
+identical missing-`forwardRef` problem — confirmed via the same `getBoundingClientRect()`
+check before fixing. A full audit of every `Popover`/`trigger={...}` usage across
+`components/database/` turned up exactly two prior fixes (`DropdownButton`,
+`TriggerButton`) and these two new ones (`ToolbarButton`, `Chip`) — every other trigger
+in the codebase is a raw host element (`<button>`/`<div>`), which accepts a ref natively
+and was never at risk. `QueryBar.test.tsx` 6/6 green.
+
+**`states.md`'s empty-filter-state checklist (steps 1-7), finished this session now
+that it's unblocked**: on a flat (ungrouped) view, filtering to zero matches makes the
+entire table disappear — no `<thead>`, no rows, confirmed via DOM query
+(`tbodyRows: 0`) — replaced by exactly two centred buttons, `Edit filters` and
+`+ New page` (primary/blue), no text message, the `1 rule` filter bar still visible
+above. `Edit filters` reopens the same filter builder. Exact match to the spec, all
+five assertions. `screenshots/actual/M16-01-empty-filter-state.jpg`.
+
+**Confirmed NOT a bug, while investigating**: the SAME zero-match filter on a
+**grouped** view does not show the two-button state — it falls through to per-group
+rendering (an empty group's own bucket, `No Kind` in this fixture, still showing its
+header and `+ New page` row). This is `states.md`'s own step 8 ("Group a view with
+Hide empty groups off → assert the empty group's presentation — capture first"),
+explicitly marked `TBD` in the spec and correctly left unbuilt — the code's own
+`!groups && rows.length === 0 && hasActiveFilter` guard is deliberate, not an
+oversight.
+
+## Second addendum — read-only source checks, Status/Date cells
+
+### Real bug found and fixed: the view tab bar was never suppressed for All Notes
+
+`view-tab-bar.md`'s own States table is explicit: **"Read-only source (`is_virtual`):
+All Notes has no `db_views` rows at all. Suppress the whole bar."** Live-checked at
+`/brain/db/all-notes` — the bar rendered in full, including a working per-view menu
+(Rename, Display as, Edit view, Copy link, Duplicate view).
+`screenshots/actual/M7-05-all-notes-tab-bar-BEFORE-fix.jpg`.
+
+Root cause: `DatabaseShell.tsx` only gated `ViewTabs`'s own `trailing` prop (the
+Filter/Sort/Automations toolbar) on `editable`, not the `<ViewTabs>` element itself.
+The tab's backing view id is a **fixed, synthesized string**
+(`"all-notes-table"`, from `routers/databases.py`'s `_all_notes_database`) — not a
+real `db_views` row — so `Rename`/`Duplicate view`/`Delete view` would each fire a
+`PATCH`/`DELETE` against a view id the backend has never heard of, and
+`useDatabaseView.ts`'s `updateView`/`deleteView` have no `is_virtual` guard at all
+(unlike the templates/automations fetch a few lines above, which correctly checks
+`detail.data_source.is_virtual` before calling). Not tested by clicking through to a
+live PATCH against the user's real All Notes data — the code path and the synthesized
+id were enough to confirm the bug without risking an actual write.
+
+Fixed by wrapping the whole `<ViewTabs>` render in `{editable && (...)}`, mirroring the
+same gate the settings sidebar and database settings menu already use one level down.
+Confirmed live: the bar and its trailing toolbar are both gone; the table itself is
+unaffected (it never depended on the bar to pick its active view — `views[0]` still
+resolves the same way). `screenshots/actual/M7-06-all-notes-tab-bar-suppressed.jpg`.
+Regression test added (`DatabaseShell.test.tsx`, "hides the whole view tab bar for the
+read-only All Notes source, not merely its toolbar"). 24/24 green.
+
+### Status cell editor and Date cell — checked, one confirms a known gap
+
+**Status editor matches the spec exactly**: placeholder `Search for an option` (no
+ellipsis, confirmed via `document.activeElement.placeholder`), options grouped under
+muted `To-do`/`In progress`/`Complete` section headers (present but empty in this
+fixture — no options configured on `Mastery`), and typing a non-matching search shows
+**no** `Create` row — confirmed no create-on-type, unlike Select.
+`screenshots/actual/M11-04-status-cell-editor.jpg`.
+
+**Date cell is still a bare native `<input type="date">`** — no month label, no
+`Today`/`‹›`, no End-date toggle, no Date format/Include time/Remind/Clear rows.
+`screenshots/actual/M11-05-date-cell-native-input.jpg`. This is **not a new finding**
+— `PROGRESS.md`'s own M11 deferred-list item 1 already names "Date's fuller calendar"
+among the unbuilt cell editors; this just confirms it live rather than leaving it
+untested.
 
 ## Summary of real defects found and fixed this run
 
@@ -313,20 +377,23 @@ available) — not blocked anymore, just not finished.
    Regression test added.
 4. **Filter/Sort toolbar popovers rendered off-screen** — misdiagnosed as an
    automation-environment artifact by this session AND the prior M4-M6 session; the
-   real cause was `ToolbarButton` missing `forwardRef`, the same trigger-ref bug this
-   codebase had already fixed twice elsewhere. Fixed the same way.
+   real cause was `ToolbarButton` (`ViewToolbar.tsx`) missing `forwardRef`, the same
+   trigger-ref bug this codebase had already fixed twice elsewhere. Fixed the same way.
+5. **The QueryBar's own sort/filter chips had the identical bug** (`Chip` in
+   `QueryBar.tsx`), found via the same follow-up audit. Fixed the same way.
 
-All four confirmed live, before and after. Frontend test suite green throughout
+All five confirmed live, before and after. Frontend test suite green throughout
 (`ViewTabs.test.tsx` 23/23, `TableView.test.tsx` 77/77, `ViewToolbar.test.tsx` 8/8,
-`DatabaseShell.test.tsx` included in a combined 99/99 run, full suite 61 files / 875
-tests).
+`QueryBar.test.tsx` 6/6, `DatabaseShell.test.tsx` included in a combined 99/99 run,
+full suite 61 files / 875 tests).
+
+`states.md`'s empty-filter-state checklist (steps 1-7) is now **fully verified live**,
+unblocked by fix #4/#5 above — see the Addendum section for the detail.
 
 ## Not covered this run, for a follow-up session
 
 - Live Chrome re-verification of column/row resize and reorder mechanics (blocked on
   this session's drag-simulation limitation, not a known product issue).
-- Filter/Sort toolbar popovers and the empty-filter-state (blocked on this session's
-  off-screen-popover environment artifact, same as M4-M6's own session).
 - Duplicate/Delete-view round trip, Status cell editor, Date's calendar popover,
   read-only-source suppression across M7-M11, PATCH-failure rollback+toast.
 - The calculations footer's live-update-without-reload gap (found, not chased to root

@@ -718,6 +718,24 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-01 (M7-M11 live visual-diff, second addendum)** — Continued working
+  through the items flagged as outstanding. Found and fixed one more real bug: the
+  view tab bar was never actually suppressed for the read-only All Notes source
+  (`view-tab-bar.md`'s own States table says "Suppress the whole bar" — only the
+  toolbar's `trailing` was gated on `editable`, not `<ViewTabs>` itself, so Rename/Edit
+  view/Duplicate view all rendered against a synthesized view id
+  (`"all-notes-table"`) that has no real `db_views` row backing it). Fixed by wrapping
+  the whole tab bar in the same `editable` gate the settings sidebar already uses;
+  confirmed live, regression test added, `DatabaseShell.test.tsx` 24/24. Also verified
+  live: Status cell editor matches `cell-editing.md` exactly (placeholder copy, section
+  headers, no create-on-type), and confirmed (not new) that the Date cell is still a
+  bare native `<input type="date">`, matching the already-recorded deferred-list gap.
+  Finished `states.md`'s empty-filter-state checklist (steps 1-7) end to end now that
+  the toolbar popover fix unblocked it — exact match, table disappears entirely,
+  `Edit filters` + `+ New page` centred, confirmed the grouped-view case correctly
+  falls through to the spec's own separate (and still-TBD) empty-group state instead.
+  Full suite 61 files / 876 tests green, `tsc` clean. Full write-up:
+  `M7-M11-VISUAL-DIFF.md`'s new "Second addendum" section.
 - **2026-09-01 (M7-M11 live visual-diff, addendum)** — Followed up on the items the
   entry below flagged as "not covered." Root-caused what both this session and the
   earlier M4-M6 session had written off as an "automation-environment rendering

@@ -640,6 +640,20 @@ describe("DatabaseShell", () => {
     mockHook.dataSource = { ...(mockHook.dataSource as Record<string, unknown>), is_virtual: false };
   });
 
+  // Live-checklist regression (view-tab-bar.md's own States table: "Read-only
+  // source (is_virtual): ... Suppress the whole bar"): only the toolbar's
+  // `trailing` was ever gated on `editable` -- the tab bar itself, and its
+  // per-view menu (Rename/Edit view/Duplicate view), rendered anyway. Those
+  // rows would PATCH/DELETE a view id that has no real `db_views` row behind
+  // it (All Notes synthesizes a fixed `"all-notes-table"` id server-side).
+  it("hides the whole view tab bar for the read-only All Notes source, not merely its toolbar", () => {
+    mockHook.dataSource = { ...(mockHook.dataSource as Record<string, unknown>), is_virtual: true };
+    render(<DatabaseShell databaseId="db-1" />);
+    expect(screen.queryByRole("button", { name: /view options/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("+ New view")).not.toBeInTheDocument();
+    mockHook.dataSource = { ...(mockHook.dataSource as Record<string, unknown>), is_virtual: false };
+  });
+
   it("threads relationLinks/ensureRelationLinks/setRelationLinks and the active view's subtasks display mode down to TableView", async () => {
     mockHook.views = [
       {
