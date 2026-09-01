@@ -387,6 +387,94 @@ table, unstarted.
 
 ---
 
+## M10 — COMPLETE (2026-09-01)
+
+| Milestone | State |
+|---|---|
+| M10 — row peek internals | done, built end to end, not yet visual-diffed live |
+
+**Frontend 832 → 846 tests green** (61 → 61 files — no new test file; RowPeek.test.tsx,
+TableView.test.tsx and AddPropertyPopover.tsx itself grew instead). `npx tsc --noEmit` clean.
+`npm run build` (a full production build, not just `tsc`) run once this milestone specifically to
+settle the `useSearchParams`-without-Suspense question below — clean, no warnings. Backend
+untouched — row-peek.md's whole surface is a frontend routing/rendering change, confirmed before
+relying on that (see below), same discipline M7-M9 already established for their own "no backend
+change" assumptions.
+
+### Verified before assuming scope, per this session's own instructions
+
+- **The URL sync IS frontend-only, but not free** — `?p=<noteId>&pm=s|c` needed
+  `useSearchParams`/`usePathname`/`router.replace`, none of which TableView.tsx used before.
+  Checked concretely (not assumed) whether this breaks the OTHER place `TableView` renders —
+  inline inside a note via `DatabaseBlock.tsx`'s `InlineDatabaseTable`, on `/brain/[noteId]`, a
+  **Server Component** page with no `<Suspense>` around `NoteEditorPage` (unlike
+  `/brain/db/[databaseId]/page.tsx`, which already wraps `DatabaseShell` in `Suspense` for this
+  exact class of reason). Ran a real `npm run build` (not just `tsc`) to settle it rather than
+  guessing — clean, no Suspense-boundary warning anywhere in the output. `DatabaseBlock.test.tsx`
+  also mocks `TableView` out entirely, so it never exercised this at the unit level either.
+- **The peek's own `⋯` menu had nothing to reuse.** row-peek.md's own instruction was "the ⋯ menu
+  reuses whatever our note page already has" — checked `NoteEditorPage.tsx` directly: no page-level
+  menu exists there at all. Shipped disabled-with-a-reason, same convention M8/M9 already
+  established for a real, named gap, not silently omitted or half-built.
+
+### What M10 built
+
+- **URL sync**, owned by `TableView.tsx` (not `RowPeek.tsx`, which stays presentational —
+  row/mode in, `onClose` out, unchanged shape): `peekRowId`/`peekMode` are local state seeded from
+  `useSearchParams()` at mount (a lazy initializer — a genuine reload/shared-link restores the
+  same row in the same mode) and written via `router.replace` on every open/close, preserving
+  every other param (`?view=` included). Deliberately **not** fully URL-driven (no reactive
+  re-sync on browser back/forward while mounted) — disclosed, same TBD class as `?view=`'s own
+  still-write-only status (M3).
+- **Forced side peek, actually forced.** Before M10, the row menu's "Open in → Side peek" and the
+  row's own `onOpenSidePeek` both routed through the SAME `openRow` the plain OPEN button used —
+  so a view whose "Open pages in" default was `center` or `full` silently overrode the menu's own
+  explicit choice. `openRow(noteId, forcedMode?)` now takes an optional force; the row menu and a
+  new `Alt+Click` handler (bound on every row's `<tr>`, checking `e.altKey` so a plain click is
+  untouched) both pass `"side"`, bypassing the view default entirely, per row-peek.md's Trigger
+  table.
+- **OPEN/CLOSE actually toggles.** Before M10, clicking CLOSE (the label OpenNoteButton already
+  showed while its row's peek was open, since M9) fired the identical `onOpen` handler as OPEN —
+  re-opening the same row instead of closing it. `toggleRow` now checks `peekRowId` first.
+- **Alphabetical property ordering** (`otherProperties.sort` by `name`, not `position`) — a
+  scan surface, not a reorder surface, per the spec's own Notion-uses-both-orderings-deliberately
+  note.
+- **The literal "Empty" placeholder** for a genuinely unset value, refined per the 9
+  `PropertyValue` wrapper types (title/rich_text/number/select/status/multi_select/date/url/
+  email/phone_number — checkbox is deliberately excluded, `false` is a real value, never an
+  absence of one). Types outside that union (files, people, relation, formula, rollup, unique_id,
+  button, created/last-edited time/by) are left alone, not silently reinterpreted. Clicking
+  "Empty" hands off to the real `renderCellValue` control for that property — which may itself
+  have its own separate click-to-edit affordance (e.g. `TextCell`'s own "—"), unchanged by this.
+- **The `»/⤢/Share/★/⋯` header bar**, replacing the old plain-text "Open as full page"/"Open in
+  Workspace" pair. `»` closes (same accessible name "Close" the row's own toggle now also
+  carries — tests disambiguate via `within(table)`), `⤢` expands to the full page (same
+  navigation "Open as full page" used to do). `★` favorites, reusing M9's own
+  fire-and-forget-only pattern (`DatabaseRow` still has no `is_favorited` to read a real
+  toggle state back from). Share and `⋯` are disabled-with-a-reason. "Open in Workspace" has no
+  Notion equivalent at all and stays as an explicit additive control, not a parity gap.
+- **`+ Add a property`**, reusing `AddPropertyPopover` rather than a second copy — it gained
+  `columns` (1 for the peek, 2 unchanged for the table header — "one shared copy string" per the
+  spec, only the grid width differs by host), `scopeNote` (renders `EditPropertyPanel.tsx`'s own
+  now-exported `SCOPE_NOTE`, so the disclaimer text has one source), and `triggerLabel` (a
+  full-width text row instead of the header's bare "+" icon). Suppressed for a read-only source or
+  when no `dataSourceId` was threaded through (`TableView`'s own, same value the table header's
+  own popover already used) — same States-table rule as the table's own version.
+
+### Deferred, tracked
+
+- Centre-peek's own capture is `TBD` in the spec itself — unaffected by this milestone,
+  `mode="center"` already existed pre-M10 (M3) and is untouched.
+- Prev/next row navigation — spec's own `TBD`, "not observed" in the capture.
+- Keyboard beyond Escape (already worked pre-M10) and `Alt+Click` — `Ctrl+⇧+↵` "opens in a new
+  tab" is exposed only as the row menu's hint text, not bound as a real shortcut, matching every
+  other surface's keyboard TBD status per PROGRESS.md's own ranked list.
+- Row-deleted-while-open — spec's own `TBD`.
+- Comments section / page body below the properties — spec's own `TBD`; the peek already embeds
+  `BlockEditor` for the body, unchanged.
+
+---
+
 ## Session artifacts
 
 | Artifact | Status |

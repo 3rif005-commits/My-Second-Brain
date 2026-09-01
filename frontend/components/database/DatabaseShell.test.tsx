@@ -7,8 +7,13 @@ import type { Group, RelatedRow, RowTemplateResponse, ViewResponse } from "@/lib
 // real Next.js app router tree (as here, a plain RTL render) that throws
 // "invariant expected app router to be mounted" unless mocked, same as
 // ListView.test.tsx does on its own.
+// TableView (rendered for the "table" active-view case below) reads/writes
+// the row peek's `?p=&pm=` via useSearchParams/usePathname/router.replace
+// (M10, row-peek.md) — mocked the same no-op way as useRouter above.
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/brain/db/db-1",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const mockHook: {

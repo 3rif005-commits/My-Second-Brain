@@ -25,6 +25,7 @@
 // this milestone's scope; worth adding if a data source's row count becomes
 // a real performance problem.
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   createColumnHelper,
   flexRender,
@@ -222,12 +223,23 @@ export function TableView({
 }: TableViewProps) {
   const { showToast } = useToast();
   const openNote = useOpenNote();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  // Controller addition: clicking a row's Open-note icon opens a RowPeek
-  // (side panel, properties + body over the table) instead of navigating
-  // straight to Workspace — see RowPeek.tsx / OpenNoteButton.tsx's own
-  // `onOpen` prop. `null` = no peek open.
-  const [peekRowId, setPeekRowId] = useState<string | null>(null);
+  // M10 (row-peek.md): "?p=<noteId>&pm=s|c" — deep-linkable and restorable.
+  // The lazy initializer reads whatever the URL held AT MOUNT, so a reload
+  // (or a first render carrying a shared link) reopens the same row in the
+  // same mode; a browser back/forward WHILE mounted does not re-derive from
+  // the URL (that would need a reactive effect keyed on `searchParams`,
+  // fighting the writes below) — a disclosed limitation, same class as
+  // `?view=`'s own still-write-only status (DatabaseShell.tsx/M3). `null` =
+  // no peek open.
+  const [peekRowId, setPeekRowId] = useState<string | null>(() => searchParams.get("p"));
+  const [peekMode, setPeekMode] = useState<"side" | "center" | null>(() => {
+    const pm = searchParams.get("pm");
+    return pm === "c" ? "center" : pm === "s" ? "side" : null;
+  });
   // M9 (row-affordances.md): bulk selection. Client state only — Notion's
   // own "Select" is not persisted either.
   const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
@@ -255,9 +267,68 @@ export function TableView({
   // use (useOpenNote), rather than growing RowPeek a mode it would never
   // render itself.
   const openPagesInMode = getOpenPagesInMode(config);
-  function openRow(noteId: string) {
-    if (openPagesInMode === "full") openNote(noteId);
-    else setPeekRowId(noteId);
+
+  // Writes the peek's own `p`/`pm` onto the CURRENT url, preserving every
+  // other param (`?view=` included) — router.replace, not push, since a
+  // peek open/close is not a distinct navigable "page" any more than a
+  // popover open/close is (row-peek.md's checklist only asks that a RELOAD
+  // restores it, never that Back closes it).
+  function writePeekUrl(noteId: string | null, mode: "side" | "center" | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (noteId) {
+      params.set("p", noteId);
+      params.set("pm", mode === "center" ? "c" : "s");
+    } else {
+      params.delete("p");
+      params.delete("pm");
+    }
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+
+  /** `forcedMode` — row-peek.md's Trigger table: the row menu's "Open in ->
+   * Side peek" and `Alt+Click` both FORCE a side peek, bypassing "Open
+   * pages in"'s view-wide default (even "full") entirely. The plain OPEN
+   * button / row click instead RESPECTS that default, including "full"
+   * (which bypasses the peek altogether, unchanged from before M10). */
+  function openRow(noteId: string, forcedMode?: "side") {
+    if (!forcedMode && openPagesInMode === "full") {
+      openNote(noteId);
+      return;
+    }
+    const mode = forcedMode ?? (openPagesInMode === "center" ? "center" : "side");
+    setPeekRowId(noteId);
+    setPeekMode(mode);
+    writePeekUrl(noteId, mode);
+  }
+
+  function closePeek() {
+    setPeekRowId(null);
+    setPeekMode(null);
+    writePeekUrl(null, null);
+  }
+
+  /** OpenNoteButton's `isOpen` makes it read CLOSE while this row's peek is
+   * open (row-affordances.md: "OPEN is a toggle") — before M10 the SAME
+   * `onOpen={openRow}` fired on every click regardless, so clicking CLOSE
+   * silently re-opened the identical row instead of closing it. */
+  function toggleRow(noteId: string) {
+    if (peekRowId === noteId) closePeek();
+    else openRow(noteId);
+  }
+
+  /** row-peek.md's Trigger table: "Alt+Click the row -> Side peek", the
+   * same FORCE-side-peek behaviour as the row menu's own "Open in -> Side
+   * peek". Bound on every `<tr>`, not a cell — a plain click still reaches
+   * whatever cell/button the pointer landed on unchanged (this only acts
+   * when `altKey` is set), so it adds a gesture rather than intercepting
+   * the existing ones. */
+  function handleRowAltClick(rowId: string) {
+    return (e: React.MouseEvent) => {
+      if (!e.altKey) return;
+      e.preventDefault();
+      openRow(rowId, "side");
+    };
   }
   // Two entry points write this same key — the title column's own header
   // menu (M1's "Show page icon") and M3's Layout panel — this is the read
@@ -680,7 +751,7 @@ export function TableView({
           selected={selectedRowIds.has(rowId)}
           onToggleSelected={toggleRowSelected}
           onAddRow={handleAddRow}
-          onOpenSidePeek={openRow}
+          onOpenSidePeek={(id) => openRow(id, "side")}
           onTrashed={() => refetchRows?.()}
         />
       </td>
@@ -697,7 +768,11 @@ export function TableView({
   // with a `group_by`).
   function dataRow(tableRow: ReturnType<typeof table.getRow>) {
     return (
-      <tr key={tableRow.id} className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+      <tr
+        key={tableRow.id}
+        onClick={handleRowAltClick(tableRow.original.id)}
+        className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+      >
         {gutterCell(tableRow.original.id)}
         {tableRow.getVisibleCells().map((cell) => (
           <td key={cell.id} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
@@ -709,7 +784,7 @@ export function TableView({
                   noteId={tableRow.original.id}
                   isOpen={peekRowId === tableRow.original.id}
                   className="shrink-0 opacity-0 group-hover:opacity-100"
-                  onOpen={openRow}
+                  onOpen={toggleRow}
                 />
               </div>
             ) : (
@@ -878,6 +953,7 @@ export function TableView({
                 return (
                   <tr
                     key={entryRow.id}
+                    onClick={handleRowAltClick(entryRow.id)}
                     className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                   >
                     {gutterCell(entryRow.id)}
@@ -907,7 +983,7 @@ export function TableView({
                               noteId={entryRow.id}
                               isOpen={peekRowId === entryRow.id}
                               className="shrink-0 opacity-0 group-hover:opacity-100"
-                              onOpen={openRow}
+                              onOpen={toggleRow}
                             />
                           </div>
                         ) : (
@@ -934,6 +1010,7 @@ export function TableView({
                 return (
                   <tr
                     key={row.id}
+                    onClick={handleRowAltClick(row.original.id)}
                     className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                   >
                     {gutterCell(row.original.id)}
@@ -956,7 +1033,7 @@ export function TableView({
                               noteId={row.original.id}
                               isOpen={peekRowId === row.original.id}
                               className="shrink-0 opacity-0 group-hover:opacity-100"
-                              onOpen={openRow}
+                              onOpen={toggleRow}
                             />
                           </div>
                         ) : (
@@ -1032,8 +1109,10 @@ export function TableView({
         properties={properties}
         editable={editable}
         onCellChange={onCellChange}
-        onClose={() => setPeekRowId(null)}
-        mode={openPagesInMode === "center" ? "center" : "side"}
+        onClose={closePeek}
+        mode={peekMode === "center" ? "center" : "side"}
+        dataSourceId={dataSourceId}
+        onPropertyCreated={refetch}
       />
     )}
     </>

@@ -79,12 +79,28 @@ export interface AddPropertyPopoverProps {
   dataSourceId: string;
   properties: PropertyResponse[];
   onCreated: () => void | Promise<void>;
+  /** row-peek.md: "single-column in narrow hosts (peek, sidebar), two-column
+   * in wide ones, and ONE shared copy string" — only the grid width varies
+   * per host; every label/placeholder below stays the same either way.
+   * Defaults to 2, the table header's existing (only, before M10) shape. */
+  columns?: 1 | 2;
+  /** row-peek.md checklist #13: "+ Add a property" must carry a scope
+   * disclaimer, since — unlike editing a value — it writes schema, affecting
+   * every view. Omitted (as before) by the table header's own usage. */
+  scopeNote?: string;
+  /** The row peek's collapsed trigger is a full-width text row ("+ Add a
+   * property"), not the table header's bare "+" icon button — same popover,
+   * a different anchor shape for a different host. */
+  triggerLabel?: string;
 }
 
 export function AddPropertyPopover({
   dataSourceId,
   properties,
   onCreated,
+  columns = 2,
+  scopeNote,
+  triggerLabel,
 }: AddPropertyPopoverProps) {
   const { showToast } = useToast();
   const [open, setOpen] = useState(false);
@@ -215,7 +231,7 @@ export function AddPropertyPopover({
   }
 
   const typePanel: MenuPanel = {
-    columns: 2,
+    columns,
     // The host owns the primary input (the name field in the header cell),
     // so this must not autofocus over it.
     search: { placeholder: "Search for a property type…", autoFocus: false },
@@ -235,6 +251,7 @@ export function AddPropertyPopover({
             }
           },
         })),
+        content: scopeNote ? <div className="pt-2 text-menu-disabled">{scopeNote}</div> : undefined,
       },
     ],
   };
@@ -275,6 +292,14 @@ export function AddPropertyPopover({
               className="h-menu-row min-w-0 flex-1 rounded bg-menu-field px-2 text-menu outline-none"
             />
           </div>
+        ) : triggerLabel ? (
+          <button
+            type="button"
+            aria-label={triggerLabel}
+            className="flex w-full items-center gap-1.5 px-1 py-1 text-left text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          >
+            {triggerLabel}
+          </button>
         ) : (
           <button
             type="button"

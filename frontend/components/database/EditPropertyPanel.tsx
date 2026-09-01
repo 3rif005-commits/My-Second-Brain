@@ -105,7 +105,10 @@ export interface EditPropertyArgs {
 /** The literal disclaimer Notion prints under the number panel. A property's
  * config is schema-level, so this is true of every panel here — but Notion
  * only shows it on the number one, and this matches that. */
-const SCOPE_NOTE = "Changes apply to all views showing this property.";
+/** Exported for row-peek.md's "+ Add a property" (RowPeek.tsx), which needs
+ * the same disclaimer for the same reason — a schema write from a
+ * non-obviously-schema-scoped surface. */
+export const SCOPE_NOTE = "Changes apply to all views showing this property.";
 
 // ---------------------------------------------------------------- number ---
 

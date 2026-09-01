@@ -9,9 +9,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Next.js app router tree (as here, a plain RTL render) that throws "invariant
 // expected app router to be mounted" unless mocked, same as BoardView.test.tsx/
 // ListView.test.tsx.
+//
+// M10 (row-peek.md): TableView now also reads/writes the peek's `?p=&pm=`
+// via `useSearchParams`/`usePathname`/`router.replace` — mocked the same
+// way, `mockSearch` mutable so a test can seed the URL the component reads
+// at mount (the lazy `useState` initializer) before rendering.
 const routerPush = vi.fn();
+const routerReplace = vi.fn();
+let mockSearch = "";
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: routerPush }),
+  useRouter: () => ({ push: routerPush, replace: routerReplace }),
+  usePathname: () => "/brain/db/ds-1",
+  useSearchParams: () => new URLSearchParams(mockSearch),
 }));
 
 // RowPeek (opened by the Open-note button, see above) mounts a real
@@ -37,6 +46,8 @@ function jsonResponse(body: unknown, status = 200) {
 afterEach(() => {
   vi.unstubAllGlobals();
   routerPush.mockClear();
+  routerReplace.mockClear();
+  mockSearch = "";
 });
 
 function prop(overrides: Partial<PropertyResponse>): PropertyResponse {
@@ -389,6 +400,121 @@ describe("TableView", () => {
       await user.keyboard("{Escape}");
 
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    // row-peek.md: "Opening the peek rewrites the URL: ?v=&p=&pm=" — adopted
+    // as `?p=<noteId>&pm=s|c`, written by TableView (RowPeek stays
+    // presentational) via router.replace, preserving any existing params.
+    describe("URL sync (row-peek.md: '?p=<noteId>&pm=s|c')", () => {
+      it("opening the peek writes p/pm onto the URL, preserving other params", async () => {
+        mockSearch = "view=view-1";
+        const user = userEvent.setup();
+        render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+
+        await user.click(screen.getByRole("button", { name: /^open$/i }));
+
+        expect(routerReplace).toHaveBeenCalledWith(
+          "/brain/db/ds-1?view=view-1&p=row-1&pm=s",
+          { scroll: false }
+        );
+      });
+
+      it("reloading with p/pm already in the URL reopens the same row in the same mode", async () => {
+        mockSearch = "p=row-1&pm=s";
+        render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+
+        expect(await screen.findByRole("dialog", { name: /row details/i })).toBeInTheDocument();
+      });
+
+      it("closing (Escape) strips p/pm from the URL", async () => {
+        mockSearch = "p=row-1&pm=s";
+        const user = userEvent.setup();
+        render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+
+        await screen.findByRole("dialog", { name: /row details/i });
+        await user.keyboard("{Escape}");
+
+        expect(routerReplace).toHaveBeenCalledWith("/brain/db/ds-1", { scroll: false });
+      });
+    });
+
+    // row-affordances.md: "OPEN is a toggle... becomes CLOSE" — before M10
+    // the SAME onOpen handler fired unconditionally, so clicking CLOSE
+    // silently re-opened the identical row rather than closing it.
+    it("clicking OPEN, then clicking the now-CLOSE button on the same row, closes the peek", async () => {
+      const user = userEvent.setup();
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+
+      await user.click(screen.getByRole("button", { name: /^open$/i }));
+      await screen.findByRole("dialog", { name: /row details/i });
+
+      // Both the row's own toggle AND RowPeek's own × now read "Close" —
+      // scoped to the `<table>` (the row toggle) to disambiguate against
+      // the dialog's ×, which `createPortal`s straight to `document.body`
+      // outside it.
+      await user.click(within(screen.getByRole("table")).getByRole("button", { name: /^close$/i }));
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    // row-peek.md's Trigger table: both the row menu's "Open in -> Side
+    // peek" and Alt+Click FORCE a side peek, bypassing "Open pages in"'s
+    // view-wide default entirely — unlike the plain OPEN button, which
+    // respects it (asserted by the "full" branch of the OPEN-button suite
+    // elsewhere in this file).
+    describe("forced side peek (row menu 'Side peek', Alt+Click) bypasses the view's own default mode", () => {
+      function fullPageView() {
+        return {
+          id: "view-1",
+          data_source_id: "ds-1",
+          user_id: "user-1",
+          name: "Table",
+          icon: null,
+          type: "table",
+          config: { open_pages_in: "full" },
+          filter: null,
+          sorts: [],
+          is_locked: false,
+          position: 0,
+        };
+      }
+
+      it("Alt+Click a row opens a side peek even when the view's default is 'full'", async () => {
+        render(
+          <TableView
+            properties={PROPERTIES}
+            rows={ROWS}
+            editable={true}
+            onCellChange={vi.fn()}
+            view={fullPageView()}
+          />
+        );
+
+        fireEvent.click(screen.getByText("First Note"), { altKey: true });
+
+        expect(await screen.findByRole("dialog", { name: /row details/i })).toBeInTheDocument();
+        expect(routerPush).not.toHaveBeenCalled();
+      });
+
+      it("a plain click on OPEN navigates away instead, honoring the view's 'full' default", async () => {
+        const user = userEvent.setup();
+        render(
+          <TableView
+            properties={PROPERTIES}
+            rows={ROWS}
+            editable={true}
+            onCellChange={vi.fn()}
+            view={fullPageView()}
+          />
+        );
+
+        await user.click(screen.getByRole("button", { name: /^open$/i }));
+
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        // useOpenNote()'s own navigate-away target — unrelated to RowPeek's
+        // "Open as full page" (`/brain/{id}`) tested elsewhere in this file.
+        expect(routerPush).toHaveBeenCalledWith("/brain/workspace/row-1");
+      });
     });
   });
 

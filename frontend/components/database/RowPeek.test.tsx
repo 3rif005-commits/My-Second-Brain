@@ -7,6 +7,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: routerPush }),
 }));
 
+const showToast = vi.fn();
+vi.mock("@/app/providers", () => ({ useToast: () => ({ showToast }) }));
+
 // Real BlockEditor mounts BlockNote — heavy, and RowPeek's own tests only
 // need to prove the fetched content reaches whatever body component is
 // mounted, not re-test BlockNote itself. Same stub TemplateEditor.test.tsx/
@@ -76,6 +79,7 @@ const ROW: DatabaseRow = {
 afterEach(() => {
   vi.unstubAllGlobals();
   routerPush.mockClear();
+  showToast.mockClear();
 });
 
 describe("RowPeek", () => {
@@ -195,6 +199,152 @@ describe("RowPeek", () => {
           body: JSON.stringify({ content: [{ type: "paragraph" }], content_text: "hi" }),
         })
       );
+    });
+  });
+
+  // M10 (row-peek.md): "Ordering: Alphabetical — not table order."
+  it("orders non-title properties alphabetically, not by their table position", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ id: "row-1", content: [] })));
+
+    render(
+      <RowPeek row={ROW} properties={PROPERTIES} editable={true} onCellChange={vi.fn()} onClose={vi.fn()} />
+    );
+    await screen.findByTestId("block-editor-stub");
+
+    // RowPeek portals straight to document.body (see RowPeek.tsx), outside
+    // RTL's own `container` — queried from `document` for that reason.
+    // PROPERTIES' table order is Kind (position 1) then Done (position 2);
+    // alphabetically "Done" sorts before "Kind".
+    const labels = Array.from(document.querySelectorAll(".grid.grid-cols-\\[120px_1fr\\] > span"))
+      .map((el) => el.textContent?.trim())
+      .filter(Boolean);
+    expect(labels).toEqual(["Done", "Kind"]);
+  });
+
+  // M10 (row-peek.md): "Empty values render the literal muted word `Empty`."
+  it("an empty property shows the literal word Empty, and clicking it reveals its real editable control", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ id: "row-1", content: [] })));
+    const props = [
+      prop({ key: "title", name: "Title", type: "title", position: 0 }),
+      prop({ key: "notes", name: "Notes", type: "rich_text", position: 1 }),
+    ];
+    const row = { id: "row-1", properties: { title: { type: "title", title: "First Note" } } };
+    const user = userEvent.setup();
+
+    render(<RowPeek row={row} properties={props} editable={true} onCellChange={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByTestId("block-editor-stub");
+
+    const empty = screen.getByRole("button", { name: /^empty$/i });
+    await user.click(empty);
+
+    // TextCell.tsx has its own separate click-to-edit affordance (a "—"
+    // placeholder button, unrelated to and unchanged by M10) — clicking
+    // "Empty" only needs to hand off to THAT real control, not skip past
+    // its own click-target too.
+    expect(screen.queryByRole("button", { name: /^empty$/i })).not.toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("a read-only row's Empty placeholder is not clickable", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ id: "row-1", content: [] })));
+    const props = [
+      prop({ key: "title", name: "Title", type: "title", position: 0 }),
+      prop({ key: "notes", name: "Notes", type: "rich_text", position: 1 }),
+    ];
+    const row = { id: "row-1", properties: { title: { type: "title", title: "First Note" } } };
+
+    render(<RowPeek row={row} properties={props} editable={false} onCellChange={vi.fn()} onClose={vi.fn()} />);
+    await screen.findByTestId("block-editor-stub");
+
+    expect(screen.getByRole("button", { name: /^empty$/i })).toBeDisabled();
+  });
+
+  describe("header bar (row-peek.md: '»  ⤢          Share  ★  ⋯')", () => {
+    it("the star PATCHes is_favorited on the row", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "row-1", content: [] }));
+      vi.stubGlobal("fetch", fetchMock);
+      const user = userEvent.setup();
+
+      render(
+        <RowPeek row={ROW} properties={PROPERTIES} editable={true} onCellChange={vi.fn()} onClose={vi.fn()} />
+      );
+      await screen.findByTestId("block-editor-stub");
+      await user.click(screen.getByRole("button", { name: /add to favorites/i }));
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/notes/row-1",
+          expect.objectContaining({
+            method: "PATCH",
+            body: JSON.stringify({ is_favorited: true }),
+          })
+        );
+      });
+      expect(showToast).toHaveBeenCalledWith("Added to Favorites", "info");
+    });
+
+    it("Share and the page menu (⋯) are disabled — no sharing or page-menu surface exists yet", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ id: "row-1", content: [] })));
+
+      render(
+        <RowPeek row={ROW} properties={PROPERTIES} editable={true} onCellChange={vi.fn()} onClose={vi.fn()} />
+      );
+      await screen.findByTestId("block-editor-stub");
+
+      expect(screen.getByRole("button", { name: /^share$/i })).toBeDisabled();
+      expect(screen.getByRole("button", { name: /^more$/i })).toBeDisabled();
+    });
+  });
+
+  describe('"+ Add a property" (row-peek.md checklist #12-14: schema-level, scope-disclaimed)', () => {
+    it("is suppressed without a dataSourceId, even when editable", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ id: "row-1", content: [] })));
+
+      render(
+        <RowPeek row={ROW} properties={PROPERTIES} editable={true} onCellChange={vi.fn()} onClose={vi.fn()} />
+      );
+      await screen.findByTestId("block-editor-stub");
+
+      expect(screen.queryByRole("button", { name: /add a property/i })).not.toBeInTheDocument();
+    });
+
+    it("is suppressed for a read-only source even with a dataSourceId", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ id: "row-1", content: [] })));
+
+      render(
+        <RowPeek
+          row={ROW}
+          properties={PROPERTIES}
+          editable={false}
+          onCellChange={vi.fn()}
+          onClose={vi.fn()}
+          dataSourceId="ds-1"
+        />
+      );
+      await screen.findByTestId("block-editor-stub");
+
+      expect(screen.queryByRole("button", { name: /add a property/i })).not.toBeInTheDocument();
+    });
+
+    it("opens a single-column type picker carrying the scope disclaimer, editable + dataSourceId given", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ id: "row-1", content: [] })));
+      const user = userEvent.setup();
+
+      render(
+        <RowPeek
+          row={ROW}
+          properties={PROPERTIES}
+          editable={true}
+          onCellChange={vi.fn()}
+          onClose={vi.fn()}
+          dataSourceId="ds-1"
+        />
+      );
+      await screen.findByTestId("block-editor-stub");
+      await user.click(screen.getByRole("button", { name: /add a property/i }));
+
+      expect(await screen.findByText("Number")).toBeInTheDocument();
+      expect(screen.getByText("Changes apply to all views showing this property.")).toBeInTheDocument();
     });
   });
 });
