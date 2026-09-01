@@ -102,7 +102,12 @@ describe("ViewToolbar", () => {
     expect(screen.getByText("New sort")).toBeInTheDocument();
 
     await user.click(screen.getByText("Name"));
-    expect(onSetSorts).toHaveBeenCalledWith([{ property: "title", direction: "asc" }]);
+
+    // onSetSorts now takes an UPDATER (see SortsUpdater's own doc comment) —
+    // DatabaseShell's queue supplies the latest known `sorts` when it runs.
+    expect(onSetSorts).toHaveBeenCalledTimes(1);
+    const updater = onSetSorts.mock.calls[0][0];
+    expect(updater([])).toEqual([{ property: "title", direction: "asc" }]);
   });
 
   it("the Sort button's label reflects the current sort state, by property NAME not its raw key", () => {

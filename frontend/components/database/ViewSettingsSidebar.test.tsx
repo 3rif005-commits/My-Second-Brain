@@ -244,7 +244,12 @@ describe("ViewSettingsSidebar", () => {
     expect(screen.getByPlaceholderText("Sort by…")).toBeInTheDocument();
     await user.click(screen.getByText("Kind"));
 
-    expect(onSetSorts).toHaveBeenCalledWith([{ property: "kind", direction: "asc" }]);
+    // onSetSorts now takes an UPDATER (see SortsUpdater's own doc comment) —
+    // DatabaseShell's queue supplies the latest known `sorts` when it runs,
+    // not whatever this panel last rendered with.
+    expect(onSetSorts).toHaveBeenCalledTimes(1);
+    const updater = onSetSorts.mock.calls[0][0];
+    expect(updater([])).toEqual([{ property: "kind", direction: "asc" }]);
   });
 
   it("Copy link to view copies a URL and applies immediately (no navigation away from the root panel)", async () => {

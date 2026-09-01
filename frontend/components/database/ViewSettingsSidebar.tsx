@@ -47,13 +47,12 @@ import type {
 } from "@/lib/database/types";
 import { isGroupablePropertyType } from "@/lib/database/types";
 import { getHiddenKeys, orderProperties, patchHidden } from "@/lib/database/viewConfig";
+import type { Sort, SortsUpdater } from "@/lib/database/viewConfig";
 import { editPropertyPanel, hasEditableConfig } from "./EditPropertyPanel";
 import { propertyTypeIcon, sortLabels } from "./ColumnHeaderMenu";
 import { PropertyVisibilityPanel } from "./PropertyVisibilityPanel";
 import { ViewLayoutPanel } from "./ViewLayoutPanel";
 import { AutomationManager } from "./AutomationManager";
-
-type Sort = { property: string; direction: "asc" | "desc" };
 
 function asSorts(raw: unknown[]): Sort[] {
   return raw.filter(
@@ -102,11 +101,19 @@ function groupPanel(
 
 // ── §E Sort — multi-sort MVP (direction + remove per row); drag-reorder is M5 ──
 
-function sortRowSubmenu(property: PropertyResponse, sorts: Sort[], onSetSorts: (next: Sort[]) => void): MenuPanel {
+// `sorts` here is render-time state, used only to decide what to SHOW
+// (current direction, which properties are already excluded from the
+// picker). The actual WRITE below always goes through `onSetSorts`'s
+// updater form, so it mutates whatever DatabaseShell's queue knows is
+// LATEST when it runs — not this closure's possibly-stale snapshot. See
+// `SortsUpdater`'s own doc comment in lib/database/viewConfig.ts for the
+// bug this avoids (two sort surfaces open at once, second write clobbers
+// the first).
+function sortRowSubmenu(property: PropertyResponse, sorts: Sort[], onSetSorts: (updater: SortsUpdater) => void): MenuPanel {
   const labels = sortLabels(property.type);
   const current = sorts.find((s) => s.property === property.key);
   const setDirection = (direction: "asc" | "desc") =>
-    onSetSorts(sorts.map((s) => (s.property === property.key ? { ...s, direction } : s)));
+    onSetSorts((latest) => latest.map((s) => (s.property === property.key ? { ...s, direction } : s)));
   return {
     sections: [
       {
@@ -121,7 +128,7 @@ function sortRowSubmenu(property: PropertyResponse, sorts: Sort[], onSetSorts: (
             id: "remove",
             label: "Remove sort",
             danger: true,
-            onSelect: () => onSetSorts(sorts.filter((s) => s.property !== property.key)),
+            onSelect: () => onSetSorts((latest) => latest.filter((s) => s.property !== property.key)),
           },
         ],
       },
@@ -129,19 +136,24 @@ function sortRowSubmenu(property: PropertyResponse, sorts: Sort[], onSetSorts: (
   };
 }
 
-export function sortPanel(properties: PropertyResponse[], sorts: Sort[], onSetSorts: (next: Sort[]) => void): MenuPanel {
+export function sortPanel(
+  properties: PropertyResponse[],
+  sorts: Sort[],
+  onSetSorts: (updater: SortsUpdater) => void
+): MenuPanel {
   const alphabetical = [...properties].sort((a, b) => a.name.localeCompare(b.name));
   const sortedKeys = new Set(sorts.map((s) => s.property));
   // Already-sorted properties are excluded from the picker — observed live
   // (group-and-sort-panels.txt: "'Name' was absent from the list once it
-  // was sorted").
+  // was sorted"). This filter is display-only, off render-time `sorts`; the
+  // write itself still goes through the updater, off whatever is latest.
   const pickerRows: MenuRow[] = alphabetical
     .filter((p) => !sortedKeys.has(p.key))
     .map((p) => ({
       id: p.key,
       icon: propertyTypeIcon(p.type),
       label: p.name,
-      onSelect: () => onSetSorts([...sorts, { property: p.key, direction: "asc" }]),
+      onSelect: () => onSetSorts((latest) => [...latest, { property: p.key, direction: "asc" }]),
     }));
 
   if (sorts.length === 0) {
@@ -173,7 +185,7 @@ export function sortPanel(properties: PropertyResponse[], sorts: Sort[], onSetSo
             disabledReason: "Every property is already sorted",
             submenu: pickerRows.length > 0 ? () => ({ search: { placeholder: "Sort by…" }, sections: [{ rows: pickerRows }] }) : undefined,
           },
-          { id: "delete-all", label: "Delete sort", danger: true, onSelect: () => onSetSorts([]) },
+          { id: "delete-all", label: "Delete sort", danger: true, onSelect: () => onSetSorts(() => []) },
         ],
       },
     ],
@@ -229,7 +241,7 @@ export interface ViewSettingsSidebarProps {
   onUpdateView: (viewId: string, patch: { name: string }) => Promise<ViewResponse>;
   onPropertiesChanged: () => void | Promise<void>;
   onDatabaseChanged: () => void | Promise<void>;
-  onSetSorts: (sorts: Sort[]) => void;
+  onSetSorts: (updater: SortsUpdater) => void;
   automations: AutomationResponse[];
   onCreateAutomation: (name: string) => Promise<AutomationResponse>;
   onUpdateAutomation: (id: string, patch: AutomationPatch) => Promise<AutomationResponse>;

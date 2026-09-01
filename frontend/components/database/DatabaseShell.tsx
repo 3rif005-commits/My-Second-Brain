@@ -9,6 +9,7 @@ import { useToast } from "@/app/providers";
 import { useDatabaseView } from "@/lib/database/useDatabaseView";
 import type { ViewResponse } from "@/lib/database/types";
 import { getGroupBySpec, getSubGroupBySpec, getSubtaskDisplayMode } from "@/lib/database/types";
+import type { Sort, SortsUpdater } from "@/lib/database/viewConfig";
 import { TableView } from "./views/TableView";
 import { BoardView } from "./views/BoardView";
 import { GalleryView } from "./views/GalleryView";
@@ -127,6 +128,51 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     [updateView]
   );
 
+  // Same staleness bug `patchViewConfig` above exists for, one field over.
+  // Review-checkpoint finding (M1-M3 pass): M3 gave `sorts` a SECOND and
+  // THIRD writer (the toolbar's Sort popover, the settings sidebar's Sort
+  // panel) alongside M1's column header menu — all three can now be open at
+  // once, each computing its next `sorts` array from a `sorts` closed over
+  // at ITS OWN last render. `sorts` is a whole-array REPLACE, not a
+  // mergeable object like `config`, so simply queuing the two PATCH
+  // REQUESTS wouldn't fix this — whichever request's ALREADY-STALE array
+  // lands last still wins outright. The caller must defer computing the new
+  // array until its turn in the queue, against the LATEST known `sorts` —
+  // exactly `patchViewConfig`'s own fix, generalized to an updater function
+  // instead of a patch object because there is nothing to merge.
+  const latestSortsByViewRef = useRef<Map<string, unknown[]>>(new Map());
+  const queueSortsUpdate = useCallback(
+    (viewId: string, renderTimeSorts: unknown[], updater: SortsUpdater) => {
+      const prevQueue = pendingPatchByViewRef.current.get(viewId) ?? Promise.resolve();
+      const nextQueue = prevQueue
+        .catch(() => undefined)
+        .then(async () => {
+          const base = (latestSortsByViewRef.current.get(viewId) ?? renderTimeSorts) as Sort[];
+          const next = updater(base);
+          let updated: ViewResponse;
+          try {
+            updated = await updateView(viewId, { sorts: next });
+          } catch (err) {
+            showToast(err instanceof Error ? err.message : "Could not sort", "error");
+            return undefined;
+          }
+          latestSortsByViewRef.current.set(viewId, updated.sorts);
+          return updated;
+        })
+        .finally(() => {
+          if (pendingPatchByViewRef.current.get(viewId) === nextQueue) {
+            pendingPatchByViewRef.current.delete(viewId);
+          }
+        });
+      // Shares `pendingPatchByViewRef` with `patchViewConfig` above, not a
+      // second queue — a config write and a sorts write for the SAME view
+      // are serialized against each other too, not just against their own kind.
+      pendingPatchByViewRef.current.set(viewId, nextQueue);
+      return nextQueue;
+    },
+    [updateView, showToast]
+  );
+
   if (loading && !database) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500">
@@ -232,11 +278,11 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             // is precisely the case the stale-merge bug fixed at :79-125 was
             // about.
             onPatchConfig={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
-            onSetSorts={(sorts) => {
-              updateView(activeView.id, { sorts }).catch((e) =>
-                showToast(e instanceof Error ? e.message : "Could not sort", "error")
-              );
-            }}
+            // Routed through queueSortsUpdate for the same reason — the
+            // column header menu, the toolbar's Sort popover and the
+            // settings sidebar's Sort panel can all be reached in the same
+            // session now, each computing its own next `sorts` array.
+            onSetSorts={(updater) => queueSortsUpdate(activeView.id, activeView.sorts, updater)}
           />
         );
       case "board": {
@@ -448,11 +494,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
               <ViewToolbar
                 view={activeView}
                 properties={properties}
-                onSetSorts={(sorts) =>
-                  updateView(activeView.id, { sorts }).catch((e) =>
-                    showToast(e instanceof Error ? e.message : "Could not sort", "error")
-                  )
-                }
+                onSetSorts={(updater) => queueSortsUpdate(activeView.id, activeView.sorts, updater)}
                 dataSourceId={dataSourceId}
                 automations={automations}
                 onCreateAutomation={createAutomation}
@@ -481,11 +523,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
           onUpdateView={(viewId, patch) => updateView(viewId, patch)}
           onPropertiesChanged={refetch}
           onDatabaseChanged={refetch}
-          onSetSorts={(sorts) =>
-            updateView(activeView.id, { sorts }).catch((e) =>
-              showToast(e instanceof Error ? e.message : "Could not sort", "error")
-            )
-          }
+          onSetSorts={(updater) => queueSortsUpdate(activeView.id, activeView.sorts, updater)}
           automations={automations}
           onCreateAutomation={createAutomation}
           onUpdateAutomation={updateAutomation}

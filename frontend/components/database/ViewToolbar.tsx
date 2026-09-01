@@ -20,10 +20,9 @@ import { useState } from "react";
 import { ArrowUpDown, Filter as FilterIcon, Search as SearchIcon, Settings, Sparkles, Wand2 } from "lucide-react";
 import { MenuList, Popover } from "@/components/ui/primitives";
 import type { AutomationPatch, AutomationResponse, PropertyResponse, ViewResponse } from "@/lib/database/types";
+import type { Sort, SortsUpdater } from "@/lib/database/viewConfig";
 import { placeholderPanel, sortPanel } from "./ViewSettingsSidebar";
 import { AutomationManager } from "./AutomationManager";
-
-type Sort = { property: string; direction: "asc" | "desc" };
 
 function asSorts(raw: unknown[]): Sort[] {
   return raw.filter(
@@ -38,7 +37,7 @@ function asSorts(raw: unknown[]): Sort[] {
 export interface ViewToolbarProps {
   view: ViewResponse;
   properties: PropertyResponse[];
-  onSetSorts: (sorts: Sort[]) => void;
+  onSetSorts: (updater: SortsUpdater) => void;
   dataSourceId: string;
   automations: AutomationResponse[];
   onCreateAutomation: (name: string) => Promise<AutomationResponse>;
@@ -126,9 +125,7 @@ export function ViewToolbar({
         }
       >
         <MenuList
-          root={sortPanel(properties, sorts, (next) => {
-            onSetSorts(next);
-          })}
+          root={sortPanel(properties, sorts, onSetSorts)}
           nav="flyout"
           onClose={() => setSortOpen(false)}
           label="Sort"

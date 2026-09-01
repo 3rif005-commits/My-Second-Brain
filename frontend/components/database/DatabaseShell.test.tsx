@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { Group, RelatedRow, RowTemplateResponse, ViewResponse } from "@/lib/database/types";
@@ -409,6 +409,68 @@ describe("DatabaseShell", () => {
     const [, secondPatchBody] = mockHook.updateView.mock.calls[1];
     expect(secondPatchBody.config.questions).toEqual([{ property_key: "title", required: true }]);
     expect(secondPatchBody.config.is_form_closed).toBe(true);
+  });
+
+  it("live-discovered fix (M1-M3 review checkpoint): two sort writes fired before the first's response lands do not clobber each other (queueSortsUpdate's stale-array race)", async () => {
+    // `sorts` is a whole-array REPLACE, not a mergeable object like
+    // `config` — patchViewConfig's own merge trick doesn't apply, so this
+    // exercises the separate fix: onSetSorts takes an UPDATER, and
+    // DatabaseShell defers computing the next array until the write's own
+    // turn in the queue, feeding it whatever the LATEST resolved sorts are
+    // — not whatever was current when the row was clicked. M3 is what made
+    // this reachable: the toolbar's Sort popover and the header menu's own
+    // Sort row can now both be interacted with in the same session.
+    const user = userEvent.setup();
+
+    let resolveFirst: (v: ViewResponse) => void = () => {};
+    mockHook.updateView.mockImplementationOnce(
+      () => new Promise<ViewResponse>((resolve) => { resolveFirst = resolve; })
+    );
+
+    render(<DatabaseShell databaseId="db-1" />);
+
+    // First write: the toolbar's Sort popover adds a sort on "Title".
+    await user.click(screen.getByRole("button", { name: /^Sort/ }));
+    let panel = await screen.findByRole("listbox", { name: "Sort" });
+    await user.click(within(panel).getByText("Title"));
+    expect(mockHook.updateView).toHaveBeenCalledTimes(1);
+    // Still unresolved — deliberately, so the second write races it.
+
+    // Second write: reopen the SAME popover (MenuList closes it after the
+    // first selection) and add a sort on "Status" — its own updater closes
+    // over an empty `current` from THIS render (the client hasn't heard
+    // back from the first write yet), exactly the stale input the old code
+    // would have sent as-is.
+    await user.click(screen.getByRole("button", { name: /^Sort/ }));
+    panel = await screen.findByRole("listbox", { name: "Sort" });
+    await user.click(within(panel).getByText("Status"));
+    // Queued, not fired yet — chained behind the still-pending first write.
+    expect(mockHook.updateView).toHaveBeenCalledTimes(1);
+
+    resolveFirst({
+      id: "v1",
+      data_source_id: "ds-1",
+      user_id: "user-1",
+      name: "Table view",
+      icon: null,
+      type: "table",
+      config: {},
+      filter: null,
+      sorts: [{ property: "title", direction: "asc" }],
+      is_locked: false,
+      position: 0,
+    });
+
+    await vi.waitFor(() => expect(mockHook.updateView).toHaveBeenCalledTimes(2));
+
+    // The bug: the second call's body would be just [{property:"status",...}]
+    // — dropping Title's sort entirely — if it had used the stale `[]` it
+    // closed over instead of the first write's resolved result.
+    const [, secondBody] = mockHook.updateView.mock.calls[1];
+    expect(secondBody.sorts).toEqual([
+      { property: "title", direction: "asc" },
+      { property: "status", direction: "asc" },
+    ]);
   });
 
   it("renders DashboardView (not some other component, not a blank fallback) for a dashboard-typed active view", () => {

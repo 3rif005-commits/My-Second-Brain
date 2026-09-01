@@ -52,6 +52,7 @@ import {
   getShowVerticalLines,
   orderProperties,
 } from "@/lib/database/viewConfig";
+import type { SortsUpdater } from "@/lib/database/viewConfig";
 import { useOpenNote } from "@/lib/database/useOpenNote";
 import { buildSubItemTree } from "@/lib/database/subItemTree";
 import { ButtonPropertyConfigPopover } from "../ButtonPropertyConfigPopover";
@@ -126,7 +127,7 @@ interface TableViewProps {
   /** Receives a PATCH of changed keys only; DatabaseShell merges it through
    * its serialised queue. */
   onPatchConfig?: (patch: Record<string, unknown>) => void;
-  onSetSorts?: (sorts: { property: string; direction: "asc" | "desc" }[]) => void;
+  onSetSorts?: (updater: SortsUpdater) => void;
   /** useDatabaseView's `instantiateTemplate` — creates a row from a chosen
    * (non-default) template right now. Does not itself refetch rows; this
    * component calls `refetchRows` afterward, same as `handleAddRow` does
@@ -203,6 +204,25 @@ export function TableView({
   // every row starts expanded (empty set), matching Notion's own default.
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
+  // The full schema, in table order — NOT hidden-filtered. Everything that
+  // needs to know "what properties exist on this data source" (sub-item/
+  // relation lookups, the rollup-source picker, Insert-left/right's
+  // duplicate-name check) must see a hidden column too: hiding a column is
+  // a per-view DISPLAY choice, not a schema change, and a relation a Button
+  // targets or a sub-item pair still functions while its column happens to
+  // be hidden. `orderedProperties` below — the HIDDEN-FILTERED list — exists
+  // solely for rendering table columns; nothing else should read it.
+  // (Live-discovered in the M1–M3 review checkpoint: every one of the
+  // lookups below used to read the filtered list, so hiding a sub-item
+  // relation's column silently killed the whole nested row tree, and hiding
+  // a Button's target property made it unresolvable in its own config
+  // popover.)
+  const allOrderedProperties = useMemo(
+    () => orderProperties(properties, config),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [properties, config.property_order]
+  );
+
   // Wired to the SAME view.config keys the column header menu's "Hide" row
   // and Insert-left/right already write (M1) and M3's Property visibility
   // panel now writes — this was the missing read half: those controls set
@@ -213,24 +233,26 @@ export function TableView({
   // own capture shows an eye icon on "Name" without confirming it is
   // enabled — kept visible here rather than guessed away.
   const orderedProperties = useMemo(() => {
-    const ordered = orderProperties(properties, config);
     const hidden = new Set(getHiddenKeys(config));
-    if (hidden.size === 0) return ordered;
-    return ordered.filter((p) => p.type === "title" || !hidden.has(p.key));
+    if (hidden.size === 0) return allOrderedProperties;
+    return allOrderedProperties.filter((p) => p.type === "title" || !hidden.has(p.key));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [properties, config.property_order, config.hidden_properties]);
+  }, [allOrderedProperties, config.hidden_properties]);
 
-  const titleProperty = useMemo(() => orderedProperties.find((p) => p.type === "title"), [orderedProperties]);
+  const titleProperty = useMemo(
+    () => allOrderedProperties.find((p) => p.type === "title"),
+    [allOrderedProperties]
+  );
   // The one sub-item relation pair on this data source, if enabled
   // (research §3.2: the property choice is data-source-global, not a
   // per-view setting — there is exactly one, found by `config.system`).
   const subItemForwardProp = useMemo(
-    () => findSystemRelationProperty(orderedProperties, "sub_item", "forward"),
-    [orderedProperties]
+    () => findSystemRelationProperty(allOrderedProperties, "sub_item", "forward"),
+    [allOrderedProperties]
   );
   const subItemReverseProp = useMemo(
-    () => findSystemRelationProperty(orderedProperties, "sub_item", "reverse"),
-    [orderedProperties]
+    () => findSystemRelationProperty(allOrderedProperties, "sub_item", "reverse"),
+    [allOrderedProperties]
   );
 
   // Every relation-type property on this data source (task-31 Parts 3/4) —
@@ -243,8 +265,8 @@ export function TableView({
   // data source, so an empty list here is exactly the "add a relation
   // property first" case task-31-brief.md §3 calls out.
   const relationProperties = useMemo(
-    () => orderedProperties.filter((p) => p.type === "relation"),
-    [orderedProperties]
+    () => allOrderedProperties.filter((p) => p.type === "relation"),
+    [allOrderedProperties]
   );
   const relationPropertyKeys = useMemo(() => relationProperties.map((p) => p.key), [relationProperties]);
 
@@ -324,13 +346,13 @@ export function TableView({
           header:
             property.type === "button"
               ? () => (
-                  <ButtonPropertyConfigPopover property={property} properties={orderedProperties} onSaved={refetch} />
+                  <ButtonPropertyConfigPopover property={property} properties={allOrderedProperties} onSaved={refetch} />
                 )
               : editable && dataSourceId && onPatchConfig && onSetSorts
                 ? () => (
                     <ColumnHeader
                       property={property}
-                      properties={orderedProperties}
+                      properties={allOrderedProperties}
                       dataSourceId={dataSourceId}
                       view={view ?? null}
                       onPatchConfig={onPatchConfig}
@@ -463,7 +485,7 @@ export function TableView({
                     * 40 native <select> elements. */}
                   <AddPropertyPopover
                     dataSourceId={dataSourceId}
-                    properties={orderedProperties}
+                    properties={allOrderedProperties}
                     onCreated={() => refetch?.()}
                   />
                 </th>

@@ -650,6 +650,45 @@ describe("TableView", () => {
       expect(screen.getByRole("button", { name: "Collapse" })).toBeInTheDocument();
     });
 
+    // Review-checkpoint finding (M1-M3 pass): `orderedProperties` used to be
+    // the ONE list every lookup read, so hiding a column silently broke
+    // whatever depended on that property existing — a sub-item relation's
+    // column being hidden shouldn't disable the whole nested tree, since
+    // hiding is a display choice, not a schema change.
+    it("'show' mode nests correctly even when the sub-item relation's own column is hidden", () => {
+      render(
+        <TableView
+          properties={PROPS_WITH_SUBITEMS}
+          rows={TREE_ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          relationLinks={relationLinksFor([{ id: "child-1", title: "Child" }])}
+          ensureRelationLinks={vi.fn()}
+          setRelationLinks={vi.fn()}
+          subItemDisplayMode="show"
+          view={{
+            id: "v1",
+            data_source_id: "ds-1",
+            user_id: "u1",
+            name: "Table",
+            icon: null,
+            type: "table",
+            config: { hidden_properties: ["subitem"] },
+            filter: null,
+            sorts: [],
+            is_locked: false,
+            position: 0,
+          }}
+        />
+      );
+
+      expect(screen.getByRole("button", { name: "Parent" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Child" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Collapse" })).toBeInTheDocument();
+      // And the hidden column itself is actually gone from the table.
+      expect(screen.queryByText("Sub-item")).not.toBeInTheDocument();
+    });
+
     it("'show' mode: collapsing the parent hides the child row", async () => {
       const user = userEvent.setup();
       render(

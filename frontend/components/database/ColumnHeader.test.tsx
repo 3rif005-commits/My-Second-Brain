@@ -287,7 +287,16 @@ describe("view-config actions", () => {
     // Never a generic "Ascending".
     expect(within(panel).getByText("Sort low → high")).toBeInTheDocument();
     await user.click(within(panel).getByText("Sort low → high"));
-    expect(onSetSorts).toHaveBeenCalledWith([{ property: "abc123", direction: "asc" }]);
+
+    // onSetSorts now takes an UPDATER, not a finished array — DatabaseShell's
+    // queue supplies the latest known `sorts` at write time (see
+    // SortsUpdater's doc comment); this row's own write doesn't depend on
+    // whatever was previously sorted, so it ignores its `current` argument.
+    expect(onSetSorts).toHaveBeenCalledTimes(1);
+    const updater = onSetSorts.mock.calls[0][0];
+    expect(updater([{ property: "unrelated", direction: "desc" }])).toEqual([
+      { property: "abc123", direction: "asc" },
+    ]);
   });
 });
 

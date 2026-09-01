@@ -21,6 +21,20 @@
 // default rather than throw.
 import type { PropertyResponse, ViewResponse } from "./types";
 
+/** `view.sorts`' element shape — a top-level field, not part of `config`,
+ * but shared here since every writer of it already imports from this file. */
+export type Sort = { property: string; direction: "asc" | "desc" };
+
+/** `sorts` is a whole-array REPLACE, not a mergeable object like `config`, so
+ * a caller cannot just hand over a finished array the way `onPatchConfig`
+ * takes a patch — two writers computing "the new array" from the same
+ * stale render-time `sorts` is exactly `patchViewConfig`'s own bug, one
+ * field over (M1's header menu, M3's toolbar Sort popover and settings
+ * sidebar Sort panel can all be reached in one session now). The updater
+ * receives whatever `DatabaseShell`'s queue knows is LATEST at the moment
+ * it actually runs, not what was current when the row was clicked. */
+export type SortsUpdater = (current: Sort[]) => Sort[];
+
 /** Keys hidden in this view. Absent means "nothing hidden". */
 export function getHiddenKeys(config: Record<string, unknown>): string[] {
   const raw = config.hidden_properties;

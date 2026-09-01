@@ -62,6 +62,7 @@ import {
   patchHidden,
   patchWrapped,
 } from "@/lib/database/viewConfig";
+import type { SortsUpdater } from "@/lib/database/viewConfig";
 import type { MenuPanel, MenuRow } from "@/components/ui/primitives";
 import { editPropertyPanel, hasEditableConfig } from "./EditPropertyPanel";
 
@@ -153,7 +154,7 @@ export interface ColumnHeaderMenuArgs {
   view: ViewResponse | null;
   config: Record<string, unknown>;
   onPatchConfig: (patch: Record<string, unknown>) => void;
-  onSetSorts: (sorts: { property: string; direction: "asc" | "desc" }[]) => void;
+  onSetSorts: (updater: SortsUpdater) => void;
   onChangeType: (targetType: string) => void;
   /** Writes a PATCH onto the PROPERTY's `config` (schema-level), not the
    * view's. Kept separate from `onPatchConfig` above precisely because they
@@ -323,12 +324,12 @@ export function buildColumnHeaderMenu(args: ColumnHeaderMenuArgs): MenuPanel {
               {
                 id: "asc",
                 label: labels.asc,
-                onSelect: () => onSetSorts([{ property: property.key, direction: "asc" }]),
+                onSelect: () => onSetSorts(() => [{ property: property.key, direction: "asc" }]),
               },
               {
                 id: "desc",
                 label: labels.desc,
-                onSelect: () => onSetSorts([{ property: property.key, direction: "desc" }]),
+                onSelect: () => onSetSorts(() => [{ property: property.key, direction: "desc" }]),
               },
             ],
           },

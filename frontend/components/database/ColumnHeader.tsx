@@ -12,6 +12,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { MenuList, Popover } from "@/components/ui/primitives";
 import type { PropertyResponse, ViewResponse } from "@/lib/database/types";
 import { patchInsertedNear } from "@/lib/database/viewConfig";
+import type { SortsUpdater } from "@/lib/database/viewConfig";
 import {
   ColumnRenameHeader,
   buildColumnHeaderMenu,
@@ -31,7 +32,7 @@ export interface ColumnHeaderProps {
   /** Receives a PATCH (only the changed keys), which DatabaseShell merges
    * onto the freshest known config through its serialised queue. */
   onPatchConfig: (patch: Record<string, unknown>) => void;
-  onSetSorts: (sorts: { property: string; direction: "asc" | "desc" }[]) => void;
+  onSetSorts: (updater: SortsUpdater) => void;
   onPropertiesChanged: () => void | Promise<void>;
   /** M4 supplies this; until then the Filter row is disabled with a reason. */
   onFilter?: () => void;
