@@ -1113,7 +1113,64 @@ describe("TableView", () => {
       };
     }
 
-    it("renders no chevron at all when there are zero templates", () => {
+    // M11 (new-row-button.md), user decision 2026-09-01: the chevron is now
+    // UNCONDITIONAL — it's Notion's own entry point for AUTHORING a
+    // template, not merely picking one, so it must survive zero templates.
+    it("shows the chevron even with zero templates, opening onto the captured empty state", async () => {
+      const user = userEvent.setup();
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          templates={[]}
+          dataSourceName="Tasks"
+        />
+      );
+      expect(screen.getByRole("button", { name: "+ New" })).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Choose a template" }));
+
+      expect(screen.getByText("Templates for Tasks")).toBeInTheDocument();
+      expect(
+        screen.getByText("Create a reusable page template for this database.")
+      ).toBeInTheDocument();
+      // "Add shortcut to sidebar" — new-row-button.md's own "no analogue
+      // for us — omit deliberately".
+      expect(screen.queryByText(/add shortcut to sidebar/i)).not.toBeInTheDocument();
+    });
+
+    it("shows the chevron even when the `templates` prop is simply omitted (older/other caller)", () => {
+      render(
+        <TableView properties={PROPERTIES} rows={[]} editable={true} onCellChange={vi.fn()} dataSourceId="ds-1" />
+      );
+      expect(screen.getByRole("button", { name: "Choose a template" })).toBeInTheDocument();
+    });
+
+    it('"+ New template" opens the same TemplateManager modal the settings menu uses, only when all three template handlers are supplied', async () => {
+      const user = userEvent.setup();
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          templates={[]}
+          onCreateTemplate={vi.fn()}
+          onUpdateTemplate={vi.fn()}
+          onDeleteTemplate={vi.fn()}
+        />
+      );
+      await user.click(screen.getByRole("button", { name: "Choose a template" }));
+      await user.click(screen.getByRole("menuitem", { name: /new template/i }));
+
+      expect(screen.getByRole("dialog", { name: "Templates" })).toBeInTheDocument();
+    });
+
+    it('"+ New template" is absent when the template handlers are omitted', async () => {
+      const user = userEvent.setup();
       render(
         <TableView
           properties={PROPERTIES}
@@ -1124,15 +1181,9 @@ describe("TableView", () => {
           templates={[]}
         />
       );
-      expect(screen.getByRole("button", { name: "+ New" })).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Choose a template" })).not.toBeInTheDocument();
-    });
+      await user.click(screen.getByRole("button", { name: "Choose a template" }));
 
-    it("renders no chevron at all when the `templates` prop is simply omitted (older/other caller)", () => {
-      render(
-        <TableView properties={PROPERTIES} rows={[]} editable={true} onCellChange={vi.fn()} dataSourceId="ds-1" />
-      );
-      expect(screen.queryByRole("button", { name: "Choose a template" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("menuitem", { name: /new template/i })).not.toBeInTheDocument();
     });
 
     it("the dropdown lists one entry per NON-default template — the default one is omitted (plain \"+ New\" already produces it)", async () => {
@@ -1240,6 +1291,47 @@ describe("TableView", () => {
         expect.objectContaining({ method: "POST" })
       );
       expect(onInstantiateTemplate).not.toHaveBeenCalled();
+    });
+
+    // new-row-button.md: "Focus the new row's title cell after creation."
+    it('"+ New" focuses the created row\'s title cell into inline edit once it appears', async () => {
+      const user = userEvent.setup();
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "row-2", properties: {} }, 201));
+      vi.stubGlobal("fetch", fetchMock);
+      const refetchRows = vi.fn().mockResolvedValue(undefined);
+
+      const { rerender } = render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetchRows={refetchRows}
+        />
+      );
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "+ New" }));
+      await waitFor(() => expect(refetchRows).toHaveBeenCalled());
+
+      // Mimics DatabaseShell: refetchRows resolving re-renders TableView
+      // with the freshly-created row now present in `rows`.
+      const newRow = { id: "row-2", properties: {} };
+      rerender(
+        <TableView
+          properties={PROPERTIES}
+          rows={[...ROWS, newRow]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetchRows={refetchRows}
+        />
+      );
+
+      // TitleCell mounts straight into its `editing` branch (a text input)
+      // instead of the plain button every other row's title renders as.
+      expect(screen.getByRole("textbox", { name: "Title" })).toBeInTheDocument();
     });
   });
 });

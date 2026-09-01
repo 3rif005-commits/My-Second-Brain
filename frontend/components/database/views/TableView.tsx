@@ -32,7 +32,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronRight, FileText, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, HelpCircle, Plus, Trash2, X } from "lucide-react";
 import { useToast } from "@/app/providers";
 import { findSystemRelationProperty, getGroupBySpec } from "@/lib/database/types";
 import type {
@@ -42,6 +42,7 @@ import type {
   PropertyValue,
   RelatedRow,
   RowResponse,
+  RowTemplatePatch,
   RowTemplateResponse,
   SubtaskDisplayMode,
   ViewResponse,
@@ -72,6 +73,7 @@ import { ColumnHeader } from "../ColumnHeader";
 import { calculationLabel } from "../ColumnHeaderMenu";
 import { AddPropertyPopover } from "../AddPropertyPopover";
 import { QueryBar } from "../QueryBar";
+import { TemplateManager } from "../TemplateManager";
 
 interface TableViewProps {
   properties: PropertyResponse[];
@@ -120,14 +122,27 @@ interface TableViewProps {
    * rather than half-built (research §3.4 also names them, but the brief
    * explicitly scopes this task down to the first two). */
   subItemDisplayMode?: SubtaskDisplayMode;
-  // Milestone 12 (task-40): the "+ New" split-button's dropdown. Optional,
-  // same "older/other caller just gets a degraded but non-crashing
-  // behaviour" convention as the relation props above — a caller that omits
-  // `templates` (or passes `[]`) simply gets the plain "+ New" button with
-  // no chevron next to it, which is byte-identical to this component's
-  // behaviour before this task existed (the brief's own regression bar for
-  // this file: the plain "+ New" click path must stay unchanged).
+  // Milestone 12 (task-40) / M11 (new-row-button.md): the "+ New" split
+  // button's dropdown. `templates` alone is enough for picking an existing
+  // one; the chevron itself is now UNCONDITIONAL (user decision, 2026-09-01
+  // — Notion's own IA: the dropdown is the entry point for AUTHORING a
+  // template, not merely picking one), so a caller that omits `templates`
+  // still gets a chevron, just one whose menu can only offer "+ New
+  // template" — the plain "+ New" click path itself is unaffected either way.
   templates?: RowTemplateResponse[];
+  /** M11: the split-button dropdown's "Templates for <name>" header —
+   * reuses the same "database name" string `ViewTabs.tsx`'s own
+   * `dataSourceName` prop already carries. Optional: omitted renders the
+   * header without a name (`"Templates"`) rather than crashing. */
+  dataSourceName?: string;
+  /** M11: "+ New template" opens the SAME `TemplateManager` modal
+   * `DatabaseSettingsMenu.tsx`'s "Manage templates" already mounts — these
+   * three are that component's own required handlers, unchanged. All
+   * optional: omitted, "+ New template" is not rendered (same
+   * degrade-gracefully convention as every other optional prop here). */
+  onCreateTemplate?: (name: string, icon?: string | null) => Promise<RowTemplateResponse>;
+  onUpdateTemplate?: (id: string, patch: RowTemplatePatch) => Promise<RowTemplateResponse>;
+  onDeleteTemplate?: (id: string) => Promise<void>;
   // M1: the column header menu. All four are optional on the same
   // "an older/other caller gets a degraded but non-crashing behaviour"
   // convention the relation props above already established — omit them and
@@ -235,6 +250,10 @@ export function TableView({
   setRelationLinks,
   subItemDisplayMode,
   templates,
+  dataSourceName,
+  onCreateTemplate,
+  onUpdateTemplate,
+  onDeleteTemplate,
   onInstantiateTemplate,
   view,
   onPatchConfig,
@@ -365,6 +384,18 @@ export function TableView({
   // path's own state).
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
   const [instantiatingTemplateId, setInstantiatingTemplateId] = useState<string | null>(null);
+  // M11 (new-row-button.md): "Focus the new row's title cell after
+  // creation." Threaded into `columns`' `cell` fn below as `TitleCell`'s
+  // `autoEdit` — see that prop's own doc comment for why this never needs
+  // to be reset back to `null`.
+  const [newlyCreatedRowId, setNewlyCreatedRowId] = useState<string | null>(null);
+  // M11: the split-button's ALWAYS-visible dropdown (user decision,
+  // 2026-09-01 — matches Notion's own IA, where the dropdown is the entry
+  // point for AUTHORING a template, not merely picking one) opens the same
+  // `TemplateManager` modal `DatabaseSettingsMenu.tsx`'s "Manage templates"
+  // already does — a second mount of the identical component/handlers, not
+  // a second template-CRUD implementation.
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
 
 
   // Sub-item "show" mode's expand/collapse state (task-22-brief.md §3) —
@@ -560,7 +591,8 @@ export function TableView({
               editable,
               (value) => onCellChange(rowId, property.key, value),
               relationExtras,
-              buttonExtras
+              buttonExtras,
+              property.type === "title" && rowId === newlyCreatedRowId
             );
           },
         })
@@ -570,6 +602,7 @@ export function TableView({
       editable,
       onCellChange,
       relationLinks,
+      newlyCreatedRowId,
       ensureRelationLinks,
       setRelationLinks,
       refetch,
@@ -632,6 +665,7 @@ export function TableView({
       const res = await fetch(`/api/db/data-sources/${dataSourceId}/rows`, { method: "POST" });
       if (!res.ok) throw new Error(await errorMessage(res));
       const created: RowResponse = await res.json();
+      setNewlyCreatedRowId(created.id);
       const value = groupProperty ? groupValueForNewRow(groupProperty, group) : undefined;
       if (value && groupProperty) {
         const patchRes = await fetch(`/api/db/data-sources/${dataSourceId}/rows/${created.id}`, {
@@ -700,6 +734,8 @@ export function TableView({
     try {
       const res = await fetch(`/api/db/data-sources/${dataSourceId}/rows`, { method: "POST" });
       if (!res.ok) throw new Error(await errorMessage(res));
+      const created: RowResponse = await res.json();
+      setNewlyCreatedRowId(created.id);
       await refetchRows?.();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Could not add row", "error");
@@ -1118,42 +1154,80 @@ export function TableView({
                   >
                     + New
                   </button>
-                  {/* Task-40 decision 3: zero non-default templates -> no
-                   * chevron at all, no dropdown with nothing in it. */}
-                  {nonDefaultTemplates.length > 0 && (
-                    <>
-                      <button
-                        type="button"
-                        aria-label="Choose a template"
-                        aria-haspopup="menu"
-                        aria-expanded={templateMenuOpen}
-                        onClick={() => setTemplateMenuOpen((o) => !o)}
-                        className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-1"
-                      >
-                        ▾
-                      </button>
-                      {templateMenuOpen && (
-                        <div
-                          role="menu"
-                          aria-label="New row from template"
-                          className="absolute left-0 bottom-full z-20 mb-1 min-w-[10rem] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-1"
-                        >
-                          {nonDefaultTemplates.map((t) => (
-                            <button
-                              key={t.id}
-                              type="button"
-                              role="menuitem"
-                              disabled={instantiatingTemplateId === t.id}
-                              onClick={() => handleInstantiateTemplate(t.id)}
-                              className="w-full flex items-center gap-1.5 text-left text-xs px-3 py-1.5 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-40"
-                            >
-                              {t.icon && <span className="leading-none">{t.icon}</span>}
-                              {t.name}
-                            </button>
-                          ))}
+                  {/* M11 (new-row-button.md), user decision 2026-09-01: the
+                   * chevron is now UNCONDITIONAL — Notion's own IA treats
+                   * this dropdown as the entry point for AUTHORING a
+                   * template, not merely picking one, so "zero templates"
+                   * must still open onto something (the captured empty
+                   * state: header, description, "+ New template"), not
+                   * disappear. */}
+                  <button
+                    type="button"
+                    aria-label="Choose a template"
+                    aria-haspopup="menu"
+                    aria-expanded={templateMenuOpen}
+                    onClick={() => setTemplateMenuOpen((o) => !o)}
+                    className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-1"
+                  >
+                    ▾
+                  </button>
+                  {templateMenuOpen && (
+                    <div
+                      role="menu"
+                      aria-label="New row from template"
+                      className="absolute left-0 bottom-full z-20 mb-1 w-64 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-1"
+                    >
+                      <div className="flex items-center justify-between gap-2 px-3 py-1.5">
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 truncate">
+                          Templates for {dataSourceName ?? "this database"}
+                        </span>
+                        <HelpCircle
+                          size={13}
+                          className="shrink-0 text-gray-300 dark:text-gray-600"
+                          aria-label="What are templates?"
+                        />
+                      </div>
+                      <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+                      {nonDefaultTemplates.length > 0 ? (
+                        // "How each is listed [with templates present] is
+                        // TBD" (new-row-button.md) — unchanged from before
+                        // M11, the one part that WAS captured (the EMPTY
+                        // state) is what M11 adds below.
+                        nonDefaultTemplates.map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            role="menuitem"
+                            disabled={instantiatingTemplateId === t.id}
+                            onClick={() => handleInstantiateTemplate(t.id)}
+                            className="w-full flex items-center gap-1.5 text-left text-xs px-3 py-1.5 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-40"
+                          >
+                            {t.icon && <span className="leading-none">{t.icon}</span>}
+                            {t.name}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500">
+                          Create a reusable page template for this database.
                         </div>
                       )}
-                    </>
+                      {onCreateTemplate && onUpdateTemplate && onDeleteTemplate && (
+                        <>
+                          <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setTemplateMenuOpen(false);
+                              setTemplateManagerOpen(true);
+                            }}
+                            className="w-full flex items-center gap-1.5 text-left text-xs px-3 py-1.5 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                          >
+                            <Plus size={12} /> New template
+                          </button>
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
               </td>
@@ -1175,6 +1249,17 @@ export function TableView({
         mode={peekMode === "center" ? "center" : "side"}
         dataSourceId={dataSourceId}
         onPropertyCreated={refetch}
+      />
+    )}
+    {onCreateTemplate && onUpdateTemplate && onDeleteTemplate && (
+      <TemplateManager
+        open={templateManagerOpen}
+        onClose={() => setTemplateManagerOpen(false)}
+        templates={templates ?? []}
+        properties={properties}
+        onCreateTemplate={onCreateTemplate}
+        onUpdateTemplate={onUpdateTemplate}
+        onDeleteTemplate={onDeleteTemplate}
       />
     )}
     </>

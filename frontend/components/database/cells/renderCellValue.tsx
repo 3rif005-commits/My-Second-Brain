@@ -71,12 +71,22 @@ export function renderCellValue(
   editable: boolean,
   onChange: (value: PropertyValue | null) => void,
   relation?: RelationCellHandlers,
-  button?: ButtonCellHandlers
+  button?: ButtonCellHandlers,
+  /** M11 (new-row-button.md): "Focus the new row's title cell after
+   * creation." Optional 7th arg, same graceful-fallback convention as
+   * `relation`/`button` above — a caller that omits it (RowPeek, every
+   * other view) gets TitleCell's pre-existing behavior unchanged. */
+  titleAutoEdit?: boolean
 ) {
   switch (property.type) {
     case "title":
       return (
-        <TitleCell value={value as TitleValue | undefined} editable={editable} onChange={onChange} />
+        <TitleCell
+          value={value as TitleValue | undefined}
+          editable={editable}
+          onChange={onChange}
+          autoEdit={titleAutoEdit}
+        />
       );
     case "rich_text":
       return (

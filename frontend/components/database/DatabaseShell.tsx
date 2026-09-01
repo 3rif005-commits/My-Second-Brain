@@ -242,6 +242,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
   // `!dataSource` check above doesn't cross into a nested function's body,
   // so `dataSource` would still type as possibly-null there.
   const dataSourceId = dataSource.id;
+  const dataSourceName = dataSource.name;
 
   /** "+ New view" (ViewTabs.tsx): create, then — for a Board with a chosen
    * group-by property — persist that choice via the existing `PATCH
@@ -312,6 +313,13 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             subItemDisplayMode={getSubtaskDisplayMode(activeView.config)}
             templates={templates}
             onInstantiateTemplate={instantiateTemplate}
+            // M11 (new-row-button.md): the split-button dropdown's "Templates
+            // for <name>" header and its "+ New template" row, which reuses
+            // DatabaseSettingsMenu.tsx's own TemplateManager handlers.
+            dataSourceName={dataSourceName}
+            onCreateTemplate={createTemplate}
+            onUpdateTemplate={updateTemplate}
+            onDeleteTemplate={deleteTemplate}
             view={activeView}
             // Routed through patchViewConfig, not a fresh closure over
             // activeView.config: the header menu fires several config writes
