@@ -8,7 +8,7 @@ import { useCallback, useRef, useState } from "react";
 import { useToast } from "@/app/providers";
 import { useDatabaseView } from "@/lib/database/useDatabaseView";
 import type { ViewResponse } from "@/lib/database/types";
-import { getGroupBySpec, getSubGroupBySpec, getSubtaskDisplayMode } from "@/lib/database/types";
+import { defaultGroupBySpec, getGroupBySpec, getSubGroupBySpec, getSubtaskDisplayMode } from "@/lib/database/types";
 import type { Sort, SortsUpdater } from "@/lib/database/viewConfig";
 import { TableView } from "./views/TableView";
 import { BoardView } from "./views/BoardView";
@@ -209,12 +209,10 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
    * don't guess" decision — `mode=None` raises `ValueError`, surfaced as a
    * real 400 from `POST .../query`, confirmed by actually creating a Board
    * grouped by a Status property and watching it 400 with "status requires
-   * mode='option' or 'group'"). `select`/`multi_select` (the other two
-   * `GROUPABLE_PROPERTY_TYPES`) have no mode concept at all, so this only
-   * needs to special-case `status` — default it to `"option"` (individual
-   * options, not status groups — matches how the Status column itself
-   * already renders/edits, since status *groups* aren't configurable
-   * anywhere in this UI yet). */
+   * mode='option' or 'group'"). `defaultGroupBySpec` (types.ts, Phase 0c)
+   * is the one place that decision lives now — it also covers Date/Text,
+   * which `GROUPABLE_PROPERTY_TYPES` grew to include once 0c widened it
+   * past select/status/multi_select. */
   async function handleCreateView(input: {
     name: string;
     type: string;
@@ -225,8 +223,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     const created = await createView(input.name, input.type);
     if (input.type === "board" && input.groupPropertyKey) {
       const groupProperty = properties.find((p) => p.key === input.groupPropertyKey);
-      const groupBy: Record<string, unknown> = { property_key: input.groupPropertyKey };
-      if (groupProperty?.type === "status") groupBy.mode = "option";
+      const groupBy = groupProperty ? defaultGroupBySpec(groupProperty) : { property_key: input.groupPropertyKey };
       await updateView(created.id, { config: { group_by: groupBy } });
     }
     // Calendar's creation-time required config (task-33-brief.md), extended

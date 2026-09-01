@@ -53,7 +53,7 @@ import {
   Users,
 } from "lucide-react";
 import { useToast } from "@/app/providers";
-import { GROUPABLE_PROPERTY_TYPES } from "@/lib/database/types";
+import { defaultGroupBySpec, GROUPABLE_PROPERTY_TYPES } from "@/lib/database/types";
 import type { PropertyResponse, ViewResponse } from "@/lib/database/types";
 import {
   getCalculation,
@@ -348,16 +348,11 @@ export function buildColumnHeaderMenu(args: ColumnHeaderMenuArgs): MenuPanel {
       icon: <Rows3 size={14} />,
       label: "Group",
       disabled: !groupable,
-      // Notion groups by any type; we support three until the grouping engine
-      // lands (plan Phase 0c). Disabled WITH a reason beats a missing row.
+      // Phase 0c widened GROUPABLE_PROPERTY_TYPES to match the engine's real
+      // capability — the handful of truly ungroupable types (Files, Rollup,
+      // Formula, …) still fall back to disabled-with-a-reason.
       disabledReason: "This property type cannot be grouped by yet",
-      onSelect: () =>
-        onPatchConfig({
-          group_by: {
-            property_key: property.key,
-            ...(property.type === "status" ? { mode: "option" } : {}),
-          },
-        }),
+      onSelect: () => onPatchConfig({ group_by: defaultGroupBySpec(property) }),
     },
     {
       id: "calculate",

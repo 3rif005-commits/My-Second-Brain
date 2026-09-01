@@ -137,17 +137,80 @@ export interface Group {
   aggregates?: Record<string, number> | null;
 }
 
-/** The property types `services.db.query.grouping.group_rows` can group a
- * Board view by without raising `ValueError`/`NotImplementedError` for a
- * missing mode (task-16-brief.md's "requires an existing groupable
- * property" — this app doesn't auto-create a status property the way
- * Notion does, so the Board-creation UI restricts its dropdown to these). */
-export const GROUPABLE_PROPERTY_TYPES = ["select", "status", "multi_select"] as const;
+/** The property types `services.db.query.grouping.group_rows` can group by
+ * without raising `ValueError`/`NotImplementedError` for a missing mode.
+ *
+ * Plan Phase 0c (2026-09-01): the engine (`grouping.py`) already supports
+ * every one of these — range/bucket grouping for Number, day/week/month/year
+ * for Date, boolean for Checkbox, exact-value for the text-shaped types, plus
+ * every already-supported multi/single-valued type — this constant was just
+ * never widened to match after the engine work landed (task-13/15, long
+ * before this plan existed). Mirrors the backend's REGISTRY key list minus
+ * `grouping._NOT_GROUPABLE` (files, rollup, unique_id, verification, button,
+ * place) and `formula` (needs the formula engine's result type first,
+ * `grouping.group_rows` raises `NotImplementedError` — Milestone 8, still
+ * deferred). Not derived at runtime from an endpoint the same way Filter
+ * derives operators from `TYPE_OPERATORS` — there is no HTTP surface for
+ * this table — so this list is a hand-kept mirror; keep it in sync with
+ * `_NOT_GROUPABLE` if that ever changes. */
+export const GROUPABLE_PROPERTY_TYPES = [
+  "title",
+  "rich_text",
+  "select",
+  "multi_select",
+  "status",
+  "date",
+  "number",
+  "people",
+  "checkbox",
+  "url",
+  "email",
+  "phone_number",
+  "relation",
+  "created_time",
+  "created_by",
+  "last_edited_time",
+  "last_edited_by",
+] as const;
 
 export type GroupablePropertyType = (typeof GROUPABLE_PROPERTY_TYPES)[number];
 
 export function isGroupablePropertyType(type: string): type is GroupablePropertyType {
   return (GROUPABLE_PROPERTY_TYPES as readonly string[]).includes(type);
+}
+
+const _DATE_GROUP_TYPES = new Set(["date", "created_time", "last_edited_time"]);
+const _TEXT_GROUP_TYPES = new Set(["title", "rich_text", "url", "email", "phone_number"]);
+
+/** Builds the `GroupBySpec` a fresh "group by this property" action should
+ * send — the one place every entry point (column header menu, group panel,
+ * Board/Chart creation) fills in the per-type `mode` `grouping.group_rows`
+ * requires before it will accept the type, rather than each writer copying
+ * its own `status`-only special case (which is how Chart/Board's creation
+ * flows and the column header menu's "Group" row each independently forgot
+ * to do the same for Date/Text once this constant above widened past
+ * select/status/multi_select).
+ *
+ * `status` needs `mode: "option"` (individual options, not status *groups*
+ * — those aren't configurable anywhere in this UI). Date-family types need
+ * a bucket unit; group-panel.md never captured a per-view unit selector for
+ * it, so `"month"` is a placeholder default, not an invented Notion value —
+ * TBD until that row is captured. Text-shaped types need `mode: "exact"`
+ * (the other option, `"alphabet_prefix"`, has no UI entry point yet).
+ * Every other groupable type (Select, Multi-select, Number, Checkbox,
+ * People, Relation, …) needs no mode at all. */
+export function defaultGroupMode(type: string): string | undefined {
+  if (type === "status") return "option";
+  if (_DATE_GROUP_TYPES.has(type)) return "month";
+  if (_TEXT_GROUP_TYPES.has(type)) return "exact";
+  return undefined;
+}
+
+export function defaultGroupBySpec(property: Pick<PropertyResponse, "key" | "type">): GroupBySpec {
+  const spec: GroupBySpec = { property_key: property.key };
+  const mode = defaultGroupMode(property.type);
+  if (mode) spec.mode = mode;
+  return spec;
 }
 
 /** Reads `config.group_by`/`config.sub_group_by` out of a view's opaque

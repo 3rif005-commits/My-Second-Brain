@@ -35,6 +35,7 @@ import type { PropertyResponse, PropertyValue } from "@/lib/database/types";
 import {
   CHART_TYPES,
   CHART_Y_AXIS_AGGREGATORS,
+  defaultGroupMode,
   GROUPABLE_PROPERTY_TYPES,
   getChartGroupStyle,
   getChartHideEmptyGroups,
@@ -236,16 +237,18 @@ export function isChartConfigComplete(draft: ChartDraftConfig): boolean {
  * `property_id`), per this task's "config shape" section. Only ever called
  * once `isChartConfigComplete` is true (ViewTabs.tsx's `canSubmit` gate).
  *
- * `properties` is used only to detect a `status`-typed x_axis/stack_by
- * selection: `services/db/query/grouping.py`'s `group_rows` requires an
- * explicit `mode="option"` for status grouping (no default), the same
- * requirement Board's own group_by creation (`DatabaseShell.tsx`'s
- * `handleCreateView`) already discovered and handles — mirrored here so a
- * Chart grouped by Status doesn't 400 at query time. select/multi_select
- * need no mode. Passing `properties=[]` (or omitting it) skips this
- * detection, matching every other caller before this fix — never a fatal
- * default, just a status grouping that would 400 the same way Board's did
- * before Task 16 added its own check. */
+ * `properties` is used to derive each x_axis/stack_by selection's required
+ * `mode`: `services/db/query/grouping.py`'s `group_rows` requires an
+ * explicit `mode` for several types (status, date-family, text-family) —
+ * the same requirement Board's own group_by creation (`DatabaseShell.tsx`'s
+ * `handleCreateView`) and the column header menu's "Group" row handle via
+ * `defaultGroupMode` (types.ts, Phase 0c) — mirrored here (adapted to this
+ * config's own `property_id` field name, not `GroupBySpec`'s `property_key`)
+ * so a Chart grouped by any of them doesn't 400 at query time. Passing
+ * `properties=[]` (or omitting it) skips this detection, matching every
+ * other caller before this fix — never a fatal default, just a grouping
+ * that would 400 the same way Board's did before Task 16 added its own
+ * check. */
 export function buildChartViewConfig(
   draft: ChartDraftConfig,
   properties: PropertyResponse[] = []
@@ -259,16 +262,16 @@ export function buildChartViewConfig(
   };
   if (draft.chart_type !== "number") {
     const xAxis: Record<string, unknown> = { property_id: draft.x_axis_property_key };
-    if (properties.find((p) => p.key === draft.x_axis_property_key)?.type === "status") {
-      xAxis.mode = "option";
-    }
+    const xMode = defaultGroupMode(properties.find((p) => p.key === draft.x_axis_property_key)?.type ?? "");
+    if (xMode) xAxis.mode = xMode;
     config.x_axis = xAxis;
     config.hide_empty_groups = draft.hide_empty_groups;
     if (draft.chart_type !== "donut" && draft.stack_by_property_key) {
       const stackBy: Record<string, unknown> = { property_id: draft.stack_by_property_key };
-      if (properties.find((p) => p.key === draft.stack_by_property_key)?.type === "status") {
-        stackBy.mode = "option";
-      }
+      const stackMode = defaultGroupMode(
+        properties.find((p) => p.key === draft.stack_by_property_key)?.type ?? ""
+      );
+      if (stackMode) stackBy.mode = stackMode;
       config.stack_by = stackBy;
     }
   }
