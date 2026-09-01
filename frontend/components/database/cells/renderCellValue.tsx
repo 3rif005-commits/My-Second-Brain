@@ -76,7 +76,12 @@ export function renderCellValue(
    * creation." Optional 7th arg, same graceful-fallback convention as
    * `relation`/`button` above — a caller that omits it (RowPeek, every
    * other view) gets TitleCell's pre-existing behavior unchanged. */
-  titleAutoEdit?: boolean
+  titleAutoEdit?: boolean,
+  /** M11 (cell-editing.md): Select's create-on-type — a schema write
+   * (`PATCH /api/db/properties/{id}`), which is why it needs its own
+   * handler rather than living inside `onChange` (a plain value write).
+   * Optional 8th arg, same convention as every other extra above. */
+  onCreateSelectOption?: (name: string) => Promise<void>
 ) {
   switch (property.type) {
     case "title":
@@ -113,6 +118,7 @@ export function renderCellValue(
           // Lets a configured option render in ITS OWN colour rather than a
           // hashed one — the `Colors` list in `Edit property` writes this.
           options={property.config?.options as ConfiguredOption[] | undefined}
+          onCreateOption={onCreateSelectOption}
         />
       );
     case "multi_select":

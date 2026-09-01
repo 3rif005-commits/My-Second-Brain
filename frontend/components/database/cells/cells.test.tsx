@@ -110,6 +110,97 @@ describe("SelectCell", () => {
 
     expect(onChange).toHaveBeenCalledWith({ type: "select", select: "video" });
   });
+
+  // M11 (cell-editing.md): create-on-type — "the single biggest
+  // cell-editing gap." Only reachable when a caller supplies
+  // `onCreateOption`; every test above (no `onCreateOption`) exercises the
+  // pre-M11 bare-input fallback unchanged.
+  describe("create-on-type (onCreateOption supplied)", () => {
+    const OPTIONS = [{ id: "o1", name: "Article", color: "blue" }];
+
+    it("typing an unmatched name shows a Create row; Enter creates, assigns, and closes in one keystroke", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const onCreateOption = vi.fn().mockResolvedValue(undefined);
+      render(
+        <SelectCell
+          value={undefined}
+          editable={true}
+          onChange={onChange}
+          options={OPTIONS}
+          onCreateOption={onCreateOption}
+        />
+      );
+
+      await user.click(screen.getByText("—"));
+      await user.type(screen.getByRole("textbox"), "Video");
+
+      expect(screen.getByText(/create/i)).toBeInTheDocument();
+      expect(screen.getByText("Video")).toBeInTheDocument();
+
+      await user.keyboard("{Enter}");
+
+      expect(onCreateOption).toHaveBeenCalledWith("Video");
+      expect(onChange).toHaveBeenCalledWith({ type: "select", select: "Video" });
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    });
+
+    it("typing a name that already matches an option does NOT show a Create row — Enter just assigns it", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const onCreateOption = vi.fn();
+      render(
+        <SelectCell
+          value={undefined}
+          editable={true}
+          onChange={onChange}
+          options={OPTIONS}
+          onCreateOption={onCreateOption}
+        />
+      );
+
+      await user.click(screen.getByText("—"));
+      await user.type(screen.getByRole("textbox"), "article");
+      expect(screen.queryByText(/^create/i)).not.toBeInTheDocument();
+
+      await user.keyboard("{Enter}");
+
+      expect(onCreateOption).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledWith({ type: "select", select: "Article" });
+    });
+
+    it("clicking an existing option row assigns it without creating anything", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const onCreateOption = vi.fn();
+      render(
+        <SelectCell
+          value={undefined}
+          editable={true}
+          onChange={onChange}
+          options={OPTIONS}
+          onCreateOption={onCreateOption}
+        />
+      );
+
+      await user.click(screen.getByText("—"));
+      await user.click(screen.getByRole("option", { name: "Article" }));
+
+      expect(onCreateOption).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledWith({ type: "select", select: "Article" });
+    });
+
+    it("no options and no query shows the empty-state copy", async () => {
+      const user = userEvent.setup();
+      render(
+        <SelectCell value={undefined} editable={true} onChange={vi.fn()} options={[]} onCreateOption={vi.fn()} />
+      );
+
+      await user.click(screen.getByText("—"));
+
+      expect(screen.getByText("Select an option or create one")).toBeInTheDocument();
+    });
+  });
 });
 
 describe("MultiSelectCell", () => {
@@ -156,17 +247,65 @@ describe("StatusCell", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
-  it("commits a new status via onChange when editable", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    render(<StatusCell value={{ type: "status", status: "learning" }} editable={true} onChange={onChange} />);
+  // M11 (cell-editing.md): "Status — and why it could not be inferred from
+  // Select." No create-on-type at all — options are managed on the
+  // property, not minted from a cell (unlike Select's own new create-on-
+  // type). Assigning still works, but only among EXISTING options.
+  describe("editor (cell-editing.md: grouped, dot-rendered, no create-on-type)", () => {
+    const OPTIONS = [
+      { id: "o1", name: "Not started", color: "gray", group: "To-do" as const },
+      { id: "o2", name: "Working", color: "blue", group: "In progress" as const },
+      { id: "o3", name: "Done", color: "green", group: "Complete" as const },
+    ];
 
-    await user.click(screen.getByText("learning"));
-    const input = screen.getByRole("textbox");
-    await user.clear(input);
-    await user.type(input, "mastered{Enter}");
+    it("groups options under To-do / In progress / Complete section headers", async () => {
+      const user = userEvent.setup();
+      render(
+        <StatusCell value={{ type: "status", status: "Not started" }} editable={true} onChange={vi.fn()} options={OPTIONS} />
+      );
 
-    expect(onChange).toHaveBeenCalledWith({ type: "status", status: "mastered" });
+      await user.click(screen.getByText("Not started"));
+
+      expect(screen.getByText("To-do")).toBeInTheDocument();
+      expect(screen.getByText("In progress")).toBeInTheDocument();
+      expect(screen.getByText("Complete")).toBeInTheDocument();
+    });
+
+    it("clicking a different option assigns it", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <StatusCell value={{ type: "status", status: "Not started" }} editable={true} onChange={onChange} options={OPTIONS} />
+      );
+
+      await user.click(screen.getByText("Not started"));
+      await user.click(screen.getByRole("option", { name: "Done" }));
+
+      expect(onChange).toHaveBeenCalledWith({ type: "status", status: "Done" });
+    });
+
+    it("typing a name that matches no configured option shows no create affordance — unlike Select", async () => {
+      const user = userEvent.setup();
+      render(
+        <StatusCell value={{ type: "status", status: "Not started" }} editable={true} onChange={vi.fn()} options={OPTIONS} />
+      );
+
+      await user.click(screen.getByText("Not started"));
+      await user.type(screen.getByRole("textbox"), "Blocked");
+
+      expect(screen.queryByText(/create/i)).not.toBeInTheDocument();
+    });
+
+    it("the search placeholder has no ellipsis, unlike Select's", async () => {
+      const user = userEvent.setup();
+      render(
+        <StatusCell value={{ type: "status", status: "Not started" }} editable={true} onChange={vi.fn()} options={OPTIONS} />
+      );
+
+      await user.click(screen.getByText("Not started"));
+
+      expect(screen.getByPlaceholderText("Search for an option")).toBeInTheDocument();
+    });
   });
 });
 

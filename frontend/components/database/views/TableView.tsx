@@ -594,7 +594,8 @@ export function TableView({
               (value) => onCellChange(rowId, property.key, value),
               relationExtras,
               buttonExtras,
-              property.type === "title" && rowId === newlyCreatedRowId
+              property.type === "title" && rowId === newlyCreatedRowId,
+              property.type === "select" ? (name) => createSelectOption(property, name) : undefined
             );
           },
         })
@@ -771,7 +772,30 @@ export function TableView({
     }
   }
 
-
+  /** M11 (cell-editing.md): a Select cell's create-on-type. Same PATCH
+   * shape as `handleAddGroupOption` above (same endpoint, same locally-
+   * minted id) — the only difference is the option's NAME comes from what
+   * the user typed, not an "Option N" placeholder. A duplicate (case-
+   * insensitive) name is a silent no-op, not an error: `SelectCell` only
+   * calls this when its own `exactMatch` check already found none, but a
+   * second column editing the SAME property concurrently could race it —
+   * assigning the existing option's name still works fine either way. */
+  async function createSelectOption(property: PropertyResponse, name: string) {
+    const options = ((property.config?.options as SelectOption[] | undefined) ?? []) as SelectOption[];
+    if (options.some((o) => o.name.toLowerCase() === name.toLowerCase())) return;
+    const next: SelectOption[] = [...options, { id: Math.random().toString(36).slice(2, 10), name, color: "default" }];
+    try {
+      const res = await fetch(`/api/db/properties/${property.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: { ...property.config, options: next } }),
+      });
+      if (!res.ok) throw new Error(await errorMessage(res));
+      await refetch?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not create the option", "error");
+    }
+  }
 
 
 
