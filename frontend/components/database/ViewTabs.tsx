@@ -36,6 +36,13 @@ interface ViewTabsProps {
     datePropertyKey?: string;
     chartConfig?: Record<string, unknown>;
   }) => Promise<void>;
+  /** M3's view toolbar (Filter/Sort/Automations/AI Autofill/Search/Settings)
+   * — rendered in THIS SAME row, right-aligned via its own `ml-auto`, per
+   * view-options-panel.md's diagram (`[ Table ▾ ] ... [toolbar] [ New ▾ ]`).
+   * A prop rather than DatabaseShell wrapping this component in a second
+   * flex row: this row is already `flex-wrap`, and nesting another flex
+   * container around it risks the tabs wrapping oddly next to the toolbar. */
+  trailing?: React.ReactNode;
 }
 
 // The ten view types this milestone supports creating (table/board —
@@ -65,7 +72,7 @@ const VIEW_TYPE_OPTIONS = [
   { value: "dashboard", label: "Dashboard" },
 ] as const;
 
-export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateView }: ViewTabsProps) {
+export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateView, trailing }: ViewTabsProps) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<string>("table");
@@ -258,6 +265,7 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
           {formError && <span className="text-xs text-red-500">{formError}</span>}
         </form>
       )}
+      {trailing}
     </div>
   );
 }

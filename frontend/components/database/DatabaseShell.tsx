@@ -4,7 +4,7 @@
 // switch over the active view's `type` that renders the matching view
 // component. Was hardcoded to `views[0]` + TableView only (Milestone 2);
 // task-16 adds real view switching/creation and the Board view.
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useToast } from "@/app/providers";
 import { useDatabaseView } from "@/lib/database/useDatabaseView";
 import type { ViewResponse } from "@/lib/database/types";
@@ -20,6 +20,8 @@ import { ChartView } from "./views/ChartView";
 import { FormView } from "./views/FormView";
 import { DashboardView } from "./views/DashboardView";
 import { ViewTabs } from "./ViewTabs";
+import { ViewToolbar } from "./ViewToolbar";
+import { ViewSettingsSidebar } from "./ViewSettingsSidebar";
 import { DatabaseSettingsMenu } from "./DatabaseSettingsMenu";
 
 interface DatabaseShellProps {
@@ -59,6 +61,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     refetchRows,
   } = useDatabaseView(databaseId);
   const { showToast } = useToast();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Live-discovered fix (post-M13-review, controller-added): every
   // config-driven view below (Gallery/Feed/Calendar/Timeline/Form) used to
@@ -436,11 +439,59 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
           onSelect={setActiveViewId}
           properties={properties}
           onCreateView={handleCreateView}
+          // Hidden for the same read-only source the settings sidebar below
+          // is hidden for — a toolbar whose only enabled button opens
+          // nothing (Filter/Sort still render but write nowhere useful for
+          // All Notes) is worse than no toolbar.
+          trailing={
+            editable && activeView ? (
+              <ViewToolbar
+                view={activeView}
+                properties={properties}
+                onSetSorts={(sorts) =>
+                  updateView(activeView.id, { sorts }).catch((e) =>
+                    showToast(e instanceof Error ? e.message : "Could not sort", "error")
+                  )
+                }
+                dataSourceId={dataSourceId}
+                automations={automations}
+                onCreateAutomation={createAutomation}
+                onUpdateAutomation={updateAutomation}
+                onDeleteAutomation={deleteAutomation}
+                onOpenSettings={() => setSettingsOpen(true)}
+              />
+            ) : undefined
+          }
         />
       </div>
 
       {/* Active view */}
       <div className="flex-1 min-h-0">{renderActiveView()}</div>
+
+      {editable && activeView && (
+        <ViewSettingsSidebar
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          view={activeView}
+          properties={properties}
+          database={database}
+          dataSourceId={dataSourceId}
+          dataSourceName={dataSource.name}
+          onPatchConfig={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
+          onUpdateView={(viewId, patch) => updateView(viewId, patch)}
+          onPropertiesChanged={refetch}
+          onDatabaseChanged={refetch}
+          onSetSorts={(sorts) =>
+            updateView(activeView.id, { sorts }).catch((e) =>
+              showToast(e instanceof Error ? e.message : "Could not sort", "error")
+            )
+          }
+          automations={automations}
+          onCreateAutomation={createAutomation}
+          onUpdateAutomation={updateAutomation}
+          onDeleteAutomation={deleteAutomation}
+        />
+      )}
     </div>
   );
 }
