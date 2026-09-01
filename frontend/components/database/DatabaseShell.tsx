@@ -504,6 +504,18 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
       {/* Header */}
       <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
         <DatabaseHeader
+          // Review-checkpoint finding (M7-M11 pass): the SAME class of bug
+          // the M1-M3 checkpoint already fixed for `ViewNameHeader` —
+          // `titleDraft`/`descriptionDraft` are `useState` INITIAL values,
+          // never resynced from `database` on prop change. Sidebar.tsx
+          // navigates between databases client-side (`router.push`, no
+          // full reload), so switching from database A to B without this
+          // key left the input showing A's OLD title/description over B's
+          // real data — and blurring without editing would silently PATCH
+          // B's title to A's stale one, since `commitTitle`'s own
+          // `trimmed === database.title` guard was comparing against the
+          // WRONG database. `key`, not an effect, matching the proven fix.
+          key={database.id}
           database={database}
           dataSource={dataSource}
           editable={editable}

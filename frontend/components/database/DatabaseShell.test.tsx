@@ -16,6 +16,46 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+// Factories, not shared object literals — `mockHook.database`/`dataSource`/
+// `rows` are plain property REASSIGNMENTS in several tests (e.g. the
+// switching-databases regression test below), not deep mutations of the
+// original object, so `beforeEach` resetting them back to a FRESH object
+// each time (not the SAME stale reference) is what actually stops one
+// test's override leaking into the next — same reasoning `properties`'s
+// own reset comment below already documents for arrays.
+function defaultDatabase() {
+  return {
+    id: "db-1",
+    user_id: "user-1",
+    title: "My Database",
+    description: [],
+    icon: null,
+    cover_url: null,
+    is_inline: false,
+    parent_note_id: null,
+    is_locked: false,
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    deleted_at: null,
+  };
+}
+function defaultDataSource() {
+  return {
+    id: "ds-1",
+    database_id: "db-1",
+    user_id: "user-1",
+    name: "Default",
+    system_kind: null,
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    is_virtual: false,
+  };
+}
+function defaultRows() {
+  return [{ id: "row-1", properties: { title: { type: "title", title: "First" } } }];
+}
+
 const mockHook: {
   database: unknown;
   dataSource: unknown;
@@ -42,31 +82,8 @@ const mockHook: {
   refetch: ReturnType<typeof vi.fn>;
   refetchRows: ReturnType<typeof vi.fn>;
 } = {
-  database: {
-    id: "db-1",
-    user_id: "user-1",
-    title: "My Database",
-    description: [],
-    icon: null,
-    cover_url: null,
-    is_inline: false,
-    parent_note_id: null,
-    is_locked: false,
-    position: 0,
-    created_at: "2026-01-01T00:00:00Z",
-    updated_at: "2026-01-01T00:00:00Z",
-    deleted_at: null,
-  },
-  dataSource: {
-    id: "ds-1",
-    database_id: "db-1",
-    user_id: "user-1",
-    name: "Default",
-    system_kind: null,
-    position: 0,
-    created_at: "2026-01-01T00:00:00Z",
-    is_virtual: false,
-  },
+  database: defaultDatabase(),
+  dataSource: defaultDataSource(),
   properties: [
     { id: "p1", data_source_id: "ds-1", user_id: "user-1", key: "title", name: "Title", type: "title", config: {}, description: null, storage: "jsonb", column_name: null, result_type: null, is_volatile: false, position: 0, created_at: "2026-01-01T00:00:00Z" },
     { id: "p2", data_source_id: "ds-1", user_id: "user-1", key: "status", name: "Status", type: "status", config: {}, description: null, storage: "jsonb", column_name: null, result_type: null, is_volatile: false, position: 1, created_at: "2026-01-01T00:00:00Z" },
@@ -76,7 +93,7 @@ const mockHook: {
   ],
   activeViewId: "v1",
   setActiveViewId: vi.fn(),
-  rows: [{ id: "row-1", properties: { title: { type: "title", title: "First" } } }],
+  rows: defaultRows(),
   groups: null,
   aggregates: null,
   loading: false,
@@ -103,6 +120,13 @@ vi.mock("@/lib/database/useDatabaseView", () => ({
 import { DatabaseShell } from "./DatabaseShell";
 
 beforeEach(() => {
+  // Same leak-prevention reasoning as `properties` below — the switching-
+  // databases regression test reassigns `database`/`dataSource`/`rows`
+  // outright, which (found live, running this exact test) leaked "db-2"/
+  // "ds-2" into every test declared after it before this reset existed.
+  mockHook.database = defaultDatabase();
+  mockHook.dataSource = defaultDataSource();
+  mockHook.rows = defaultRows();
   mockHook.activeViewId = "v1";
   mockHook.views = [
     { id: "v1", data_source_id: "ds-1", user_id: "user-1", name: "Table view", icon: null, type: "table", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },
@@ -146,6 +170,29 @@ describe("DatabaseShell", () => {
   it("renders TableView for a table-typed active view", () => {
     render(<DatabaseShell databaseId="db-1" />);
     expect(screen.getByText("First")).toBeInTheDocument();
+  });
+
+  // Review-checkpoint finding (M7-M11 pass): the same class of bug the
+  // M1-M3 checkpoint already fixed for ViewNameHeader — DatabaseHeader's
+  // titleDraft is a useState INITIAL value, never resynced when the
+  // `database` prop changes to a DIFFERENT database. Sidebar.tsx navigates
+  // between databases client-side (no full reload), so switching from A to
+  // B without a `key` left the input showing A's stale title over B's real
+  // data. Fixed with `key={database.id}` in DatabaseShell.tsx.
+  it("switching to a different database (client-side nav, same DatabaseShell instance) shows the NEW database's title, not the old one's", () => {
+    const { rerender } = render(<DatabaseShell databaseId="db-1" />);
+    expect(screen.getByLabelText("Database title")).toHaveValue("My Database");
+
+    mockHook.database = { ...(mockHook.database as Record<string, unknown>), id: "db-2", title: "Other Database" };
+    mockHook.dataSource = { ...(mockHook.dataSource as Record<string, unknown>), id: "ds-2", database_id: "db-2" };
+    mockHook.views = [
+      { id: "v-other", data_source_id: "ds-2", user_id: "user-1", name: "Table view", icon: null, type: "table", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },
+    ];
+    mockHook.activeViewId = "v-other";
+    mockHook.rows = [];
+    rerender(<DatabaseShell databaseId="db-2" />);
+
+    expect(screen.getByLabelText("Database title")).toHaveValue("Other Database");
   });
 
   it("renders BoardView for a board-typed active view", () => {

@@ -101,7 +101,61 @@ one fix (item 1).
 
 ---
 
-## Next checkpoint
+## Checkpoint 2 — M7, M8, M9, M10, M11 (2026-09-01)
 
-Per the plan: **0c, M4–M6** (grouping engine, filter panel, sort panel, group panel),
-once built.
+Run per the session's own budget-first instruction: **not** `/code-review` at
+`high`/`max`/`ultra` (the 0c/M4-M6 checkpoint's own attempt at that mostly hit the
+account-level rate limit) and **not** a subagent (this project's own working rule).
+A manual read-through instead, over `dffd372..HEAD` (`git diff --stat`: 31 files,
++3526/-291) — every file the M7-M11 batch touched or added, prioritized by size and by
+which milestone's code I hadn't already had fresh eyes on this session (M7-M9's
+`RowGutter.tsx`/`RowMenu.tsx`/`ViewTabMenu.tsx`/`ViewTabs.tsx`/`DatabasePageMenu.tsx`
+were built in a prior session; M10/M11's own files I'd just written and had already
+scrutinized while building them).
+
+### Fixed
+
+1. **`DatabaseHeader.tsx`'s `titleDraft`/`descriptionDraft` are `useState` INITIAL
+   values, never resynced when the `database` prop changes to a DIFFERENT database —
+   the exact same bug class the M1-M3 checkpoint's finding 4 already fixed once, in
+   `ViewNameHeader`, for switching VIEWS rather than databases.** `Sidebar.tsx`
+   navigates between databases client-side (`router.push`, no full reload;
+   confirmed by reading it, not assumed), so `DatabaseShell` — and therefore
+   `DatabaseHeader`, which carries no `key` — stays mounted across the switch, with
+   only its props changing. Reachable and, worse than the original finding, silently
+   destructive: switching from database A to B leaves the title input showing A's
+   stale name over B's real data, and `commitTitle`'s own `trimmed === database.title`
+   guard compares the stale draft against the WRONG (new) database — blurring without
+   editing anything would `PATCH` database B's title to database A's old name.
+   Fixed with `key={database.id}` on `DatabaseHeader` in `DatabaseShell.tsx`, the same
+   proven fix as before. Regression test in `DatabaseShell.test.tsx` reproduces the
+   switch live (mutates the mocked hook's `database`/`dataSource`/`views`, re-renders
+   with a new `databaseId`, asserts the title input shows the NEW database's name) —
+   which surfaced a second, smaller gap while writing it: `DatabaseShell.test.tsx`'s
+   own `beforeEach` reset `properties`/`views`/`groups`/`aggregates` between tests but
+   never `database`/`dataSource`/`rows`, so my own regression test's mutation leaked
+   into a later, unrelated test until those three gained the same reset (now sourced
+   from factory functions, not shared object literals, matching `properties`'s own
+   already-established reset comment).
+
+### Checked, not fixed (no defect found)
+
+- `ViewTabs.tsx`'s own rename field (`renamingViewId`/`renameDraft`) does NOT have the
+  same class of bug: `startRename(view)` sets `renameDraft` fresh from the CURRENT
+  `view` at the moment the row is clicked, not once at mount — there is no stale-draft
+  window to exploit.
+- `RowGutter.tsx`, `RowMenu.tsx`, `ViewTabMenu.tsx`, `DatabasePageMenu.tsx` — all pure
+  props-in, callbacks-out; no local draft state that could survive an identity change
+  underneath it.
+- `TableView.tsx`'s M11 additions (footer, resize, `newlyCreatedRowId`,
+  `hasActiveFilter`/empty-filter-state) — read through end to end again with this
+  checkpoint's own scrutiny, not just the sub-piece-by-sub-piece testing already done
+  while building them. No new issues found beyond what was already caught (and fixed)
+  during implementation itself (the column-resize ordering race and the
+  `persistedWidths`-reference infinite-loop, both documented in their own commits).
+
+No other candidates were raised — this was a narrower pass than Checkpoint 1's (one
+finding vs. nine), consistent with M7-M11 reusing more already-reviewed primitives and
+patterns than M1-M3 did while those patterns were still being established.
+
+Frontend 873 tests green (was 872), `tsc` clean.
