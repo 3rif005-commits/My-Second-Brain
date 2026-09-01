@@ -305,6 +305,22 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-01 (review checkpoint)** — Ran the plan's first review checkpoint
+  (M1, M2, M2b, M3) via `/code-review high` over the whole branch diff,
+  scoped to the database UI code. 10 candidate findings, each verified
+  against the actual code before acting: 9 real and fixed (a hidden-column
+  filter that had quietly become the ONE list every non-rendering lookup
+  read too — breaking sub-item nesting, Button target resolution, and the
+  rollup-source picker whenever their property happened to be hidden; a
+  `sorts` staleness race matching `patchViewConfig`'s own bug one field
+  over, now that M3 gave `sorts` three writers instead of one; `SidePeek`
+  silently violating its own "non-modal, stays open" contract via a Radix
+  default it never overrode, which in turn unmasked a stale-`draft` bug in
+  the view rename field; two rename-field consistency gaps; one dead-key
+  duplication). One (an option-rename desyncing a free-text cell's stored
+  color) verified real but deliberately left for `cell-editing.md`'s own
+  milestone rather than patched piecemeal. Full write-up:
+  `docs/ui-specs/REVIEW-LOG.md`. Frontend 729 tests green, `tsc` clean.
 - **2026-09-01** — Built M3 (the view settings sidebar) end to end and ran its
   checklist live in Chrome. Two real defects found and fixed: `MenuList`'s
   push stack was snapshotting resolved panels rather than re-deriving them
