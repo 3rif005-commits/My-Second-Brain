@@ -718,6 +718,33 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-01 (M10, M11, review checkpoint)** — Built M10 (row peek internals) and M11
+  (calculations footer, always-visible New-row chevron + new-row title focus, column
+  resize, Select/Status cell editors, the two captured empty states) end to end,
+  M11 sub-batched into five separately-tested, separately-committed pieces per this
+  session's own instructions. Then ran the plan's M7-M11 review checkpoint as a manual
+  read-through (no `/code-review` at high/max/ultra, no subagents) — one real,
+  reachable, silently-destructive bug found and fixed: `DatabaseHeader.tsx`'s title/
+  description draft state wasn't keyed per database, so switching databases via the
+  sidebar (client-side nav, no remount) could silently rename the new database to the
+  old one's name on blur — the same bug class the M1-M3 checkpoint had already fixed
+  once elsewhere (`ViewNameHeader`). Two real, novel bugs found and fixed along the way
+  during M11 itself, not at the checkpoint: an infinite render loop in the column-resize
+  effect (a fresh `{}` object literal every render when `view` was absent), and a Radix
+  Popover ordering race where a controlled `columnSizing`/`onColumnSizingChange` observes
+  a same-render-pass side effect before React has actually run the updater that produces
+  it (column resize), and separately a trigger-element-type-swap race that let Radix's
+  own non-modal dismiss logic close a cell's Select/Status editor before a single
+  keystroke landed (root-caused and fixed for both cells, not patched around). One
+  real, user-facing IA decision was explicitly punted to the user rather than decided
+  unilaterally (new-row-button.md's own "this is the user's call, not silently
+  restructured" flag) — resolved via `AskUserQuestion`: always show the New-row
+  chevron, Notion's own IA. Frontend 61 files / 873 tests green (was 61/846 at M9's own
+  end), `tsc` clean throughout every sub-piece. Full write-ups: this file's own "M10"
+  and "M11" sections above, `REVIEW-LOG.md`'s "Checkpoint 2". Per the plan, M12 ("apply
+  the pattern to the other nine views") is explicitly **not started** — it has no task
+  breakdown written yet and gets its own future prompt, per the plan document's own
+  words and this session's own instructions.
 - **2026-09-01 (M7/M8/M9)** — Built the plan's next batch (view tab bar's per-view menu,
   database header, row hover affordances) end to end in one session, commits per
   milestone, per the user's explicit budget-first instructions: no subagents, no
