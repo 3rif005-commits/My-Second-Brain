@@ -201,3 +201,120 @@ Selecting a colour **closes** our panel, matching every other `MenuList` row.
 Whether Notion keeps its colour list open was not established — the attempt to
 verify it in Notion mis-clicked and closed the menu, and I did not want to assert
 behaviour I had not actually observed. Flagged rather than guessed.
+
+---
+
+# M3 — the view settings sidebar (2026-09-01)
+
+Run by me, in Chrome, against the live app (`localhost:3000`) — a fresh local
+database built for this run (11-property "New database" fixture is a
+different, live Notion database this session doesn't have browser access to;
+built a 4-property local stand-in: Title, Notes, Kind (select), Count
+(number) instead). Checklist run item by item, live.
+
+## Confirmed against the spec, no defect
+
+- Toolbar renders all six icons in spec order (Filter · Sort · Automations ·
+  AI Autofill · Search · Settings), right-aligned in the view-tabs row.
+- Settings opens a **docked sidebar**, not a popover — `483px` (measured via
+  `getComputedStyle`), non-resizable, table stays clickable underneath (no
+  backdrop).
+- Header: leading icon, editable name input, trailing ⓘ, × — matches the
+  `[icon] [input] [ⓘ] .... ×` layout exactly.
+- Section 1 rows, in order, chevron on every row except **Copy link to
+  view** (verified via DOM: `hasChevron` true on Layout/Property
+  visibility/Filter/Sort/Group/Conditional color, false only on Copy link) —
+  row-for-row match.
+- `Layout` shows value `Table`; `Property visibility` shows a live count
+  (`4`, decrementing to `3` on hide) — both render correctly.
+- Section 2 (`Data source settings`) / Section 3 (`More settings`) headers
+  present; `Source` greyed with the data source's name as its value; `AI
+  Autofill` greyed with no chevron.
+- Property visibility: autofocused search, filters correctly, "Shown in
+  table" + right-aligned "Hide all", row anatomy (drag handle, type icon,
+  name, eye) matches. Toggling an eye **actually hides the table column and
+  decrements the count** — the M1-class defect this milestone was watching
+  for, closed by TableView.tsx now reading `hidden_properties`/
+  `property_order` (previously written by M1 and M3 alike, read by neither).
+- Layout: 3x3 grid renders (Table selected, blue border+label; every other
+  card disabled — no `type` field on `ViewUpdate`, a documented, deliberate
+  gap); three toggles present and functional (Show vertical lines removes
+  the column-separator border live; verified via `getComputedStyle`
+  zoom-and-inspect, not just eyeballing — see the environment note below);
+  Open pages in shows `Side peek`.
+- Open pages in popover: overlays the panel (not a flyout/push), Side peek
+  ✓ + description + "Default for Table" annotation, Center peek + Full page
+  each with their own description — matches the raw-dom capture.
+- **Center peek**, selected then a row opened: rendered as a **centered
+  modal** (backdrop, centered, not docked right) — confirmed live.
+- **Full page**, selected then a row opened: **navigated to
+  `/brain/workspace/{id}`** (bypassing RowPeek entirely) — confirmed live.
+- Group: alphabetical property list, `select`/`status`/`multi_select`
+  enabled, everything else disabled-with-reason, `None` clears; selecting a
+  property patches `group_by` and the panel's own title flips `"Group by"` →
+  `"Group"` with a checkmark on reopen.
+- Sort: `New sort` title + `Sort by…` placeholder when empty; selecting a
+  property sets a single ascending sort; the toolbar's own Sort button
+  reflects it (after the fix below).
+- Copy link to view: copies a `?view=` URL to the clipboard, toasts "Link
+  copied to clipboard", applies immediately.
+- Lock database: real toggle, PATCHes `db_databases.is_locked` (the endpoint
+  already existed from Phase 0b — this session only added the frontend
+  call), persists across reload.
+- Edit properties: real property list; `Kind` (select) pushed the exact same
+  option editor M2 built (add option, rename, delete, recolor) — three
+  levels deep from the sidebar's root, same nesting depth M1/M2 already
+  proved for flyouts, now proven for push too.
+- Automations: pushes a small summary + "Manage automations", which opens
+  the existing `AutomationManager` modal correctly layered above the
+  sidebar.
+- Firing two rapid config changes (Show vertical lines, then Show page icon)
+  and reloading: **both persisted** — the `patchViewConfig` regression this
+  panel was the second real test of held.
+- No console errors at any point in the run.
+
+## Found and fixed during the run
+
+**1. A pushed panel didn't reflect its own live writes.** Dragging a row
+inside Property visibility correctly wrote the new `property_order` — the
+table re-rendered with the new column order immediately — but the **panel
+itself** kept showing the pre-drag row order until popped and re-pushed.
+Root cause: `MenuList`'s push stack stored resolved `MenuPanel` objects,
+frozen at the moment a row was pushed; a parent re-render with fresh data
+never touched an already-pushed snapshot. Fixed at the primitive level —
+`MenuList` now stores only the path of pushed row ids and re-derives each
+level from the live `root` every render (see `MenuList.tsx`'s `resolveStack`
+and its own comment). This benefits every push-mode consumer, not just this
+panel. Regression test added.
+
+**2. The toolbar's Sort button showed the property's raw key, not its
+name** — `"Sort: eNCdGzx4"` instead of `"Sort: Kind"`. `ViewToolbar.tsx` read
+`sorts[0].property` (the key) straight into the label without looking it up
+against `properties`. My own unit test had enshrined this, because the test
+fixture's key and name happened to both look plausible. Fixed, and the test
+fixture corrected so it can't pass by coincidence again.
+
+## Environment note, not a product defect
+
+This Chrome session renders every page with a browser-level forced-dark
+repaint regardless of the page's own authored theme — `getComputedStyle`
+confirmed `--menu-bg: #fff` (light, correctly authored) while the actual
+pixels rendered dark. Structural checks in this run therefore leaned on
+`getComputedStyle`/DOM inspection rather than eyeballing screenshot colour
+wherever a screenshot looked suspicious (e.g. the Property visibility count,
+which is genuinely present and correctly styled despite being nearly
+invisible in a raw screenshot). Not applicable to prior milestones' own
+screenshot-based diffs, which used a proper light-mode capture.
+
+## Deliberate, not defects
+
+- **Row count and layout switching are stubs.** Filter (no compiler exists —
+  M4), Conditional color and Manage data sources (no backend support) push
+  an honest "isn't available yet" panel rather than a half-built editor.
+  Group/Sort are real, working MVPs (single group-by; multi-sort minus
+  drag-reorder) — full editors (hide-empty-groups, per-group ordering,
+  drag-reordered sort chips) are M5/M6's own scope.
+- **The `New ▾` split button was not moved into the toolbar row.** It
+  already exists at the bottom of the table (M11's row-add), and the spec's
+  own scope bullet lists only the six toolbar icons as new; the ASCII
+  diagram's `New ▾` placement is anchoring context, not a M3 deliverable.

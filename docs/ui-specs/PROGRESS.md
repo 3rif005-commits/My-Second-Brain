@@ -102,6 +102,94 @@ are all `ConnectionRefusedError` — no local Postgres on this machine; pre-exis
 
 ---
 
+## M3 — COMPLETE (2026-09-01)
+
+| Milestone | State |
+|---|---|
+| M3 — the view settings sidebar | done, visual-diffed live, 2 defects fixed |
+
+**Frontend 54 files / 724 tests green. Backend suite unchanged (no backend
+files touched this milestone).** `npx tsc --noEmit` clean.
+
+### What M3 built
+
+- **`ViewSettingsSidebar.tsx`** — the docked 483px sidebar, `SidePeek`
+  (`mode="side"`, `resizable={false}`) hosting `MenuList` in `nav="push"`
+  mode. Root panel matches `view-options-panel.md` row for row across all
+  three sections.
+- **`ViewLayoutPanel.tsx`** — §A: the 3x3 view-type grid (only the current
+  type enabled — `ViewUpdate` has no `type` field, and no-backend-change was
+  this milestone's own constraint), three real display toggles
+  (`show_vertical_lines`, `show_page_icon`, `wrap_all_content`), and Open
+  pages in (a real popover — `side`/`center`/`full`, all three wired end to
+  end: center opens a centered modal, full navigates to
+  `/brain/workspace/{id}`).
+- **`PropertyVisibilityPanel.tsx`** — §B: drag reorder (`@dnd-kit`, pure
+  `reorderPropertyKeys` split out for testability) + per-row eye toggles +
+  "Hide all". The title property's toggle is disabled — it's the only place
+  `OpenNoteButton` and the sub-item tree render.
+- **`ViewToolbar.tsx`** — the toolbar row the spec said didn't exist at all
+  (Filter/Sort/Automations/AI Autofill/Search/Settings), threaded into
+  `ViewTabs.tsx` via a new `trailing` prop. Filter and Sort reuse the exact
+  same `MenuPanel` data the sidebar's own rows push.
+- Group (§D) and Sort (§E) are real, working MVPs — not stubs — built on
+  infrastructure that already existed (`GROUPABLE_PROPERTY_TYPES`, M1's
+  `onSetSorts`): single group-by with per-type disabled reasons; multi-sort
+  with per-row direction/remove, drag-reorder deferred to M5. Filter,
+  Conditional color and Manage data sources push an honest "isn't available
+  yet" panel — no compiler/backend support exists for any of them yet.
+- Reused `EditPropertyPanel.tsx`'s `editPropertyPanel`/`hasEditableConfig`
+  for "Edit properties" rather than a second copy; reused `AutomationManager`
+  for "Automations" ("fold it in here", the spec's own instruction).
+- **The M1-class defect, closed for real this time:** `TableView.tsx`'s
+  `orderedProperties` was still a bare schema-position sort — M1's Hide/
+  Insert-left/right rows had been writing `hidden_properties`/
+  `property_order` since M1 shipped, and *nothing read either*. Now wired
+  through the same `lib/database/viewConfig.ts` helpers Gallery/FeedView
+  already used for their own `hidden_properties`.
+- `RowPeek.tsx` gained a `mode` prop and is now genuinely non-modal in its
+  default ("side") mode — it was unconditionally modal (`bg-black/30`
+  backdrop over the whole viewport) before this, a gap `row-peek.md`'s own
+  capture had already flagged as unverified.
+
+### Primitive additions this needed
+
+| Addition | Why |
+|---|---|
+| `MenuList.dismissible` | the persistent × every level of the sidebar carries, distinct from the back arrow's pop |
+| `MenuRow.annotation` | Open pages in's "Default for Table" link, alongside `description` |
+| `SidePeek.resizable` | 483px is a token, not a per-viewer preference the row peek's own drag remembers |
+| `MenuList`'s push stack now stores row-id **paths**, not resolved panels | see the live-found defect below — a pushed panel must reflect the LIVE root, not a snapshot frozen at push time |
+
+### Two defects found running the checklist live, both fixed
+
+1. **A pushed panel didn't reflect its own live writes.** Dragging inside
+   Property visibility wrote the new order correctly (table re-rendered),
+   but the panel itself kept showing the pre-drag order until popped and
+   re-pushed. Root cause and fix in `MenuList.tsx`'s `resolveStack` — a
+   primitive-layer fix, not a one-panel patch. Full account in
+   `M1-VISUAL-DIFF.md`'s M3 section.
+2. **The toolbar's Sort button showed a property's raw key**
+   (`"Sort: eNCdGzx4"`) instead of its name. Fixed, and the unit test that
+   had enshrined the bug corrected.
+
+### Deliberate, not defects
+
+- **View type switching is disabled for every card but the current one** —
+  `ViewUpdate` has no `type` field and this milestone's constraint is no
+  backend change. Map's cut slot filled with Dashboard to keep the 3x3
+  shape the checklist tests for.
+- **The `New ▾` split button stays at the bottom of the table**, where
+  M11's row-add already put it — the spec's own scope bullet lists only the
+  six toolbar icons as new.
+- **`?view=` deep links are written but not yet read on load** — Copy link
+  to view produces a real, sensible URL; nothing in `DatabaseShell` parses
+  `?view=` on mount yet. Recorded rather than silently left half-working;
+  low risk since it is a clipboard action, not a persisted setting the UI
+  must render.
+
+---
+
 ## Session artifacts
 
 | Artifact | Status |
@@ -217,6 +305,17 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-01** — Built M3 (the view settings sidebar) end to end and ran its
+  checklist live in Chrome. Two real defects found and fixed: `MenuList`'s
+  push stack was snapshotting resolved panels rather than re-deriving them
+  from live `root`, so a pushed panel (Property visibility) didn't reflect
+  its own drag-reorder until popped and re-pushed — fixed at the primitive
+  level, benefiting every push-mode consumer; and the toolbar's Sort button
+  displayed a property's raw key instead of its name. Also closed the M1
+  dead-control gap: `TableView.tsx` now actually reads
+  `hidden_properties`/`property_order`, which M1's header menu had been
+  writing since it shipped. Frontend 724 tests green, `tsc` clean, backend
+  untouched. Next up per the plan: a review checkpoint over M1–M3 + M2b.
 - **2026-08-31 (second autonomous session)** — 13 more captures, 2 more specs (M7, and
   M1/M9/M3/M4 extended). Confirmed live: view creation is create-first-configure-after;
   Delete view is state-dependent on view count; the row context menu is the row menu with
