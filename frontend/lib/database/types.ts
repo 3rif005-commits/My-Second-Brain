@@ -304,6 +304,29 @@ export function getQueryExtras(view: Pick<ViewResponse, "type" | "config">): Rec
       const subGroupBy = getSubGroupBySpec(view.config);
       if (subGroupBy) extras.sub_group_by = subGroupBy;
     }
+    // M11 (calculations-row.md): the footer row's own values, one
+    // `AggregationSpec` per column carrying a calculation
+    // (`config.calculations`, M1's Calculate sub-panel — already written,
+    // never read before now). `key: propertyKey` (not a synthetic label
+    // like Chart's `"y"`) since `QueryResponse.aggregates` is echoed back
+    // keyed by `spec.key`, and a table footer needs exactly one value per
+    // column, addressable by that column's own key.
+    //
+    // Deliberately NOT sent alongside a `group_by` — a grouped query
+    // computes aggregates PER GROUP (`GroupResult.aggregates`), which this
+    // milestone's footer does not render (calculations-row.md's own
+    // States table: "Grouped view: TBD — capture first"); sending it
+    // regardless would just burn a `compute_full_set` server round-trip
+    // for a response `TableView` never reads.
+    if (view.type === "table" && !groupBy) {
+      const raw = view.config.calculations;
+      if (raw && typeof raw === "object") {
+        const specs = Object.entries(raw as Record<string, unknown>)
+          .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+          .map(([propertyKey, aggregator]) => ({ key: propertyKey, property_key: propertyKey, aggregator }));
+        if (specs.length > 0) extras.aggregations = specs;
+      }
+    }
     return extras;
   }
 

@@ -518,6 +518,91 @@ describe("TableView", () => {
     });
   });
 
+  // M11 (calculations-row.md): the footer row. M1 already writes
+  // `config.calculations`; this is the first thing that reads it.
+  describe("calculations footer row", () => {
+    function tableView(config: Record<string, unknown>) {
+      return {
+        id: "view-1",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Table",
+        icon: null,
+        type: "table",
+        config,
+        filter: null,
+        sorts: [],
+        is_locked: false,
+        position: 0,
+      };
+    }
+
+    it("renders LABEL value, right-aligned, only under a column with a calculation set", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          view={tableView({ calculations: { count: "sum" } })}
+          aggregates={{ count: 42 }}
+        />
+      );
+
+      const footer = document.querySelector("tfoot");
+      expect(footer).not.toBeNull();
+      expect(within(footer as HTMLElement).getByText("SUM")).toBeInTheDocument();
+      expect(within(footer as HTMLElement).getByText("42")).toBeInTheDocument();
+    });
+
+    it("renders nothing when no column has a calculation, even with aggregates present", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          view={tableView({})}
+          aggregates={{ count: 42 }}
+        />
+      );
+
+      expect(document.querySelector("tfoot")).toBeNull();
+    });
+
+    it("renders nothing without an aggregates prop at all (no calculation ever sent)", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          view={tableView({ calculations: { count: "sum" } })}
+        />
+      );
+
+      expect(document.querySelector("tfoot")).toBeNull();
+    });
+
+    it("percent_* aggregators format with a trailing %", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={true}
+          onCellChange={vi.fn()}
+          view={tableView({ calculations: { count: "percent_empty" } })}
+          aggregates={{ count: 33.333 }}
+        />
+      );
+
+      const footer = document.querySelector("tfoot") as HTMLElement;
+      expect(within(footer).getByText("PERCENT EMPTY")).toBeInTheDocument();
+      // Rounded to 2 decimals, same as any other non-integer aggregate.
+      expect(within(footer).getByText("33.33%")).toBeInTheDocument();
+    });
+  });
+
   describe("empty-state gap fix", () => {
     it("still renders column headers (not just a bare message) when there are no rows", () => {
       render(

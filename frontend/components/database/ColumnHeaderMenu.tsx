@@ -150,6 +150,18 @@ const NUMERIC_FUNCTIONS: { label: string; aggregator: string }[] = [
   { label: "Range", aggregator: "range" },
 ];
 
+const ALL_CALCULATION_FUNCTIONS = [...COUNT_FUNCTIONS, ...PERCENT_FUNCTIONS, ...NUMERIC_FUNCTIONS];
+
+/** M11 (calculations-row.md): the footer row's own label — "the function
+ * name in muted small uppercase (`SUM`)". Reuses THIS file's own menu
+ * labels rather than a second copy (so the footer can never drift from
+ * what the menu itself calls a function) — the one captured example
+ * (`Sum` -> `SUM`) confirms a plain uppercase of the existing label is the
+ * right transform, not a new string. */
+export function calculationLabel(aggregator: string): string {
+  return (ALL_CALCULATION_FUNCTIONS.find((fn) => fn.aggregator === aggregator)?.label ?? aggregator).toUpperCase();
+}
+
 export interface ColumnHeaderMenuArgs {
   property: PropertyResponse;
   properties: PropertyResponse[];

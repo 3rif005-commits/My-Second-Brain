@@ -48,6 +48,7 @@ import type {
 } from "@/lib/database/types";
 import { renderCellValue } from "../cells/renderCellValue";
 import {
+  getCalculation,
   getHiddenKeys,
   getOpenPagesInMode,
   getShowPageIcon,
@@ -68,6 +69,7 @@ import { OpenNoteButton } from "../OpenNoteButton";
 import { RowGutter } from "../RowGutter";
 import { RowPeek } from "../RowPeek";
 import { ColumnHeader } from "../ColumnHeader";
+import { calculationLabel } from "../ColumnHeaderMenu";
 import { AddPropertyPopover } from "../AddPropertyPopover";
 import { QueryBar } from "../QueryBar";
 
@@ -145,6 +147,14 @@ interface TableViewProps {
    * emptied) whenever `view.config.group_by` is set. `null`/`undefined`
    * renders the ordinary flat table, unchanged. */
   groups?: Group[] | null;
+  /** M11 (calculations-row.md): `useDatabaseView`'s query result, populated
+   * whenever `getQueryExtras` sent `aggregations` (i.e. some column has a
+   * `config.calculations` entry AND the view isn't grouped — see that
+   * function's own comment for why grouped is excluded). Keyed by property
+   * key (this file's own `AggregationSpec.key` choice), one entry per
+   * column with a calculation set. `null`/`undefined`/missing key renders
+   * that column's footer cell empty, same as "None". */
+  aggregates?: Record<string, number> | null;
   /** useDatabaseView's `instantiateTemplate` — creates a row from a chosen
    * (non-default) template right now. Does not itself refetch rows; this
    * component calls `refetchRows` afterward, same as `handleAddRow` does
@@ -153,6 +163,17 @@ interface TableViewProps {
 }
 
 const columnHelper = createColumnHelper<DatabaseRow>();
+
+/** M11 (calculations-row.md): the footer's own value formatting — the spec
+ * only captures one example (`SUM 0`, an integer), so anything beyond
+ * "round `average`/`median`'s often-long decimals to 2 places" and "the
+ * percent_* aggregators are already 0-100 server-side (aggregations.py),
+ * so append `%`" is a plain engineering call, not an invented visual
+ * value. */
+function formatCalculationValue(aggregator: string, value: number): string {
+  const rounded = Number.isInteger(value) ? value : Math.round(value * 100) / 100;
+  return aggregator.startsWith("percent_") ? `${rounded}%` : String(rounded);
+}
 
 
 /** Best-effort message extraction from a failed POST, matching the pattern
@@ -220,6 +241,7 @@ export function TableView({
   onSetSorts,
   onSetFilter,
   groups,
+  aggregates,
 }: TableViewProps) {
   const { showToast } = useToast();
   const openNote = useOpenNote();
@@ -730,6 +752,45 @@ export function TableView({
     ]);
   }
 
+  // M11 (calculations-row.md): the calculations footer row. Ungrouped
+  // ONLY — the grouped `<table>` branch above never calls this (its own
+  // `dataRow`/header-repeat machinery has no per-group footer yet; the
+  // spec's own States table marks that TBD, capture-first). One `<td>` per
+  // VISIBLE column (`orderedProperties`, same list `columns`/headers are
+  // built from), right-aligned, empty unless that column has a calculation
+  // AND `aggregates` actually carries a value for it (absent whenever
+  // `getQueryExtras` had nothing to send, e.g. no calculation set at all).
+  function footerRow() {
+    if (!aggregates) return null;
+    const config = view?.config ?? {};
+    const hasAny = orderedProperties.some((p) => getCalculation(config, p.key));
+    if (!hasAny) return null;
+    return (
+      <tfoot>
+        <tr className="border-t border-gray-200 dark:border-gray-700">
+          {editable && <td className="w-14" aria-hidden />}
+          {orderedProperties.map((property) => {
+            const aggregator = getCalculation(config, property.key);
+            const value = aggregator ? aggregates[property.key] : undefined;
+            return (
+              <td key={property.key} className={`px-3 py-1.5 text-right text-sm ${cellBorderClass}`}>
+                {aggregator && value !== undefined && (
+                  <span>
+                    <span className="text-[10px] font-medium uppercase text-gray-400 dark:text-gray-500 mr-1.5">
+                      {calculationLabel(aggregator)}
+                    </span>
+                    <span className="text-gray-700 dark:text-gray-300">{formatCalculationValue(aggregator, value)}</span>
+                  </span>
+                )}
+              </td>
+            );
+          })}
+          {editable && <td />}
+        </tr>
+      </tfoot>
+    );
+  }
+
   // M9's row gutter (row-affordances.md) — a leading cell OUTSIDE the
   // table's own columns, reserved only when `editable` (the read-only All
   // Notes source suppresses `+`/drag handle/checkbox entirely, per the
@@ -1099,6 +1160,7 @@ export function TableView({
             </tr>
           )}
         </tbody>
+        {footerRow()}
       </table>
       </div>
       )}

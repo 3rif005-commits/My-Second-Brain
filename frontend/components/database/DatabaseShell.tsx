@@ -330,6 +330,10 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             // whenever config.group_by is set — see getQueryExtras' new
             // "table" branch.
             groups={groups}
+            // M11: populated the same way, whenever getQueryExtras' table
+            // branch sent `aggregations` (some column has a calculation,
+            // and the view isn't grouped).
+            aggregates={aggregates}
           />
         );
       case "board": {

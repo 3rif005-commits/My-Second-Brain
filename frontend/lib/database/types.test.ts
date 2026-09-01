@@ -74,3 +74,33 @@ describe("getQueryExtras — table view (M6)", () => {
     expect(getQueryExtras(view)).toEqual({ group_by: { property_key: "kind" } });
   });
 });
+
+describe("getQueryExtras — table calculations (M11, calculations-row.md)", () => {
+  it("sends one AggregationSpec per column with a calculation, keyed by that column's own property key", () => {
+    const view = { type: "table", config: { calculations: { count_col: "sum", other: "average" } } };
+    expect(getQueryExtras(view)).toEqual({
+      aggregations: [
+        { key: "count_col", property_key: "count_col", aggregator: "sum" },
+        { key: "other", property_key: "other", aggregator: "average" },
+      ],
+    });
+  });
+
+  it("sends {} when config.calculations is absent or empty", () => {
+    expect(getQueryExtras({ type: "table", config: {} })).toEqual({});
+    expect(getQueryExtras({ type: "table", config: { calculations: {} } })).toEqual({});
+  });
+
+  it("does NOT send aggregations alongside group_by — a grouped query computes per-group aggregates instead", () => {
+    const view = {
+      type: "table",
+      config: { group_by: { property_key: "kind" }, calculations: { count_col: "sum" } },
+    };
+    expect(getQueryExtras(view)).toEqual({ group_by: { property_key: "kind" } });
+  });
+
+  it("Board never sends aggregations, even with config.calculations present (Table-only)", () => {
+    const view = { type: "board", config: { calculations: { count_col: "sum" } } };
+    expect(getQueryExtras(view)).toEqual({});
+  });
+});
