@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -472,6 +472,34 @@ describe("ViewTabs", () => {
       expect(screen.getByText("Edit view")).toBeInTheDocument();
       expect(screen.getByText("Copy link to view")).toBeInTheDocument();
       expect(screen.getByText("Duplicate view")).toBeInTheDocument();
+    });
+
+    // Live-checklist regression: clicking "Edit view" closed the menu but
+    // never opened the M3 sidebar. Root cause was a same-tick race between
+    // this Popover's own close and the sidebar's SidePeek mount; onEditView
+    // now defers onOpenSettings by one tick. This test would have caught it
+    // -- the earlier test above only asserted the row's presence, never that
+    // selecting it actually calls onOpenSettings.
+    it("clicking Edit view calls onOpenSettings", async () => {
+      const user = userEvent.setup();
+      const onOpenSettings = vi.fn();
+      render(
+        <ViewTabs
+          views={VIEWS}
+          activeViewId="v1"
+          onSelect={vi.fn()}
+          properties={[]}
+          onCreateView={vi.fn()}
+          dataSourceName="Tasks"
+          onUpdateView={vi.fn()}
+          onDeleteView={vi.fn()}
+          onOpenSettings={onOpenSettings}
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: /table view options/i }));
+      await user.click(screen.getByText("Edit view"));
+      await waitFor(() => expect(onOpenSettings).toHaveBeenCalledTimes(1));
     });
 
     it("Delete view is absent with only one view", async () => {

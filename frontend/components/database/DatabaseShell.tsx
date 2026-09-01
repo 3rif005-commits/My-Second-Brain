@@ -315,8 +315,11 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             onInstantiateTemplate={instantiateTemplate}
             // M11 (new-row-button.md): the split-button dropdown's "Templates
             // for <name>" header and its "+ New template" row, which reuses
-            // DatabaseSettingsMenu.tsx's own TemplateManager handlers.
-            dataSourceName={dataSourceName}
+            // DatabaseSettingsMenu.tsx's own TemplateManager handlers. The
+            // spec's own header reads "Templates for <DATABASE name>" — pass
+            // database.title, not the data source's own name (only ever
+            // "Default" today, since create_database mints exactly one).
+            dataSourceName={database?.title ?? dataSourceName}
             onCreateTemplate={createTemplate}
             onUpdateTemplate={updateTemplate}
             onDeleteTemplate={deleteTemplate}

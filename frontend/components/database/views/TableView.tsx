@@ -386,6 +386,26 @@ export function TableView({
   // its own row without touching `rowSubmitting` (the plain "+ New" click
   // path's own state).
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
+  const templateMenuRef = useRef<HTMLDivElement>(null);
+  // The dropdown below is a plain conditional div, not the shared Popover
+  // primitive (it predates it) — so it needs its own outside-click/Escape
+  // dismissal. Live-checklist regression: it stayed open until the chevron
+  // was clicked again, since nothing else ever flipped templateMenuOpen.
+  useEffect(() => {
+    if (!templateMenuOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      if (!templateMenuRef.current?.contains(e.target as Node)) setTemplateMenuOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setTemplateMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [templateMenuOpen]);
   const [instantiatingTemplateId, setInstantiatingTemplateId] = useState<string | null>(null);
   // M11 (new-row-button.md): "Focus the new row's title cell after
   // creation." Threaded into `columns`' `cell` fn below as `TitleCell`'s
@@ -1281,7 +1301,7 @@ export function TableView({
           {editable && (
             <tr>
               <td colSpan={Math.max(columnCount, 1)} className="px-3 py-1.5">
-                <div className="relative inline-flex items-center">
+                <div ref={templateMenuRef} className="relative inline-flex items-center">
                   <button
                     type="button"
                     onClick={handleAddRow}

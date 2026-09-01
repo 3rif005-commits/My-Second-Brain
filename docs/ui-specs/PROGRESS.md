@@ -303,9 +303,9 @@ Caught both times by the component's own test suite, before either shipped broke
 
 | Milestone | State |
 |---|---|
-| M7 — view tab bar's per-view menu | done, built end to end, not yet visual-diffed live |
-| M8 — database header (title/icon/description), gated on B2 | done, built end to end, not yet visual-diffed live |
-| M9 — row hover affordances + open-as | done, built end to end, not yet visual-diffed live |
+| M7 — view tab bar's per-view menu | **visual-diffed live 2026-09-01** — 1 defect fixed |
+| M8 — database header (title/icon/description), gated on B2 | **visual-diffed live 2026-09-01** |
+| M9 — row hover affordances + open-as | **visual-diffed live 2026-09-01** |
 
 **Frontend 812 → 823 tests green** across the three milestones (59 → 62 files). `npx tsc --noEmit`
 clean after each. Backend untouched — B1/B2 were already built in Phase 0b; nothing else needed a
@@ -391,7 +391,7 @@ table, unstarted.
 
 | Milestone | State |
 |---|---|
-| M10 — row peek internals | done, built end to end, not yet visual-diffed live |
+| M10 — row peek internals | **visual-diffed live 2026-09-01** |
 
 **Frontend 832 → 846 tests green** (61 → 61 files — no new test file; RowPeek.test.tsx,
 TableView.test.tsx and AddPropertyPopover.tsx itself grew instead). `npx tsc --noEmit` clean.
@@ -479,7 +479,7 @@ change" assumptions.
 
 | Milestone | State |
 |---|---|
-| M11 — calculations footer, always-visible New-row chevron, column resize, Select/Status cell editors, the two captured empty states | done, built end to end in five sub-commits, not yet visual-diffed live |
+| M11 — calculations footer, always-visible New-row chevron, column resize, Select/Status cell editors, the two captured empty states | **visual-diffed live 2026-09-01** (partial — see below), 2 defects fixed |
 
 **Frontend 846 → 872 tests green** (61 → 61 files — no new test file; existing files grew).
 `npx tsc --noEmit` clean after every sub-piece. Backend untouched — all five sub-pieces are
@@ -718,6 +718,27 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-01 (M7-M11 live visual-diff)** — Ran the live Chrome checklist for M7-M11
+  inline in the main session, per this file's own "no subagents" rule — reused the
+  existing throwaway fixture databases (`9aebda7f...` for M7's single-view case,
+  `54f49606-...`, the same one M4-M6's own diff used, for everything else) rather than
+  building a new fixture. Three real, reproducible defects found and fixed: (1) M7's
+  tab-menu "Edit view" row silently did nothing — a same-tick race between the tab
+  menu's `Popover` closing and the M3 settings `SidePeek` opening, fixed by deferring
+  `onOpenSettings` one tick; (2) M11's new-row dropdown header read "Templates for
+  Default" (the data source's name) instead of the database's own title — a one-line
+  fix at the `DatabaseShell.tsx` call site; (3) the same dropdown never dismissed on
+  outside click or Escape (it predates the shared `Popover` primitive) — fixed with a
+  scoped outside-click/Escape listener. All three confirmed live before and after, with
+  regression tests added for (1) and (3). One accidental stray database was created
+  early in the session (clicking the sidebar's "New Database" create button, mistaken
+  for a nav link) and trashed via the app's own UI once noticed. Full write-up,
+  including what was NOT re-verified live (column/row resize and reorder — a drag-
+  simulation limitation, not a known product issue — and the Filter/Sort toolbar
+  popovers, which reproduced the exact same off-screen-render environment artifact
+  M4-M6's own session already documented) in `M7-M11-VISUAL-DIFF.md`. Frontend 61
+  files / 875 tests green, `tsc` clean. Review checkpoint (M7-M11 code review) was
+  already run in the prior session per the entry below; not repeated here.
 - **2026-09-01 (M10, M11, review checkpoint)** — Built M10 (row peek internals) and M11
   (calculations footer, always-visible New-row chevron + new-row title focus, column
   resize, Select/Status cell editors, the two captured empty states) end to end,

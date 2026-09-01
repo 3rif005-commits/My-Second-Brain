@@ -349,7 +349,7 @@ export function ViewTabs({
                 onRename: () => startRename(view),
                 onEditView: () => {
                   setMenuOpen(false);
-                  onOpenSettings?.();
+                  setTimeout(() => onOpenSettings?.(), 0);
                 },
                 onCopyLink: () => copyViewLink(view),
                 onDuplicate: () => {

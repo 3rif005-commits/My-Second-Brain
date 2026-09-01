@@ -1365,6 +1365,38 @@ describe("TableView", () => {
       expect(screen.queryByText(/add shortcut to sidebar/i)).not.toBeInTheDocument();
     });
 
+    // Live-checklist regression: this dropdown is a plain conditional div
+    // (predates the Popover primitive), so it never dismissed on outside
+    // click or Escape -- only re-clicking the chevron closed it.
+    it("dismisses on outside click and on Escape", async () => {
+      const user = userEvent.setup();
+      render(
+        <div>
+          <button>outside</button>
+          <TableView
+            properties={PROPERTIES}
+            rows={[]}
+            editable={true}
+            onCellChange={vi.fn()}
+            dataSourceId="ds-1"
+            templates={[]}
+            dataSourceName="Tasks"
+          />
+        </div>
+      );
+
+      await user.click(screen.getByRole("button", { name: "Choose a template" }));
+      expect(screen.getByText("Templates for Tasks")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "outside" }));
+      expect(screen.queryByText("Templates for Tasks")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Choose a template" }));
+      expect(screen.getByText("Templates for Tasks")).toBeInTheDocument();
+      await user.keyboard("{Escape}");
+      expect(screen.queryByText("Templates for Tasks")).not.toBeInTheDocument();
+    });
+
     it("shows the chevron even when the `templates` prop is simply omitted (older/other caller)", () => {
       render(
         <TableView properties={PROPERTIES} rows={[]} editable={true} onCellChange={vi.fn()} dataSourceId="ds-1" />
