@@ -151,6 +151,29 @@ export function patchCalculation(
   return { calculations: raw };
 }
 
+/** M11 (table-drag-resize.md): per-view column widths, keyed by property
+ * key — the same JSONB-pass-through shape `calculations` above uses,
+ * **not** a schema-level field ("the same property can be a different
+ * width in different views, exactly as with order and visibility" — the
+ * spec's own reasoning). Missing entries fall back to whatever default
+ * `@tanstack/react-table`'s own `size` would use for that column. */
+export function getColumnWidths(config: Record<string, unknown>): Record<string, number> {
+  const raw = config.column_widths;
+  if (!raw || typeof raw !== "object") return {};
+  const widths: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === "number") widths[key] = value;
+  }
+  return widths;
+}
+
+export function patchColumnWidths(
+  config: Record<string, unknown>,
+  widths: Record<string, number>
+): Record<string, unknown> {
+  return { column_widths: widths };
+}
+
 /** Column order for this view. Falls back to schema `position` order for any
  * property the config does not mention, so adding a property never leaves it
  * unrendered. */

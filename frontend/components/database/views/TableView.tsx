@@ -24,7 +24,7 @@
 // here. No virtualization (@tanstack/react-virtual) either — not needed for
 // this milestone's scope; worth adding if a data source's row count becomes
 // a real performance problem.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   createColumnHelper,
@@ -50,11 +50,13 @@ import type {
 import { renderCellValue } from "../cells/renderCellValue";
 import {
   getCalculation,
+  getColumnWidths,
   getHiddenKeys,
   getOpenPagesInMode,
   getShowPageIcon,
   getShowVerticalLines,
   orderProperties,
+  patchColumnWidths,
 } from "@/lib/database/viewConfig";
 import type { SortsUpdater } from "@/lib/database/viewConfig";
 import { defaultConditionFor } from "@/lib/database/filterAst";
@@ -625,12 +627,66 @@ export function TableView({
   // `useReactTable` treat `data` as changed and rebuild its row model for no
   // reason (review-checkpoint finding).
   const tableData = useMemo(() => (groups ? groups.flatMap((g) => g.rows) : rows), [groups, rows]);
+
+  // M11 (table-drag-resize.md): per-view column widths, `view.config.
+  // column_widths` — JSONB pass-through, not a schema-level field ("the
+  // same property can be a different width in different views," the
+  // spec's own reasoning). `columnSizing` itself is left UNCONTROLLED
+  // (TanStack's own default state, seeded from `initialState` below) —
+  // an earlier version of this controlled it directly, which broke:
+  // `columnResizeMode: "onChange"`'s live-drag math computes each new
+  // width as a SIDE EFFECT inside the very `setColumnSizingInfo` updater
+  // React queues for the SAME render pass, and a caller-supplied
+  // `onColumnSizingChange` fires synchronously, outside that queue — so it
+  // observes the side effect before React has run it. TanStack's own
+  // uncontrolled path doesn't have this ordering hazard (both updates go
+  // through the identical queue), so this defers to it and only
+  // IMPERATIVELY re-seeds `columnSizing` (`table.setColumnSizing`) when
+  // the view's own persisted widths change from under it — this same
+  // `TableView` instance is reused across different Table VIEWS of the
+  // active database (DatabaseShell doesn't remount it on a tab switch).
+  const persistedWidths = useMemo(() => getColumnWidths(config), [config]);
+
   const table = useReactTable({
     data: tableData,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
+    columnResizeMode: "onChange",
+    initialState: { columnSizing: persistedWidths },
   });
+
+  // Keyed on a STRINGIFIED value, not `persistedWidths` itself: `config`
+  // (`view?.config ?? {}`) is a fresh `{}` literal on every render when
+  // `view` is absent/null, which would otherwise re-run this effect (and
+  // re-`setColumnSizing`, re-rendering, re-computing a fresh `{}`, …) on
+  // every single render — an infinite loop caught by this file's own test
+  // suite hanging outright, not a slow test.
+  const persistedWidthsKey = JSON.stringify(persistedWidths);
+  useEffect(() => {
+    table.setColumnSizing(persistedWidths);
+    // `table` (== `useReactTable`'s own stable `tableRef.current`) is
+    // deliberately excluded — including it would defeat this effect's own
+    // point, since `columns` (a `table` dependency) changes on nearly
+    // every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [persistedWidthsKey]);
+
+  // Fires the checklist's "exactly ONE PATCH for the whole drag, not one
+  // per mouse-move" the instant `columnSizingInfo.isResizingColumn`
+  // transitions from a column id back to `false` (mouseup/touchend). A
+  // ref, not state, for the "was resizing a moment ago" flag: it only
+  // needs to survive across renders to detect the transition, never to
+  // trigger one itself.
+  const wasResizingRef = useRef(false);
+  const isResizingColumn = table.getState().columnSizingInfo.isResizingColumn;
+  useEffect(() => {
+    if (wasResizingRef.current && !isResizingColumn) {
+      onPatchConfig?.(patchColumnWidths(config, table.getState().columnSizing));
+    }
+    wasResizingRef.current = Boolean(isResizingColumn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isResizingColumn]);
 
   // +1 for the trailing "Add property"/spacer column, +1 for the leading
   // M9 row gutter — both only exist when editable — keeps <thead>'s and
@@ -780,9 +836,24 @@ export function TableView({
       ...headerGroup.headers.map((header) => (
         <th
           key={header.id}
-          className={`text-left font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap ${cellBorderClass}`}
+          style={{ width: header.getSize() }}
+          className={`relative text-left font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap ${cellBorderClass}`}
         >
           {flexRender(header.column.columnDef.header, header.getContext())}
+          {/* M11 (table-drag-resize.md): the resize grip — "a blue
+            * vertical bar at the border, within the header row." The
+            * spec's own "guide line extending down through the table
+            * body" is left unbuilt: several of its exact details (does it
+            * persist for the whole drag or only on press?) are themselves
+            * TBD in the capture, and the live column reflow below already
+            * gives clear resize feedback without guessing at it. */}
+          <div
+            onMouseDown={header.getResizeHandler()}
+            onTouchStart={header.getResizeHandler()}
+            className={`absolute right-0 top-0 h-full w-1 cursor-col-resize touch-none select-none ${
+              header.column.getIsResizing() ? "bg-blue-500" : "hover:bg-blue-400"
+            }`}
+          />
         </th>
       )),
     ]);
@@ -872,7 +943,7 @@ export function TableView({
       >
         {gutterCell(tableRow.original.id)}
         {tableRow.getVisibleCells().map((cell) => (
-          <td key={cell.id} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
+          <td key={cell.id} style={{ width: cell.column.getSize() }} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
             {cell.column.id === titleProperty?.key ? (
               <div className="flex items-center gap-1">
                 {showPageIcon && <FileText size={12} className="shrink-0 text-gray-300 dark:text-gray-600" aria-hidden />}
@@ -1002,31 +1073,24 @@ export function TableView({
       <div className="overflow-auto flex-1 min-h-0">
       <table className="w-full border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-white dark:bg-gray-900">
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {gutterHeaderCell()}
-              {headerGroup.headers.map((header) => (
-                <th
-                  key={header.id}
-                  className={`text-left font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap ${cellBorderClass}`}
-                >
-                  {flexRender(header.column.columnDef.header, header.getContext())}
-                </th>
-              ))}
-              {editable && dataSourceId && (
-                <th className="text-left font-normal px-3 py-2 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap">
-                  {/* M2: the anchored creation popover. Replaced a
-                    * trailing-column inline form that held five of this app's
-                    * 40 native <select> elements. */}
-                  <AddPropertyPopover
-                    dataSourceId={dataSourceId}
-                    properties={allOrderedProperties}
-                    onCreated={() => refetch?.()}
-                  />
-                </th>
-              )}
-            </tr>
-          ))}
+          <tr>
+            {/* M11: now genuinely shared with the grouped table's own
+              * per-group header row below — see `headerCells()`'s own
+              * comment — rather than a byte-for-byte duplicate of it. */}
+            {headerCells()}
+            {editable && dataSourceId && (
+              <th className="text-left font-normal px-3 py-2 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap">
+                {/* M2: the anchored creation popover. Replaced a
+                  * trailing-column inline form that held five of this app's
+                  * 40 native <select> elements. */}
+                <AddPropertyPopover
+                  dataSourceId={dataSourceId}
+                  properties={allOrderedProperties}
+                  onCreated={() => refetch?.()}
+                />
+              </th>
+            )}
+          </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
@@ -1055,7 +1119,7 @@ export function TableView({
                   >
                     {gutterCell(entryRow.id)}
                     {tableRow.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
+                      <td key={cell.id} style={{ width: cell.column.getSize() }} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
                         {cell.column.id === titleProperty?.key ? (
                           <div className="flex items-center gap-1" style={{ paddingLeft: depth * 16 }}>
                             {hasChildren ? (
@@ -1112,7 +1176,7 @@ export function TableView({
                   >
                     {gutterCell(row.original.id)}
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
+                      <td key={cell.id} style={{ width: cell.column.getSize() }} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
                         {cell.column.id === titleProperty?.key ? (
                           <div className="flex items-center gap-1">
                             {showPageIcon && (

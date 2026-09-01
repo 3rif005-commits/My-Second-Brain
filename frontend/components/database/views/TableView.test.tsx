@@ -603,6 +603,98 @@ describe("TableView", () => {
     });
   });
 
+  // M11 (table-drag-resize.md): column resize. Reorder (header-drag AND
+  // row-drag) stays unbuilt — the spec's own "not captured by dragging a
+  // header" / "not captured" TBDs, same discipline as every other TBD this
+  // plan has deferred rather than guessed at.
+  describe("column resize", () => {
+    function tableView(config: Record<string, unknown>) {
+      return {
+        id: "view-1",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Table",
+        icon: null,
+        type: "table",
+        config,
+        filter: null,
+        sorts: [],
+        is_locked: false,
+        position: 0,
+      };
+    }
+
+    it("applies a persisted view.config.column_widths as the column's rendered width", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={false}
+          onCellChange={vi.fn()}
+          view={tableView({ column_widths: { notes: 300 } })}
+        />
+      );
+      const header = screen.getByRole("columnheader", { name: "Notes" });
+      expect(header).toHaveStyle({ width: "300px" });
+    });
+
+    it("dragging the grip resizes live and fires exactly one PATCH (onPatchConfig) on release, not one per move", () => {
+      const onPatchConfig = vi.fn();
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={false}
+          onCellChange={vi.fn()}
+          view={tableView({})}
+          onPatchConfig={onPatchConfig}
+        />
+      );
+      const header = screen.getByRole("columnheader", { name: "Notes" });
+      const startWidth = parseFloat(header.style.width);
+      const grip = header.querySelector(".cursor-col-resize") as HTMLElement;
+
+      fireEvent.mouseDown(grip, { clientX: 100 });
+      fireEvent.mouseMove(document, { clientX: 150 });
+      // Live: the header's own width already reflects the in-progress drag,
+      // before mouseup.
+      expect(parseFloat(header.style.width)).toBeGreaterThan(startWidth);
+      expect(onPatchConfig).not.toHaveBeenCalled();
+
+      fireEvent.mouseMove(document, { clientX: 200 });
+      fireEvent.mouseUp(document, { clientX: 200 });
+
+      expect(onPatchConfig).toHaveBeenCalledTimes(1);
+      expect(onPatchConfig).toHaveBeenCalledWith({
+        column_widths: expect.objectContaining({ notes: expect.any(Number) }),
+      });
+    });
+
+    it("a resize on one view's column does not affect a different view's persisted width — per-view, not schema-level", () => {
+      const { rerender } = render(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={false}
+          onCellChange={vi.fn()}
+          view={tableView({ column_widths: { notes: 300 } })}
+        />
+      );
+      expect(screen.getByRole("columnheader", { name: "Notes" })).toHaveStyle({ width: "300px" });
+
+      rerender(
+        <TableView
+          properties={PROPERTIES}
+          rows={ROWS}
+          editable={false}
+          onCellChange={vi.fn()}
+          view={tableView({ column_widths: { notes: 150 } })}
+        />
+      );
+      expect(screen.getByRole("columnheader", { name: "Notes" })).toHaveStyle({ width: "150px" });
+    });
+  });
+
   describe("empty-state gap fix", () => {
     it("still renders column headers (not just a bare message) when there are no rows", () => {
       render(
