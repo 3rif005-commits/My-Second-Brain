@@ -57,9 +57,11 @@ import { GROUPABLE_PROPERTY_TYPES } from "@/lib/database/types";
 import type { PropertyResponse, ViewResponse } from "@/lib/database/types";
 import {
   getCalculation,
+  getShowPageIcon,
   isWrapped,
   patchCalculation,
   patchHidden,
+  patchShowPageIcon,
   patchWrapped,
 } from "@/lib/database/viewConfig";
 import type { SortsUpdater } from "@/lib/database/viewConfig";
@@ -293,14 +295,19 @@ export function buildColumnHeaderMenu(args: ColumnHeaderMenuArgs): MenuPanel {
 
   if (!isTitle) rows.push(changeType);
   if (isTitle) {
-    // Unique to the title column: it owns the row's page icon.
+    // Unique to the title column: it owns the row's page icon. Same key
+    // M3's Layout panel writes (getShowPageIcon/patchShowPageIcon) — routed
+    // through the shared helpers, not inlined a second time, so the two
+    // entry points can't drift on the key name or the default (review-
+    // checkpoint finding, M1-M3 pass: this call site had stayed on the
+    // inline form from before the helpers existed).
+    const showPageIcon = getShowPageIcon(config);
     rows.push({
       id: "show-page-icon",
       label: "Show page icon",
       kind: "toggle",
-      checked: config.show_page_icon !== false,
-      onSelect: () =>
-        onPatchConfig({ show_page_icon: config.show_page_icon === false }),
+      checked: showPageIcon,
+      onSelect: () => onPatchConfig(patchShowPageIcon(config, !showPageIcon)),
     });
   }
 
@@ -456,7 +463,21 @@ export function ColumnRenameHeader({
           aria-label="Property name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onBlur={() => name !== property.name && onRename(name)}
+          // Review-checkpoint finding (M1-M3 pass): this was the one rename
+          // field without a trim/empty guard — OptionRenameHeader and M3's
+          // ViewNameHeader both require `name.trim()` before committing, so
+          // select-all + delete + blur here PATCHed the property to a blank
+          // name with no fallback default. Also restores the ORIGINAL name
+          // into the field when the whole thing is blanked, rather than
+          // leaving an empty box behind after a no-op blur.
+          onBlur={() => {
+            const trimmed = name.trim();
+            if (!trimmed) {
+              setName(property.name);
+              return;
+            }
+            if (trimmed !== property.name) onRename(trimmed);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();

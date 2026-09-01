@@ -320,6 +320,22 @@ describe("rename and description", () => {
     );
   });
 
+  it("clearing the name field and blurring does NOT rename to an empty string — restores the original instead", async () => {
+    // Review-checkpoint finding (M1-M3 pass): this was the one rename field
+    // in the codebase without a trim/empty guard — OptionRenameHeader and
+    // ViewNameHeader both require `name.trim()` before committing.
+    const user = userEvent.setup();
+    setup();
+    await user.click(screen.getByRole("button", { name: /column options/i }));
+
+    const input = screen.getByLabelText("Property name");
+    await user.clear(input);
+    await user.tab();
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(input).toHaveValue("Notes");
+  });
+
   it("the ⓘ reveals a description field — its tooltip names what it does", async () => {
     const user = userEvent.setup();
     setup();

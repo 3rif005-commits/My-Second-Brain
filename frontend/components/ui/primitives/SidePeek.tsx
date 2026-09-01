@@ -87,6 +87,20 @@ export function SidePeek({
           data-testid="side-peek"
           data-mode={mode}
           aria-label={title}
+          // `modal={false}` (side mode, above) stops Radix from trapping
+          // focus/locking scroll, but Radix's DismissableLayer still closes
+          // on ANY outside pointerdown regardless of `modal` — that is a
+          // SEPARATE default this component never overrode. Review-
+          // checkpoint finding (M1-M3 pass): side mode's whole point, per
+          // this file's own "NON-MODAL BY DEFAULT" comment and Notion's own
+          // copy for it ("Keeps the view behind interactive"), is that
+          // clicking the table does NOT close the panel — dismissal here is
+          // the × only (view-options-panel.md's own Anchor section: "Escape
+          // TBD" but no outside-click dismissal is documented at all).
+          // Escape is left alone; only the outside-pointerdown auto-close is
+          // suppressed, and only in side mode — center peek keeps Radix's
+          // default backdrop-click-to-close.
+          onPointerDownOutside={isSide ? (e) => e.preventDefault() : undefined}
           style={isSide ? { width } : undefined}
           className={
             isSide

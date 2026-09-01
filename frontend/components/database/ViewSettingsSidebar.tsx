@@ -328,6 +328,17 @@ export function ViewSettingsSidebar({
   const rootPanel: MenuPanel = {
     header: (
       <ViewNameHeader
+        // Forces a fresh mount (and a fresh `draft` state) whenever the
+        // ACTIVE view changes while the sidebar stays open — review-
+        // checkpoint finding (M1-M3 pass): `useState(name)` only seeds its
+        // initial value, so switching view tabs without closing Settings
+        // left `draft` holding the PREVIOUS view's name; any blur after
+        // that renamed the NEWLY active view to the old one's name. Losing
+        // an un-blurred, in-progress edit on switching views (same as this
+        // remount does) is the same trade-off every other row in this menu
+        // already makes for "navigate away" — see the toggle-keeps-panel-
+        // open comment on `activate` in MenuList.tsx.
+        key={view.id}
         name={view.name}
         viewType={view.type}
         onRename={(name) =>
@@ -537,6 +548,13 @@ function ViewNameHeader({
         onKeyDown={(e) => {
           if (e.key === "Enter") (e.target as HTMLInputElement).blur();
           if (e.key === "Escape") setDraft(name);
+          // Same reason as ColumnRenameHeader/OptionRenameHeader: without
+          // stopping Tab here, MenuList's own onKeyDown sees it bubble up
+          // and unconditionally closes the whole sidebar (`case "Tab":
+          // onClose()`) before blur can commit the rename — review-
+          // checkpoint finding (M1-M3 pass), missed when this file copied
+          // the sibling pattern but not this part of it.
+          if (e.key.startsWith("Arrow") || e.key === "Tab") e.stopPropagation();
         }}
         className="min-w-0 flex-1 truncate rounded bg-transparent px-1 py-0.5 text-menu outline-none hover:bg-menu-hover focus:bg-menu-field"
       />

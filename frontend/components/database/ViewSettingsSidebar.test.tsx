@@ -291,4 +291,57 @@ describe("ViewSettingsSidebar", () => {
 
     await waitFor(() => expect(onUpdateView).toHaveBeenCalledWith("v1", { name: "Renamed view" }));
   });
+
+  it("switching the active view while Settings stays open shows the NEW view's name, not the old one's", () => {
+    // Review-checkpoint finding (M1-M3 pass): the name input's `draft` state
+    // only seeded from `name` on first mount. Switching view tabs without
+    // closing Settings used to leave `draft` holding the PREVIOUS view's
+    // name — any blur after that would have silently renamed the newly
+    // active view to the old one's name. Fixed with `key={view.id}` on
+    // ViewNameHeader, forcing a fresh mount (and a fresh `draft`) per view.
+    const onUpdateView = vi.fn().mockResolvedValue(view());
+    const { rerender } = render(
+      <ViewSettingsSidebar
+        open={true}
+        onClose={vi.fn()}
+        view={view({ id: "v1", name: "View A" })}
+        properties={PROPERTIES}
+        database={database()}
+        dataSourceId="ds-1"
+        dataSourceName="My database"
+        onPatchConfig={vi.fn()}
+        onUpdateView={onUpdateView}
+        onPropertiesChanged={vi.fn()}
+        onDatabaseChanged={vi.fn()}
+        onSetSorts={vi.fn()}
+        automations={[]}
+        onCreateAutomation={vi.fn()}
+        onUpdateAutomation={vi.fn()}
+        onDeleteAutomation={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("textbox", { name: "View name" })).toHaveValue("View A");
+
+    rerender(
+      <ViewSettingsSidebar
+        open={true}
+        onClose={vi.fn()}
+        view={view({ id: "v2", name: "View B" })}
+        properties={PROPERTIES}
+        database={database()}
+        dataSourceId="ds-1"
+        dataSourceName="My database"
+        onPatchConfig={vi.fn()}
+        onUpdateView={onUpdateView}
+        onPropertiesChanged={vi.fn()}
+        onDatabaseChanged={vi.fn()}
+        onSetSorts={vi.fn()}
+        automations={[]}
+        onCreateAutomation={vi.fn()}
+        onUpdateAutomation={vi.fn()}
+        onDeleteAutomation={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("textbox", { name: "View name" })).toHaveValue("View B");
+  });
 });
