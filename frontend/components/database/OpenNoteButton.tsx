@@ -34,28 +34,35 @@ interface OpenNoteButtonProps {
   noteId: string;
   className?: string;
   onOpen?: (noteId: string) => void;
+  /** M9 (row-affordances.md): TableView's row peek toggle. "OPEN is a
+   * LABELLED button — an icon plus the word OPEN, right-aligned... While
+   * the peek is open it becomes CLOSE." Every other caller (Board/Gallery)
+   * omits this and keeps the pre-M9 icon-only rendering unchanged. */
+  isOpen?: boolean;
 }
 
-export function OpenNoteButton({ noteId, className = "", onOpen }: OpenNoteButtonProps) {
+export function OpenNoteButton({ noteId, className = "", onOpen, isOpen }: OpenNoteButtonProps) {
   const openNote = useOpenNote();
+  const labelled = isOpen !== undefined;
 
   return (
     <button
       type="button"
-      aria-label="Open note"
-      title="Open note"
+      aria-label={labelled ? (isOpen ? "Close" : "Open") : "Open note"}
+      title={labelled ? (isOpen ? "Close" : "Open") : "Open note"}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
         (onOpen ?? openNote)(noteId);
       }}
-      className={`inline-flex items-center justify-center rounded p-1 bg-white/80 dark:bg-gray-900/80 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-white dark:hover:bg-gray-900 ${className}`}
+      className={`inline-flex items-center gap-1 justify-center rounded p-1 bg-white/80 dark:bg-gray-900/80 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-white dark:hover:bg-gray-900 ${className}`}
     >
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
         <path d="M15 3h6v6" />
         <path d="M10 14 21 3" />
       </svg>
+      {labelled && <span className="text-[10px] font-medium uppercase">{isOpen ? "Close" : "Open"}</span>}
     </button>
   );
 }

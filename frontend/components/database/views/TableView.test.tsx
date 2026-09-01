@@ -233,11 +233,57 @@ describe("TableView", () => {
     const onCellChange = vi.fn();
     render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={onCellChange} />);
 
-    const checkbox = screen.getByRole("checkbox");
+    // Disambiguated against M9's own row-selection checkbox, which now
+    // shares the "checkbox" role in the same row (row-affordances.md's
+    // gutter) — this targets the CELL's checkbox specifically.
+    const checkbox = screen.getByRole("checkbox", { name: "Checkbox" });
     expect(checkbox).not.toBeDisabled();
     await user.click(checkbox);
 
     expect(onCellChange).toHaveBeenCalledWith("row-1", "done", { type: "checkbox", checkbox: false });
+  });
+
+  describe("M9 row gutter (row-affordances.md)", () => {
+    it("renders the gutter's own 'Select row' checkbox when editable", () => {
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+      expect(screen.getByRole("checkbox", { name: "Select row" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Row options" })).toBeInTheDocument();
+    });
+
+    it("suppresses the gutter entirely when not editable (read-only source)", () => {
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={false} onCellChange={vi.fn()} />);
+      expect(screen.queryByRole("checkbox", { name: "Select row" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Row options" })).not.toBeInTheDocument();
+      // OPEN survives read-only, per the spec's own States table.
+      expect(screen.getByRole("button", { name: /^open$/i })).toBeInTheDocument();
+    });
+
+    it("selecting a row's checkbox shows the bulk bar with a count, and clearing it hides the bar again", async () => {
+      const user = userEvent.setup();
+      render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
+      expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("checkbox", { name: "Select row" }));
+      expect(screen.getByText("1 selected")).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Clear selection" }));
+      expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
+    });
+
+    it("the bulk bar's trash button moves every selected row to Trash and refetches", async () => {
+      const user = userEvent.setup();
+      const refetchRows = vi.fn();
+      global.fetch = vi.fn().mockResolvedValue({ ok: true });
+      render(
+        <TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} refetchRows={refetchRows} />
+      );
+      await user.click(screen.getByRole("checkbox", { name: "Select row" }));
+      await user.click(screen.getByRole("button", { name: "Move selected rows to Trash" }));
+
+      expect(global.fetch).toHaveBeenCalledWith("/api/notes/row-1", { method: "DELETE" });
+      expect(refetchRows).toHaveBeenCalled();
+      expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
+    });
   });
 
   describe("row peek (controller design, approved 2026-08-25 — a user found live that TableView had no way to open a row as its note page at all; the peek is the Notion-parity fix: a side panel with properties + body over the table, not an immediate navigation)", () => {
@@ -255,7 +301,7 @@ describe("TableView", () => {
       const user = userEvent.setup();
       render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
 
-      await user.click(screen.getByRole("button", { name: /open note/i }));
+      await user.click(screen.getByRole("button", { name: /^open$/i }));
 
       expect(await screen.findByRole("dialog", { name: /row details/i })).toBeInTheDocument();
       expect(routerPush).not.toHaveBeenCalled();
@@ -277,7 +323,7 @@ describe("TableView", () => {
       const onCellChange = vi.fn();
       render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={onCellChange} />);
 
-      await user.click(screen.getByRole("button", { name: /open note/i }));
+      await user.click(screen.getByRole("button", { name: /^open$/i }));
       const dialog = await screen.findByRole("dialog", { name: /row details/i });
 
       expect(within(dialog).getByText("Kind")).toBeInTheDocument();
@@ -292,7 +338,7 @@ describe("TableView", () => {
       const user = userEvent.setup();
       render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
 
-      await user.click(screen.getByRole("button", { name: /open note/i }));
+      await user.click(screen.getByRole("button", { name: /^open$/i }));
       const dialog = await screen.findByRole("dialog", { name: /row details/i });
 
       expect(await within(dialog).findByTestId("block-editor-stub")).toBeInTheDocument();
@@ -302,7 +348,7 @@ describe("TableView", () => {
       const user = userEvent.setup();
       render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
 
-      await user.click(screen.getByRole("button", { name: /open note/i }));
+      await user.click(screen.getByRole("button", { name: /^open$/i }));
       const dialog = await screen.findByRole("dialog", { name: /row details/i });
       await user.click(within(dialog).getByRole("button", { name: /open as full page/i }));
 
@@ -313,7 +359,7 @@ describe("TableView", () => {
       const user = userEvent.setup();
       render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
 
-      await user.click(screen.getByRole("button", { name: /open note/i }));
+      await user.click(screen.getByRole("button", { name: /^open$/i }));
       const dialog = await screen.findByRole("dialog", { name: /row details/i });
       await user.click(within(dialog).getByRole("button", { name: /open in workspace/i }));
 
@@ -324,9 +370,12 @@ describe("TableView", () => {
       const user = userEvent.setup();
       render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
 
-      await user.click(screen.getByRole("button", { name: /open note/i }));
-      await screen.findByRole("dialog", { name: /row details/i });
-      await user.click(screen.getByRole("button", { name: /close/i }));
+      await user.click(screen.getByRole("button", { name: /^open$/i }));
+      const dialog = await screen.findByRole("dialog", { name: /row details/i });
+      // Disambiguates against the row's OWN toggle, which now ALSO reads
+      // "Close" while the peek is open for it (row-affordances.md: "OPEN
+      // is a toggle... becomes CLOSE") — this asserts RowPeek's own ×.
+      await user.click(within(dialog).getByRole("button", { name: /^close$/i }));
 
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
@@ -335,7 +384,7 @@ describe("TableView", () => {
       const user = userEvent.setup();
       render(<TableView properties={PROPERTIES} rows={ROWS} editable={true} onCellChange={vi.fn()} />);
 
-      await user.click(screen.getByRole("button", { name: /open note/i }));
+      await user.click(screen.getByRole("button", { name: /^open$/i }));
       await screen.findByRole("dialog", { name: /row details/i });
       await user.keyboard("{Escape}");
 

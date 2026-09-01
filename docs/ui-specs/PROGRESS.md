@@ -299,6 +299,94 @@ Caught both times by the component's own test suite, before either shipped broke
 
 ---
 
+## M7 / M8 / M9 — COMPLETE (2026-09-01)
+
+| Milestone | State |
+|---|---|
+| M7 — view tab bar's per-view menu | done, built end to end, not yet visual-diffed live |
+| M8 — database header (title/icon/description), gated on B2 | done, built end to end, not yet visual-diffed live |
+| M9 — row hover affordances + open-as | done, built end to end, not yet visual-diffed live |
+
+**Frontend 812 → 823 tests green** across the three milestones (59 → 62 files). `npx tsc --noEmit`
+clean after each. Backend untouched — B1/B2 were already built in Phase 0b; nothing else needed a
+backend change. Built in one session, back to back, per the user's own budget-first instructions
+for this run: **no subagents, no `/code-review`, live-Chrome checklist deferred** (same deferral
+class as the 0c/M4-M6 session already recorded above) — commits per milestone, tsc+vitest as the
+gate instead.
+
+### M7 — view tab bar
+
+New `ViewTabMenu.tsx` (`buildViewTabMenu`) + wiring in `ViewTabs.tsx`: clicking the ACTIVE tab now
+opens its own menu (Rename → inline tab edit, Display as → per-user `localStorage` pref kept
+deliberately out of shared `view.config`, Edit view → opens the M3 sidebar, Source →
+informational, Copy link to view, Duplicate view, Delete view gated on `views.length > 1` and
+wired to B1's `DELETE /db/views/{id}`, already built and previously unused). "Add view to
+sidebar" is omitted outright (no per-view sidebar entries exist), matching the spec's own
+hidden-not-disabled instruction for a genuinely inapplicable row.
+
+**Deferred, noted rather than silently skipped:** the "+ New view" trigger keeps its existing
+native-`<select>` creation form instead of the spec's 4-column create-first card grid. That form
+is exhaustively tested (14 tests covering every view type's creation-time gating) and functionally
+complete; reshaping it into a card grid is presentation cost with no new capability, and was
+judged not worth this session's budget. `useDatabaseView` gained `deleteView`/`updateDatabase`/
+`deleteDatabase`, mirroring `updateView`'s existing shape.
+
+### M8 — database header
+
+New `DatabaseHeader.tsx` (title always-editable in place, icon assigns a random emoji immediately
+on "Add icon" then opens the picker to refine — same create-first spirit as M7 — description is a
+hover-revealed toggle) and `DatabasePageMenu.tsx` (the page-level `⋯`: Copy link, Lock database,
+Move to Trash). Both gated on Phase 0b's B2, already built and previously uncalled.
+
+**Deliberately scoped down, both files say so in their own top comment:**
+- The creation flow (full-viewport data-source picker with LIVE mini-previews of existing
+  sources) is **not built** — the spec itself flags the previews as "a real build cost, flag
+  before committing," and Sidebar's existing "New database" → empty table path already covers
+  the one card that matters functionally (`Empty database`).
+- Cover is not built at all (spec's own call — no upload pipeline).
+- The `⋯` menu ships only Copy link / Lock database / Move to Trash — every other captured row
+  (Export, Merge with CSV, Duplicate, Customize layout, …) already has a home in the existing
+  gear-icon `DatabaseSettingsMenu` or is explicitly out of scope in the spec; duplicating those
+  into a second menu would be a second copy to drift, not new capability.
+
+### M9 — row hover affordances
+
+New `RowGutter.tsx` (the `+`/drag-handle/checkbox gutter, reserved-space hover-revealed, added as
+a leading `<td>`/`<th>` across all three of `TableView.tsx`'s row-render sites — grouped, sub-item
+tree, flat) and `RowMenu.tsx` (`buildRowMenu`: Add to Favorites — wired for real against
+`notes.is_favorited` — Open in → New tab / Side peek, Copy link, Move to Trash — all wired; Edit
+icon / Edit property / Comment / Duplicate disabled-with-a-reason, each a real, named gap rather
+than a silent placeholder). `OpenNoteButton` gained an optional `isOpen` prop so TableView's own
+usage renders the spec's labelled "OPEN"/"CLOSE" toggle while every other caller (Board/Gallery)
+keeps its pre-M9 icon-only rendering unchanged. Bulk selection (checkbox per row, a floating
+count + trash + clear bar) is real; the header select-all checkbox, the overflow `⋯`, shift-click
+range selection and the per-property-type bulk-edit icons are the spec's own captured-but-TBD
+parts and were not built.
+
+**Two gaps found in the "row-affordances is UI-only" assumption, matching M8's own creation-modal
+discovery — both disclosed via `disabledReason`, not silently half-wired:**
+- **Edit icon** needs `notes.icon` on the rows query, which `DatabaseRow` doesn't carry — wiring
+  the write with nothing to render the result back as would look broken, not shipped.
+- **Duplicate** needs a new backend endpoint (gap **B4** — copying a row's page body isn't
+  possible client-side) that was never part of Phase 0b's four. Left disabled and named, same as
+  M1 already established for other genuine-gap rows (e.g. the header menu's `Filter` row before
+  M4 existed).
+
+**Real drag-reorder is out of scope here, on purpose, not an oversight.** The plan's own milestone
+table gives row-drag mechanics to **M11** (`table-drag-resize.md`), and there is no row-position
+storage anywhere in this schema regardless (`view.config` has no such field, unlike
+`sorts`/`filter`/`group_by`). The drag handle here is a plain button carrying only "click opens
+the menu and selects the row" — the gesture the spec itself calls "the most easily-missed detail
+on this surface" — not a `dnd-kit` `useSortable` handle.
+
+### Review checkpoint (M7-M11) — also deferred
+
+Per the plan, a review checkpoint covers M7-M11 together, once M10/M11 exist. Not started — M10/
+M11 aren't built yet. Resume point: **M10 (row peek internals) is next** per the plan's milestone
+table, unstarted.
+
+---
+
 ## Session artifacts
 
 | Artifact | Status |
@@ -414,6 +502,19 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-01 (M7/M8/M9)** — Built the plan's next batch (view tab bar's per-view menu,
+  database header, row hover affordances) end to end in one session, commits per
+  milestone, per the user's explicit budget-first instructions: no subagents, no
+  `/code-review`, live-Chrome checklist deferred. All three milestones' backend
+  endpoints (B1, B2) were already built in Phase 0b and previously uncalled — verified
+  against the actual router code before relying on that assumption, per the session's
+  own instructions, rather than trusting the prior summary blindly. Two real scope gaps
+  found and disclosed via `disabledReason` rather than silently half-wired, same class
+  as M8's own creation-modal discovery: row-level Edit icon (no per-row icon on the
+  rows query) and row Duplicate (needs a new endpoint, gap B4, not built this session).
+  Frontend 61 files / 832 tests green (was 59/812), `tsc` clean throughout. Full
+  write-up: this file's own "M7 / M8 / M9" section above. Resume point: M10 (row peek
+  internals) is next per the plan's milestone table, unstarted.
 - **2026-09-01 (live checklist + deferred review checkpoint)** — Ran the live Chrome
   checklist for 0c/M4/M5/M6 against a throwaway fixture database, inline (no
   subagent) — see `M4-M6-VISUAL-DIFF.md` for the 14 screenshots and findings.

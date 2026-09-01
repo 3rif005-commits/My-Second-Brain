@@ -31,7 +31,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ChevronDown, ChevronRight, FileText, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Plus, Trash2, X } from "lucide-react";
 import { useToast } from "@/app/providers";
 import { findSystemRelationProperty, getGroupBySpec } from "@/lib/database/types";
 import type {
@@ -64,6 +64,7 @@ import { useOpenNote } from "@/lib/database/useOpenNote";
 import { buildSubItemTree } from "@/lib/database/subItemTree";
 import { ButtonPropertyConfigPopover } from "../ButtonPropertyConfigPopover";
 import { OpenNoteButton } from "../OpenNoteButton";
+import { RowGutter } from "../RowGutter";
 import { RowPeek } from "../RowPeek";
 import { ColumnHeader } from "../ColumnHeader";
 import { AddPropertyPopover } from "../AddPropertyPopover";
@@ -227,6 +228,27 @@ export function TableView({
   // straight to Workspace — see RowPeek.tsx / OpenNoteButton.tsx's own
   // `onOpen` prop. `null` = no peek open.
   const [peekRowId, setPeekRowId] = useState<string | null>(null);
+  // M9 (row-affordances.md): bulk selection. Client state only — Notion's
+  // own "Select" is not persisted either.
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  function toggleRowSelected(rowId: string) {
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  }
+  async function trashSelectedRows() {
+    const ids = Array.from(selectedRowIds);
+    setSelectedRowIds(new Set());
+    try {
+      await Promise.all(ids.map((id) => fetch(`/api/notes/${id}`, { method: "DELETE" })));
+      await refetchRows?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not move rows to Trash", "error");
+    }
+  }
   const config = view?.config ?? {};
   // M3's Layout panel default ("Open pages in") — "full" bypasses RowPeek
   // entirely and reuses the exact navigation List/Feed/Board/Gallery already
@@ -484,10 +506,11 @@ export function TableView({
     getRowId: (row) => row.id,
   });
 
-  // +1 for the trailing "Add property"/spacer column that only exists when
-  // editable — keeps <thead>'s and <tbody>'s cell counts matching so the
-  // real columns don't visually shift under the wrong header.
-  const columnCount = orderedProperties.length + (editable ? 1 : 0);
+  // +1 for the trailing "Add property"/spacer column, +1 for the leading
+  // M9 row gutter — both only exist when editable — keeps <thead>'s and
+  // <tbody>'s cell counts matching so the real columns don't visually
+  // shift under the wrong header.
+  const columnCount = orderedProperties.length + (editable ? 2 : 0);
 
   const groupBySpec = view ? getGroupBySpec(view.config) : undefined;
   const groupProperty = groupBySpec ? allOrderedProperties.find((p) => p.key === groupBySpec.property_key) : undefined;
@@ -623,15 +646,44 @@ export function TableView({
   // "+ Add property" cell (not repeated per group — one add-property
   // affordance, not N of them).
   function headerCells() {
-    return table.getHeaderGroups().map((headerGroup) =>
-      headerGroup.headers.map((header) => (
+    return table.getHeaderGroups().map((headerGroup) => [
+      gutterHeaderCell(),
+      ...headerGroup.headers.map((header) => (
         <th
           key={header.id}
           className={`text-left font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap ${cellBorderClass}`}
         >
           {flexRender(header.column.columnDef.header, header.getContext())}
         </th>
-      ))
+      )),
+    ]);
+  }
+
+  // M9's row gutter (row-affordances.md) — a leading cell OUTSIDE the
+  // table's own columns, reserved only when `editable` (the read-only All
+  // Notes source suppresses `+`/drag handle/checkbox entirely, per the
+  // spec's own States table — OPEN alone stays, which OpenNoteButton
+  // already renders regardless of `editable`). One function for the header
+  // stub, one for a row's own gutter, so all three row-render sites below
+  // (grouped `dataRow`, the sub-item tree branch, the flat branch) share
+  // identical markup instead of drifting three ways.
+  function gutterHeaderCell() {
+    if (!editable) return null;
+    return <th key="gutter" className="w-14 border-b border-gray-200 dark:border-gray-700" aria-hidden />;
+  }
+  function gutterCell(rowId: string) {
+    if (!editable) return null;
+    return (
+      <td key="gutter" className="px-1 align-middle w-14">
+        <RowGutter
+          rowId={rowId}
+          selected={selectedRowIds.has(rowId)}
+          onToggleSelected={toggleRowSelected}
+          onAddRow={handleAddRow}
+          onOpenSidePeek={openRow}
+          onTrashed={() => refetchRows?.()}
+        />
+      </td>
     );
   }
 
@@ -646,13 +698,19 @@ export function TableView({
   function dataRow(tableRow: ReturnType<typeof table.getRow>) {
     return (
       <tr key={tableRow.id} className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+        {gutterCell(tableRow.original.id)}
         {tableRow.getVisibleCells().map((cell) => (
           <td key={cell.id} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
             {cell.column.id === titleProperty?.key ? (
               <div className="flex items-center gap-1">
                 {showPageIcon && <FileText size={12} className="shrink-0 text-gray-300 dark:text-gray-600" aria-hidden />}
                 <div className="flex-1 min-w-0">{flexRender(cell.column.columnDef.cell, cell.getContext())}</div>
-                <OpenNoteButton noteId={tableRow.original.id} className="shrink-0 opacity-0 group-hover:opacity-100" onOpen={openRow} />
+                <OpenNoteButton
+                  noteId={tableRow.original.id}
+                  isOpen={peekRowId === tableRow.original.id}
+                  className="shrink-0 opacity-0 group-hover:opacity-100"
+                  onOpen={openRow}
+                />
               </div>
             ) : (
               flexRender(cell.column.columnDef.cell, cell.getContext())
@@ -669,6 +727,32 @@ export function TableView({
     <div className="flex h-full flex-col">
       {view && onSetSorts && onSetFilter && (
         <QueryBar view={view} properties={allOrderedProperties} onSetSorts={onSetSorts} onSetFilter={onSetFilter} />
+      )}
+      {/* M9 (row-affordances.md §"Bulk selection"): replaces the toolbar row
+        * while any row is selected. The overflow `⋯`, shift-click range
+        * selection and the per-property-type bulk-edit icons are all
+        * captured-but-TBD in the spec — this ships the count + bulk trash +
+        * deselect only, not a half-built version of the rest. */}
+      {editable && selectedRowIds.size > 0 && (
+        <div className="flex items-center gap-3 px-3 py-1.5 bg-gray-900 dark:bg-gray-800 text-white text-xs">
+          <span>{selectedRowIds.size} selected</span>
+          <button
+            type="button"
+            aria-label="Move selected rows to Trash"
+            onClick={trashSelectedRows}
+            className="flex items-center gap-1 text-gray-300 hover:text-white"
+          >
+            <Trash2 size={14} />
+          </button>
+          <button
+            type="button"
+            aria-label="Clear selection"
+            onClick={() => setSelectedRowIds(new Set())}
+            className="ml-auto text-gray-300 hover:text-white"
+          >
+            <X size={14} />
+          </button>
+        </div>
       )}
       {groups ? (
         <div className="overflow-auto flex-1 min-h-0">
@@ -748,6 +832,7 @@ export function TableView({
         <thead className="sticky top-0 z-10 bg-white dark:bg-gray-900">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
+              {gutterHeaderCell()}
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
@@ -795,6 +880,7 @@ export function TableView({
                     key={entryRow.id}
                     className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                   >
+                    {gutterCell(entryRow.id)}
                     {tableRow.getVisibleCells().map((cell) => (
                       <td key={cell.id} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
                         {cell.column.id === titleProperty?.key ? (
@@ -819,6 +905,7 @@ export function TableView({
                             </div>
                             <OpenNoteButton
                               noteId={entryRow.id}
+                              isOpen={peekRowId === entryRow.id}
                               className="shrink-0 opacity-0 group-hover:opacity-100"
                               onOpen={openRow}
                             />
@@ -849,6 +936,7 @@ export function TableView({
                     key={row.id}
                     className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                   >
+                    {gutterCell(row.original.id)}
                     {row.getVisibleCells().map((cell) => (
                       <td key={cell.id} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
                         {cell.column.id === titleProperty?.key ? (
@@ -866,6 +954,7 @@ export function TableView({
                             </div>
                             <OpenNoteButton
                               noteId={row.original.id}
+                              isOpen={peekRowId === row.original.id}
                               className="shrink-0 opacity-0 group-hover:opacity-100"
                               onOpen={openRow}
                             />
