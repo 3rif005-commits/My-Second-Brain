@@ -16,7 +16,7 @@
 // this app; Search: view-options-panel.md marks it TBD) — both disabled with
 // a reason, the "disabled, not missing" convention this branch uses
 // everywhere else for the same situation.
-import { useState } from "react";
+import { forwardRef, useState } from "react";
 import { ArrowUpDown, Filter as FilterIcon, Search as SearchIcon, Settings, Sparkles, Wand2 } from "lucide-react";
 import { MenuList, Popover } from "@/components/ui/primitives";
 import type { AutomationPatch, AutomationResponse, PropertyResponse, ViewResponse } from "@/lib/database/types";
@@ -49,32 +49,42 @@ export interface ViewToolbarProps {
   onOpenSettings: () => void;
 }
 
-function ToolbarButton({
-  label,
-  icon,
-  onClick,
-  disabled,
-  disabledReason,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  disabledReason?: string;
-}) {
+// `forwardRef` AND spreading `...rest` are both required, not cosmetic: the
+// Filter/Sort buttons are Radix `Popover.Trigger asChild` anchors, and
+// `Slot` clones this element with its own `ref` (for floating-ui's
+// position computation) and `onClick`/`aria-*`/`data-*` props merged on. A
+// plain function component that only destructures its own named props
+// drops the ref entirely -- React silently ignores a `ref` passed to a
+// non-forwardRef function component -- so floating-ui had no anchor rect to
+// measure and the popover rendered at Radix's pre-measurement placeholder
+// position (`translate(0, -200%)`), hundreds of pixels above the viewport,
+// forever. Same root cause and fix as `DropdownButton` (SortRowsList.tsx)
+// and `TriggerButton` (FilterBuilder.tsx); this one just never got the
+// live-checklist repro to catch it (masked as "the automation session's own
+// off-screen-render artifact" in an earlier session, since the popover DID
+// open -- just not where anyone could see it).
+const ToolbarButton = forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    label: string;
+    icon: React.ReactNode;
+    disabledReason?: string;
+  }
+>(function ToolbarButton({ label, icon, disabled, disabledReason, className = "", ...rest }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       aria-label={label}
       title={disabled ? disabledReason : label}
       disabled={disabled}
-      onClick={onClick}
-      className="flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-gray-800 dark:hover:text-gray-300"
+      {...rest}
+      className={`flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-gray-800 dark:hover:text-gray-300 ${className}`}
     >
       {icon}
     </button>
   );
-}
+});
 
 export function ViewToolbar({
   view,

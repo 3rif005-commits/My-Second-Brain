@@ -261,6 +261,45 @@ specifically. Grouped-empty-group and loading-state (steps 8-9) remain the spec'
 
 ---
 
+## Addendum (same session, continued) — the toolbar popover "environment artifact" was a real bug
+
+Follow-up pass on the items flagged above as "not covered." The Filter/Sort toolbar
+popover positioning, previously attributed to an automation-session-only rendering
+quirk (both here and in `M4-M6-VISUAL-DIFF.md`), is **not an environment artifact — it
+is the same `forwardRef`-trigger bug this codebase had already found and fixed twice
+before** (`DropdownButton` in `SortRowsList.tsx`, `TriggerButton` in
+`FilterBuilder.tsx`).
+
+**Root cause, confirmed via DOM inspection**: `ViewToolbar.tsx`'s `ToolbarButton` was a
+plain function component (no `forwardRef`, no `...rest` spread) used as every
+`Popover`'s `trigger` (Filter, Sort, and — harmlessly, since it doesn't need
+positioning — Automations/AI Autofill/Search/Settings). Radix's `Popover.Trigger
+asChild` clones the trigger with its own `ref` (for `Popper.Content`'s floating-ui
+position computation) alongside the usual `onClick`/`aria-*` props. A ref handed to a
+non-`forwardRef` function component is silently dropped by React — so floating-ui had
+no anchor `DOMRect` to measure against and the popover rendered stuck at Radix's
+pre-measurement placeholder (`transform: translate(0, -200%)`, confirmed via
+`getBoundingClientRect()`/`getAttribute('style')` on `[data-radix-popper-content-
+wrapper]` — `y: -670`, matching the exact number both sessions independently
+observed). The `onClick` half worked (Radix composes handlers, and `ToolbarButton`'s
+own explicit `onClick={onClick}` still fired), which is exactly why the popover
+*opened* — just invisibly, hundreds of pixels above the viewport — making it look like
+a positioning/environment issue rather than a wiring one.
+
+**Fixed**: `ToolbarButton` converted to `forwardRef` + `...rest` spread, mirroring
+`DropdownButton`'s own established pattern and comment. Confirmed live: Filter and
+Sort both now open correctly anchored under their toolbar buttons.
+`screenshots/actual/M4-05-filter-popover-fixed.jpg`,
+`M5-04-sort-popover-fixed.jpg`. `ViewToolbar.test.tsx` 8/8 green, `tsc` clean.
+
+**This unblocks, for a future session**: `states.md`'s empty-filter-state checklist
+(steps 2-7) and any other Filter/Sort-toolbar-dependent live checks across M4-M6 that
+were previously marked "can't verify, known environment limitation" — that framing was
+wrong. A follow-up attempt at the empty-filter-state check this session was abandoned
+partway (the filter builder's own value-picker UI, in this narrow 248px popover near
+the viewport's right edge, proved fiddly to drive via coordinate clicks in the time
+available) — not blocked anymore, just not finished.
+
 ## Summary of real defects found and fixed this run
 
 1. **M7 — "Edit view" silently did nothing** (same-tick Radix-layer race between the
@@ -272,10 +311,15 @@ specifically. Grouped-empty-group and loading-state (steps 8-9) remain the spec'
 3. **M11 — new-row dropdown never dismissed on outside click or Escape** (predates the
    shared `Popover` primitive). Fixed: scoped outside-click/Escape listener.
    Regression test added.
+4. **Filter/Sort toolbar popovers rendered off-screen** — misdiagnosed as an
+   automation-environment artifact by this session AND the prior M4-M6 session; the
+   real cause was `ToolbarButton` missing `forwardRef`, the same trigger-ref bug this
+   codebase had already fixed twice elsewhere. Fixed the same way.
 
-All three confirmed live, before and after. Frontend test suite green throughout
-(`ViewTabs.test.tsx` 23/23, `TableView.test.tsx` 77/77, `DatabaseShell.test.tsx`
-included in a combined 99/99 run).
+All four confirmed live, before and after. Frontend test suite green throughout
+(`ViewTabs.test.tsx` 23/23, `TableView.test.tsx` 77/77, `ViewToolbar.test.tsx` 8/8,
+`DatabaseShell.test.tsx` included in a combined 99/99 run, full suite 61 files / 875
+tests).
 
 ## Not covered this run, for a follow-up session
 

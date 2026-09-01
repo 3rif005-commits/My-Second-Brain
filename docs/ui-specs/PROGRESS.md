@@ -718,6 +718,23 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-01 (M7-M11 live visual-diff, addendum)** — Followed up on the items the
+  entry below flagged as "not covered." Root-caused what both this session and the
+  earlier M4-M6 session had written off as an "automation-environment rendering
+  artifact": the Filter/Sort toolbar popovers rendering hundreds of pixels off-screen.
+  It was a real, reproducible bug — `ViewToolbar.tsx`'s `ToolbarButton` was missing
+  `forwardRef`, the same Radix `Popover.Trigger asChild` ref-dropping bug this
+  codebase had already found and fixed twice elsewhere (`SortRowsList.tsx`,
+  `FilterBuilder.tsx`), confirmed via `getBoundingClientRect()`/inline-style
+  inspection on the stuck popover (`transform: translate(0, -200%)`, no anchor rect to
+  measure against). Fixed the same way; confirmed live for both Filter and Sort.
+  `ViewToolbar.test.tsx` 8/8, full suite 61/875 green, `tsc` clean. This retroactively
+  unblocks `states.md`'s empty-filter-state checklist and anything else gated on the
+  Filter/Sort toolbar across M4-M6 — that gate was never real. A follow-up attempt at
+  the empty-filter-state check itself was started but not finished (the filter
+  builder's own narrow value-picker UI proved fiddly to drive via coordinate clicks in
+  the time available) — still open for a future session. Full write-up:
+  `M7-M11-VISUAL-DIFF.md`'s new "Addendum" section.
 - **2026-09-01 (M7-M11 live visual-diff)** — Ran the live Chrome checklist for M7-M11
   inline in the main session, per this file's own "no subagents" rule — reused the
   existing throwaway fixture databases (`9aebda7f...` for M7's single-view case,
