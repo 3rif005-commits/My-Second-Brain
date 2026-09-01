@@ -718,6 +718,40 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-01 (Phase 0c/M4/M5/M6 review checkpoint, run for real)** — The plan's own
+  review checkpoint for this batch had been explicitly deferred (see the log entry
+  below, "a `/code-review high` attempt... hit the account's rate limit"). Run this
+  time as a manual read-through (no subagents, no `/code-review high`/`max`), per this
+  workstream's own working rules and the same style Checkpoint 2 (M7-M11) already
+  used successfully — scoped to the code the four milestones actually touched
+  (`filterAst.ts`/`filterOperators.ts`/`GroupBuilder.tsx`/`SortRowsList.tsx`/
+  `QueryBar.tsx`/`FilterBuilder.tsx` plus the wiring in `DatabaseShell.tsx`/
+  `ColumnHeaderMenu.tsx`/`ViewSettingsSidebar.tsx`/`ViewToolbar.tsx`/`ChartView.tsx`/
+  `TableView.tsx`/`types.ts`). One real, reachable, silently-broken defect found and
+  fixed: `view.filter` is written straight from `FilterBuilder.tsx` on every edit (no
+  separate draft state), so two ordinary mid-edit states — "+ Add advanced filter"'s
+  intentionally-empty group, and picking a property before its value is typed — are
+  syntactically incomplete by the backend's own contract (`ast.py`'s
+  `Field(min_length=1)`, `operators.py`'s `coerce_value` rejecting a missing value).
+  The write itself succeeds (`PATCH /db/views/{id}` never validates `filter`), but the
+  very next `POST .../query` 400s on it, and `useDatabaseView`'s own error surfacing
+  only renders while `!database` — so once the database has loaded, rows/groups just
+  silently stop updating with no toast, no banner, nothing. `M4-M6-VISUAL-DIFF.md`'s
+  own live run likely hit this without noticing (it typed a filter value fast enough
+  after picking a property that the momentary 400 self-corrected before anyone
+  looked). Fixed with a new `sanitizeFilterForQuery` (`filterAst.ts`), run inside
+  `useDatabaseView.loadRows` before the filter ever reaches the query endpoint —
+  strips incomplete conditions/empty groups from the COMPILED request only, leaving
+  what's persisted (and what the builder shows for editing) untouched. Also
+  cross-checked, and confirmed correct (no drift): `filterOperators.ts`'s
+  `TYPE_OPERATORS` against the backend's `operators.py` `_FAMILIES` table, byte for
+  byte; `types.ts`'s widened `GROUPABLE_PROPERTY_TYPES` (17 types) against
+  `grouping.py`'s real support (`REGISTRY` minus `_NOT_GROUPABLE` minus `formula`).
+  Full write-up: `REVIEW-LOG.md`'s "Checkpoint 3". Frontend 61 files / 887 tests green
+  (was 877; +10 regression tests), `tsc` clean. This closes out the last open item
+  from the 0c/M4-M6 batch — the milestone table above can now read the review
+  checkpoint as done, not deferred.
+
 - **2026-09-01 (M7-M11 live visual-diff, fourth addendum — close-out)** — Two final
   items from the outstanding list. First, a correction: the earlier-recorded
   "calculations footer doesn't update live without reload" finding was re-tested more

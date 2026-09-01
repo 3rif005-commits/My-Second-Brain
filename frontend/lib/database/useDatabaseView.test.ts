@@ -130,6 +130,65 @@ describe("useDatabaseView", () => {
     expect(body).toEqual({ filter: null, sorts: [] });
   });
 
+  // Review checkpoint (Phase 0c/M4/M5/M6): `view.filter` can be a MID-EDIT
+  // state — "+ Add advanced filter" persists an empty group, picking a
+  // property persists a condition with no value yet — since this app writes
+  // the filter tree to the view on every builder edit, with no separate
+  // draft. Before this fix, either state 400'd `POST .../query` (the
+  // backend's `FilterGroup` requires >=1 child, and `coerce_value` rejects
+  // a missing value), silently — `loadRows`'s own catch sets `error`, which
+  // the component only ever surfaces while `!database`, so once the
+  // database has loaded, rows/groups just stop updating with no visible
+  // sign anything went wrong.
+  it("sends `filter: null` (not a 400) when the view's persisted filter is an empty group", async () => {
+    const view: ViewResponse = { ...TABLE_VIEW, filter: { type: "group", op: "and", children: [] } };
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(detail([view])));
+      if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({ rows: ROWS }));
+      }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+
+    await waitFor(() => expect(result.current.rows).toHaveLength(2));
+    expect(result.current.error).toBeNull();
+
+    const queryCall = fetchMock.mock.calls.find(([url]) => url === "/api/db/data-sources/ds-1/query");
+    const body = JSON.parse((queryCall![1] as RequestInit).body as string);
+    expect(body.filter).toBeNull();
+  });
+
+  it("sends `filter: null` when a freshly-picked property's condition has no value yet", async () => {
+    const view: ViewResponse = {
+      ...TABLE_VIEW,
+      filter: { type: "condition", property: "status", operator: "equals" },
+    };
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(detail([view])));
+      if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+        return Promise.resolve(jsonResponse({ rows: ROWS }));
+      }
+      if (url === "/api/db/data-sources/ds-1/templates") return Promise.resolve(jsonResponse([]));
+      if (url === "/api/db/data-sources/ds-1/automations") return Promise.resolve(jsonResponse([]));
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+
+    await waitFor(() => expect(result.current.rows).toHaveLength(2));
+    expect(result.current.error).toBeNull();
+
+    const queryCall = fetchMock.mock.calls.find(([url]) => url === "/api/db/data-sources/ds-1/query");
+    const body = JSON.parse((queryCall![1] as RequestInit).body as string);
+    expect(body.filter).toBeNull();
+  });
+
   it("sets an error when the initial load fails", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(jsonResponse({ detail: "database not found" }, 404))

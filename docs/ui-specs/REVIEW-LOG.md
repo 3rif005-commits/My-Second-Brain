@@ -159,3 +159,114 @@ finding vs. nine), consistent with M7-M11 reusing more already-reviewed primitiv
 patterns than M1-M3 did while those patterns were still being established.
 
 Frontend 873 tests green (was 872), `tsc` clean.
+
+---
+
+## Checkpoint 3 — Phase 0c, M4, M5, M6 (2026-09-01, deferred checkpoint run for real)
+
+The plan's own review checkpoint for this batch (`a7e802f..dffd372`: Phase 0c's
+grouping-engine wiring, M4's filter builder, M5's sort panel, M6's group panel +
+grouped Table rendering) had been explicitly **deferred** — the same file's own log
+records a `/code-review high` attempt that fanned into parallel subagents and mostly
+hit the account's rate limit, producing only one usable finding (already applied: the
+`tableData`/`peekRow` memoization). Run for real this time as a manual read-through,
+same style as Checkpoint 2 — no subagents, no `/code-review high`/`max` — over
+`git diff --stat a7e802f..dffd372` (24 files, +3476/-187) scoped to the code the four
+milestones actually touched: `filterAst.ts`/`filterOperators.ts` (new), `FilterBuilder.tsx`/
+`GroupBuilder.tsx`/`SortRowsList.tsx`/`QueryBar.tsx` (new), `ColumnHeaderMenu.tsx`,
+`DatabaseShell.tsx`, `ViewSettingsSidebar.tsx`, `ViewToolbar.tsx`, `ViewTabs.tsx`,
+`views/ChartView.tsx`, `views/TableView.tsx`, `types.ts`. One correction carried in per
+this checkpoint's own briefing: `M4-M6-VISUAL-DIFF.md`'s "every top-level toolbar
+Popover rendered off-screen" note is **not** a live-finding here — it was root-caused
+and fixed in a later commit on this branch (`3b4a079`, missing `forwardRef` on
+`ToolbarButton`/`Chip`), so it is not re-reported.
+
+Every operator/type table this batch introduced was cross-checked byte-for-byte
+against its backend mirror before trusting it (`filterOperators.ts`'s `TYPE_OPERATORS`
+against `operators.py`'s `_FAMILIES`; `types.ts`'s widened `GROUPABLE_PROPERTY_TYPES`
+against `grouping.py`'s `_NOT_GROUPABLE`/`REGISTRY`) — both matched exactly, no drift
+found in either mirror.
+
+### Fixed
+
+1. **A filter tree can be, and routinely is, mid-edit — and this app has no separate
+   "draft" for that: every `FilterBuilder.tsx` edit writes straight to `view.filter`
+   via `DatabaseShell.queueFilterUpdate`'s immediate PATCH.** Two ordinary, easily
+   reached mid-edit states are syntactically incomplete by the backend's own contract:
+   - `FilterBuilder.tsx`'s "+ Add advanced filter" (stage 1) and "Add filter group"
+     (stage 2) both write `{ type: "group", op: "and", children: [] }` **before any
+     rule is ever added** — exactly what `FilterBuilder.test.tsx` already asserts
+     (`"+ Add advanced filter starts an empty group builder"`, `"...nests an indented
+     group"`). `ast.py`'s `FilterGroup.children` is `Field(min_length=1)`.
+   - Picking a property from the stage-1 picker writes `defaultConditionFor(property)`
+     immediately — a condition with the type's first operator and **no `value`** —
+     before the user has typed anything into the value editor. `operators.py`'s
+     `coerce_value` rejects a missing value for every `arg_type` except `"none"`.
+
+   Neither is rejected at PATCH time — `routers/databases.py`'s `update_view` writes
+   `filter`/`config`/etc. verbatim, with **no** `ast.parse_filter` call; that only runs
+   inside `POST .../query`. So the write succeeds, `useDatabaseView`'s `loadRows`
+   effect (keyed on `activeView.filter`) immediately re-fires the query, the backend
+   400s, and the failure is **completely silent**: `loadRows().catch(e => setError(...))`
+   sets the hook's `error` state, but `DatabaseShell.tsx` only ever renders it while
+   `error && !database` — once the database has already loaded (true the instant this
+   is reachable), the 400 has no toast, no banner, nothing. Rows/groups simply stop
+   updating until the rule is completed or removed, with no indication anything broke.
+   `M4-M6-VISUAL-DIFF.md`'s own live run likely hit this and didn't notice: it types a
+   value fast enough after picking a property that the momentary 400 self-corrected
+   before anyone looked, and its own "no console errors" check wouldn't have caught it
+   either (`useDatabaseView.ts` never `console.error`s a failed query).
+
+   Fixed with `sanitizeFilterForQuery` (new, `filterAst.ts`) — strips any condition
+   whose operator needs a value it doesn't have (or an empty `str_or_list` array) and
+   any group left with zero children after its own children are stripped, recursively.
+   `useDatabaseView.loadRows` now runs `activeView.filter` through it (with `properties`
+   in scope) before it ever reaches `POST .../query`, treating an incomplete rule as
+   "not filtering yet" rather than an error. **Deliberately does not touch what's
+   persisted** — `view.filter` keeps the in-progress node so the builder keeps showing
+   it for editing; only the compiled request changes. Regression tests: 8 new cases in
+   `filterAst.test.ts` (empty group, group whose only child is incomplete, group that
+   keeps its complete children and drops its incomplete ones, a none-arg-type condition
+   with no value staying intact, empty-array `str_or_list` treated as no value) plus 2
+   end-to-end cases in `useDatabaseView.test.ts` asserting the actual `POST .../query`
+   body sends `filter: null` for both mid-edit shapes above, not the raw persisted
+   value.
+
+### Checked, not fixed (no defect found)
+
+- `filterOperators.ts`'s `TYPE_OPERATORS` mirrors `operators.py`'s `_FAMILIES` exactly,
+  key for key, operator for operator (title/rich_text/url/email/phone_number → text;
+  number/unique_id → number; select/status → the same select ops; multi_select;
+  checkbox; date/created_time/last_edited_time; people/created_by/last_edited_by;
+  files; relation; verification) — no drift in the hand-kept mirror.
+- `types.ts`'s widened `GROUPABLE_PROPERTY_TYPES` (17 entries) is exactly
+  `REGISTRY`'s 24 real type keys minus `grouping._NOT_GROUPABLE`'s 6
+  (files/rollup/unique_id/verification/button/place) minus `formula` — verified by
+  listing both sides, not just reading the comment's claim.
+- `defaultGroupMode`/`defaultGroupBySpec` (types.ts) are the single place `status`
+  (`mode: "option"`), the three date types (`mode: "month"`), and the five text types
+  (`mode: "exact"`) get their required mode — checked all four call sites
+  (`DatabaseShell.handleCreateView`, `ColumnHeaderMenu`'s Group row, `GroupBuilder.tsx`,
+  `ChartView.buildChartViewConfig`) route through it rather than re-deriving their own
+  copy; none do.
+- `GroupBuilder.tsx`'s `group_by` writes go through `onPatchConfig` (a mergeable
+  `config` patch), not `queueFilterUpdate`'s whole-value-replace path — a `GroupBySpec`
+  is always built by `defaultGroupBySpec`/`patchGroupBy`, both of which only ever
+  produce backend-legal shapes, so there is no equivalent "invalid state persisted"
+  window for grouping the way there was for filtering.
+- `TableView.tsx`'s `groupValueForNewRow` pre-fill values checked against their
+  actual `PropertyValue` wrapper shapes (`TitleValue`/`SelectValue`/etc. in `types.ts`)
+  and against the grouping
+  engine's real bucket keys (`grouping.py`'s `_group_by_checkbox`'s `"true"`/`"false"`
+  keys) — all correct. The text-family pre-fill (writing the group key back as the
+  literal value) is only correct because `defaultGroupBySpec` always sets
+  `mode: "exact"` for text types and no UI path ever sets `mode: "alphabet_prefix"`
+  (group-panel.md's own noted gap) — if that mode ever becomes reachable, this
+  pre-fill would need gating on it too; noted here since it isn't obvious from either
+  file alone.
+- `SortRowsList.tsx`/`GroupBuilder.tsx`'s drag-reorder writers (`reorderSorts`,
+  `reorderGroups`) both compute their next value from `onSetSorts`/`onPatchGroupBy`'s
+  own queue-latest semantics, not a render-time closure — no stale-write race.
+
+Frontend 887 tests green (was 877 before this checkpoint's own regression tests;
++10: 8 in `filterAst.test.ts`, 2 in `useDatabaseView.test.ts`), `tsc` clean.

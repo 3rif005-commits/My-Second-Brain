@@ -33,6 +33,7 @@ import type {
   ViewResponse,
 } from "./types";
 import { getQueryExtras } from "./types";
+import { asFilterNode, sanitizeFilterForQuery } from "./filterAst";
 
 /** Best-effort extraction of a human-readable message from a failed
  * fetch's body — FastAPI's HTTPException responses are `{"detail": "..."}`,
@@ -159,8 +160,18 @@ export function useDatabaseView(databaseId: string) {
    * before Chart existed). */
   const loadRows = useCallback(async () => {
     if (!dataSource || !activeView) return;
+    // `activeView.filter` may be MID-EDIT (an empty "+ Add advanced filter"
+    // group, a freshly-picked property with no value typed yet) — this app
+    // persists the filter tree to `view.filter` on every edit rather than
+    // keeping a separate draft, so `sanitizeFilterForQuery` strips anything
+    // the compiler would 400 on before it ever reaches the query endpoint.
+    // See its own doc comment (filterAst.ts) for why: without this, every
+    // such moment silently stopped rows from updating (the 400 landed in
+    // `error`, which the render below never surfaces once a database has
+    // already loaded).
+    const sanitizedFilter = sanitizeFilterForQuery(asFilterNode(activeView.filter ?? null), properties);
     const body: Record<string, unknown> = {
-      filter: activeView.filter ?? null,
+      filter: sanitizedFilter,
       sorts: activeView.sorts ?? [],
       ...getQueryExtras(activeView),
     };
@@ -182,7 +193,7 @@ export function useDatabaseView(databaseId: string) {
       setGroups(null);
       setAggregates(data.aggregates ?? null);
     }
-  }, [dataSource, activeView]);
+  }, [dataSource, activeView, properties]);
 
   useEffect(() => {
     loadRows().catch((e) => {

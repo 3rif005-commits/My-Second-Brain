@@ -12,7 +12,7 @@
 // on every render, so a path is only ever used within the same render pass
 // that produced it (no path is ever held across a re-render).
 import type { FilterOperator } from "./filterOperators";
-import { isFilterableType, operatorsForType } from "./filterOperators";
+import { isFilterableType, operatorFor, operatorsForType } from "./filterOperators";
 import type { PropertyResponse } from "./types";
 
 export interface FilterCondition {
@@ -130,4 +130,43 @@ export function defaultConditionFor(property: PropertyResponse): FilterCondition
  * filter tree don't need a second import from filterOperators.ts. */
 export function isFilterableProperty(property: Pick<PropertyResponse, "type">): boolean {
   return isFilterableType(property.type);
+}
+
+/** Drops every node the backend would 400 on before `POST .../query` ever
+ * sees it — a `FilterGroup` with zero children (`ast.py`'s
+ * `Field(min_length=1)`) or a `FilterCondition` whose operator needs a
+ * value it doesn't have yet (`operators.py`'s `coerce_value`, e.g. "Is"
+ * with no value typed in). Both are ordinary, reachable MID-EDIT states —
+ * "+ Add advanced filter" starts an intentionally empty group
+ * (FilterBuilder.tsx), and picking a property applies its default operator
+ * before any value has been entered — and this app persists the filter
+ * tree to `view.filter` on every edit (there is no separate "draft" state
+ * a half-built rule could live in instead), so without this pass every
+ * such mid-edit moment reaches the compiler and 400s the row query, which
+ * `useDatabaseView.loadRows` catches into `error` and never surfaces (no
+ * toast, no visible banner once a database has already loaded) — rows just
+ * silently stop updating until the rule is completed or removed. This
+ * function does NOT touch what's persisted (`view.filter` keeps the
+ * in-progress node so the builder keeps showing it to edit) — only what's
+ * actually sent to the query endpoint; an incomplete rule is treated as not
+ * filtering yet, not as an error. */
+export function sanitizeFilterForQuery(
+  node: FilterNode | null,
+  properties: PropertyResponse[]
+): FilterNode | null {
+  if (!node) return null;
+  if (isFilterCondition(node)) {
+    const property = properties.find((p) => p.key === node.property);
+    const operator = operatorFor(property?.type ?? "", node.operator);
+    if (!operator) return null;
+    if (operator.argType === "none") return node;
+    if (node.value === undefined || node.value === null) return null;
+    if (Array.isArray(node.value) && node.value.length === 0) return null;
+    return node;
+  }
+  const children = node.children
+    .map((child) => sanitizeFilterForQuery(child, properties))
+    .filter((child): child is FilterNode => child !== null);
+  if (children.length === 0) return null;
+  return { ...node, children };
 }

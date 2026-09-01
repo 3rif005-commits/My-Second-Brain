@@ -6,6 +6,7 @@ import {
   defaultConditionFor,
   isFilterableProperty,
   removeAtPath,
+  sanitizeFilterForQuery,
   updateAtPath,
   type FilterCondition,
   type FilterGroup,
@@ -142,5 +143,63 @@ describe("defaultConditionFor / isFilterableProperty", () => {
     for (const type of ["title", "rich_text", "number", "select", "multi_select", "status", "date", "checkbox", "url", "files"]) {
       expect(isFilterableProperty(prop({ type }))).toBe(true);
     }
+  });
+});
+
+// Review checkpoint (Phase 0c/M4/M5/M6): the compiler 400s on a FilterGroup
+// with zero children (ast.py's `Field(min_length=1)`) and on a condition
+// whose operator needs a value it doesn't have (operators.py's
+// `coerce_value`) — both are ordinary mid-edit states this app persists to
+// `view.filter` directly (no separate draft), so `loadRows` was silently
+// breaking every time "+ Add advanced filter" ran, or a property was picked
+// but its value not yet typed. `sanitizeFilterForQuery` is what
+// `useDatabaseView.loadRows` now runs the filter through before it ever
+// reaches `POST .../query`.
+describe("sanitizeFilterForQuery", () => {
+  const properties = [prop({ key: "kind", type: "select" }), prop({ key: "count", type: "number" })];
+
+  it("null stays null", () => {
+    expect(sanitizeFilterForQuery(null, properties)).toBeNull();
+  });
+
+  it("drops a freshly-picked condition with no value yet", () => {
+    const node: FilterCondition = { type: "condition", property: "kind", operator: "equals" };
+    expect(sanitizeFilterForQuery(node, properties)).toBeNull();
+  });
+
+  it("keeps a none-arg-type condition (is_empty) with no value", () => {
+    const node: FilterCondition = { type: "condition", property: "kind", operator: "is_empty" };
+    expect(sanitizeFilterForQuery(node, properties)).toEqual(node);
+  });
+
+  it("keeps a condition once it has a real value", () => {
+    const node: FilterCondition = { type: "condition", property: "count", operator: "equals", value: 3 };
+    expect(sanitizeFilterForQuery(node, properties)).toEqual(node);
+  });
+
+  it("drops an empty str_or_list array value, same as no value", () => {
+    const node: FilterCondition = { type: "condition", property: "kind", operator: "equals", value: [] };
+    expect(sanitizeFilterForQuery(node, properties)).toBeNull();
+  });
+
+  it("an empty group (\"+ Add advanced filter\", not yet given a rule) sanitizes to null", () => {
+    const node: FilterGroup = { type: "group", op: "and", children: [] };
+    expect(sanitizeFilterForQuery(node, properties)).toBeNull();
+  });
+
+  it("a group with only incomplete children sanitizes to null, not an empty-children group", () => {
+    const node: FilterGroup = {
+      type: "group",
+      op: "and",
+      children: [{ type: "condition", property: "kind", operator: "equals" }],
+    };
+    expect(sanitizeFilterForQuery(node, properties)).toBeNull();
+  });
+
+  it("a group keeps only its complete children", () => {
+    const complete: FilterCondition = { type: "condition", property: "count", operator: "equals", value: 3 };
+    const incomplete: FilterCondition = { type: "condition", property: "kind", operator: "equals" };
+    const node: FilterGroup = { type: "group", op: "and", children: [complete, incomplete] };
+    expect(sanitizeFilterForQuery(node, properties)).toEqual({ type: "group", op: "and", children: [complete] });
   });
 });
