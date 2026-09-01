@@ -471,7 +471,12 @@ export function TableView({
   // present in `data`, so the grouped render below (which looks up each
   // group's rows individually, same `table.getRow` technique the sub-item
   // tree branch already uses) needs every grouped row flattened back in.
-  const tableData = groups ? groups.flatMap((g) => g.rows) : rows;
+  // `useMemo`, not a bare re-derive: TableView owns several unrelated bits of
+  // local state (peek, template menu, group collapse, …), and a fresh
+  // `.flatMap()` array identity on every one of those renders would make
+  // `useReactTable` treat `data` as changed and rebuild its row model for no
+  // reason (review-checkpoint finding).
+  const tableData = useMemo(() => (groups ? groups.flatMap((g) => g.rows) : rows), [groups, rows]);
   const table = useReactTable({
     data: tableData,
     columns,
@@ -607,7 +612,10 @@ export function TableView({
     }
   }
 
-  const peekRow = peekRowId ? rows.find((r) => r.id === peekRowId) : undefined;
+  // `useMemo`: an unmemoized `.find()` over every row would re-run on every
+  // render this component makes for unrelated reasons (review-checkpoint
+  // finding, same class as `tableData` above).
+  const peekRow = useMemo(() => (peekRowId ? rows.find((r) => r.id === peekRowId) : undefined), [peekRowId, rows]);
 
   // Shared between the flat table and M6's grouped rendering below — "every
   // group repeats the full column header row" (group-panel.md) means this
