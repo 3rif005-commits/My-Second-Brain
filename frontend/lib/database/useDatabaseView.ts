@@ -481,7 +481,9 @@ export function useDatabaseView(databaseId: string) {
   }
 
   /** Fields `PATCH /db/databases/{id}` (Phase 0b, B2) accepts. */
-  type DatabasePatch = Partial<Pick<DatabaseResponse, "title" | "icon" | "description" | "cover_url">>;
+  type DatabasePatch = Partial<
+    Pick<DatabaseResponse, "title" | "icon" | "description" | "cover_url" | "is_locked">
+  >;
 
   /** `PATCH /db/databases/{id}` (Phase 0b, B2) — M8's title/icon/description.
    * Mirrors `updateView` above exactly. */

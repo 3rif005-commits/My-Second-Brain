@@ -23,6 +23,7 @@ import { ChartView } from "./views/ChartView";
 import { FormView } from "./views/FormView";
 import { DashboardView } from "./views/DashboardView";
 import { ViewTabs } from "./ViewTabs";
+import { DatabaseHeader } from "./DatabaseHeader";
 import { ViewToolbar } from "./ViewToolbar";
 import { ViewSettingsSidebar } from "./ViewSettingsSidebar";
 import { DatabaseSettingsMenu } from "./DatabaseSettingsMenu";
@@ -490,22 +491,18 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     <div className="flex flex-col h-full bg-white dark:bg-gray-900">
       {/* Header */}
       <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
-        <div className="flex items-center gap-2">
-          {database.icon && <span className="text-lg leading-none">{database.icon}</span>}
-          <h1 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            {database.title}
-          </h1>
-          {dataSource.is_virtual && (
-            <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
-              Read only
-            </span>
-          )}
-          {/* All Notes has no db_properties/db_views rows to configure at
-           * all (it's synthesized from COLUMN_BACKED, routers/databases.py)
-           * — hidden rather than shown-disabled, same "not merely disabled"
-           * rule the relation controls follow. */}
-          {editable && (
-            <div className="ml-auto">
+        <DatabaseHeader
+          database={database}
+          dataSource={dataSource}
+          editable={editable}
+          onUpdate={updateDatabase}
+          onDelete={deleteDatabase}
+          // All Notes has no db_properties/db_views rows to configure at
+          // all (it's synthesized from COLUMN_BACKED, routers/databases.py)
+          // — hidden rather than shown-disabled, same "not merely disabled"
+          // rule the relation controls follow.
+          trailing={
+            editable ? (
               <DatabaseSettingsMenu
                 dataSourceId={dataSourceId}
                 properties={properties}
@@ -521,9 +518,9 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
                 onUpdateAutomation={updateAutomation}
                 onDeleteAutomation={deleteAutomation}
               />
-            </div>
-          )}
-        </div>
+            ) : undefined
+          }
+        />
 
         <ViewTabs
           views={views}
