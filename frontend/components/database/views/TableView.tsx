@@ -53,6 +53,8 @@ import {
   orderProperties,
 } from "@/lib/database/viewConfig";
 import type { SortsUpdater } from "@/lib/database/viewConfig";
+import { defaultConditionFor } from "@/lib/database/filterAst";
+import type { FilterUpdater } from "../FilterBuilder";
 import { useOpenNote } from "@/lib/database/useOpenNote";
 import { buildSubItemTree } from "@/lib/database/subItemTree";
 import { ButtonPropertyConfigPopover } from "../ButtonPropertyConfigPopover";
@@ -60,6 +62,7 @@ import { OpenNoteButton } from "../OpenNoteButton";
 import { RowPeek } from "../RowPeek";
 import { ColumnHeader } from "../ColumnHeader";
 import { AddPropertyPopover } from "../AddPropertyPopover";
+import { QueryBar } from "../QueryBar";
 
 interface TableViewProps {
   properties: PropertyResponse[];
@@ -128,6 +131,9 @@ interface TableViewProps {
    * its serialised queue. */
   onPatchConfig?: (patch: Record<string, unknown>) => void;
   onSetSorts?: (updater: SortsUpdater) => void;
+  /** M4: the query bar (sort/filter chips) and each column header's
+   * "Filter" row both write here. */
+  onSetFilter?: (updater: FilterUpdater) => void;
   /** useDatabaseView's `instantiateTemplate` — creates a row from a chosen
    * (non-default) template right now. Does not itself refetch rows; this
    * component calls `refetchRows` afterward, same as `handleAddRow` does
@@ -166,6 +172,7 @@ export function TableView({
   view,
   onPatchConfig,
   onSetSorts,
+  onSetFilter,
 }: TableViewProps) {
   const { showToast } = useToast();
   const openNote = useOpenNote();
@@ -358,6 +365,13 @@ export function TableView({
                       onPatchConfig={onPatchConfig}
                       onSetSorts={onSetSorts}
                       onPropertiesChanged={() => refetch?.()}
+                      // M4: applies a default filter on THIS property
+                      // immediately, replacing whatever filter existed —
+                      // same "groups by that property immediately" replace
+                      // semantics M1's own "Group" row already established.
+                      onFilter={
+                        onSetFilter ? () => onSetFilter(() => defaultConditionFor(property)) : undefined
+                      }
                     />
                   )
                 : property.name,
@@ -396,6 +410,7 @@ export function TableView({
       view,
       onPatchConfig,
       onSetSorts,
+      onSetFilter,
     ]
   );
 
@@ -465,7 +480,11 @@ export function TableView({
 
   return (
     <>
-    <div className="overflow-auto h-full">
+    <div className="flex h-full flex-col">
+      {view && onSetSorts && onSetFilter && (
+        <QueryBar view={view} properties={allOrderedProperties} onSetSorts={onSetSorts} onSetFilter={onSetFilter} />
+      )}
+      <div className="overflow-auto flex-1 min-h-0">
       <table className="w-full border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-white dark:bg-gray-900">
           {table.getHeaderGroups().map((headerGroup) => (
@@ -656,6 +675,7 @@ export function TableView({
           )}
         </tbody>
       </table>
+      </div>
     </div>
     {peekRow && (
       <RowPeek

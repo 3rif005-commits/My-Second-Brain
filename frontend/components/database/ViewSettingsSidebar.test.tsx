@@ -85,6 +85,7 @@ function setup(overrides: Partial<Parameters<typeof ViewSettingsSidebar>[0]> = {
   const onPropertiesChanged = vi.fn();
   const onDatabaseChanged = vi.fn();
   const onSetSorts = vi.fn();
+  const onSetFilter = vi.fn();
   const onClose = vi.fn();
   render(
     <ViewSettingsSidebar
@@ -100,6 +101,7 @@ function setup(overrides: Partial<Parameters<typeof ViewSettingsSidebar>[0]> = {
       onPropertiesChanged={onPropertiesChanged}
       onDatabaseChanged={onDatabaseChanged}
       onSetSorts={onSetSorts}
+      onSetFilter={onSetFilter}
       automations={[]}
       onCreateAutomation={vi.fn()}
       onUpdateAutomation={vi.fn()}
@@ -107,7 +109,7 @@ function setup(overrides: Partial<Parameters<typeof ViewSettingsSidebar>[0]> = {
       {...overrides}
     />
   );
-  return { onPatchConfig, onUpdateView, onPropertiesChanged, onDatabaseChanged, onSetSorts, onClose };
+  return { onPatchConfig, onUpdateView, onPropertiesChanged, onDatabaseChanged, onSetSorts, onSetFilter, onClose };
 }
 
 beforeEach(() => {
@@ -180,6 +182,19 @@ describe("ViewSettingsSidebar", () => {
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Search for a property…")).toBeInTheDocument();
     expect(screen.getByText("Hide all")).toBeInTheDocument();
+  });
+
+  it("clicking Filter pushes the real property picker (M4), not a placeholder", async () => {
+    const user = userEvent.setup();
+    const { onSetFilter } = setup();
+    await user.click(screen.getByText("Filter"));
+
+    expect(screen.getByPlaceholderText("Filter by…")).toBeInTheDocument();
+    await user.click(screen.getByText("Kind"));
+
+    expect(onSetFilter).toHaveBeenCalledTimes(1);
+    const updater = onSetFilter.mock.calls[0][0];
+    expect(updater(null)).toEqual({ type: "condition", property: "kind", operator: "equals" });
   });
 
   it("toggling a property's eye in Property visibility patches hidden_properties", async () => {
@@ -324,6 +339,7 @@ describe("ViewSettingsSidebar", () => {
         onPropertiesChanged={vi.fn()}
         onDatabaseChanged={vi.fn()}
         onSetSorts={vi.fn()}
+        onSetFilter={vi.fn()}
         automations={[]}
         onCreateAutomation={vi.fn()}
         onUpdateAutomation={vi.fn()}
@@ -346,6 +362,7 @@ describe("ViewSettingsSidebar", () => {
         onPropertiesChanged={vi.fn()}
         onDatabaseChanged={vi.fn()}
         onSetSorts={vi.fn()}
+        onSetFilter={vi.fn()}
         automations={[]}
         onCreateAutomation={vi.fn()}
         onUpdateAutomation={vi.fn()}

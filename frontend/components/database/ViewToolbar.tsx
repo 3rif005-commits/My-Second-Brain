@@ -5,23 +5,25 @@
 // AI Autofill · Search · Settings, at the right of the view-tabs row.
 //
 // Filter and Sort reuse the EXACT SAME MenuPanel data ViewSettingsSidebar
-// pushes for its own Filter/Sort rows (`sortPanel`/`placeholderPanel`,
-// exported from there) — hosted here as a popover flyout instead of a
-// pushed sidebar panel. Two entry points, one panel-as-data, which is the
-// whole argument for building panels this way.
+// pushes for its own Filter/Sort rows (`filterPanel` from FilterBuilder.tsx,
+// `sortPanel` exported from ViewSettingsSidebar.tsx) — hosted here as a
+// popover flyout instead of a pushed sidebar panel. Two entry points, one
+// panel-as-data, which is the whole argument for building panels this way.
 //
 // Automations reuses the existing AutomationManager modal directly rather
 // than growing a second entry point's worth of bespoke UI. AI Autofill and
 // Search have no real surface behind them yet (AI Autofill: out of scope for
 // this app; Search: view-options-panel.md marks it TBD) — both disabled with
 // a reason, the "disabled, not missing" convention this branch uses
-// everywhere else for the same situation (e.g. M1's Filter row before M4).
+// everywhere else for the same situation.
 import { useState } from "react";
 import { ArrowUpDown, Filter as FilterIcon, Search as SearchIcon, Settings, Sparkles, Wand2 } from "lucide-react";
 import { MenuList, Popover } from "@/components/ui/primitives";
 import type { AutomationPatch, AutomationResponse, PropertyResponse, ViewResponse } from "@/lib/database/types";
 import type { Sort, SortsUpdater } from "@/lib/database/viewConfig";
-import { placeholderPanel, sortPanel } from "./ViewSettingsSidebar";
+import { asFilterNode, countConditions } from "@/lib/database/filterAst";
+import { sortPanel } from "./ViewSettingsSidebar";
+import { filterPanel, type FilterUpdater } from "./FilterBuilder";
 import { AutomationManager } from "./AutomationManager";
 
 function asSorts(raw: unknown[]): Sort[] {
@@ -38,6 +40,7 @@ export interface ViewToolbarProps {
   view: ViewResponse;
   properties: PropertyResponse[];
   onSetSorts: (updater: SortsUpdater) => void;
+  onSetFilter: (updater: FilterUpdater) => void;
   dataSourceId: string;
   automations: AutomationResponse[];
   onCreateAutomation: (name: string) => Promise<AutomationResponse>;
@@ -77,6 +80,7 @@ export function ViewToolbar({
   view,
   properties,
   onSetSorts,
+  onSetFilter,
   dataSourceId,
   automations,
   onCreateAutomation,
@@ -88,6 +92,7 @@ export function ViewToolbar({
   const [sortOpen, setSortOpen] = useState(false);
   const [automationsOpen, setAutomationsOpen] = useState(false);
   const sorts = asSorts(view.sorts ?? []);
+  const ruleCount = countConditions(asFilterNode(view.filter));
 
   return (
     <div className="ml-auto flex items-center gap-0.5" role="toolbar" aria-label="View toolbar">
@@ -96,10 +101,15 @@ export function ViewToolbar({
         onOpenChange={setFilterOpen}
         width="sm"
         label="Filter"
-        trigger={<ToolbarButton label="Filter" icon={<FilterIcon size={14} />} />}
+        trigger={
+          <ToolbarButton
+            label={ruleCount === 1 ? "1 rule" : ruleCount > 1 ? `${ruleCount} rules` : "Filter"}
+            icon={<FilterIcon size={14} />}
+          />
+        }
       >
         <MenuList
-          root={placeholderPanel("Filter", "Filters aren't available in this view yet.")}
+          root={filterPanel(properties, view.filter, onSetFilter)}
           nav="flyout"
           onClose={() => setFilterOpen(false)}
           label="Filter"

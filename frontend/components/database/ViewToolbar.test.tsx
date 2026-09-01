@@ -49,12 +49,14 @@ function view(overrides: Partial<ViewResponse> = {}): ViewResponse {
 
 function setup(overrides: Partial<Parameters<typeof ViewToolbar>[0]> = {}) {
   const onSetSorts = vi.fn();
+  const onSetFilter = vi.fn();
   const onOpenSettings = vi.fn();
   render(
     <ViewToolbar
       view={view()}
       properties={PROPERTIES}
       onSetSorts={onSetSorts}
+      onSetFilter={onSetFilter}
       dataSourceId="ds-1"
       automations={[]}
       onCreateAutomation={vi.fn()}
@@ -64,7 +66,7 @@ function setup(overrides: Partial<Parameters<typeof ViewToolbar>[0]> = {}) {
       {...overrides}
     />
   );
-  return { onSetSorts, onOpenSettings };
+  return { onSetSorts, onSetFilter, onOpenSettings };
 }
 
 describe("ViewToolbar", () => {
@@ -88,11 +90,24 @@ describe("ViewToolbar", () => {
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("Filter opens the same 'not available yet' placeholder the sidebar's Filter row pushes", async () => {
+  it("Filter opens the property picker and picking one calls onSetFilter with a default condition", async () => {
     const user = userEvent.setup();
-    setup();
+    const { onSetFilter } = setup();
     await user.click(screen.getByRole("button", { name: "Filter" }));
-    expect(screen.getByText("Filters aren't available in this view yet.")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Filter by…")).toBeInTheDocument();
+
+    await user.click(screen.getByText("Name"));
+
+    expect(onSetFilter).toHaveBeenCalledTimes(1);
+    const updater = onSetFilter.mock.calls[0][0];
+    expect(updater(null)).toEqual({ type: "condition", property: "title", operator: "equals" });
+  });
+
+  it("the Filter button's label reflects the current rule count", () => {
+    setup({
+      view: view({ filter: { type: "condition", property: "title", operator: "equals" } }),
+    });
+    expect(screen.getByRole("button", { name: "1 rule" })).toBeInTheDocument();
   });
 
   it("Sort opens the sort panel and selecting a property calls onSetSorts", async () => {

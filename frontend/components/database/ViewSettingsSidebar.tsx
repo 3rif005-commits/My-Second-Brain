@@ -52,6 +52,8 @@ import { editPropertyPanel, hasEditableConfig } from "./EditPropertyPanel";
 import { propertyTypeIcon } from "./ColumnHeaderMenu";
 import { PropertyVisibilityPanel } from "./PropertyVisibilityPanel";
 import { SortRowsList } from "./SortRowsList";
+import { filterPanel } from "./FilterBuilder";
+import type { FilterUpdater } from "./FilterBuilder";
 import { ViewLayoutPanel } from "./ViewLayoutPanel";
 import { AutomationManager } from "./AutomationManager";
 
@@ -197,6 +199,7 @@ export interface ViewSettingsSidebarProps {
   onPropertiesChanged: () => void | Promise<void>;
   onDatabaseChanged: () => void | Promise<void>;
   onSetSorts: (updater: SortsUpdater) => void;
+  onSetFilter: (updater: FilterUpdater) => void;
   automations: AutomationResponse[];
   onCreateAutomation: (name: string) => Promise<AutomationResponse>;
   onUpdateAutomation: (id: string, patch: AutomationPatch) => Promise<AutomationResponse>;
@@ -216,6 +219,7 @@ export function ViewSettingsSidebar({
   onPropertiesChanged,
   onDatabaseChanged,
   onSetSorts,
+  onSetFilter,
   automations,
   onCreateAutomation,
   onUpdateAutomation,
@@ -347,7 +351,7 @@ export function ViewSettingsSidebar({
             id: "filter",
             icon: <FilterIcon size={14} />,
             label: "Filter",
-            submenu: () => placeholderPanel("Filter", "Filters aren't available in this view yet."),
+            submenu: () => filterPanel(properties, view.filter, onSetFilter),
           },
           {
             id: "sort",

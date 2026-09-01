@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getGroupBySpec, getSubGroupBySpec, isGroupablePropertyType } from "./types";
+import { getGroupBySpec, getQueryExtras, getSubGroupBySpec, isGroupablePropertyType } from "./types";
 
 describe("getGroupBySpec", () => {
   it("returns the spec when config.group_by has a property_key", () => {
@@ -53,5 +53,24 @@ describe("isGroupablePropertyType", () => {
     expect(isGroupablePropertyType("place")).toBe(false);
     // Deferred to Milestone 8 — needs the formula engine's result type first.
     expect(isGroupablePropertyType("formula")).toBe(false);
+  });
+});
+
+describe("getQueryExtras — table view (M6)", () => {
+  it("sends group_by when config.group_by is set", () => {
+    const view = { type: "table", config: { group_by: { property_key: "kind" } } };
+    expect(getQueryExtras(view)).toEqual({ group_by: { property_key: "kind" } });
+  });
+
+  it("sends {} when config.group_by is absent", () => {
+    expect(getQueryExtras({ type: "table", config: {} })).toEqual({});
+  });
+
+  it("never sends sub_group_by, even if present in config — Table has no sub-group control", () => {
+    const view = {
+      type: "table",
+      config: { group_by: { property_key: "kind" }, sub_group_by: { property_key: "status" } },
+    };
+    expect(getQueryExtras(view)).toEqual({ group_by: { property_key: "kind" } });
   });
 });

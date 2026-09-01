@@ -10,6 +10,8 @@ import { useDatabaseView } from "@/lib/database/useDatabaseView";
 import type { ViewResponse } from "@/lib/database/types";
 import { defaultGroupBySpec, getGroupBySpec, getSubGroupBySpec, getSubtaskDisplayMode } from "@/lib/database/types";
 import type { Sort, SortsUpdater } from "@/lib/database/viewConfig";
+import { asFilterNode } from "@/lib/database/filterAst";
+import type { FilterUpdater } from "./FilterBuilder";
 import { TableView } from "./views/TableView";
 import { BoardView } from "./views/BoardView";
 import { GalleryView } from "./views/GalleryView";
@@ -173,6 +175,44 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     [updateView, showToast]
   );
 
+  // Same hazard as `sorts`, one field over again — M4 flags it explicitly
+  // (filter-panel.md: "Two rapid filter edits must not lose the first").
+  // `filter` is also a separate `ViewPatch` field from `config` (whole-value
+  // REPLACE, not mergeable), reachable from the toolbar's Filter popover,
+  // the settings sidebar's Filter row, and (once wired) a column header's
+  // "Filter" row — three writers, same as `sorts`.
+  const latestFilterByViewRef = useRef<Map<string, Record<string, unknown> | null>>(new Map());
+  const queueFilterUpdate = useCallback(
+    (viewId: string, renderTimeFilter: Record<string, unknown> | null, updater: FilterUpdater) => {
+      const prevQueue = pendingPatchByViewRef.current.get(viewId) ?? Promise.resolve();
+      const nextQueue = prevQueue
+        .catch(() => undefined)
+        .then(async () => {
+          const base = latestFilterByViewRef.current.has(viewId)
+            ? (latestFilterByViewRef.current.get(viewId) ?? null)
+            : renderTimeFilter;
+          const next = updater(asFilterNode(base));
+          let updated: ViewResponse;
+          try {
+            updated = await updateView(viewId, { filter: next as Record<string, unknown> | null });
+          } catch (err) {
+            showToast(err instanceof Error ? err.message : "Could not filter", "error");
+            return undefined;
+          }
+          latestFilterByViewRef.current.set(viewId, updated.filter);
+          return updated;
+        })
+        .finally(() => {
+          if (pendingPatchByViewRef.current.get(viewId) === nextQueue) {
+            pendingPatchByViewRef.current.delete(viewId);
+          }
+        });
+      pendingPatchByViewRef.current.set(viewId, nextQueue);
+      return nextQueue;
+    },
+    [updateView, showToast]
+  );
+
   if (loading && !database) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500">
@@ -280,6 +320,8 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             // settings sidebar's Sort panel can all be reached in the same
             // session now, each computing its own next `sorts` array.
             onSetSorts={(updater) => queueSortsUpdate(activeView.id, activeView.sorts, updater)}
+            // M4: routed through queueFilterUpdate for the identical reason.
+            onSetFilter={(updater) => queueFilterUpdate(activeView.id, activeView.filter, updater)}
           />
         );
       case "board": {
@@ -492,6 +534,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
                 view={activeView}
                 properties={properties}
                 onSetSorts={(updater) => queueSortsUpdate(activeView.id, activeView.sorts, updater)}
+                onSetFilter={(updater) => queueFilterUpdate(activeView.id, activeView.filter, updater)}
                 dataSourceId={dataSourceId}
                 automations={automations}
                 onCreateAutomation={createAutomation}
@@ -521,6 +564,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
           onPropertiesChanged={refetch}
           onDatabaseChanged={refetch}
           onSetSorts={(updater) => queueSortsUpdate(activeView.id, activeView.sorts, updater)}
+          onSetFilter={(updater) => queueFilterUpdate(activeView.id, activeView.filter, updater)}
           automations={automations}
           onCreateAutomation={createAutomation}
           onUpdateAutomation={updateAutomation}

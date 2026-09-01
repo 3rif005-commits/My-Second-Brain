@@ -104,7 +104,18 @@ export interface DatabaseListResponse {
  * `ViewResponse.config.group_by`/`config.sub_group_by` — spec §10's "config
  * follows Notion's own Views API verbatim"). Only `property_key` is
  * required; everything else is per-type/optional exactly as the backend
- * dataclass documents. */
+ * dataclass documents.
+ *
+ * `group_order`/`group_order_manual`/`hidden_groups` (M6, 2026-09-01) are
+ * UI-only additions living on this SAME object, per group-panel.md's own
+ * capture (`config.group_by.group_order`, not a sibling config key) — but
+ * they must NEVER reach `POST .../query`'s `group_by` field as-is:
+ * `grouping.GroupBySpec` is a plain dataclass (`GroupBySpec(**body.
+ * group_by)`), which raises `TypeError` on any unknown kwarg, surfaced as a
+ * 400 that would break grouping entirely the moment any of these three is
+ * ever set. `backendGroupBySpec` below is the one place that strips them
+ * before a request goes out — every reader of this type must go through it
+ * rather than forwarding `config.group_by` verbatim. */
 export interface GroupBySpec {
   property_key: string;
   mode?: string;
@@ -113,6 +124,37 @@ export interface GroupBySpec {
   range_end?: number | null;
   range_size?: number | null;
   hide_empty_groups?: boolean;
+  /** Group ORDERING (group-panel.md §A) — distinct from the view's row
+   * `Sort`. Defaults to "manual" when absent. */
+  group_order?: "manual" | "alphabetical" | "reverse_alphabetical";
+  /** Explicit group key order for `group_order: "manual"` — groups not
+   * listed here (e.g. a brand new option) sort after the ones that are. */
+  group_order_manual?: string[];
+  /** Group keys hidden from the table (per-group visibility, group-
+   * panel.md's per-group 👁/👁̸ toggle) — independent of `hide_empty_groups`,
+   * which hides only groups with zero rows. */
+  hidden_groups?: string[];
+}
+
+const _BACKEND_GROUP_BY_KEYS = [
+  "property_key",
+  "mode",
+  "start_day_of_week",
+  "range_start",
+  "range_end",
+  "range_size",
+  "hide_empty_groups",
+] as const;
+
+/** The subset of `GroupBySpec` the backend's dataclass actually accepts —
+ * see this interface's own doc comment for why sending the UI-only fields
+ * verbatim would 400 every grouped query. */
+export function backendGroupBySpec(spec: GroupBySpec): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of _BACKEND_GROUP_BY_KEYS) {
+    if (spec[key] !== undefined) out[key] = spec[key];
+  }
+  return out;
 }
 
 /** JSON mirror of `GroupResult` (task-15's `QueryResponse.groups[]`).
@@ -239,8 +281,11 @@ export function getSubGroupBySpec(config: Record<string, unknown>): GroupBySpec 
  * request fields beyond `filter`/`sorts` gets one entry point here, keyed
  * on `view.type`. Board (task-16) sends `group_by`/`sub_group_by` verbatim
  * from `config.group_by`/`config.sub_group_by` (already `GroupBySpec`-
- * shaped, `property_key` and all). Chart (task-35) is a genuinely new
- * translation, not a reuse: its own `config.x_axis`/`config.y_axis`/
+ * shaped, `property_key` and all). Table (M6) sends `group_by` the same
+ * way, but never `sub_group_by` — group-panel.md's own live capture found
+ * no sub-group control in a table view (a plan assumption, corrected
+ * 2026-08-31), unlike Board which keeps it. Chart (task-35) is a genuinely
+ * new translation, not a reuse: its own `config.x_axis`/`config.y_axis`/
  * `config.stack_by` use Notion's own field name `property_id` (spec §10's
  * "config follows Notion's own Views API verbatim"), which has to be
  * renamed to `property_key` to match `GroupBySpec`/`AggregationSpec`'s own
@@ -248,12 +293,17 @@ export function getSubGroupBySpec(config: Record<string, unknown>): GroupBySpec 
  * type falls through to `{}` — byte-identical to before this function
  * existed. */
 export function getQueryExtras(view: Pick<ViewResponse, "type" | "config">): Record<string, unknown> {
-  if (view.type === "board") {
+  if (view.type === "board" || view.type === "table") {
     const extras: Record<string, unknown> = {};
     const groupBy = getGroupBySpec(view.config);
-    const subGroupBy = getSubGroupBySpec(view.config);
-    if (groupBy) extras.group_by = groupBy;
-    if (subGroupBy) extras.sub_group_by = subGroupBy;
+    // `backendGroupBySpec`, not `groupBy` verbatim — see GroupBySpec's own
+    // doc comment: M6's group_order/group_order_manual/hidden_groups live
+    // on this same object but would 400 the query if forwarded as-is.
+    if (groupBy) extras.group_by = backendGroupBySpec(groupBy);
+    if (view.type === "board") {
+      const subGroupBy = getSubGroupBySpec(view.config);
+      if (subGroupBy) extras.sub_group_by = subGroupBy;
+    }
     return extras;
   }
 
