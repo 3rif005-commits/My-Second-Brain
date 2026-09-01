@@ -49,8 +49,9 @@ import { isGroupablePropertyType } from "@/lib/database/types";
 import { getHiddenKeys, orderProperties, patchHidden } from "@/lib/database/viewConfig";
 import type { Sort, SortsUpdater } from "@/lib/database/viewConfig";
 import { editPropertyPanel, hasEditableConfig } from "./EditPropertyPanel";
-import { propertyTypeIcon, sortLabels } from "./ColumnHeaderMenu";
+import { propertyTypeIcon } from "./ColumnHeaderMenu";
 import { PropertyVisibilityPanel } from "./PropertyVisibilityPanel";
+import { SortRowsList } from "./SortRowsList";
 import { ViewLayoutPanel } from "./ViewLayoutPanel";
 import { AutomationManager } from "./AutomationManager";
 
@@ -99,42 +100,8 @@ function groupPanel(
   };
 }
 
-// ── §E Sort — multi-sort MVP (direction + remove per row); drag-reorder is M5 ──
-
-// `sorts` here is render-time state, used only to decide what to SHOW
-// (current direction, which properties are already excluded from the
-// picker). The actual WRITE below always goes through `onSetSorts`'s
-// updater form, so it mutates whatever DatabaseShell's queue knows is
-// LATEST when it runs — not this closure's possibly-stale snapshot. See
-// `SortsUpdater`'s own doc comment in lib/database/viewConfig.ts for the
-// bug this avoids (two sort surfaces open at once, second write clobbers
-// the first).
-function sortRowSubmenu(property: PropertyResponse, sorts: Sort[], onSetSorts: (updater: SortsUpdater) => void): MenuPanel {
-  const labels = sortLabels(property.type);
-  const current = sorts.find((s) => s.property === property.key);
-  const setDirection = (direction: "asc" | "desc") =>
-    onSetSorts((latest) => latest.map((s) => (s.property === property.key ? { ...s, direction } : s)));
-  return {
-    sections: [
-      {
-        rows: [
-          { id: "asc", label: labels.asc, checked: current?.direction === "asc", onSelect: () => setDirection("asc") },
-          { id: "desc", label: labels.desc, checked: current?.direction === "desc", onSelect: () => setDirection("desc") },
-        ],
-      },
-      {
-        rows: [
-          {
-            id: "remove",
-            label: "Remove sort",
-            danger: true,
-            onSelect: () => onSetSorts((latest) => latest.filter((s) => s.property !== property.key)),
-          },
-        ],
-      },
-    ],
-  };
-}
+// ── §E Sort — M5: drag-reorderable multi-sort, two independent per-row
+// dropdowns (property, direction) via SortRowsList.tsx's own DndContext. ──
 
 export function sortPanel(
   properties: PropertyResponse[],
@@ -160,22 +127,10 @@ export function sortPanel(
     return { title: "New sort", search: { placeholder: "Sort by…" }, sections: [{ rows: pickerRows }] };
   }
 
-  const sortRows: MenuRow[] = sorts.map((s) => {
-    const p = properties.find((pp) => pp.key === s.property);
-    const labels = p ? sortLabels(p.type) : { asc: "Ascending", desc: "Descending" };
-    return {
-      id: s.property,
-      icon: p ? propertyTypeIcon(p.type) : undefined,
-      label: p?.name ?? s.property,
-      value: s.direction === "asc" ? labels.asc : labels.desc,
-      submenu: p ? () => sortRowSubmenu(p, sorts, onSetSorts) : undefined,
-    };
-  });
-
   return {
     title: "Sort",
     sections: [
-      { rows: sortRows },
+      { rows: [], content: <SortRowsList sorts={sorts} properties={properties} onSetSorts={onSetSorts} /> },
       {
         rows: [
           {

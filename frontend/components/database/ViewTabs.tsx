@@ -21,7 +21,8 @@ interface ViewTabsProps {
   activeViewId: string;
   onSelect: (viewId: string) => void;
   /** Used to build the Board-creation "group by" dropdown — restricted to
-   * groupable types (select/status/multi_select) — and the Calendar/
+   * `GROUPABLE_PROPERTY_TYPES` (types.ts, widened past select/status/
+   * multi_select by Phase 0c) — and the Calendar/
    * Timeline-creation "date property" dropdown (both require the same
    * `date_property_id`, task-34-brief.md extending task-33's pattern),
    * restricted to `type === "date"`. Also handed to Chart-creation's own
@@ -205,7 +206,7 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
           {type === "board" &&
             (boardNeedsPropertyButHasNone ? (
               <span className="text-xs text-amber-600 dark:text-amber-400">
-                no groupable property yet — add a Select, Status, or Multi-select property first
+                no groupable property yet — add one first
               </span>
             ) : (
               <select

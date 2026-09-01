@@ -221,15 +221,25 @@ describe("ViewSettingsSidebar", () => {
 
   it("Group offers only groupable properties enabled, others greyed, and selecting one patches group_by", async () => {
     const user = userEvent.setup();
-    const { onPatchConfig } = setup();
+    // Local fixture, not the shared PROPERTIES array other tests assert a
+    // count against: `files` is genuinely ungroupable (`grouping.
+    // _NOT_GROUPABLE`), needed here to exercise the disabled-row case now
+    // that Phase 0c widened GROUPABLE_PROPERTY_TYPES to include rich_text.
+    const { onPatchConfig } = setup({
+      properties: [...PROPERTIES, prop({ key: "attachments", name: "Attachments", type: "files", position: 3 })],
+    });
     await user.click(screen.getByText("Group"));
 
     // "Kind" (select) is groupable — enabled.
     const kindRow = screen.getByText("Kind").closest('[role="option"]');
     expect(kindRow).not.toHaveAttribute("aria-disabled");
-    // "Notes" (rich_text) isn't groupable — disabled with a reason, not absent.
+    // "Notes" (rich_text) is groupable since Phase 0c widened
+    // GROUPABLE_PROPERTY_TYPES to match the engine's real support.
     const notesRow = screen.getByText("Notes").closest('[role="option"]');
-    expect(notesRow).toHaveAttribute("aria-disabled", "true");
+    expect(notesRow).not.toHaveAttribute("aria-disabled");
+    // "Attachments" (files) isn't — disabled with a reason, not absent.
+    const attachmentsRow = screen.getByText("Attachments").closest('[role="option"]');
+    expect(attachmentsRow).toHaveAttribute("aria-disabled", "true");
 
     await user.click(screen.getByText("Kind"));
     expect(onPatchConfig).toHaveBeenCalledWith({ group_by: { property_key: "kind" } });

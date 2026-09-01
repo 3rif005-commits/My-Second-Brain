@@ -91,7 +91,10 @@ describe("ViewTabs", () => {
         views={VIEWS}
         activeViewId="v1"
         onSelect={vi.fn()}
-        properties={[prop({ key: "notes", type: "rich_text" })]}
+        // `files` is genuinely ungroupable (`grouping._NOT_GROUPABLE`) —
+        // `rich_text` no longer is, since Phase 0c widened
+        // GROUPABLE_PROPERTY_TYPES to match the engine's real support.
+        properties={[prop({ key: "attachments", type: "files" })]}
         onCreateView={onCreateView}
       />
     );
@@ -99,9 +102,7 @@ describe("ViewTabs", () => {
     await user.click(screen.getByText("+ New view"));
     await user.selectOptions(screen.getByLabelText(/view type/i), "board");
 
-    expect(
-      screen.getByText(/no groupable property yet — add a Select, Status, or Multi-select property first/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/no groupable property yet — add one first/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: /^create$/i }));
