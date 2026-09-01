@@ -209,6 +209,45 @@ describe("MenuList push navigation (the config sidebar's model)", () => {
     await user.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  // Live-discovered running M3's checklist: dragging a row inside the pushed
+  // "Property visibility" panel wrote the new order (the table re-rendered
+  // correctly), but the PANEL ITSELF kept showing the pre-drag order until
+  // popped and pushed again — `stack` held a MenuPanel snapshotted at push
+  // time, and a parent re-render with fresh data never touched it. Root
+  // panel is exempt from that (it always reads the live `root` prop); this
+  // is the same guarantee extended to every pushed level.
+  it("a pushed panel re-derives from the live root — a host re-render is reflected without popping", async () => {
+    const user = userEvent.setup();
+    let order = ["Select", "Status"];
+    const dynamicPanel: MenuPanel = {
+      sections: [
+        {
+          rows: [
+            {
+              id: "by",
+              label: "Group by",
+              submenu: () => ({
+                sections: [{ rows: order.map((label) => ({ id: label, label })) }],
+              }),
+            },
+          ],
+        },
+      ],
+    };
+
+    const { rerender } = render(<MenuList root={dynamicPanel} nav="push" onClose={vi.fn()} />);
+    await user.click(screen.getByText("Group by"));
+    expect(screen.getByText("Select")).toBeInTheDocument();
+
+    // Simulate the host writing a reorder and re-rendering with fresh data —
+    // no pop/push, just a new `root` prop, exactly what a live drag does.
+    order = ["Status", "Select"];
+    rerender(<MenuList root={{ ...dynamicPanel }} nav="push" onClose={vi.fn()} />);
+
+    const rows = screen.getAllByRole("option").map((r) => r.textContent);
+    expect(rows).toEqual(["Status", "Select"]);
+  });
 });
 
 describe("MenuList search", () => {

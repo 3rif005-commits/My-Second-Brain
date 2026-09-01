@@ -114,7 +114,13 @@ export function ViewToolbar({
         label="Sort"
         trigger={
           <ToolbarButton
-            label={sorts.length === 1 ? `Sort: ${sorts[0].property}` : sorts.length > 1 ? `${sorts.length} sorts` : "Sort"}
+            label={
+              sorts.length === 1
+                ? `Sort: ${properties.find((p) => p.key === sorts[0].property)?.name ?? sorts[0].property}`
+                : sorts.length > 1
+                  ? `${sorts.length} sorts`
+                  : "Sort"
+            }
             icon={<ArrowUpDown size={14} />}
           />
         }

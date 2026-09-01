@@ -60,19 +60,46 @@ function matches(row: MenuRow, query: string): boolean {
   return row.label.toLowerCase().includes(query.toLowerCase());
 }
 
+/** Walks `root` through a path of row ids, calling each level's `submenu()`
+ * fresh, so a pushed panel is always derived from LIVE data rather than a
+ * snapshot frozen at push time. Stops early (shrinking the effective stack)
+ * if a row along the path has vanished or lost its submenu — a host whose
+ * data changed out from under an open path degrades to "as deep as still
+ * makes sense" rather than throwing. */
+function resolveStack(root: MenuPanel, ids: string[]): MenuPanel[] {
+  const out: MenuPanel[] = [];
+  let current = root;
+  for (const id of ids) {
+    const row = current.sections.flatMap((s) => s.rows).find((r) => r.id === id);
+    if (!row?.submenu) break;
+    current = row.submenu();
+    out.push(current);
+  }
+  return out;
+}
+
 export function MenuList({ root, nav = "flyout", onClose, label, side, dismissible = false }: MenuListProps) {
   // `push` keeps a stack so the back arrow has somewhere to go. `flyout`
   // never pushes — its submenus are nested Popovers rendered by the row.
-  // `stack` holds only the PUSHED panels. The base level always reads the
-  // live `root` prop rather than a snapshot.
   //
-  // This matters more than it looks: a host rebuilds its panel every render,
-  // so its row handlers close over current state. Snapshotting root into
-  // state on mount froze those closures — property creation POSTed the
-  // DEFAULT name because the handler still held the empty string from the
-  // first render. Any host whose panel depends on changing state would hit
-  // the same thing.
-  const [stack, setStack] = useState<MenuPanel[]>([]);
+  // State holds only the PATH of pushed row ids, never resolved MenuPanel
+  // objects. The panels themselves are re-resolved from the LIVE `root` on
+  // every render by walking that path (`resolveStack` below) — the same
+  // "the base level always reads live root, never a snapshot" rule the
+  // flyout side of this file already followed, extended to every pushed
+  // level too.
+  //
+  // Storing resolved panels here first (i.e. calling `row.submenu()` once,
+  // at push time, and keeping the result) was tried and is why this
+  // exists: a live drag-reorder inside a pushed panel (M3's Property
+  // visibility) wrote the new order through `onPatchConfig` — the HOST
+  // re-rendered with fresh data and a fresh `root`, but the ALREADY-PUSHED
+  // panel sitting in state was a frozen React element from the render that
+  // pushed it, so it kept showing the pre-drag order until popped and
+  // pushed again. Re-deriving from `root` by id every render is what makes
+  // a pushed panel behave exactly like the base level: always current.
+  const [stackIds, setStackIds] = useState<string[]>([]);
+  const stack = useMemo(() => resolveStack(root, stackIds), [root, stackIds]);
   const panel = stack.length > 0 ? stack[stack.length - 1] : root;
 
   const [query, setQuery] = useState("");
@@ -147,7 +174,7 @@ export function MenuList({ root, nav = "flyout", onClose, label, side, dismissib
     (row: MenuRow) => {
       if (row.disabled) return;
       if (row.submenu && nav === "push") {
-        setStack((s) => [...s, row.submenu!()]);
+        setStackIds((ids) => [...ids, row.id]);
         setQuery("");
         setActive(0);
         return;
@@ -161,7 +188,7 @@ export function MenuList({ root, nav = "flyout", onClose, label, side, dismissib
   );
 
   const pop = useCallback(() => {
-    setStack((s) => (s.length > 0 ? s.slice(0, -1) : s));
+    setStackIds((ids) => (ids.length > 0 ? ids.slice(0, -1) : ids));
     setQuery("");
     setActive(0);
   }, []);

@@ -105,9 +105,9 @@ describe("ViewToolbar", () => {
     expect(onSetSorts).toHaveBeenCalledWith([{ property: "title", direction: "asc" }]);
   });
 
-  it("the Sort button's label reflects the current sort state", () => {
+  it("the Sort button's label reflects the current sort state, by property NAME not its raw key", () => {
     setup({ view: view({ sorts: [{ property: "title", direction: "asc" }] }) });
-    expect(screen.getByRole("button", { name: "Sort: title" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sort: Name" })).toBeInTheDocument();
   });
 
   it("clicking Automations opens the automation manager", async () => {
