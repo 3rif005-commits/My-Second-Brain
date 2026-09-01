@@ -414,6 +414,25 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-01 (live checklist + deferred review checkpoint)** — Ran the live Chrome
+  checklist for 0c/M4/M5/M6 against a throwaway fixture database, inline (no
+  subagent) — see `M4-M6-VISUAL-DIFF.md` for the 14 screenshots and findings.
+  Confirmed live: 0c's widened groupable-types list, M6's grouped Table rendering
+  (collapse, per-group hide, group ordering, Remove grouping — each cross-checked
+  against the persisted `view.config` after the UI action), M4's filter builder
+  narrowing the table live, M5's type-aware sort label and the combined query bar's
+  chip order. One environment-scoped finding (not a product bug): every top-level
+  toolbar Popover rendered off-screen in this automation session specifically —
+  flagged as the one open question needing a real browser to answer. Applied one
+  concrete perf fix that surfaced along the way (`tableData`/`peekRow` in
+  `TableView.tsx` were unmemoized re-derives). **The plan's own "review checkpoint
+  (0c, M4–M6)" step is explicitly DEFERRED, not done** — a `/code-review high` attempt
+  this session fanned out into several parallel subagents that mostly hit the user's
+  own account-level rate limit and produced only one partial, useful finding (the
+  perf fix above) before failing; given real token constraints, a full review pass
+  was judged not worth its cost right now and is left for a session with more budget
+  to spend on it. Resume point: M7 (view tab bar) is next per the plan's milestone
+  table, unstarted.
 - **2026-09-01 (0c + M4–M6)** — Built the plan's next batch in one session: Phase 0c
   turned out to be already-done engine work, needing only the frontend wiring
   (`GROUPABLE_PROPERTY_TYPES` widened, `defaultGroupBySpec`/`defaultGroupMode` added);
