@@ -567,6 +567,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             onSelect={setActiveViewId}
             properties={properties}
             onCreateView={handleCreateView}
+            onCreateViewRaw={createView}
             dataSourceName={dataSource.name}
             onUpdateView={updateView}
             onDeleteView={deleteView}

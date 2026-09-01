@@ -718,6 +718,18 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-01 (M7-M11 live visual-diff, third addendum)** — Finished M7's own
+  Duplicate/Delete-view checklist items. Delete worked correctly on the first try.
+  Duplicate did not: the backend really did create the copy (confirmed via a direct DB
+  query), but the frontend never showed the new tab until reload — `ViewTabs.tsx`'s
+  `duplicateView` called `fetch()` directly instead of going through the hook's own
+  `createView`/`updateView` (the only two functions that call `setViews`). Fixed by
+  adding an `onCreateViewRaw` prop (the hook's bare `createView`) and routing through
+  it + the existing `onUpdateView`; confirmed live twice in a row (each duplicate
+  showing immediately, correctly selected, no reload) and added a regression test —
+  same coverage gap class as the "Edit view" bug two addenda back. `ViewTabs.test.tsx`
+  24/24, full suite 61 files / 877 tests green, `tsc` clean. Full write-up:
+  `M7-M11-VISUAL-DIFF.md`.
 - **2026-09-01 (M7-M11 live visual-diff, second addendum)** — Continued working
   through the items flagged as outstanding. Found and fixed one more real bug: the
   view tab bar was never actually suppressed for the read-only All Notes source

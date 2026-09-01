@@ -364,6 +364,35 @@ fixture — no options configured on `Mastery`), and typing a non-matching searc
 among the unbuilt cell editors; this just confirms it live rather than leaving it
 untested.
 
+### Real bug found and fixed: "Duplicate view" was invisible until reload
+
+Checked the Duplicate/Delete-view round trip (M7's own checklist steps 15-18,
+previously listed as "not exercised"). Delete worked correctly first try — the tab
+disappeared immediately, no reload needed. Duplicate did not: the backend created the
+new view (confirmed via a direct DB query — `V5 (copy)` really existed in
+`db_views`), but the frontend tab bar never showed it until the page was reloaded.
+
+Root cause: `ViewTabs.tsx`'s `duplicateView` called `fetch()` directly for both the
+`POST .../views` and the follow-up `PATCH /views/{id}` steps, instead of going through
+the hook's own `createView`/`updateView` (already threaded into `ViewTabs` as
+`onCreateView`(wrong shape for this)/`onUpdateView`) — both of which call `setViews`
+on success; the raw `fetch()` calls did not. `onSelect(created.id)` then pointed the
+active view at an id the local `views` array didn't contain at all.
+
+Fixed by adding a new `onCreateViewRaw` prop (the hook's bare `createView`, distinct
+from `onCreateView`'s Board/Calendar/Chart-aware wrapper) and rewriting
+`duplicateView` to call `onCreateViewRaw` then `onUpdateView` instead of `fetch`
+directly — removing the now-dead local `errorMessage` helper. Widened `onUpdateView`'s
+prop type from `{name?: string}` to the hook's own exported `ViewPatch` (it was always
+being passed the real `updateView`, which already accepted the fuller shape — the
+prop's TS type was just narrower than reality). Confirmed live: duplicating a view
+(twice, chained) shows the new tab immediately, correctly selected, no reload.
+`screenshots/actual/M7-07-duplicate-view-live-no-reload.jpg`. Regression test added
+(`ViewTabs.test.tsx`, "Duplicate view creates via onCreateViewRaw, patches via
+onUpdateView, then selects the new id") — the existing test only asserted the row's
+presence, same coverage gap as the "Edit view" bug earlier in this session. 24/24
+green.
+
 ## Summary of real defects found and fixed this run
 
 1. **M7 — "Edit view" silently did nothing** (same-tick Radix-layer race between the
@@ -381,11 +410,17 @@ untested.
    trigger-ref bug this codebase had already fixed twice elsewhere. Fixed the same way.
 5. **The QueryBar's own sort/filter chips had the identical bug** (`Chip` in
    `QueryBar.tsx`), found via the same follow-up audit. Fixed the same way.
+6. **All Notes' view tab bar was never suppressed** despite the spec's own explicit
+   instruction — only the toolbar `trailing` was gated on `editable`. Fixed by gating
+   the whole `<ViewTabs>` render the same way.
+7. **"Duplicate view" was invisible until reload** — it bypassed the hook's
+   state-syncing `createView`/`updateView` in favor of raw `fetch()` calls. Fixed by
+   routing through a new `onCreateViewRaw` prop + the existing `onUpdateView`.
 
-All five confirmed live, before and after. Frontend test suite green throughout
-(`ViewTabs.test.tsx` 23/23, `TableView.test.tsx` 77/77, `ViewToolbar.test.tsx` 8/8,
-`QueryBar.test.tsx` 6/6, `DatabaseShell.test.tsx` included in a combined 99/99 run,
-full suite 61 files / 875 tests).
+All seven confirmed live, before and after. Frontend test suite green throughout
+(`ViewTabs.test.tsx` 24/24, `TableView.test.tsx` 77/77, `ViewToolbar.test.tsx` 8/8,
+`QueryBar.test.tsx` 6/6, `DatabaseShell.test.tsx` 24/24, full suite 61 files / 876
+tests).
 
 `states.md`'s empty-filter-state checklist (steps 1-7) is now **fully verified live**,
 unblocked by fix #4/#5 above — see the Addendum section for the detail.
@@ -394,7 +429,8 @@ unblocked by fix #4/#5 above — see the Addendum section for the detail.
 
 - Live Chrome re-verification of column/row resize and reorder mechanics (blocked on
   this session's drag-simulation limitation, not a known product issue).
-- Duplicate/Delete-view round trip, Status cell editor, Date's calendar popover,
-  read-only-source suppression across M7-M11, PATCH-failure rollback+toast.
+- PATCH-failure rollback+toast (cell-editing.md step 15) — not exercised.
 - The calculations footer's live-update-without-reload gap (found, not chased to root
   cause).
+- Read-only-source suppression checked for M7 (All Notes' tab bar, fixed above); not
+  re-checked for M8-M11's own write affordances on the same source.

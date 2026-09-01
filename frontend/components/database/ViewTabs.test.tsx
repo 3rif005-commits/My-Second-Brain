@@ -502,6 +502,43 @@ describe("ViewTabs", () => {
       await waitFor(() => expect(onOpenSettings).toHaveBeenCalledTimes(1));
     });
 
+    // Live-checklist regression: "Duplicate view" called fetch() directly
+    // instead of the hook's own createView/updateView (which both call
+    // setViews on success) -- the duplicate really was created server-side,
+    // but the caller's `views` array never learned about it, so the new tab
+    // stayed invisible until a reload, and onSelect was pointed at an id
+    // `views` didn't contain. This test would have caught it: the earlier
+    // "active tab's menu" test above only asserted the row's presence.
+    it("Duplicate view creates via onCreateViewRaw, patches via onUpdateView, then selects the new id", async () => {
+      const user = userEvent.setup();
+      const created = view({ id: "v1-copy", name: "Table (copy)" });
+      const onCreateViewRaw = vi.fn().mockResolvedValue(created);
+      const onUpdateView = vi.fn().mockResolvedValue(created);
+      const onSelect = vi.fn();
+      render(
+        <ViewTabs
+          views={VIEWS}
+          activeViewId="v1"
+          onSelect={onSelect}
+          properties={[]}
+          onCreateView={vi.fn()}
+          dataSourceName="Tasks"
+          onCreateViewRaw={onCreateViewRaw}
+          onUpdateView={onUpdateView}
+          onDeleteView={vi.fn()}
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: /table view options/i }));
+      await user.click(screen.getByText("Duplicate view"));
+
+      await waitFor(() => expect(onCreateViewRaw).toHaveBeenCalledWith("Table (copy)", "table", null));
+      await waitFor(() =>
+        expect(onUpdateView).toHaveBeenCalledWith("v1-copy", { config: {}, filter: null, sorts: [] })
+      );
+      await waitFor(() => expect(onSelect).toHaveBeenCalledWith("v1-copy"));
+    });
+
     it("Delete view is absent with only one view", async () => {
       const user = userEvent.setup();
       render(

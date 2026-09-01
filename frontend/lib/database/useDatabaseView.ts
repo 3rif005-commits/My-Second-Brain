@@ -51,7 +51,7 @@ async function errorMessage(res: Response): Promise<string> {
 
 /** Fields `PATCH /db/views/{id}` (Milestone 2, `_VIEW_UPDATABLE_FIELDS`)
  * accepts. `id`/`data_source_id`/`user_id` are never patchable. */
-type ViewPatch = Partial<
+export type ViewPatch = Partial<
   Pick<ViewResponse, "name" | "icon" | "config" | "filter" | "sorts" | "is_locked" | "position">
 >;
 

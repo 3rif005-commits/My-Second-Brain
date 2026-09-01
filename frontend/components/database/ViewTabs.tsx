@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { MenuList, Popover } from "@/components/ui/primitives";
 import type { PropertyResponse, ViewResponse } from "@/lib/database/types";
 import { GROUPABLE_PROPERTY_TYPES } from "@/lib/database/types";
+import type { ViewPatch } from "@/lib/database/useDatabaseView";
 import { getDisplayAs, setDisplayAs } from "@/lib/database/viewTabPrefs";
 import { buildViewTabMenu } from "./ViewTabMenu";
 import {
@@ -20,11 +21,6 @@ import {
   isChartConfigComplete,
 } from "./views/ChartView";
 import type { ChartDraftConfig } from "./views/ChartView";
-
-async function errorMessage(res: Response): Promise<string> {
-  const body = await res.json().catch(() => null);
-  return body?.detail || body?.error || `Request failed (${res.status})`;
-}
 
 /** view-tab-bar.md: "Our `createView` defaults `name` to `\"New view\"` and
  * stores it... renaming to `\"\"` should show the type again. TBD." Rather
@@ -72,8 +68,14 @@ interface ViewTabsProps {
   // omitting them (e.g. a stale test) just means clicking the active tab
   // does nothing, same as before this milestone.
   dataSourceName?: string;
-  onUpdateView?: (viewId: string, patch: { name?: string }) => Promise<ViewResponse>;
+  onUpdateView?: (viewId: string, patch: ViewPatch) => Promise<ViewResponse>;
   onDeleteView?: (viewId: string) => Promise<void>;
+  /** The hook's own raw `createView` — unlike `onCreateView` (which layers
+   * on Board/Calendar/Chart's own creation-time config), this returns the
+   * bare created `ViewResponse` AND updates the shared `views` list, which
+   * `duplicateView` below needs (it does its own follow-up config PATCH via
+   * `onUpdateView`, not `onCreateView`'s type-specific one). */
+  onCreateViewRaw?: (name: string, type: string, icon: string | null) => Promise<ViewResponse>;
   onOpenSettings?: () => void;
 }
 
@@ -114,6 +116,7 @@ export function ViewTabs({
   dataSourceName = "",
   onUpdateView,
   onDeleteView,
+  onCreateViewRaw,
   onOpenSettings,
 }: ViewTabsProps) {
   const { showToast } = useToast();
@@ -157,21 +160,19 @@ export function ViewTabs({
   // "Duplicate view needs no new endpoint — POST .../views then PATCH the
   // config is faithful" (view-tab-bar.md). Switches to the new tab
   // afterward — the point of duplicating is almost always to edit the copy.
+  //
+  // Live-checklist regression: this used to fetch() the two requests
+  // directly instead of going through `onCreateViewRaw`/`onUpdateView` (the
+  // hook's own `createView`/`updateView`, which both call `setViews` on
+  // success). The duplicate really was created server-side, but the local
+  // `views` array DatabaseShell holds never learned about it, so the new
+  // tab was invisible until a reload — and `onSelect(created.id)` was
+  // switching the active view to an id `views` didn't contain at all.
   async function duplicateView(view: ViewResponse) {
+    if (!onCreateViewRaw || !onUpdateView) return;
     try {
-      const res = await fetch(`/api/db/data-sources/${view.data_source_id}/views`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: `${viewTabLabel(view)} (copy)`, type: view.type, icon: view.icon }),
-      });
-      if (!res.ok) throw new Error(await errorMessage(res));
-      const created: ViewResponse = await res.json();
-      const patched = await fetch(`/api/db/views/${created.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config: view.config, filter: view.filter, sorts: view.sorts }),
-      });
-      if (!patched.ok) throw new Error(await errorMessage(patched));
+      const created = await onCreateViewRaw(`${viewTabLabel(view)} (copy)`, view.type, view.icon);
+      await onUpdateView(created.id, { config: view.config, filter: view.filter, sorts: view.sorts });
       onSelect(created.id);
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not duplicate the view", "error");
