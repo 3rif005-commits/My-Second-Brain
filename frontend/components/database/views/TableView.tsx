@@ -59,8 +59,8 @@ import {
   patchColumnWidths,
 } from "@/lib/database/viewConfig";
 import type { SortsUpdater } from "@/lib/database/viewConfig";
-import { defaultConditionFor } from "@/lib/database/filterAst";
-import type { FilterUpdater } from "../FilterBuilder";
+import { asFilterNode, countConditions, defaultConditionFor } from "@/lib/database/filterAst";
+import { filterPanel, type FilterUpdater } from "../FilterBuilder";
 import { groupDisplayLabel, orderedGroups } from "../GroupBuilder";
 import type { SelectOption } from "../EditPropertyPanel";
 import { pillStyleForOption } from "../cells/CellProps";
@@ -76,6 +76,7 @@ import { calculationLabel } from "../ColumnHeaderMenu";
 import { AddPropertyPopover } from "../AddPropertyPopover";
 import { QueryBar } from "../QueryBar";
 import { TemplateManager } from "../TemplateManager";
+import { MenuList, Popover } from "@/components/ui/primitives";
 
 interface TableViewProps {
   properties: PropertyResponse[];
@@ -695,6 +696,16 @@ export function TableView({
   // shift under the wrong header.
   const columnCount = orderedProperties.length + (editable ? 2 : 0);
 
+  // M11 (states.md): "A filter matches nothing" is its OWN empty state —
+  // "the entire table disappears," not the same `No rows yet.` message a
+  // genuinely-empty, unfiltered database gets. `ruleCount`, not a bare
+  // `Boolean(view?.filter)`: a present-but-empty filter node (e.g.
+  // `{type:"group", op:"and", children:[]}`) is structurally "a filter"
+  // but has nothing active, same distinction QueryBar.tsx's own
+  // visibility check already makes.
+  const hasActiveFilter = Boolean(view && countConditions(asFilterNode(view.filter)) > 0);
+  const [emptyFilterMenuOpen, setEmptyFilterMenuOpen] = useState(false);
+
   const groupBySpec = view ? getGroupBySpec(view.config) : undefined;
   const groupProperty = groupBySpec ? allOrderedProperties.find((p) => p.key === groupBySpec.property_key) : undefined;
   // "+ New group" (group-panel.md: "creates a new select option on the
@@ -1021,7 +1032,48 @@ export function TableView({
           </button>
         </div>
       )}
-      {groups ? (
+      {!groups && rows.length === 0 && hasActiveFilter ? (
+        // M11 (states.md): "the entire table disappears — column headers,
+        // group headers, the + New page row and the calculations footer
+        // are ALL gone... Two buttons. No text at all." — deliberately NOT
+        // the grouped case (`groups` truthy): the spec's own capture never
+        // addresses an empty-due-to-filter GROUPED view (states.md's own
+        // "An empty GROUP" is a separate, uncaptured TBD), so this only
+        // replaces the plain flat table.
+        <div className="flex flex-1 items-center justify-center gap-2">
+          <Popover
+            open={emptyFilterMenuOpen}
+            onOpenChange={setEmptyFilterMenuOpen}
+            width="md"
+            label="Edit filters"
+            trigger={
+              <button
+                type="button"
+                className="rounded border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                Edit filters
+              </button>
+            }
+          >
+            {view && onSetFilter && (
+              <MenuList
+                root={filterPanel(allOrderedProperties, view.filter, onSetFilter)}
+                nav="flyout"
+                onClose={() => setEmptyFilterMenuOpen(false)}
+                label="Filter"
+              />
+            )}
+          </Popover>
+          <button
+            type="button"
+            onClick={handleAddRow}
+            disabled={rowSubmitting || !dataSourceId}
+            className="rounded bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-40"
+          >
+            + New page
+          </button>
+        </div>
+      ) : groups ? (
         <div className="overflow-auto flex-1 min-h-0">
           {(() => {
             const spec = groupBySpec ?? { property_key: "" };
@@ -1117,16 +1169,12 @@ export function TableView({
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 && (
-            <tr>
-              <td
-                colSpan={Math.max(columnCount, 1)}
-                className="text-center py-16 text-sm text-gray-400 dark:text-gray-500"
-              >
-                No rows yet.
-              </td>
-            </tr>
-          )}
+          {/* M11 (states.md): "the empty state IS the affordance to fill
+            * it" — a brand-new, unfiltered, empty database renders the
+            * table NORMALLY (header row + the "+ New" row below), with no
+            * "No rows yet." message at all. (The OTHER empty state — a
+            * filter matching nothing — is handled by an entirely separate
+            * branch above this `<table>`, which this one never reaches.) */}
           {rows.length > 0 && treeEntries
             ? // Sub-item "show" mode: tree order + indentation/toggle on the
               // title cell (task-22-brief.md §3). `table.getRow(id)` looks up

@@ -221,9 +221,12 @@ describe("TableView", () => {
     });
   });
 
-  it("shows an empty state when there are no rows", () => {
+  // M11 (states.md): "the empty state IS the affordance to fill it" — a
+  // brand-new, unfiltered, empty database renders NORMALLY, no message.
+  it("renders no empty-state message for a brand-new, unfiltered, empty database", () => {
     render(<TableView properties={PROPERTIES} rows={[]} editable={false} onCellChange={vi.fn()} />);
-    expect(screen.getByText(/no rows yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no rows yet/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Title" })).toBeInTheDocument();
   });
 
   it("is editable when editable=true: editing the Title cell calls onCellChange with the row id, property key, and new value", async () => {
@@ -696,16 +699,16 @@ describe("TableView", () => {
   });
 
   describe("empty-state gap fix", () => {
-    it("still renders column headers (not just a bare message) when there are no rows", () => {
+    it("renders column headers normally (no message) when there are no rows", () => {
       render(
         <TableView properties={PROPERTIES} rows={[]} editable={false} onCellChange={vi.fn()} />
       );
-      expect(screen.getByText(/no rows yet/i)).toBeInTheDocument();
+      expect(screen.queryByText(/no rows yet/i)).not.toBeInTheDocument();
       expect(screen.getByRole("columnheader", { name: "Title" })).toBeInTheDocument();
       expect(screen.getByRole("columnheader", { name: "Notes" })).toBeInTheDocument();
     });
 
-    it("shows both add-controls alongside the empty-state message when editable", () => {
+    it("shows both add-controls, no empty-state message, when editable", () => {
       render(
         <TableView
           properties={PROPERTIES}
@@ -716,10 +719,139 @@ describe("TableView", () => {
           refetch={vi.fn()}
         />
       );
-      expect(screen.getByText(/no rows yet/i)).toBeInTheDocument();
+      expect(screen.queryByText(/no rows yet/i)).not.toBeInTheDocument();
       expect(screen.getByRole("columnheader", { name: "Title" })).toBeInTheDocument();
       expect(screen.getByLabelText(/add property/i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "+ New" })).toBeInTheDocument();
+    });
+  });
+
+  // M11 (states.md): "A filter matches nothing" — "the entire table
+  // disappears... Two buttons. No text at all." Distinct from the
+  // no-filter empty state above.
+  describe("empty state: a filter matches nothing", () => {
+    function filteredView(filter: Record<string, unknown> | null) {
+      return {
+        id: "view-1",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Table",
+        icon: null,
+        type: "table",
+        config: {},
+        filter,
+        sorts: [],
+        is_locked: false,
+        position: 0,
+      };
+    }
+
+    const ACTIVE_FILTER = {
+      type: "group",
+      op: "and",
+      children: [{ type: "condition", property: "kind", operator: "equals", value: "nope" }],
+    };
+
+    it("hides headers/footer entirely and shows only Edit filters + New page, no text message", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          view={filteredView(ACTIVE_FILTER)}
+          onSetFilter={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByRole("columnheader")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "+ New" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Edit filters" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "+ New page" })).toBeInTheDocument();
+    });
+
+    it("a structurally-present but EMPTY filter (no conditions) does not trigger this state", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          view={filteredView({ type: "group", op: "and", children: [] })}
+          onSetFilter={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByRole("button", { name: "Edit filters" })).not.toBeInTheDocument();
+      expect(screen.getByRole("columnheader", { name: "Title" })).toBeInTheDocument();
+    });
+
+    it("no active filter, just zero rows, renders the ordinary empty table instead", () => {
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          view={filteredView(null)}
+          onSetFilter={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByRole("button", { name: "Edit filters" })).not.toBeInTheDocument();
+      expect(screen.getByRole("columnheader", { name: "Title" })).toBeInTheDocument();
+    });
+
+    it("clicking Edit filters opens the filter builder", async () => {
+      const user = userEvent.setup();
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          view={filteredView(ACTIVE_FILTER)}
+          onSetFilter={vi.fn()}
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: "Edit filters" }));
+
+      expect(await screen.findByRole("dialog", { name: "Edit filters" })).toBeInTheDocument();
+      // The actual filter builder, not an empty panel.
+      expect(screen.getByText("Add filter rule")).toBeInTheDocument();
+    });
+
+    it("clicking + New page creates a row", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ id: "row-9", properties: {} }, 201));
+      vi.stubGlobal("fetch", fetchMock);
+      const user = userEvent.setup();
+      const refetchRows = vi.fn().mockResolvedValue(undefined);
+      render(
+        <TableView
+          properties={PROPERTIES}
+          rows={[]}
+          editable={true}
+          onCellChange={vi.fn()}
+          dataSourceId="ds-1"
+          refetchRows={refetchRows}
+          view={filteredView(ACTIVE_FILTER)}
+          onSetFilter={vi.fn()}
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: "+ New page" }));
+
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          "/api/db/data-sources/ds-1/rows",
+          expect.objectContaining({ method: "POST" })
+        )
+      );
     });
   });
 
