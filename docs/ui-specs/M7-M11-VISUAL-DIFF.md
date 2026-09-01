@@ -182,10 +182,14 @@ calculations-footer-sum.jpg`.
 **On a grouped view (Default view), the footer correctly does not render** — matches
 `PROGRESS.md`'s own documented M11(1/5) scope ("never alongside `group_by`").
 
-**Minor finding, not fixed:** setting the calculation doesn't paint the footer live —
-it only appeared after a reload, on both the grouped and flat views tried. Not chased
-further (likely `getQueryExtras`/`aggregates` not being refetched on
-`onPatchConfig`'s own optimistic path); flagged for a follow-up.
+**Correction, follow-up in the same session:** an earlier pass through this file
+flagged the footer as not updating live without a reload. Re-tested more carefully
+(toggling Sum → Average → None on `V3`, checking `document.querySelector('tfoot')` via
+JS immediately after each change and again ~2s later): it **does** update live — the
+first check just outran the two sequential network round-trips involved (`PATCH
+/db/views/{id}` for the config, then `POST .../query` for the refetched aggregate),
+each real but quick. Not a bug — the earlier finding was this session's own testing
+outrunning a normal async chain, not a broken live-update path.
 
 ### M11 (2/5) — new-row chevron + title focus (`new-row-button.md`)
 
@@ -429,8 +433,10 @@ unblocked by fix #4/#5 above — see the Addendum section for the detail.
 
 - Live Chrome re-verification of column/row resize and reorder mechanics (blocked on
   this session's drag-simulation limitation, not a known product issue).
-- PATCH-failure rollback+toast (cell-editing.md step 15) — not exercised.
-- The calculations footer's live-update-without-reload gap (found, not chased to root
-  cause).
+- PATCH-failure rollback+toast (cell-editing.md step 15) — not induced live (would
+  need a forced network failure), but confirmed in code:
+  `useDatabaseView.ts`'s `updateCell` sets `rows` optimistically, and on a caught
+  fetch failure calls `setRows(previousRows)` plus `showToast(..., "error")` before
+  returning — exactly the spec's required shape.
 - Read-only-source suppression checked for M7 (All Notes' tab bar, fixed above); not
   re-checked for M8-M11's own write affordances on the same source.

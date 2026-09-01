@@ -718,6 +718,21 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-01 (M7-M11 live visual-diff, fourth addendum — close-out)** — Two final
+  items from the outstanding list. First, a correction: the earlier-recorded
+  "calculations footer doesn't update live without reload" finding was re-tested more
+  carefully (toggling Sum → Average → None, checking the DOM immediately after each
+  change and again ~2s later) and turned out to be this session's own testing outrunning
+  a normal two-request async chain (`PATCH` the config, then `POST .../query` for the
+  refetched aggregate) — not a bug. `M7-M11-VISUAL-DIFF.md` corrected in place rather
+  than left standing. Second, PATCH-failure rollback+toast (`cell-editing.md`'s own
+  step 15) — not induced live, but confirmed in code: `useDatabaseView.ts`'s
+  `updateCell` does exactly the required optimistic-update/rollback/toast shape. This
+  closes out every item this session's own "not covered" list had flagged, except the
+  column/row drag mechanics (blocked on a drag-simulation limitation in this
+  automation session, not a known product issue) and read-only-source suppression
+  beyond M7 (checked and fixed for the view tab bar; M8-M11's own write affordances on
+  All Notes not independently re-checked).
 - **2026-09-01 (M7-M11 live visual-diff, third addendum)** — Finished M7's own
   Duplicate/Delete-view checklist items. Delete worked correctly on the first try.
   Duplicate did not: the backend really did create the copy (confirmed via a direct DB
