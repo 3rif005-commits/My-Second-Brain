@@ -475,6 +475,134 @@ change" assumptions.
 
 ---
 
+## M11 — COMPLETE (2026-09-01)
+
+| Milestone | State |
+|---|---|
+| M11 — calculations footer, always-visible New-row chevron, column resize, Select/Status cell editors, the two captured empty states | done, built end to end in five sub-commits, not yet visual-diffed live |
+
+**Frontend 846 → 872 tests green** (61 → 61 files — no new test file; existing files grew).
+`npx tsc --noEmit` clean after every sub-piece. Backend untouched — all five sub-pieces are
+frontend-only (calculations-row.md/new-row-button.md/table-drag-resize.md/cell-editing.md/
+states.md all confirm "no backend change" or reuse endpoints Phase 0b/M1 already built).
+Built as five separately-tested, separately-committed sub-pieces per the session's own
+instruction that M11 was "the big one" — cheaper to review and safer if budget ran out
+mid-milestone.
+
+### M11 (1/5) — calculations footer row
+
+`getQueryExtras`'s table branch now sends one `AggregationSpec` per column with a
+`config.calculations` entry (M1 already wrote this; nothing had read it) — keyed by the
+column's own property key, and **never** alongside `group_by` (a grouped query computes
+PER-GROUP aggregates the footer doesn't render this milestone, disclosed below). TableView
+renders the resulting `aggregates` as a right-aligned `LABEL value` `tfoot` row;
+`calculationLabel` (`ColumnHeaderMenu.tsx`) reuses M1's own menu label strings uppercased,
+not a second copy.
+
+### M11 (2/5) — always-visible New-row chevron, new-row title focus
+
+**User decision, 2026-09-01** (the spec's own explicitly-flagged IA question): the `+ New ▾`
+split button's chevron is now unconditional, matching Notion's own IA — the dropdown is the
+entry point for *authoring* a template, not merely picking one — rather than staying hidden
+until a template already exists (the pre-M11 behaviour). Its empty state (`Templates for
+<name>` header + `?` icon + the captured description + `+ New template`) opens the existing
+`TemplateManager` modal, a second mount of the same component/handlers
+`DatabaseSettingsMenu.tsx`'s "Manage templates" already uses — not a second template-CRUD
+implementation. Also fixed a real, spec-named gap: "Focus the new row's title cell after
+creation" — `handleAddRow`/`handleAddRowToGroup` now capture the created row's id, and
+`TitleCell` gained an `autoEdit` prop (threaded through `renderCellValue`'s existing
+optional-arg convention) so the new row mounts straight into inline edit, caret placed.
+
+### M11 (3/5) — column resize
+
+Per-view column widths (`view.config.column_widths`, JSONB pass-through — table-drag-
+resize.md's own "not a schema-level field" reasoning), a drag grip on each header border,
+live reflow, exactly one `PATCH` per drag (fired on `columnSizingInfo.isResizingColumn`'s
+`false` transition, not per mouse-move). `columnSizing` itself stays **uncontrolled**
+(TanStack's own default) — a controlled first attempt broke, because `columnResizeMode:
+"onChange"`'s live-drag math mutates a variable as a side effect inside the very
+`setColumnSizingInfo` updater React queues for the same render pass, and a synchronous
+caller-supplied `onColumnSizingChange` observes it before React has actually run that
+updater. The fix instead only imperatively re-seeds `columnSizing`
+(`table.setColumnSizing(persistedWidths)`) when the view's own persisted widths change
+under it — this `TableView` instance is reused across a database's own table views, not
+remounted on a tab switch.
+
+**Column/row drag-REORDER stay unbuilt** — table-drag-resize.md's own "not captured by
+dragging a header" / "not captured" TBDs. The Property visibility panel's own drag-reorder
+(M3) already covers column order through a captured path; there is still no row-position
+field anywhere in this schema (M9 already established this).
+
+### M11 (4/5) — Select create-on-type, Status's real editor
+
+cell-editing.md's own words: create-on-type is "the single biggest cell-editing gap."
+`SelectCell` now opens a `Popover`+`MenuList` panel in place of the cell (the same
+trigger-is-the-input pattern `AddPropertyPopover.tsx` already established), listing
+matching options plus a `Create [x]` row; Enter creates the option
+(`PATCH /api/db/properties/{id}`, sequenced before assigning, per the spec's own
+persistence note), assigns it, and closes — one keystroke. Falls back to the pre-M11
+bare-input editor for any caller that doesn't supply `onCreateOption` (`RowPeek`,
+Board/Gallery/List/Feed — none of them were threaded through, a disclosed scope-down, not
+an oversight).
+
+`StatusCell` gets the four differences cell-editing.md calls out from Select's own editor:
+options grouped under `To-do`/`In progress`/`Complete` section headers, a coloured **dot**
+instead of a filled chip, **no** create-on-type (options are managed on the property only),
+and different placeholder copy (`"Search for an option"`, no ellipsis). **The `Edit
+property` footer row stays unbuilt** — reaching it from a cell would need
+`EditPropertyPanel`'s panel-building function threaded all the way through
+`renderCellValue`, judged disproportionate to what was left of this milestone's budget.
+
+**A real, novel bug found and fixed along the way, not specific to Select/Status:** the
+"trigger swaps between a `<button>` and an `<input>` depending on state" pattern this
+codebase's Popover-based editors already used (`AddPropertyPopover.tsx` included) has a
+latent race — Radix's non-modal `onInteractOutside` check
+(`context.triggerRef.current?.contains(target)`) can catch the newly-mounted, newly-
+`autoFocus`ed input in a stale-ref window (the swap unmounts/remounts the DOM node the ref
+tracks) and dismiss the popover before a single keystroke lands. Never manifested in
+`AddPropertyPopover`'s own tests because its trigger-input flow was never exercised with
+`user.type()` while its own MenuList panel was simultaneously open below it. Fixed here by
+wrapping the trigger in one stable element instead of swapping its type; `AddPropertyPopover`
+itself was left alone (out of scope for this milestone, its own tests are green, and the bug
+is latent rather than currently manifesting there).
+
+### M11 (5/5) — the two captured empty states
+
+states.md: a brand-new, unfiltered, empty database now renders the table **normally**
+(header row + the `+ New` row) with **no** `No rows yet.` message — "the empty state IS the
+affordance to fill it." A filter matching nothing is a *different*, separate state: the
+entire flat table disappears (headers, footer, the `+New` row) for two centred buttons,
+`Edit filters` (opens the same `filterPanel()` the toolbar's own filter chip already uses)
+and `+ New page` — no text message, matching the capture's own "two buttons, no text."
+
+**Deliberately not touched:** the grouped-view case (states.md's own "an empty group" TBD,
+not captured), the "`+ New page` clears/matches the active filter" behaviour (checklist's
+own "capture Notion's behaviour first" — the row is created, but the filter itself is
+neither cleared nor auto-matched), and loading/error states (both explicitly `TBD` in the
+spec — "do not guess"). The empty-filter-state's `+ New page` button is present-but-
+disabled (not absent) for a read-only source, a minor deviation from states.md's own
+"New split button: Suppress" table entry — accepted given how rare "All Notes, filtered,
+zero results" is in practice.
+
+### Deferred across all of M11, ranked by what's missing
+
+1. **Cell editors for Text, Number, Multi-select, Person, Files, URL, Checkbox, and Date's
+   fuller calendar** — cell-editing.md's own "assume each type differs until captured";
+   these seven (plus Date's End-date toggle/Clear/Today/calendar-grid richness) have zero or
+   partial capture. Only Select and Status were fully specified.
+2. **The two-stage click-to-select-then-edit interaction model** — "the single biggest
+   *behavioural* difference," per the spec's own words, left entirely unbuilt: several of
+   its own details (the corner-circle's behaviour, arrow-key cell navigation, whether Enter
+   opens a selected cell) are themselves `TBD`, and retrofitting it would touch every cell
+   component's click handling at once.
+3. Column/row drag-reorder (table-drag-resize.md) — both `TBD`, "capture before
+   implementing."
+4. Status's `Edit property` footer row, and the "+ New page" filter-interaction semantics.
+5. Grouped-view empty states and loading/error states — all explicitly `TBD` for Notion's
+   own behaviour.
+
+---
+
 ## Session artifacts
 
 | Artifact | Status |
