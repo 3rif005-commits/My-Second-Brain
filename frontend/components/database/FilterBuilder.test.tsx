@@ -59,7 +59,10 @@ describe("filterPanel — stage 1, the property picker", () => {
     await user.click(screen.getByText("Text"));
     expect(onSetFilter).toHaveBeenCalledTimes(1);
     const updater = onSetFilter.mock.calls[0][0];
-    expect(updater(null)).toEqual({ type: "condition", property: "notes", operator: "equals" });
+    // filter-panel.md's own capture: a text-shaped property defaults to "Contains",
+    // not "equals" (TEXT_OPS' first entry) — live-verified reachable and wrong before
+    // this fix.
+    expect(updater(null)).toEqual({ type: "condition", property: "notes", operator: "contains" });
   });
 
   it("+ Add advanced filter starts an empty group builder, not a default condition", async () => {

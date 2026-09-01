@@ -119,12 +119,24 @@ describe("updateAtPath / removeAtPath / appendChild", () => {
 });
 
 describe("defaultConditionFor / isFilterableProperty", () => {
-  it("picks the first operator for the property's type", () => {
+  // filter-panel.md's own capture: a freshly-picked Text/Title property defaults to
+  // "Contains", not the first entry in TEXT_OPS ("equals"/"Is") — live-verified
+  // reachable and wrong before this fix (picking Title and typing a substring matched
+  // zero rows instead of narrowing).
+  it("text-shaped types default to Contains, not the first operator in their list", () => {
     expect(defaultConditionFor(prop({ key: "title", type: "title" }))).toEqual({
       type: "condition",
       property: "title",
-      operator: "equals",
+      operator: "contains",
     });
+    expect(defaultConditionFor(prop({ key: "notes", type: "rich_text" }))).toEqual({
+      type: "condition",
+      property: "notes",
+      operator: "contains",
+    });
+  });
+
+  it("every other type's default is still its operator list's first entry (spec's own TBD)", () => {
     expect(defaultConditionFor(prop({ key: "kind", type: "select" }))).toEqual({
       type: "condition",
       property: "kind",

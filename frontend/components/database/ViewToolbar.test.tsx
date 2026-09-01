@@ -100,7 +100,9 @@ describe("ViewToolbar", () => {
 
     expect(onSetFilter).toHaveBeenCalledTimes(1);
     const updater = onSetFilter.mock.calls[0][0];
-    expect(updater(null)).toEqual({ type: "condition", property: "title", operator: "equals" });
+    // filter-panel.md's own capture: a text-shaped property (title included) defaults
+    // to "Contains", not "equals" (TEXT_OPS' first entry).
+    expect(updater(null)).toEqual({ type: "condition", property: "title", operator: "contains" });
   });
 
   it("the Filter button's label reflects the current rule count", () => {

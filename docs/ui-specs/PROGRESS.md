@@ -718,6 +718,33 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M4 live Chrome checklist, partial)** — Followed up on the review
+  checkpoint below by actually running `filter-panel.md`'s checklist live, against a
+  fresh throwaway fixture database (Title/Count/Kind-select/Done-checkbox/Due-date/
+  Status, 4 rows). Found and fixed a second real, live-only-visible defect:
+  `defaultOperatorFor` (filterAst.ts) picked the first entry in a type's operator
+  list unconditionally, defaulting a fresh Text/Title filter to `equals` — but
+  `filter-panel.md`'s own capture is explicit that Notion defaults a text filter to
+  `Contains`. Live-reproduced: picking `Title` and typing `Article` against two rows
+  titled "Article one"/"Article two" matched **zero** rows instead of narrowing,
+  since `equals "Article"` never matches either title. Fixed with an explicit
+  `Contains`-first override for the five text-shaped types; every other type's
+  default stays list-order (the spec's own `TBD` for those). Three tests had
+  enshrined the wrong default (`filterAst.test.ts`, `FilterBuilder.test.tsx`,
+  `ViewToolbar.test.tsx`) and were corrected. Also confirmed live: the toolbar
+  Filter/Sort popovers render on-screen correctly in a real browser (closing the
+  M4-M6-VISUAL-DIFF.md open question, since `3b4a079` already fixed the underlying
+  bug), and the prior entry's `sanitizeFilterForQuery` fix works live (an
+  incomplete column-header filter came back `200`, not a silent `400`). **Not
+  completed**: the rest of `filter-panel.md`'s checklist (steps 10-20) plus all of
+  `sort-panel.md`/`group-panel.md` — the automation session became memory-
+  constrained partway through (confirmed via `free -h`, not guessed: <650MB free,
+  ~3GB/3.7GB swap) and stopped opening ANY toolbar popover (Filter and Sort both,
+  confirmed via the accessibility tree, not screenshots), ruling out a regression
+  from the fix itself. Full write-up: `REVIEW-LOG.md`'s new "Live Chrome checklist
+  run — filter-panel.md, M4" section. Frontend 61 files / 888 tests green (was
+  887), `tsc` clean. Resume point: re-run the remaining M4/M5/M6 checklist steps
+  live in a less memory-constrained session.
 - **2026-09-01 (Phase 0c/M4/M5/M6 review checkpoint, run for real)** — The plan's own
   review checkpoint for this batch had been explicitly deferred (see the log entry
   below, "a `/code-review high` attempt... hit the account's rate limit"). Run this

@@ -111,11 +111,27 @@ export function appendChild(root: FilterNode, path: number[], node: FilterNode):
   );
 }
 
-/** The default operator for a freshly-picked property — the first entry in
- * its operator list, matching "picking a property applies a default filter
- * immediately" (filter-panel.md). */
+// filter-panel.md's own capture (line 84, `Where [Aa Name ▾] [Contains ▾] [Value]`,
+// re-asserted by the panel's checklist step 6) is explicit that a freshly-picked
+// Text/Title property defaults to "Contains" — NOT the first entry in its operator
+// list (`equals`/"Is"). Live-verified reachable and materially wrong, not cosmetic:
+// picking Title and typing a substring (e.g. "Article" against a row titled "Article
+// one") silently matched ZERO rows instead of narrowing, because the condition was
+// applying `equals` under the hood. Every other type's default is `filter-panel.md`'s
+// own explicit `TBD` — list-order-as-default stays their behavior until one is
+// captured, per this workstream's "no invented numbers" rule.
+const _TEXT_SHAPE_TYPES_FOR_DEFAULT = new Set(["title", "rich_text", "url", "email", "phone_number"]);
+
+/** The default operator for a freshly-picked property — "Contains" for the five
+ * text-shaped types (confirmed against Notion, see the comment above), the first
+ * entry in the type's operator list for everything else (`filter-panel.md`'s own
+ * `TBD` for those, not yet captured). */
 export function defaultOperatorFor(type: string): FilterOperator | undefined {
-  return operatorsForType(type)[0];
+  const operators = operatorsForType(type);
+  if (_TEXT_SHAPE_TYPES_FOR_DEFAULT.has(type)) {
+    return operators.find((o) => o.name === "contains") ?? operators[0];
+  }
+  return operators[0];
 }
 
 export function defaultConditionFor(property: PropertyResponse): FilterCondition {

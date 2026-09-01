@@ -270,3 +270,82 @@ found in either mirror.
 
 Frontend 887 tests green (was 877 before this checkpoint's own regression tests;
 +10: 8 in `filterAst.test.ts`, 2 in `useDatabaseView.test.ts`), `tsc` clean.
+
+---
+
+## Live Chrome checklist run — filter-panel.md, M4 (2026-09-02)
+
+Follow-up to Checkpoint 3, run live in Chrome against a fresh throwaway fixture
+database (`d0a95060-5ebc-483e-b3a2-1672e206ce8b`: Title, Count/Number, Kind/Select
+with `Article`/`Note` options, Done/Checkbox, Due/Date, Status/Status with
+To-do/In-progress/Complete groups; 4 rows). Working through `filter-panel.md`'s own
+checklist (steps 1-9) to close out the one item Checkpoint 3 couldn't verify from
+reading code alone — whether a freshly-picked filter actually narrows the table
+correctly.
+
+### Fixed
+
+1. **A freshly-picked Text/Title filter condition defaults to the wrong operator,
+   and it's not cosmetic — it silently returns zero rows instead of narrowing.**
+   `filter-panel.md`'s own capture (line 84, `Where [Aa Name ▾] [Contains ▾]
+   [Value]`) and its checklist step 6 are explicit that Notion's default operator
+   for a fresh Text/Title pick is **Contains**. `filterAst.ts`'s
+   `defaultOperatorFor` instead returned `operatorsForType(type)[0]` unconditionally
+   — the first entry in `TEXT_OPS`, which is `equals` ("Is"), not `contains`.
+   Caught live, not by inspection: clicking the toolbar's `Filter` button, picking
+   `Title`, and typing `Article` against two rows titled "Article one"/"Article
+   two" narrowed the table to **zero rows** — `equals "Article"` never matches
+   either title. Root-caused via `read_network_requests`: the debounced
+   `PATCH /db/views/{id}` fired exactly once (correct, unrelated to this bug) but
+   the persisted condition read `operator: "equals"`.
+
+   Fixed by giving `defaultOperatorFor` an explicit override for the five
+   text-shaped types (`title`/`rich_text`/`url`/`email`/`phone_number`): `contains`
+   if the type's operator list has it, falling back to `operators[0]` otherwise.
+   Every other type's default is left as `operators[0]` — `filter-panel.md`'s own
+   words call every other type's default `TBD`, so changing them now would be
+   inventing behavior with no capture behind it, the one thing this workstream's
+   own rules forbid ("no invented numbers").
+
+   Three tests had already enshrined the wrong default (same failure class as
+   M3's "Sort's raw key" and this file's own Checkpoint-1/2 rename-field findings —
+   a green suite that asserts the bug is not a passing suite that's right):
+   `filterAst.test.ts`'s `defaultConditionFor` test, `FilterBuilder.test.tsx`'s
+   picker test, and `ViewToolbar.test.tsx`'s picker test. All three corrected to
+   assert `contains`; a fourth test added to `filterAst.test.ts` confirming
+   non-text types (`select`) are unaffected.
+
+### Confirmed working, not re-litigated
+
+- The toolbar's Filter/Sort popovers render on-screen correctly in a real (non-
+  automation-viewport-limited) browser — closing the one open question
+  `M4-M6-VISUAL-DIFF.md`'s own "Not verified this run" section left from the
+  original 0c/M4-M6 live pass, now moot since `3b4a079` already fixed the
+  underlying `forwardRef` bug on this branch.
+- The Checkpoint-3 fix above (`sanitizeFilterForQuery`) confirmed live, not just
+  by unit test: picking `Kind` from a column header's own `Filter` row (M4's
+  `onFilter` wiring) persisted the same "operator with no value yet" mid-edit
+  state my Checkpoint-3 fix targets — `POST .../query` came back **200** (rows
+  unchanged, matching "not filtering yet"), not the pre-fix silent 400.
+- Exactly one `PATCH /db/views/{id}` fires for the whole typed filter value (a
+  debounced commit, not one per keystroke) — checklist step 8, confirmed via
+  `read_network_requests`.
+
+### Not completed this run — an environment limitation, not a product finding
+
+This session's automation environment became memory-constrained partway through
+(`free -h`: <650MB free RAM, ~3GB/3.7GB swap in use) — `Page.captureScreenshot`
+started timing out on EVERY call, and clicking the toolbar's `Filter`/`Sort`
+buttons (confirmed via `read_page`'s accessibility tree, not screenshots) stopped
+opening their popovers at all, reproducibly, across two fresh tabs, for BOTH
+buttons — ruling out a regression from the fix above and pointing at resource
+exhaustion rather than the app. This closed the window on live-verifying the fix
+itself (steps 10-20 of `filter-panel.md`'s checklist: operator-list narrowing by
+type, `Add filter rule`/`Add filter group`, the settings-sidebar entry point,
+`Delete filter`, concurrent-edit ordering, the empty-result state) plus all of
+`sort-panel.md` and `group-panel.md`'s own checklists. The fix itself is
+unit-tested (`filterAst.test.ts`) and was live-confirmed for the specific
+`Article`-narrows-to-zero repro before the environment degraded — not merely
+inferred from reading the code. Resume point for a future session: re-run
+`filter-panel.md` steps 10-20, `sort-panel.md`, and `group-panel.md` live once a
+less memory-constrained session is available.
