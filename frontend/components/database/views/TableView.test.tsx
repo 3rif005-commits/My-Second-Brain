@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,7 +23,7 @@ vi.mock("@/components/editor/BlockEditor", () => ({
   BlockEditor: () => <div data-testid="block-editor-stub" />,
 }));
 
-import { TableView } from "./TableView";
+import { TableView, groupValueForNewRow } from "./TableView";
 import { KNOWN_PROPERTY_TYPES, ROLLUP_FUNCTIONS } from "@/lib/database/types";
 import type { DatabaseRow, PropertyResponse, RelatedRow, RowTemplateResponse } from "@/lib/database/types";
 
@@ -981,5 +981,247 @@ describe("TableView", () => {
       );
       expect(onInstantiateTemplate).not.toHaveBeenCalled();
     });
+  });
+});
+
+// `fireEvent`, not `userEvent`, for every click in this describe block —
+// `userEvent.click` hangs indefinitely (not a slow test, an unresolved
+// promise even past a 30s wall-clock kill) the moment TWO OR MORE grouped
+// `<table>` sections exist side by side and ANY one of them is clicked,
+// reproduced down to two minimal sibling `<table>` elements with no other
+// TableView machinery involved. `fireEvent.click` on the exact same button
+// resolves instantly and asserts correctly — the state update and resulting
+// DOM change are right; this is userEvent's own pointer/visibility
+// simulation getting stuck on jsdom's layout-less multi-<table> DOM, the
+// same class of environment-only artifact SortRowsList.test.tsx already
+// documents for DndContext+Popover. Unverified beyond jsdom — the live
+// Chrome checklist run is this surface's real cross-check.
+//
+// For the same reason, `waitFor` (also MutationObserver/interval-poll
+// based) hangs the identical way once a click triggers an async fetch
+// inside this multi-<table> DOM — reproduced down to the same minimal
+// case. `flushPromises` below (a handful of awaited microtask turns) is
+// the workaround: it resolves the same pending promises `waitFor` would
+// have polled for, without the polling mechanism that hangs.
+async function flushPromises() {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+}
+
+describe("TableView — M6 grouped rendering", () => {
+  function view(config: Record<string, unknown>) {
+    return {
+      id: "view-1",
+      data_source_id: "ds-1",
+      user_id: "user-1",
+      name: "Table",
+      icon: null,
+      type: "table",
+      config,
+      filter: null,
+      sorts: [],
+      is_locked: false,
+      position: 0,
+    };
+  }
+
+  const GROUPS = [
+    {
+      key: "article",
+      label: "article",
+      row_count: 1,
+      rows: [ROWS[0]],
+      subgroups: null,
+    },
+    {
+      key: "__no_value__",
+      label: "No value",
+      row_count: 1,
+      rows: [
+        {
+          id: "row-2",
+          properties: {
+            title: { type: "title", title: "Second Note" },
+          },
+        },
+      ],
+      subgroups: null,
+    },
+  ];
+
+  it("renders one section per group, each with its own repeated column header row", () => {
+    render(
+      <TableView
+        properties={PROPERTIES}
+        rows={[]}
+        groups={GROUPS}
+        editable={false}
+        onCellChange={vi.fn()}
+        view={view({ group_by: { property_key: "kind" } })}
+      />
+    );
+
+    // Two groups -> two independent header rows, each with every column.
+    const titleHeaders = screen.getAllByText("Title");
+    expect(titleHeaders).toHaveLength(2);
+    expect(screen.getByText("First Note")).toBeInTheDocument();
+    expect(screen.getByText("Second Note")).toBeInTheDocument();
+  });
+
+  it("the implicit empty bucket displays as 'No <PropertyName>', not the backend's 'No value'", () => {
+    render(
+      <TableView
+        properties={PROPERTIES}
+        rows={[]}
+        groups={GROUPS}
+        editable={false}
+        onCellChange={vi.fn()}
+        view={view({ group_by: { property_key: "kind" } })}
+      />
+    );
+    expect(screen.getByText("No Kind")).toBeInTheDocument();
+    expect(screen.queryByText("No value")).not.toBeInTheDocument();
+  });
+
+  it("collapsing a group hides its rows but keeps the group header visible", () => {
+    render(
+      <TableView
+        properties={PROPERTIES}
+        rows={[]}
+        groups={GROUPS}
+        editable={false}
+        onCellChange={vi.fn()}
+        view={view({ group_by: { property_key: "kind" } })}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Collapse article" }));
+    expect(screen.queryByText("First Note")).not.toBeInTheDocument();
+    expect(screen.getByText("Second Note")).toBeInTheDocument();
+    expect(screen.getByText("article")).toBeInTheDocument();
+  });
+
+  it("a group listed in hidden_groups doesn't render at all", () => {
+    render(
+      <TableView
+        properties={PROPERTIES}
+        rows={[]}
+        groups={GROUPS}
+        editable={false}
+        onCellChange={vi.fn()}
+        view={view({ group_by: { property_key: "kind", hidden_groups: ["article"] } })}
+      />
+    );
+    expect(screen.queryByText("First Note")).not.toBeInTheDocument();
+    expect(screen.getByText("Second Note")).toBeInTheDocument();
+  });
+
+  it("groupValueForNewRow: unambiguous for option/boolean/exact-text types, undefined for the empty bucket and Number/Date buckets", () => {
+    const g = (key: string) => ({ key, label: key, row_count: 0, rows: [], subgroups: null });
+    expect(groupValueForNewRow(prop({ type: "select" }), g("article"))).toEqual({ type: "select", select: "article" });
+    expect(groupValueForNewRow(prop({ type: "status" }), g("done"))).toEqual({ type: "status", status: "done" });
+    expect(groupValueForNewRow(prop({ type: "multi_select" }), g("tag"))).toEqual({
+      type: "multi_select",
+      multi_select: ["tag"],
+    });
+    expect(groupValueForNewRow(prop({ type: "checkbox" }), g("true"))).toEqual({ type: "checkbox", checkbox: true });
+    expect(groupValueForNewRow(prop({ type: "checkbox" }), g("false"))).toEqual({ type: "checkbox", checkbox: false });
+    expect(groupValueForNewRow(prop({ type: "title" }), g("Hello"))).toEqual({ type: "title", title: "Hello" });
+    // The implicit empty bucket needs no write — an unset property already renders as empty.
+    expect(groupValueForNewRow(prop({ type: "select" }), g("__no_value__"))).toBeUndefined();
+    // Number/Date range buckets: which exact value inside the bucket is ambiguous.
+    expect(groupValueForNewRow(prop({ type: "number" }), g("0-10"))).toBeUndefined();
+    expect(groupValueForNewRow(prop({ type: "date" }), g("2026-01"))).toBeUndefined();
+  });
+
+  it("each group has its own + New page that creates a row pre-filled with that group's value", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (init?.method === "POST") return Promise.resolve(jsonResponse({ id: "row-new", properties: {} }, 201));
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const refetchRows = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <TableView
+        properties={PROPERTIES}
+        rows={[]}
+        groups={GROUPS}
+        editable={true}
+        onCellChange={vi.fn()}
+        dataSourceId="ds-1"
+        refetchRows={refetchRows}
+        view={view({ group_by: { property_key: "kind" } })}
+      />
+    );
+
+    const addButtons = screen.getAllByRole("button", { name: "+ New page" });
+    fireEvent.click(addButtons[0]);
+    await flushPromises();
+
+    expect(refetchRows).toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith("/api/db/data-sources/ds-1/rows", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/db/data-sources/ds-1/rows/row-new",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ property_key: "kind", value: { type: "select", select: "article" } }),
+      })
+    );
+  });
+
+  it("+ New group is offered for a select-typed group property and PATCHes a new option onto it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
+    vi.stubGlobal("fetch", fetchMock);
+    const refetch = vi.fn();
+
+    render(
+      <TableView
+        properties={PROPERTIES}
+        rows={[]}
+        groups={GROUPS}
+        editable={true}
+        onCellChange={vi.fn()}
+        dataSourceId="ds-1"
+        refetch={refetch}
+        view={view({ group_by: { property_key: "kind" } })}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /New group/ }));
+    await flushPromises();
+
+    expect(refetch).toHaveBeenCalled();
+    const kindProperty = PROPERTIES.find((p) => p.key === "kind")!;
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/db/properties/${kindProperty.id}`,
+      expect.objectContaining({ method: "PATCH" })
+    );
+  });
+
+  it("+ New group is absent for a non-option-based group property (e.g. Number)", () => {
+    render(
+      <TableView
+        properties={PROPERTIES}
+        rows={[]}
+        groups={GROUPS}
+        editable={true}
+        onCellChange={vi.fn()}
+        dataSourceId="ds-1"
+        view={view({ group_by: { property_key: "count" } })}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /New group/ })).not.toBeInTheDocument();
+  });
+
+  it("falls back to the ordinary flat table when groups is null/omitted", () => {
+    render(
+      <TableView
+        properties={PROPERTIES}
+        rows={ROWS}
+        editable={false}
+        onCellChange={vi.fn()}
+        view={view({})}
+      />
+    );
+    expect(screen.getAllByText("Title")).toHaveLength(1);
   });
 });

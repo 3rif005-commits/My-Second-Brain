@@ -31,10 +31,12 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { ChevronDown, ChevronRight, FileText, Plus } from "lucide-react";
 import { useToast } from "@/app/providers";
-import { findSystemRelationProperty } from "@/lib/database/types";
+import { findSystemRelationProperty, getGroupBySpec } from "@/lib/database/types";
 import type {
   DatabaseRow,
+  Group,
   PropertyResponse,
   PropertyValue,
   RelatedRow,
@@ -43,7 +45,6 @@ import type {
   SubtaskDisplayMode,
   ViewResponse,
 } from "@/lib/database/types";
-import { FileText } from "lucide-react";
 import { renderCellValue } from "../cells/renderCellValue";
 import {
   getHiddenKeys,
@@ -55,6 +56,10 @@ import {
 import type { SortsUpdater } from "@/lib/database/viewConfig";
 import { defaultConditionFor } from "@/lib/database/filterAst";
 import type { FilterUpdater } from "../FilterBuilder";
+import { groupDisplayLabel, orderedGroups } from "../GroupBuilder";
+import type { SelectOption } from "../EditPropertyPanel";
+import { pillStyleForOption } from "../cells/CellProps";
+import { configuredOptions } from "@/lib/database/filterOperators";
 import { useOpenNote } from "@/lib/database/useOpenNote";
 import { buildSubItemTree } from "@/lib/database/subItemTree";
 import { ButtonPropertyConfigPopover } from "../ButtonPropertyConfigPopover";
@@ -134,6 +139,10 @@ interface TableViewProps {
   /** M4: the query bar (sort/filter chips) and each column header's
    * "Filter" row both write here. */
   onSetFilter?: (updater: FilterUpdater) => void;
+  /** M6: `useDatabaseView`'s grouped-query result — populated (with `rows`
+   * emptied) whenever `view.config.group_by` is set. `null`/`undefined`
+   * renders the ordinary flat table, unchanged. */
+  groups?: Group[] | null;
   /** useDatabaseView's `instantiateTemplate` — creates a row from a chosen
    * (non-default) template right now. Does not itself refetch rows; this
    * component calls `refetchRows` afterward, same as `handleAddRow` does
@@ -152,6 +161,41 @@ const columnHelper = createColumnHelper<DatabaseRow>();
 async function errorMessage(res: Response): Promise<string> {
   const body = await res.json().catch(() => null);
   return body?.detail || body?.error || `Request failed (${res.status})`;
+}
+
+/** M6: best-effort pre-fill for a row created inside a specific group —
+ * unambiguous for the option/boolean/exact-text types (the group KEY is
+ * literally the value to set), skipped for Number/Date range buckets
+ * (which exact value inside the bucket is genuinely ambiguous — the row is
+ * created same as "+ New" and lands in "No <Property>" until the user sets
+ * it) and for the implicit "No <Property>" bucket itself (nothing to write
+ * — that's what an unset property already renders as). A module-level pure
+ * function (not a closure inside the component) so it has its own direct
+ * test coverage. */
+export function groupValueForNewRow(property: PropertyResponse, group: Group): PropertyValue | undefined {
+  if (group.key === "__no_value__") return undefined;
+  switch (property.type) {
+    case "title":
+      return { type: "title", title: group.key };
+    case "rich_text":
+      return { type: "rich_text", rich_text: group.key };
+    case "url":
+      return { type: "url", url: group.key };
+    case "email":
+      return { type: "email", email: group.key };
+    case "phone_number":
+      return { type: "phone_number", phone_number: group.key };
+    case "select":
+      return { type: "select", select: group.key };
+    case "status":
+      return { type: "status", status: group.key };
+    case "multi_select":
+      return { type: "multi_select", multi_select: [group.key] };
+    case "checkbox":
+      return { type: "checkbox", checkbox: group.key === "true" };
+    default:
+      return undefined;
+  }
 }
 
 export function TableView({
@@ -173,6 +217,7 @@ export function TableView({
   onPatchConfig,
   onSetSorts,
   onSetFilter,
+  groups,
 }: TableViewProps) {
   const { showToast } = useToast();
   const openNote = useOpenNote();
@@ -210,6 +255,13 @@ export function TableView({
   // Sub-item "show" mode's expand/collapse state (task-22-brief.md §3) —
   // every row starts expanded (empty set), matching Notion's own default.
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+
+  // M6: which GROUPS are collapsed — same "every group starts expanded,
+  // empty set" default. Purely a display toggle, not persisted anywhere
+  // (group-panel.md never captured whether Notion persists this either).
+  const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<Set<string>>(new Set());
+  const [addingRowToGroupKey, setAddingRowToGroupKey] = useState<string | null>(null);
+  const [addingGroupOption, setAddingGroupOption] = useState(false);
 
   // The full schema, in table order — NOT hidden-filtered. Everything that
   // needs to know "what properties exist on this data source" (sub-item/
@@ -414,8 +466,14 @@ export function TableView({
     ]
   );
 
+  // M6: when grouped, `rows` is empty (useDatabaseView's own "exactly one of
+  // rows/groups" contract) — TanStack's `table.getRow(id)` only resolves ids
+  // present in `data`, so the grouped render below (which looks up each
+  // group's rows individually, same `table.getRow` technique the sub-item
+  // tree branch already uses) needs every grouped row flattened back in.
+  const tableData = groups ? groups.flatMap((g) => g.rows) : rows;
   const table = useReactTable({
-    data: rows,
+    data: tableData,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getRowId: (row) => row.id,
@@ -426,8 +484,81 @@ export function TableView({
   // real columns don't visually shift under the wrong header.
   const columnCount = orderedProperties.length + (editable ? 1 : 0);
 
+  const groupBySpec = view ? getGroupBySpec(view.config) : undefined;
+  const groupProperty = groupBySpec ? allOrderedProperties.find((p) => p.key === groupBySpec.property_key) : undefined;
+  // "+ New group" (group-panel.md: "creates a new select option on the
+  // property — a schema write from the table body") is only well-defined
+  // for option-based types; Number/Date bucket boundaries are config, not
+  // something a bare "+" can invent, and Checkbox/Text/People/Relation have
+  // no options list to append to at all.
+  const groupPropertyIsOptionBased =
+    groupProperty?.type === "select" || groupProperty?.type === "status" || groupProperty?.type === "multi_select";
+
+  function toggleGroupCollapsed(key: string) {
+    setCollapsedGroupKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
 
+  async function handleAddRowToGroup(group: Group) {
+    if (!dataSourceId || addingRowToGroupKey) return;
+    setAddingRowToGroupKey(group.key);
+    try {
+      const res = await fetch(`/api/db/data-sources/${dataSourceId}/rows`, { method: "POST" });
+      if (!res.ok) throw new Error(await errorMessage(res));
+      const created: RowResponse = await res.json();
+      const value = groupProperty ? groupValueForNewRow(groupProperty, group) : undefined;
+      if (value && groupProperty) {
+        const patchRes = await fetch(`/api/db/data-sources/${dataSourceId}/rows/${created.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ property_key: groupProperty.key, value }),
+        });
+        if (!patchRes.ok) throw new Error(await errorMessage(patchRes));
+      }
+      await refetchRows?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not add row", "error");
+    } finally {
+      setAddingRowToGroupKey(null);
+    }
+  }
+
+  /** Mirrors EditPropertyPanel.tsx's own `addOption` — a fresh option named
+   * "Option N", immediately usable, renamed afterward via the same Edit
+   * property → Options row every other option uses (no bespoke inline
+   * rename here). */
+  async function handleAddGroupOption() {
+    if (!groupProperty || addingGroupOption) return;
+    setAddingGroupOption(true);
+    try {
+      const options = ((groupProperty.config?.options as SelectOption[] | undefined) ?? []) as SelectOption[];
+      const next: SelectOption[] = [
+        ...options,
+        {
+          id: Math.random().toString(36).slice(2, 10),
+          name: `Option ${options.length + 1}`,
+          color: "default",
+          ...(groupProperty.type === "status" ? { group: "To-do" as const } : {}),
+        },
+      ];
+      const res = await fetch(`/api/db/properties/${groupProperty.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: { ...groupProperty.config, options: next } }),
+      });
+      if (!res.ok) throw new Error(await errorMessage(res));
+      await refetch?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not add a group", "error");
+    } finally {
+      setAddingGroupOption(false);
+    }
+  }
 
 
 
@@ -478,12 +609,132 @@ export function TableView({
 
   const peekRow = peekRowId ? rows.find((r) => r.id === peekRowId) : undefined;
 
+  // Shared between the flat table and M6's grouped rendering below — "every
+  // group repeats the full column header row" (group-panel.md) means this
+  // same `<tr>` of `<th>`s, minus the flat table's own trailing
+  // "+ Add property" cell (not repeated per group — one add-property
+  // affordance, not N of them).
+  function headerCells() {
+    return table.getHeaderGroups().map((headerGroup) =>
+      headerGroup.headers.map((header) => (
+        <th
+          key={header.id}
+          className={`text-left font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap ${cellBorderClass}`}
+        >
+          {flexRender(header.column.columnDef.header, header.getContext())}
+        </th>
+      ))
+    );
+  }
+
+  // Shared row renderer — same title-cell (page icon + OpenNoteButton)
+  // treatment the flat branch below has always used, factored out so M6's
+  // per-group `<tbody>` can render identically without duplicating it.
+  // Sub-item tree/flattened-parent decoration is deliberately NOT
+  // reproduced here: grouping and the sub-item tree are two different
+  // orderings of the same flat row list, and combining them is out of
+  // scope (grouped mode always renders flat rows, tree mode never combines
+  // with a `group_by`).
+  function dataRow(tableRow: ReturnType<typeof table.getRow>) {
+    return (
+      <tr key={tableRow.id} className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+        {tableRow.getVisibleCells().map((cell) => (
+          <td key={cell.id} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
+            {cell.column.id === titleProperty?.key ? (
+              <div className="flex items-center gap-1">
+                {showPageIcon && <FileText size={12} className="shrink-0 text-gray-300 dark:text-gray-600" aria-hidden />}
+                <div className="flex-1 min-w-0">{flexRender(cell.column.columnDef.cell, cell.getContext())}</div>
+                <OpenNoteButton noteId={tableRow.original.id} className="shrink-0 opacity-0 group-hover:opacity-100" onOpen={openRow} />
+              </div>
+            ) : (
+              flexRender(cell.column.columnDef.cell, cell.getContext())
+            )}
+          </td>
+        ))}
+        {editable && <td className="px-3 py-1.5" />}
+      </tr>
+    );
+  }
+
   return (
     <>
     <div className="flex h-full flex-col">
       {view && onSetSorts && onSetFilter && (
         <QueryBar view={view} properties={allOrderedProperties} onSetSorts={onSetSorts} onSetFilter={onSetFilter} />
       )}
+      {groups ? (
+        <div className="overflow-auto flex-1 min-h-0">
+          {(() => {
+            const spec = groupBySpec ?? { property_key: "" };
+            const hidden = new Set(spec.hidden_groups ?? []);
+            const visible = orderedGroups(groups, spec).filter((g) => !hidden.has(g.key));
+            return visible.map((group) => {
+              const collapsed = collapsedGroupKeys.has(group.key);
+              return (
+                <div key={group.key} className="border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-900">
+                    <button
+                      type="button"
+                      aria-label={collapsed ? `Expand ${groupDisplayLabel(group, groupProperty)}` : `Collapse ${groupDisplayLabel(group, groupProperty)}`}
+                      onClick={() => toggleGroupCollapsed(group.key)}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                    </button>
+                    {group.key === "__no_value__" ? (
+                      <span className="text-xs font-medium text-gray-400 dark:text-gray-500">
+                        {groupDisplayLabel(group, groupProperty)}
+                      </span>
+                    ) : (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300 ${
+                          groupProperty ? pillStyleForOption(group.label, configuredOptions(groupProperty)) : "bg-gray-100 dark:bg-gray-800"
+                        }`}
+                      >
+                        {groupDisplayLabel(group, groupProperty)}
+                      </span>
+                    )}
+                  </div>
+                  {!collapsed && (
+                    <table className="w-full border-collapse text-sm">
+                      <thead>
+                        <tr>{headerCells()}</tr>
+                      </thead>
+                      <tbody>
+                        {group.rows.map((row) => dataRow(table.getRow(row.id)))}
+                        {editable && (
+                          <tr>
+                            <td colSpan={Math.max(columnCount, 1)} className="px-3 py-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleAddRowToGroup(group)}
+                                disabled={addingRowToGroupKey === group.key}
+                                className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-40"
+                              >
+                                + New page
+                              </button>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              );
+            });
+          })()}
+          {editable && groupPropertyIsOptionBased && (
+            <button
+              type="button"
+              onClick={handleAddGroupOption}
+              disabled={addingGroupOption}
+              className="flex items-center gap-1 px-3 py-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-40"
+            >
+              <Plus size={12} /> New group
+            </button>
+          )}
+        </div>
+      ) : (
       <div className="overflow-auto flex-1 min-h-0">
       <table className="w-full border-collapse text-sm">
         <thead className="sticky top-0 z-10 bg-white dark:bg-gray-900">
@@ -676,6 +927,7 @@ export function TableView({
         </tbody>
       </table>
       </div>
+      )}
     </div>
     {peekRow && (
       <RowPeek

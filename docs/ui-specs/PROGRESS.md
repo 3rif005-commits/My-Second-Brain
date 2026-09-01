@@ -190,6 +190,115 @@ files touched this milestone).** `npx tsc --noEmit` clean.
 
 ---
 
+## Phase 0c / M4 / M5 / M6 — COMPLETE (2026-09-01)
+
+| Milestone | State |
+|---|---|
+| Phase 0c — grouping engine | already existed (task-13/15, pre-dates this plan) — only the UI-facing wiring was missing |
+| M4 — Filter panel | done, built end to end, not yet visual-diffed live |
+| M5 — Sort panel (drag-reorder) | done, built end to end, not yet visual-diffed live |
+| M6 — Group panel + grouped Table rendering | done, built end to end, not yet visual-diffed live |
+
+**Frontend 59 files / 805 tests green.** `npx tsc --noEmit` clean. Backend untouched —
+34/34 grouping tests already green before this session (0c needed no backend work).
+**Live Chrome checklist run and the user's visual diff are still outstanding for all
+three milestones** — this batch was built and unit-tested inline across one long
+session; the review checkpoint below covers code review only.
+
+### The Phase 0c discovery
+
+The plan's Phase 0c assumed the grouping engine needed new work (range-bucketed Number,
+day/week/month/year Date, boolean Checkbox, exact-value Text/URL/Person). It didn't —
+`services/db/query/grouping.py` already supported all of it, built for task-13/15 long
+before this UI-parity plan existed. `GROUPABLE_PROPERTY_TYPES` (frontend) was just never
+widened past `select`/`status`/`multi_select` to match. Fixed by widening it to mirror
+the backend's real support (everything except `grouping._NOT_GROUPABLE` and `formula`,
+deferred to M8) and adding `defaultGroupBySpec`/`defaultGroupMode` as the one place that
+fills in each type's required `mode` — replacing three independent copies of
+status-only mode logic in Board creation, the column header's "Group" row, and Chart's
+axis builder that would otherwise 400 the moment Date/Text became pickable.
+
+### M5 — sort panel
+
+`SortRowsList.tsx`: drag-reorderable rows (row order is precedence) via `DragHandle`'s
+`wrapper` render-prop + `DndContext`/`SortableContext` — the same whole-row-transform
+fix `PropertyVisibilityPanel.tsx` already needed. Two independent per-row dropdowns
+(property, direction), replacing the M3 MVP's one-combined-submenu shape.
+
+### M4 — filter panel
+
+New `filterAst.ts` (mirrors `ast.py`'s `FilterCondition`/`FilterGroup`, path-addressed
+tree edits — no ids, matching the backend shape) and `filterOperators.ts` (hand-kept
+mirror of `operators.py`'s `TYPE_OPERATORS` — no HTTP endpoint serves it, so "derive
+from the backend" means keeping this file in step by hand). `FilterBuilder.tsx` is a
+recursive tree editor: a lone condition ("Where …"), a group (first rule "Where", the
+rest with an editable And/Or selector), nested groups indented with their own
+conjunction + footer, per-type value editors dispatched off `FilterOperator.argType`.
+
+**Resolved, not deferred, both of filter-panel.md's flagged AST questions:** our Date
+family has no `between` operator and no generic "relative to today" builder, so the UI
+offers our real 14 date operators, not Notion's captured 9 — which also means
+`FilterCondition.value` never needs two values. The sub-property (start/end) question
+has no answer: the compiler has no concept of it, so a date filter always targets the
+property's single instant.
+
+Wired into the toolbar (rule-count label, same pattern as Sort), the settings sidebar,
+a column header's "Filter" row (M1, disabled since it shipped — now applies a default
+filter on that column, replacing whatever existed), and a new `QueryBar.tsx` (the
+persistent bar under the toolbar: sort chip(s), then filter chip, then "+ Filter" — a
+synthesis of sort-panel.md's and filter-panel.md's two separate captures, disclosed as
+such, since neither shows both chips at once). `DatabaseShell` gained
+`queueFilterUpdate`, the same serialized-per-view-id queue `sorts` already has.
+
+### M6 — group panel + grouped Table rendering
+
+`GroupBuilder.tsx`: property picker (Files excluded outright, matching the capture;
+everything else disabled-with-a-reason if ungroupable), stage-2 editor (Group by,
+Sort — group ORDERING, distinct from row Sort, Manual/Alphabetical/Reverse alphabetical
+— Hide empty groups, a Groups section with drag-reorder + per-group eye toggle + "Hide
+all", Remove grouping, Learn about grouping). Three new UI-only `GroupBySpec` fields
+(`group_order`, `group_order_manual`, `hidden_groups`) live on the SAME config object
+group-panel.md's capture calls for — caught before it shipped: the backend's
+`GroupBySpec` is a plain dataclass that 400s on any unknown kwarg, so
+`backendGroupBySpec()` is now the one required stop between `config.group_by` and
+`POST .../query`, and `getQueryExtras`'s new `table` branch (Table now sends
+`group_by`, matching Board, but never `sub_group_by` — no sub-group control exists in
+Table) routes through it.
+
+`TableView.tsx` renders real grouped tables when `groups` is populated: one
+`<table>` per visible group (each repeating the full column header), a collapse
+toggle, the option's own coloured chip as the group header (or "No `<Property>`" for
+the implicit empty bucket — a UI-only rename of the backend's "No value"), a per-group
+"+ New page" (pre-fills the new row's grouped property when unambiguous — select/
+status/multi_select/checkbox/exact-text; skipped for Number/Date buckets, which value
+inside the bucket is genuinely ambiguous), and "+ New group" (creates a new select
+option — offered only for select/status/multi_select, matching the capture).
+
+### A second jsdom/testing-library environment quirk, found and worked around
+
+`userEvent.click`/`waitFor` (not `fireEvent.click`, not a manual microtask flush) hang
+indefinitely — not slow, unresolved past a 30s wall-clock kill — the moment two or more
+grouped `<table>` sections exist as DOM siblings and either any click or any pending
+promise inside one is awaited through them. Reproduced down to two minimal sibling
+`<table>` elements with no other TableView machinery involved; `fireEvent.click` and a
+manual `await Promise.resolve()` loop resolve the identical state update correctly and
+instantly. Same class of jsdom-only artifact as the DndContext+Popover hang M5's own
+session found (documented in `SortRowsList.test.tsx`) — not a real component bug, but
+unverified beyond jsdom. `TableView.test.tsx`'s M6 describe block documents the
+workaround inline; the live Chrome checklist is this surface's real cross-check.
+
+### Also found: a Radix `asChild` trigger-prop-forwarding bug, twice
+
+A custom component used as a `Popover` `trigger` that only destructures its own props
+(no `forwardRef`, no `...rest` spread) silently drops the `onClick`/`aria-*` props
+Radix's `Slot` injects when cloning it — the popover renders identically but never
+opens, no error, no visual difference. Hit once in `SortRowsList.tsx`'s
+`DropdownButton` (M5) and again in `FilterBuilder.tsx`'s `TriggerButton` (M4) before
+the fix (forwardRef + spread `...rest`) became habitual for the rest of the session.
+Caught both times by the component's own test suite, before either shipped broken.
+
+---
+
 ## Session artifacts
 
 | Artifact | Status |
@@ -305,6 +414,23 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-01 (0c + M4–M6)** — Built the plan's next batch in one session: Phase 0c
+  turned out to be already-done engine work, needing only the frontend wiring
+  (`GROUPABLE_PROPERTY_TYPES` widened, `defaultGroupBySpec`/`defaultGroupMode` added);
+  M5 (drag-reorderable sort rows), M4 (the full filter builder — AST tree, per-type
+  operators, wired into toolbar/sidebar/column header/a new query bar), and M6 (the
+  group panel plus real grouped Table rendering) all built end to end. Found and fixed
+  two real defects along the way, both novel to this batch: a Radix `asChild`
+  trigger-prop-forwarding bug (hit twice, in `SortRowsList.tsx` and
+  `FilterBuilder.tsx`) and a debounce timer that fired on mount, not just on keystroke.
+  Also found and worked around a second jsdom/testing-library environment quirk
+  (`userEvent`/`waitFor` hanging against sibling grouped `<table>` elements — confirmed
+  via `fireEvent` that the actual component behaviour is correct), documented the same
+  way M5's DndContext+Popover hang already is. Frontend 805 tests green, `tsc` clean,
+  backend untouched (0c needed none). Full write-up: this file's own "Phase 0c / M4 /
+  M5 / M6" section above. **Live Chrome checklist + the user's visual diff, and a
+  review checkpoint over this batch, are both still outstanding** — next up per the
+  plan.
 - **2026-09-01 (review checkpoint)** — Ran the plan's first review checkpoint
   (M1, M2, M2b, M3) via `/code-review high` over the whole branch diff,
   scoped to the database UI code. 10 candidate findings, each verified

@@ -10,14 +10,9 @@
 // ALSO top-level toolbar buttons (ViewToolbar.tsx) — two entry points to the
 // same MenuPanel data, which is the whole point of panels-as-data.
 //
-// Filter, Group and Sort's real editors are M4/M5/M6's own milestones (the
-// plan's own milestone table lists them separately) — Group and Sort below
-// are working MVPs (single group-by; multi-sort minus drag-reorder) built on
-// infrastructure M1 already wired (onSetSorts) or that already existed
-// (GROUPABLE_PROPERTY_TYPES), not stubs. Filter has zero existing
-// infrastructure (no compiler, no operators) — its row pushes an honest
-// placeholder rather than a half-built filter UI this milestone was never
-// scoped to write.
+// Filter (M4), Sort (M5) and Group (M6) are all real now — panels-as-data
+// built by FilterBuilder.tsx/SortRowsList.tsx/GroupBuilder.tsx respectively,
+// each reused verbatim by both this sidebar and its own second entry point.
 import { useState } from "react";
 import {
   Bolt,
@@ -41,11 +36,11 @@ import type {
   AutomationPatch,
   AutomationResponse,
   DatabaseResponse,
-  GroupBySpec,
+  Group,
   PropertyResponse,
   ViewResponse,
 } from "@/lib/database/types";
-import { isGroupablePropertyType } from "@/lib/database/types";
+import { getGroupBySpec } from "@/lib/database/types";
 import { getHiddenKeys, orderProperties, patchHidden } from "@/lib/database/viewConfig";
 import type { Sort, SortsUpdater } from "@/lib/database/viewConfig";
 import { editPropertyPanel, hasEditableConfig } from "./EditPropertyPanel";
@@ -54,6 +49,7 @@ import { PropertyVisibilityPanel } from "./PropertyVisibilityPanel";
 import { SortRowsList } from "./SortRowsList";
 import { filterPanel } from "./FilterBuilder";
 import type { FilterUpdater } from "./FilterBuilder";
+import { groupPanel } from "./GroupBuilder";
 import { ViewLayoutPanel } from "./ViewLayoutPanel";
 import { AutomationManager } from "./AutomationManager";
 
@@ -70,36 +66,6 @@ function asSorts(raw: unknown[]): Sort[] {
 async function errorMessage(res: Response): Promise<string> {
   const body = await res.json().catch(() => null);
   return body?.detail || body?.error || `Request failed (${res.status})`;
-}
-
-// ── §D Group — a working single-group-by MVP (group-and-sort-panels.txt) ──
-
-function groupPanel(
-  properties: PropertyResponse[],
-  groupBy: GroupBySpec | undefined,
-  onSelect: (property: PropertyResponse | null) => void
-): MenuPanel {
-  // Alphabetical — this list is for FINDING, not reordering (view-options-
-  // panel.md's own stated rule, contrasted with Property visibility's table
-  // order).
-  const alphabetical = [...properties].sort((a, b) => a.name.localeCompare(b.name));
-  const rows: MenuRow[] = [
-    { id: "none", label: "None", checked: !groupBy, onSelect: () => onSelect(null) },
-    ...alphabetical.map((p) => ({
-      id: p.key,
-      icon: propertyTypeIcon(p.type),
-      label: p.name,
-      checked: groupBy?.property_key === p.key,
-      disabled: !isGroupablePropertyType(p.type),
-      disabledReason: "Grouping isn't supported for this property type yet",
-      onSelect: () => onSelect(p),
-    })),
-  ];
-  return {
-    title: groupBy ? "Group" : "Group by",
-    search: { placeholder: "Search for a property…" },
-    sections: [{ rows }],
-  };
 }
 
 // ── §E Sort — M5: drag-reorderable multi-sort, two independent per-row
@@ -200,6 +166,12 @@ export interface ViewSettingsSidebarProps {
   onDatabaseChanged: () => void | Promise<void>;
   onSetSorts: (updater: SortsUpdater) => void;
   onSetFilter: (updater: FilterUpdater) => void;
+  /** M6's Groups section needs the ACTUAL group results (labels, which
+   * option/bucket a row landed in) to render — not derivable from `config`
+   * alone. `null`/omitted when the active view isn't grouped or this host
+   * doesn't have them yet (Board threads its own `groups` state; Table's
+   * `useDatabaseView` populates the same state once M6 wires it through). */
+  groups?: Group[] | null;
   automations: AutomationResponse[];
   onCreateAutomation: (name: string) => Promise<AutomationResponse>;
   onUpdateAutomation: (id: string, patch: AutomationPatch) => Promise<AutomationResponse>;
@@ -220,6 +192,7 @@ export function ViewSettingsSidebar({
   onDatabaseChanged,
   onSetSorts,
   onSetFilter,
+  groups,
   automations,
   onCreateAutomation,
   onUpdateAutomation,
@@ -269,19 +242,6 @@ export function ViewSettingsSidebar({
     } catch {
       showToast("Could not copy the link", "error");
     }
-  }
-
-  function selectGroupProperty(property: PropertyResponse | null) {
-    if (!property) {
-      onPatchConfig({ group_by: null });
-      return;
-    }
-    const groupBy: Record<string, unknown> = { property_key: property.key };
-    // Mirrors DatabaseShell.handleCreateView's identical Board-creation rule
-    // — `status` needs an explicit mode or the query 400s; select/multi_select
-    // have no mode concept.
-    if (property.type === "status") groupBy.mode = "option";
-    onPatchConfig({ group_by: groupBy });
   }
 
   const rootPanel: MenuPanel = {
@@ -363,7 +323,7 @@ export function ViewSettingsSidebar({
             id: "group",
             icon: <Users size={14} />,
             label: "Group",
-            submenu: () => groupPanel(properties, config.group_by as GroupBySpec | undefined, selectGroupProperty),
+            submenu: () => groupPanel(properties, getGroupBySpec(config), groups ?? null, onPatchConfig),
           },
           {
             id: "conditional-color",

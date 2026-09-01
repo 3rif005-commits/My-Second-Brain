@@ -234,14 +234,19 @@ describe("ViewSettingsSidebar", () => {
     expect(screen.getByText("Open pages in")).toBeInTheDocument();
   });
 
-  it("Group offers only groupable properties enabled, others greyed, and selecting one patches group_by", async () => {
+  it("Group offers only groupable properties enabled, others greyed, Files absent entirely, and selecting one patches group_by", async () => {
     const user = userEvent.setup();
     // Local fixture, not the shared PROPERTIES array other tests assert a
-    // count against: `files` is genuinely ungroupable (`grouping.
-    // _NOT_GROUPABLE`), needed here to exercise the disabled-row case now
-    // that Phase 0c widened GROUPABLE_PROPERTY_TYPES to include rich_text.
+    // count against: `files` is excluded from the picker OUTRIGHT (M6's
+    // groupPropertyPicker, matching group-panel.md's "Files is absent
+    // here" capture — contrast Filter/Sort, which include it disabled);
+    // `formula` stays present but disabled (deferred to Milestone 8).
     const { onPatchConfig } = setup({
-      properties: [...PROPERTIES, prop({ key: "attachments", name: "Attachments", type: "files", position: 3 })],
+      properties: [
+        ...PROPERTIES,
+        prop({ key: "attachments", name: "Attachments", type: "files", position: 3 }),
+        prop({ key: "calc", name: "Calc", type: "formula", position: 4 }),
+      ],
     });
     await user.click(screen.getByText("Group"));
 
@@ -252,9 +257,11 @@ describe("ViewSettingsSidebar", () => {
     // GROUPABLE_PROPERTY_TYPES to match the engine's real support.
     const notesRow = screen.getByText("Notes").closest('[role="option"]');
     expect(notesRow).not.toHaveAttribute("aria-disabled");
-    // "Attachments" (files) isn't — disabled with a reason, not absent.
-    const attachmentsRow = screen.getByText("Attachments").closest('[role="option"]');
-    expect(attachmentsRow).toHaveAttribute("aria-disabled", "true");
+    // "Attachments" (files) doesn't appear in the list at all.
+    expect(screen.queryByText("Attachments")).not.toBeInTheDocument();
+    // "Calc" (formula) appears but disabled with a reason — deferred to M8.
+    const calcRow = screen.getByText("Calc").closest('[role="option"]');
+    expect(calcRow).toHaveAttribute("aria-disabled", "true");
 
     await user.click(screen.getByText("Kind"));
     expect(onPatchConfig).toHaveBeenCalledWith({ group_by: { property_key: "kind" } });

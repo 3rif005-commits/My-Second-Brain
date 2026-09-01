@@ -322,6 +322,10 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             onSetSorts={(updater) => queueSortsUpdate(activeView.id, activeView.sorts, updater)}
             // M4: routed through queueFilterUpdate for the identical reason.
             onSetFilter={(updater) => queueFilterUpdate(activeView.id, activeView.filter, updater)}
+            // M6: populated (and `rows` emptied) by useDatabaseView.loadRows
+            // whenever config.group_by is set — see getQueryExtras' new
+            // "table" branch.
+            groups={groups}
           />
         );
       case "board": {
@@ -565,6 +569,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
           onDatabaseChanged={refetch}
           onSetSorts={(updater) => queueSortsUpdate(activeView.id, activeView.sorts, updater)}
           onSetFilter={(updater) => queueFilterUpdate(activeView.id, activeView.filter, updater)}
+          groups={groups}
           automations={automations}
           onCreateAutomation={createAutomation}
           onUpdateAutomation={updateAutomation}
