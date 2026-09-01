@@ -445,4 +445,115 @@ describe("ViewTabs", () => {
     const options = screen.getAllByRole("option", { name: /.+/ }).map((o) => o.textContent);
     expect(options).not.toContain("Map");
   });
+
+  // M7 — the active tab's own menu (view-tab-bar.md).
+  describe("the active tab's menu", () => {
+    it("clicking the active tab opens its menu rather than a no-op switch", async () => {
+      const user = userEvent.setup();
+      const onSelect = vi.fn();
+      render(
+        <ViewTabs
+          views={VIEWS}
+          activeViewId="v1"
+          onSelect={onSelect}
+          properties={[]}
+          onCreateView={vi.fn()}
+          dataSourceName="Tasks"
+          onUpdateView={vi.fn()}
+          onDeleteView={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />
+      );
+
+      await user.click(screen.getByRole("button", { name: /table view options/i }));
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(screen.getByText("Rename")).toBeInTheDocument();
+      expect(screen.getByText("Display as")).toBeInTheDocument();
+      expect(screen.getByText("Edit view")).toBeInTheDocument();
+      expect(screen.getByText("Copy link to view")).toBeInTheDocument();
+      expect(screen.getByText("Duplicate view")).toBeInTheDocument();
+    });
+
+    it("Delete view is absent with only one view", async () => {
+      const user = userEvent.setup();
+      render(
+        <ViewTabs
+          views={[VIEWS[0]]}
+          activeViewId="v1"
+          onSelect={vi.fn()}
+          properties={[]}
+          onCreateView={vi.fn()}
+          dataSourceName="Tasks"
+          onUpdateView={vi.fn()}
+          onDeleteView={vi.fn()}
+        />
+      );
+      await user.click(screen.getByRole("button", { name: /table view options/i }));
+      expect(screen.queryByText("Delete view")).not.toBeInTheDocument();
+    });
+
+    it("Delete view is present with two views, and deletes on confirm", async () => {
+      const user = userEvent.setup();
+      const onDeleteView = vi.fn().mockResolvedValue(undefined);
+      const onSelect = vi.fn();
+      render(
+        <ViewTabs
+          views={VIEWS}
+          activeViewId="v1"
+          onSelect={onSelect}
+          properties={[]}
+          onCreateView={vi.fn()}
+          dataSourceName="Tasks"
+          onUpdateView={vi.fn()}
+          onDeleteView={onDeleteView}
+        />
+      );
+      await user.click(screen.getByRole("button", { name: /table view options/i }));
+      await user.click(screen.getByText("Delete view"));
+      await user.click(screen.getByRole("button", { name: /^delete view$/i }));
+
+      expect(onDeleteView).toHaveBeenCalledWith("v1");
+      expect(onSelect).toHaveBeenCalledWith("v2");
+    });
+
+    it("Rename turns the tab into an editable input and commits on blur", async () => {
+      const user = userEvent.setup();
+      const onUpdateView = vi.fn().mockResolvedValue(undefined);
+      render(
+        <ViewTabs
+          views={VIEWS}
+          activeViewId="v1"
+          onSelect={vi.fn()}
+          properties={[]}
+          onCreateView={vi.fn()}
+          dataSourceName="Tasks"
+          onUpdateView={onUpdateView}
+          onDeleteView={vi.fn()}
+        />
+      );
+      await user.click(screen.getByRole("button", { name: /table view options/i }));
+      await user.click(screen.getByText("Rename"));
+
+      const input = screen.getByLabelText("View name");
+      await user.clear(input);
+      await user.type(input, "My Tasks");
+      await user.tab();
+
+      expect(onUpdateView).toHaveBeenCalledWith("v1", { name: "My Tasks" });
+    });
+
+    it("an unnamed view (the literal 'New view' default) shows its type as the tab label", () => {
+      render(
+        <ViewTabs
+          views={[{ ...VIEWS[1], name: "New view" }]}
+          activeViewId="v2"
+          onSelect={vi.fn()}
+          properties={[]}
+          onCreateView={vi.fn()}
+        />
+      );
+      expect(screen.getByText("Board")).toBeInTheDocument();
+      expect(screen.queryByText("New view")).not.toBeInTheDocument();
+    });
+  });
 });

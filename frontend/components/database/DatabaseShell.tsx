@@ -51,6 +51,9 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     setRelationLinks,
     createView,
     updateView,
+    deleteView,
+    updateDatabase,
+    deleteDatabase,
     templates,
     createTemplate,
     updateTemplate,
@@ -528,6 +531,10 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
           onSelect={setActiveViewId}
           properties={properties}
           onCreateView={handleCreateView}
+          dataSourceName={dataSource.name}
+          onUpdateView={updateView}
+          onDeleteView={deleteView}
+          onOpenSettings={() => setSettingsOpen(true)}
           // Hidden for the same read-only source the settings sidebar below
           // is hidden for — a toolbar whose only enabled button opens
           // nothing (Filter/Sort still render but write nowhere useful for

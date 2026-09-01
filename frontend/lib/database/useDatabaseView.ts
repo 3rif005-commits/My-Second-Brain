@@ -470,6 +470,43 @@ export function useDatabaseView(databaseId: string) {
     return updated;
   }
 
+  /** `DELETE /db/views/{id}` (Phase 0b, B1) — M7's "Delete view" row. The
+   * backend itself refuses to delete the last view (400, in a transaction);
+   * the caller (ViewTabs) also gates the row's very presence on
+   * `views.length > 1` so that refusal is a backstop, not the primary UX. */
+  async function deleteView(viewId: string): Promise<void> {
+    const res = await fetch(`/api/db/views/${viewId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(await errorMessage(res));
+    setViews((prev) => prev.filter((v) => v.id !== viewId));
+  }
+
+  /** Fields `PATCH /db/databases/{id}` (Phase 0b, B2) accepts. */
+  type DatabasePatch = Partial<Pick<DatabaseResponse, "title" | "icon" | "description" | "cover_url">>;
+
+  /** `PATCH /db/databases/{id}` (Phase 0b, B2) — M8's title/icon/description.
+   * Mirrors `updateView` above exactly. */
+  async function updateDatabase(patch: DatabasePatch): Promise<DatabaseResponse> {
+    if (!database) throw new Error("No database loaded yet");
+    const res = await fetch(`/api/db/databases/${database.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res));
+    const updated: DatabaseResponse = await res.json();
+    setDatabase(updated);
+    return updated;
+  }
+
+  /** `DELETE /db/databases/{id}` (Phase 0b, B2) — M8's "Move to Trash". Soft
+   * delete server-side; the caller (DatabasePageMenu) navigates away since
+   * there is nothing left here to re-render. */
+  async function deleteDatabase(): Promise<void> {
+    if (!database) throw new Error("No database loaded yet");
+    const res = await fetch(`/api/db/databases/${database.id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(await errorMessage(res));
+  }
+
   /** `POST /db/data-sources/{id}/templates` (task-37's backend, task-40's
    * frontend) — mirrors `createView` above exactly: fetch, `errorMessage` on
    * failure (thrown, not caught here — same as `createView`/`updateView`,
@@ -597,6 +634,9 @@ export function useDatabaseView(databaseId: string) {
     setRelationLinks,
     createView,
     updateView,
+    deleteView,
+    updateDatabase,
+    deleteDatabase,
     templates,
     createTemplate,
     updateTemplate,

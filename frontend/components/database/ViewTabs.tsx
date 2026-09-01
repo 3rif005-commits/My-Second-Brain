@@ -6,8 +6,13 @@
 // (name/type/group-by-property draft, submit/error state) that inlining it
 // would make DatabaseShell noticeably harder to read.
 import { useState } from "react";
+import { useToast } from "@/app/providers";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { MenuList, Popover } from "@/components/ui/primitives";
 import type { PropertyResponse, ViewResponse } from "@/lib/database/types";
 import { GROUPABLE_PROPERTY_TYPES } from "@/lib/database/types";
+import { getDisplayAs, setDisplayAs } from "@/lib/database/viewTabPrefs";
+import { buildViewTabMenu } from "./ViewTabMenu";
 import {
   ChartCreateFields,
   DEFAULT_CHART_DRAFT,
@@ -15,6 +20,22 @@ import {
   isChartConfigComplete,
 } from "./views/ChartView";
 import type { ChartDraftConfig } from "./views/ChartView";
+
+async function errorMessage(res: Response): Promise<string> {
+  const body = await res.json().catch(() => null);
+  return body?.detail || body?.error || `Request failed (${res.status})`;
+}
+
+/** view-tab-bar.md: "Our `createView` defaults `name` to `\"New view\"` and
+ * stores it... renaming to `\"\"` should show the type again. TBD." Rather
+ * than resolve that storage question (unconfirmed against live Notion),
+ * this only fixes the DISPLAY: an empty or still-literally-default name
+ * renders as the view's TYPE, matching the captured "unnamed view shows its
+ * type" behaviour, without changing what's persisted. */
+export function viewTabLabel(view: ViewResponse): string {
+  if (view.name && view.name !== "New view") return view.name;
+  return view.type.charAt(0).toUpperCase() + view.type.slice(1);
+}
 
 interface ViewTabsProps {
   views: ViewResponse[];
@@ -44,6 +65,16 @@ interface ViewTabsProps {
    * flex row: this row is already `flex-wrap`, and nesting another flex
    * container around it risks the tabs wrapping oddly next to the toolbar. */
   trailing?: React.ReactNode;
+  // M7 (view-tab-bar.md): the active tab's own menu — rename, display as,
+  // edit view, source, copy link, duplicate, delete. All optional on the
+  // same "an older/other caller gets a degraded but non-crashing
+  // behaviour" convention M1's ColumnHeader props already established —
+  // omitting them (e.g. a stale test) just means clicking the active tab
+  // does nothing, same as before this milestone.
+  dataSourceName?: string;
+  onUpdateView?: (viewId: string, patch: { name?: string }) => Promise<ViewResponse>;
+  onDeleteView?: (viewId: string) => Promise<void>;
+  onOpenSettings?: () => void;
 }
 
 // The ten view types this milestone supports creating (table/board —
@@ -73,7 +104,95 @@ const VIEW_TYPE_OPTIONS = [
   { value: "dashboard", label: "Dashboard" },
 ] as const;
 
-export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateView, trailing }: ViewTabsProps) {
+export function ViewTabs({
+  views,
+  activeViewId,
+  onSelect,
+  properties,
+  onCreateView,
+  trailing,
+  dataSourceName = "",
+  onUpdateView,
+  onDeleteView,
+  onOpenSettings,
+}: ViewTabsProps) {
+  const { showToast } = useToast();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [renamingViewId, setRenamingViewId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [confirmingDeleteViewId, setConfirmingDeleteViewId] = useState<string | null>(null);
+  // Bumped on every "Display as" write so the active tab's label re-reads
+  // localStorage — the pref lives outside React state entirely (per-user,
+  // not `view.config`; see viewTabPrefs.ts), so nothing else would
+  // otherwise trigger a re-render when it changes.
+  const [displayAsTick, setDisplayAsTick] = useState(0);
+
+  function startRename(view: ViewResponse) {
+    setRenameDraft(viewTabLabel(view));
+    setRenamingViewId(view.id);
+    setMenuOpen(false);
+  }
+
+  async function commitRename(view: ViewResponse) {
+    const trimmed = renameDraft.trim();
+    setRenamingViewId(null);
+    if (!onUpdateView || !trimmed || trimmed === viewTabLabel(view)) return;
+    try {
+      await onUpdateView(view.id, { name: trimmed });
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not rename the view", "error");
+    }
+  }
+
+  async function copyViewLink(view: ViewResponse) {
+    const url = `${window.location.origin}${window.location.pathname}?view=${view.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Link copied to clipboard", "info");
+    } catch {
+      showToast("Could not copy the link", "error");
+    }
+  }
+
+  // "Duplicate view needs no new endpoint — POST .../views then PATCH the
+  // config is faithful" (view-tab-bar.md). Switches to the new tab
+  // afterward — the point of duplicating is almost always to edit the copy.
+  async function duplicateView(view: ViewResponse) {
+    try {
+      const res = await fetch(`/api/db/data-sources/${view.data_source_id}/views`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: `${viewTabLabel(view)} (copy)`, type: view.type, icon: view.icon }),
+      });
+      if (!res.ok) throw new Error(await errorMessage(res));
+      const created: ViewResponse = await res.json();
+      const patched = await fetch(`/api/db/views/${created.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: view.config, filter: view.filter, sorts: view.sorts }),
+      });
+      if (!patched.ok) throw new Error(await errorMessage(patched));
+      onSelect(created.id);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not duplicate the view", "error");
+    }
+  }
+
+  async function confirmDeleteView() {
+    const viewId = confirmingDeleteViewId;
+    setConfirmingDeleteViewId(null);
+    if (!viewId || !onDeleteView) return;
+    try {
+      await onDeleteView(viewId);
+      if (viewId === activeViewId) {
+        const remaining = views.filter((v) => v.id !== viewId);
+        if (remaining[0]) onSelect(remaining[0].id);
+      }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not delete the view", "error");
+    }
+  }
+
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<string>("table");
@@ -151,21 +270,104 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
 
   return (
     <div className="flex items-center gap-1 mt-2.5 flex-wrap">
-      {views.map((view) => (
-        <button
-          key={view.id}
-          type="button"
-          onClick={() => onSelect(view.id)}
-          className={`text-xs font-medium px-2.5 py-1 rounded-md ${
-            view.id === activeViewId
-              ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-              : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          }`}
-        >
-          {view.icon && <span className="mr-1">{view.icon}</span>}
-          {view.name}
-        </button>
-      ))}
+      {views.map((view) => {
+        const isActive = view.id === activeViewId;
+        const tabClassName = `text-xs font-medium px-2.5 py-1 rounded-md ${
+          isActive
+            ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+            : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        }`;
+
+        if (renamingViewId === view.id) {
+          return (
+            <input
+              key={view.id}
+              autoFocus
+              aria-label="View name"
+              value={renameDraft}
+              onChange={(e) => setRenameDraft(e.target.value)}
+              onFocus={(e) => e.target.select()}
+              onBlur={() => commitRename(view)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") setRenamingViewId(null);
+              }}
+              className="text-xs font-medium px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+            />
+          );
+        }
+
+        const displayAs = getDisplayAs(view.id);
+        void displayAsTick; // read to force re-render after a "Display as" write
+        const label = viewTabLabel(view);
+        const tabBody = (
+          <>
+            {displayAs !== "text_only" && view.icon && <span className="mr-1">{view.icon}</span>}
+            {displayAs !== "icon_only" && label}
+          </>
+        );
+
+        // "Click the active tab -> opens that view's menu. Click an
+        // inactive tab -> switches." Only the active tab is a menu trigger;
+        // an inactive one keeps the plain switch-on-click behaviour it
+        // always had.
+        if (!isActive || !onUpdateView) {
+          return (
+            <button key={view.id} type="button" onClick={() => onSelect(view.id)} className={tabClassName}>
+              {tabBody}
+            </button>
+          );
+        }
+
+        return (
+          <Popover
+            key={view.id}
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+            width="sm"
+            label={`${label} view options`}
+            trigger={
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-label={`${label} view options`}
+                className={tabClassName}
+              >
+                {tabBody}
+              </button>
+            }
+          >
+            <MenuList
+              root={buildViewTabMenu({
+                viewCount: views.length,
+                dataSourceName,
+                displayAs,
+                onSetDisplayAs: (mode) => {
+                  setDisplayAs(view.id, mode);
+                  setDisplayAsTick((t) => t + 1);
+                },
+                onRename: () => startRename(view),
+                onEditView: () => {
+                  setMenuOpen(false);
+                  onOpenSettings?.();
+                },
+                onCopyLink: () => copyViewLink(view),
+                onDuplicate: () => {
+                  setMenuOpen(false);
+                  duplicateView(view);
+                },
+                onDelete: () => {
+                  setMenuOpen(false);
+                  setConfirmingDeleteViewId(view.id);
+                },
+              })}
+              nav="flyout"
+              onClose={() => setMenuOpen(false)}
+              label={`${label} view options`}
+            />
+          </Popover>
+        );
+      })}
 
       {!creating ? (
         <button
@@ -267,6 +469,15 @@ export function ViewTabs({ views, activeViewId, onSelect, properties, onCreateVi
         </form>
       )}
       {trailing}
+
+      <ConfirmDialog
+        open={confirmingDeleteViewId !== null}
+        title="Delete this view?"
+        description="This only removes the view. The rows themselves are unaffected."
+        confirmLabel="Delete view"
+        onConfirm={confirmDeleteView}
+        onCancel={() => setConfirmingDeleteViewId(null)}
+      />
     </div>
   );
 }
