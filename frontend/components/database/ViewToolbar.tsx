@@ -17,7 +17,7 @@
 // a reason, the "disabled, not missing" convention this branch uses
 // everywhere else for the same situation.
 import { forwardRef, useState } from "react";
-import { ArrowUpDown, Filter as FilterIcon, Search as SearchIcon, Settings, Sparkles, Wand2 } from "lucide-react";
+import { ArrowUpDown, Eye, Filter as FilterIcon, Search as SearchIcon, Settings, Sparkles, Wand2 } from "lucide-react";
 import { MenuList, Popover } from "@/components/ui/primitives";
 import type { AutomationPatch, AutomationResponse, PropertyResponse, ViewResponse } from "@/lib/database/types";
 import type { Sort, SortsUpdater } from "@/lib/database/viewConfig";
@@ -104,53 +104,66 @@ export function ViewToolbar({
   const sorts = asSorts(view.sorts ?? []);
   const ruleCount = countConditions(asFilterNode(view.filter));
 
+  // Form's own live capture (form-view.md): its toolbar shows exactly three
+  // icons (Automations/AI Autofill/Settings) plus a "Preview" button — no
+  // Filter/Sort/Search at all, unlike every other view type. Genuine per-
+  // type difference, not an oversight: a form has no rows to filter or sort
+  // (task-44-brief.md's own "has no `properties` array" framing), and
+  // Search's own disabled state elsewhere in this app is about row search,
+  // equally inapplicable here.
+  const isForm = view.type === "form";
+
   return (
     <div className="ml-auto flex items-center gap-0.5" role="toolbar" aria-label="View toolbar">
-      <Popover
-        open={filterOpen}
-        onOpenChange={setFilterOpen}
-        width="sm"
-        label="Filter"
-        trigger={
-          <ToolbarButton
-            label={ruleCount === 1 ? "1 rule" : ruleCount > 1 ? `${ruleCount} rules` : "Filter"}
-            icon={<FilterIcon size={14} />}
-          />
-        }
-      >
-        <MenuList
-          root={filterPanel(properties, view.filter, onSetFilter)}
-          nav="flyout"
-          onClose={() => setFilterOpen(false)}
-          label="Filter"
-        />
-      </Popover>
-
-      <Popover
-        open={sortOpen}
-        onOpenChange={setSortOpen}
-        width="sm"
-        label="Sort"
-        trigger={
-          <ToolbarButton
-            label={
-              sorts.length === 1
-                ? `Sort: ${properties.find((p) => p.key === sorts[0].property)?.name ?? sorts[0].property}`
-                : sorts.length > 1
-                  ? `${sorts.length} sorts`
-                  : "Sort"
+      {!isForm && (
+        <>
+          <Popover
+            open={filterOpen}
+            onOpenChange={setFilterOpen}
+            width="sm"
+            label="Filter"
+            trigger={
+              <ToolbarButton
+                label={ruleCount === 1 ? "1 rule" : ruleCount > 1 ? `${ruleCount} rules` : "Filter"}
+                icon={<FilterIcon size={14} />}
+              />
             }
-            icon={<ArrowUpDown size={14} />}
-          />
-        }
-      >
-        <MenuList
-          root={sortPanel(properties, sorts, onSetSorts)}
-          nav="flyout"
-          onClose={() => setSortOpen(false)}
-          label="Sort"
-        />
-      </Popover>
+          >
+            <MenuList
+              root={filterPanel(properties, view.filter, onSetFilter)}
+              nav="flyout"
+              onClose={() => setFilterOpen(false)}
+              label="Filter"
+            />
+          </Popover>
+
+          <Popover
+            open={sortOpen}
+            onOpenChange={setSortOpen}
+            width="sm"
+            label="Sort"
+            trigger={
+              <ToolbarButton
+                label={
+                  sorts.length === 1
+                    ? `Sort: ${properties.find((p) => p.key === sorts[0].property)?.name ?? sorts[0].property}`
+                    : sorts.length > 1
+                      ? `${sorts.length} sorts`
+                      : "Sort"
+                }
+                icon={<ArrowUpDown size={14} />}
+              />
+            }
+          >
+            <MenuList
+              root={sortPanel(properties, sorts, onSetSorts)}
+              nav="flyout"
+              onClose={() => setSortOpen(false)}
+              label="Sort"
+            />
+          </Popover>
+        </>
+      )}
 
       <ToolbarButton
         label="Automations"
@@ -160,9 +173,22 @@ export function ViewToolbar({
 
       <ToolbarButton label="AI Autofill" icon={<Sparkles size={14} />} disabled disabledReason="Out of scope for this app" />
 
-      <ToolbarButton label="Search" icon={<SearchIcon size={14} />} disabled disabledReason="In-view search isn't available yet" />
+      {!isForm && (
+        <ToolbarButton label="Search" icon={<SearchIcon size={14} />} disabled disabledReason="In-view search isn't available yet" />
+      )}
 
       <ToolbarButton label="Settings" icon={<Settings size={14} />} onClick={onOpenSettings} />
+
+      {isForm && (
+        <a
+          href={`/forms/${view.id}`}
+          target="_blank"
+          rel="noreferrer"
+          className="ml-1 flex h-6 items-center gap-1 rounded px-2 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+        >
+          <Eye size={13} /> Preview
+        </a>
+      )}
 
       <AutomationManager
         open={automationsOpen}

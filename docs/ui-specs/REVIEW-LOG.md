@@ -821,3 +821,35 @@ the peek" test already documents (RowPeek's own close control also reads "Close"
 open) — asserts the exact `router.replace` URL after each click, not just "no crash."
 
 Frontend 61 files / 935 tests green (was 928), `tsc` clean.
+
+## Form view — a stale test's throw cascaded into 3 unrelated test failures (2026-09-02)
+
+Not a code-review checkpoint — found finishing M12's Form rebuild (`form-view.md` has
+the full account of that session; this entry covers the one real bug in isolation,
+matching this file's own convention).
+
+### Confirmed and fixed
+
+Rebuilding `FormView.tsx` as a WYSIWYG surface (per a live Notion capture) moved
+"Required" off a bare per-question checkbox and into each question card's own "···"
+"Question options" popover. `DatabaseShell.test.tsx`'s own pre-existing "two config
+PATCHes fired before the first's response lands do not clobber each other" test still
+called `screen.getByLabelText("Question 1 required")` — a label that no longer exists —
+which throws `TestingLibraryElementError` immediately.
+
+**That throw alone would just fail its own test.** What actually happened: the throw
+left `user-event`'s pointer/mock state in a condition that cascaded into 3 OTHER,
+unrelated-looking tests failing later in the SAME file run — two `queueSortsUpdate`/
+`queueGroupByUpdate` stale-write-race tests and one Board-view-creation test, all
+failing on an unrelated `vi.waitFor(...)` timeout. Confirmed as real cross-test
+pollution, not this machine's own recurring memory-pressure flakiness (a class this
+workstream has hit often — row-affordances.md's Gallery/List sessions, for instance):
+every one of the 4 failing tests passed cleanly in isolation (`-t` filter), and
+reverting only `FormView.tsx` (keeping the stale test as-is) made all 35 pass — proving
+the earlier test's throw, not system load, was the cause.
+
+**Fix:** updated that one test to open the question's own "···" popover and click
+"Required" inside it, matching every other test this milestone updated for the new UI.
+No FormView.tsx change was needed — the component was correct; the test was stale.
+
+Frontend 61 files / 953 tests green (was 947 pre-M12-Form), `tsc` clean.

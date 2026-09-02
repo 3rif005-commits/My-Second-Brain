@@ -601,6 +601,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             properties={properties}
             config={activeView.config}
             onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
+            onPropertiesChanged={refetch}
           />
         );
       case "dashboard":

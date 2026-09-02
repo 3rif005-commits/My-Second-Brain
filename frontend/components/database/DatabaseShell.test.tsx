@@ -434,7 +434,10 @@ describe("DatabaseShell", () => {
 
     render(<DatabaseShell databaseId="db-1" />);
 
-    await user.click(screen.getByLabelText("Question 1 required"));
+    // M12's rebuild moved "Required" behind each question card's own "···"
+    // Question options popover (form-view.md) — no longer a bare checkbox.
+    await user.click(screen.getByRole("button", { name: "Question 1 options" }));
+    await user.click(screen.getByText("Required"));
     // The first PATCH (Required) is now in flight, deliberately unresolved.
     expect(mockHook.updateView).toHaveBeenCalledTimes(1);
 

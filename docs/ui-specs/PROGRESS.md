@@ -8,12 +8,11 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 **Branch:** `feat/notion-databases-ui-parity` (from `feat/workspaces-compact-redesign` @ 25a08b4)
 
-**RESOLVED (2026-09-02):** the row-gutter mismatch the user reported — see this entry's
-own Log record below and `docs/ui-specs/ISSUE-row-gutter-mismatch.md` (now carries its own
-"Resolution" section) — turned out to be case 1 of that doc's own three possibilities:
-the 2026-08-29 capture was accurate then and still is. No code change was needed. Resume
-point reverts to M12's own decided order: **Gallery's own dedicated per-view work** (card
-preview source, card size/fit).
+**M12 — Form's own dedicated work: DONE (2026-09-02).** Rebuilt as a real WYSIWYG builder
+against a fresh live-Notion capture (`docs/ui-specs/form-view.md`) — see this file's own
+Log entry below for the full account. Resume point: **Dashboard's own dedicated work**,
+next in M12's decided order (widget grid, per-widget config — "least overlap" reasoning,
+same class as Form).
 
 ---
 
@@ -617,7 +616,8 @@ zero results" is in practice.
 | M12 — Feed | **DONE (2026-09-02): row hover affordances (top-right "···" menu) and center-peek default built, unit-tested, and live-verified; byline/comments deliberately deferred (missing prerequisites, user's own call)** |
 | M12 — Open pages in defaults (Gallery, Calendar) | **DONE (2026-09-02): both now default to Center peek at creation, matching real Notion, live-verified; checked systematically across every view type, not just Feed** |
 | M12 — Gallery's own dedicated work | **DONE (2026-09-02): Card preview source (None/Page cover/a `files` property) built, unit-tested; row hover affordances (OPEN + new "···" menu, hover-gated) built — a real gap the code survey named, closed; a real OPEN/CLOSE-toggle bug (same class M10 fixed once for Table) found and fixed. Card size/fit-image were already built pre-session. Live-verified partially — see `row-affordances.md`'s "Gallery view" section for the environment-exhaustion gap.** |
-| M12 — Chart's own dedicated work | **DONE (2026-09-02): the real post-creation config surface `view-tab-bar.md`'s own "Chart is a disclosed exception" section named as missing — built, unit-tested, live-verified (persisted through a hard reload). Form/Dashboard/Board/Calendar/Timeline's own dedicated per-view work not started** |
+| M12 — Chart's own dedicated work | **DONE (2026-09-02): the real post-creation config surface `view-tab-bar.md`'s own "Chart is a disclosed exception" section named as missing — built, unit-tested, live-verified (persisted through a hard reload).** |
+| M12 — Form's own dedicated work | **DONE (2026-09-02): rebuilt from scratch as a real WYSIWYG builder (`docs/ui-specs/form-view.md`, a fresh live-Notion capture) — per-type answer previews, the full "Question options" popover, "Add question", the toolbar's own Filter/Sort/Search suppression + new Preview link. Live-verified against both real Notion and this app's own build. Dashboard/Board/Calendar/Timeline's own dedicated per-view work not started** |
 
 `docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
 a code-verified survey of what M1-M11 already ship for free across every view type (view
@@ -719,6 +719,7 @@ differs from List's row shape).
 | 14 | `table-drag-resize.md` | **written** (reorder drags TBD) | `resize-and-states.txt` | 79, 80 |
 | 15 | `cell-editing.md` | **written** (Select, Status, Date; 7 types TBD) | `cell-editing.txt` | 85a-d, 87, 88 |
 | 16 | `states.md` | **written** (loading/error/empty-group TBD) | `resize-and-states.txt`, `empty-database-toolbar.txt` | 94 |
+| — | `form-view.md` (M12) | **written** (per-type previews beyond title/rich_text/select TBD, keyboard TBD) | reconstructed from inline screenshots + targeted `read_page`/`find` reads, not a saved `raw-dom/*.txt` dump | none saved to `screenshots/` this session |
 
 ---
 
@@ -793,8 +794,12 @@ Built by me, with the user's authorisation, 2026-08-29:
   Person, Checkbox, URL, Files
 - **2 rows**: "Row one" (all values empty), "Row two" (added 2026-09-02 for M12's List
   capture — also all values empty)
-- **3 views**: `Table`, `Board` (Board auto-grouped by Status), `List` (added 2026-09-02
-  for M12's row-affordances capture, `row-affordances.md`'s new "List view" section)
+- **Views**: `Table`, `Board` (Board auto-grouped by Status), `List` (added 2026-09-02
+  for M12's row-affordances capture), plus a **"Form builder" view** — found already
+  present when M12's Form session opened the view switcher (2026-09-02), not previously
+  recorded in this section; likely created ad hoc in an earlier, unlogged session. Used
+  as-is for `form-view.md`'s capture; a temporary `Select`-type question added and
+  removed again during that capture (no lasting fixture change).
 - **1 Select option**: `Alpha`, created via create-on-type, applied to Row one
 - **1 calculation**: `Sum` on the Number column, so the footer row renders
 - **TYPES CORRECTED 2026-08-31.** Four properties had been created with the wrong type
@@ -806,6 +811,72 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M12 — Form's own dedicated work: rebuilt as a real WYSIWYG builder)** —
+  Picked up the decided M12 order's next item after Chart. First committed the prior
+  session's own uncommitted Gallery/Chart/row-gutter-resolution work (three commits,
+  matching PROGRESS.md's own log entries for each) — found sitting in the working tree
+  at session start, tested green, landed before starting new work. Read the existing
+  `FormView.tsx` first (built earlier, under task-44/M13, well before this UI-parity
+  plan existed): a plain settings-list editor (checkboxes, a native `<select>`-free but
+  still form-shaped layout) with real backing logic already — `readFormQuestions`/
+  `readSubmitScreen`, debounced submit-screen PATCHes, `submission_permissions: "none"`
+  always forced. The parity gap was never the logic, only the shape.
+  Live-captured Notion's real Form builder (the fixture database's own pre-existing
+  "Form builder" view, not previously logged in this file's own Fixture-state section)
+  and found it is **WYSIWYG** — the page body IS the form a respondent would see, each
+  question rendering as its own disabled answer-input preview, edited via a "···"
+  "Question options" popover — not a settings panel beside a hidden preview. Full
+  capture: `docs/ui-specs/form-view.md` (new spec, no `raw-dom/*.txt` dump this time —
+  reconstructed from inline screenshots + targeted accessibility-tree reads instead,
+  disclosed as such in the spec's own header).
+  **Two real, capture-confirmed findings that changed scope, not guessed:**
+  1. "Add conditional logic" and "Submit screen" are BOTH gated behind Notion's own
+     paid plans (Business and Plus respectively) — clicking either opens Notion's real
+     upgrade page, confirmed live, not assumed from the badge alone. This app's own
+     Submit-screen editing (already built, free) is therefore ADDITIVE, not a parity
+     gap — same class of finding as M10's "Open in Workspace."
+  2. The Form view's own toolbar shows exactly 3 icons (Automations/AI Autofill/
+     Settings) plus "Preview"/"Share form" — no Filter/Sort/Search — a genuine per-
+     view-type toolbar difference `ViewToolbar.tsx` never accounted for (it renders the
+     full 6-icon set for every view type, Form included, before this session).
+  **Built:** `FormView.tsx` rebuilt from scratch — WYSIWYG question cards (disabled
+  per-type answer previews: text input, radio/checkbox list with a real "+ Add option"
+  reusing `EditPropertyPanel.tsx`'s own `addOption` naming convention, a dropdown-shaped
+  button for select-likes' "Show options as: Dropdown"), a "Question options" popover
+  per card (`MenuList`/`MenuPanel`, five new optional `FormQuestion` fields —
+  `description`/`long_answer`/`display_as`/`label`/`sync_with_name`, all additive to
+  task-44-brief.md's original four-field contract), "View linked property" reusing the
+  SAME `editPropertyPanel()`/`hasEditableConfig()` the column header menu already uses
+  (not a second copy) with a new minimal read-only fallback panel for types without one,
+  and a re-scoped "+ Add question" (existing-properties only — the "New question" /
+  create-a-property-from-the-form section is real, captured, and deliberately deferred).
+  `ViewToolbar.tsx` gained a `view.type === "form"` branch: hides Filter/Sort/Search,
+  adds a "Preview" link to `/forms/{viewId}`. `ColumnHeaderMenu.tsx`'s `TYPE_LABELS`
+  exported (one more reuse, not a second copy).
+  **A real bug found and fixed, not in FormView.tsx itself:** `DatabaseShell.test.tsx`'s
+  own pre-existing "two config PATCHes... race" test still clicked a bare
+  `getByLabelText("Question 1 required")` checkbox this rebuild removed — its throw
+  cascaded into 3 unrelated-looking test failures elsewhere in the same file (confirmed
+  via isolation runs, not assumed to be this machine's usual memory-pressure flakiness).
+  Full account: `REVIEW-LOG.md`'s new "Form view" section.
+  Frontend 947 → 953 tests green (61 files unchanged — no new test file, `FormView.
+  test.tsx`/`ViewToolbar.test.tsx`/`DatabaseShell.test.tsx` all grew), `tsc` clean.
+  **Live-verified twice**, both real: against real Notion for the capture itself, and
+  against this app's own `localhost:3000` build afterward (a scratch database, a Select
+  property added for the session) — question cards, the full Question-options row set
+  and its per-type conditionality, the Show-options-as/Long-answer preview swaps, both
+  branches of View-linked-property, a real Add-option PATCH, and the toolbar's Preview
+  link opening the real `/forms/{viewId}` page. Full write-up: `form-view.md`'s own
+  Checklist section.
+  **Deferred, ranked in `form-view.md`'s own closing section:** form title/description
+  shown to respondents (needs a `config` contract change Task 43's `PublicFormClient.tsx`
+  also reads — out of scope for a unilateral change), "New question" (create-a-property-
+  from-the-form), per-type previews for number/date/checkbox/multi_select (inferred, not
+  captured), a working "Form settings" toolbar popover (kept inline in the page instead),
+  a center-peek Preview (this app's opens a new tab instead), keyboard, loading/error
+  states.
+  **Resume point: Dashboard's own dedicated per-view work** (next in M12's decided
+  order — widget grid, per-widget config, same "least overlap" reasoning as Form).
 - **2026-09-02 (M12 — Chart's own dedicated work: a real post-creation config surface)** —
   Picked up the decided M12 order's next item after Gallery, below. Read the code first
   (same discipline as every milestone): two of the plan's own named Chart gaps

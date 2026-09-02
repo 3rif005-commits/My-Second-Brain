@@ -138,4 +138,20 @@ describe("ViewToolbar", () => {
     await user.click(screen.getByRole("button", { name: "Automations" }));
     expect(screen.getByRole("heading", { name: /automation/i })).toBeInTheDocument();
   });
+
+  // form-view.md's own live capture: a Form view's toolbar shows exactly
+  // Automations/AI Autofill/Settings plus a "Preview" link — no Filter,
+  // Sort, or Search (a form has no rows to filter, sort, or search).
+  it("Form view hides Filter/Sort/Search and adds a Preview link instead", () => {
+    setup({ view: view({ type: "form", id: "v-form" }) });
+    expect(screen.queryByRole("button", { name: /^Filter/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Sort/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Automations" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "AI Autofill" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    const preview = screen.getByRole("link", { name: /preview/i });
+    expect(preview).toHaveAttribute("href", "/forms/v-form");
+    expect(preview).toHaveAttribute("target", "_blank");
+  });
 });

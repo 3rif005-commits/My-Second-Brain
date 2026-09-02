@@ -103,7 +103,7 @@ export function propertyTypeIcon(type: string): React.ReactNode {
 /** Human labels for the types a property can be converted into. The set of
  * legal targets comes from the SERVER (`property.convertible_to`); this only
  * names them. */
-const TYPE_LABELS: Record<string, string> = {
+export const TYPE_LABELS: Record<string, string> = {
   rich_text: "Text",
   number: "Number",
   select: "Select",
