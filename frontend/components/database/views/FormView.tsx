@@ -144,6 +144,22 @@ export function readIsFormClosed(config: Record<string, unknown>): boolean {
   return config.is_form_closed === true;
 }
 
+/** `config.questions`'s own updater form — same "whole-value REPLACE,
+ * compute the next value against whatever's latest, never a stale
+ * render-time closure" contract `SortsUpdater`/`GroupByUpdater`
+ * (GroupBuilder.tsx) already document, for the identical reason: every
+ * question-array writer below (`saveQuestions`, reached from add/patch/
+ * remove/move) used to build its next array by reading the CURRENT
+ * `questions` prop — a value closed over at render time, stale until the
+ * in-flight PATCH it came from resolves. Two writes landing inside that
+ * window (e.g. two quick "Move up" clicks, or a Required toggle right
+ * after a reorder) would each compute against the SAME stale snapshot, so
+ * whichever PATCH resolves last silently drops the other's change — the
+ * same "second write clobbers the first" bug class the M1-M3 review
+ * checkpoint already fixed once for `sorts`, and the M6 group-panel
+ * session again for `group_by`. */
+export type QuestionsUpdater = (current: FormQuestion[]) => FormQuestion[];
+
 export function readFormQuestions(config: Record<string, unknown>): FormQuestion[] {
   if (!Array.isArray(config.questions)) return [];
   return config.questions
@@ -523,6 +539,14 @@ export interface FormViewProps {
   properties: PropertyResponse[];
   config: Record<string, unknown>;
   onConfigChange: (patch: Record<string, unknown>) => void;
+  /** `config.questions`'s own race-safe writer — see `QuestionsUpdater`'s
+   * own doc comment for the bug it avoids. Optional, same "degrade
+   * gracefully" convention `onSetGroupBy`/`onFilter` use elsewhere
+   * (ColumnHeaderMenu.tsx): omitted, every question write below still
+   * fires (through `onConfigChange`'s own plain replace, computed from
+   * this render's `questions` same as before this fix), it just isn't
+   * protected against two writes landing close together. */
+  onSetQuestions?: (updater: QuestionsUpdater) => void;
   /** Re-fetches `properties` after a question-level property write (a new
    * Select/Multi-select option) so the answer preview reflects it — the
    * same "the caller owns refetch" convention AddPropertyPopover.tsx and
@@ -532,7 +556,7 @@ export interface FormViewProps {
   onPropertiesChanged?: () => void | Promise<void>;
 }
 
-export function FormView({ viewId, properties, config, onConfigChange, onPropertiesChanged }: FormViewProps) {
+export function FormView({ viewId, properties, config, onConfigChange, onSetQuestions, onPropertiesChanged }: FormViewProps) {
   const isFormClosed = readIsFormClosed(config);
   const questions = readFormQuestions(config);
   const submitScreen = readSubmitScreen(config);
@@ -547,27 +571,41 @@ export function FormView({ viewId, properties, config, onConfigChange, onPropert
 
   const [addOpen, setAddOpen] = useState(false);
 
-  function saveQuestions(next: FormQuestion[]) {
-    onConfigChange({ questions: next, submission_permissions: "none" });
+  // Race-safe when `onSetQuestions` is threaded (DatabaseShell.tsx always
+  // does); falls back to the pre-fix plain-replace otherwise. Every caller
+  // below identifies its target question by `property_key`, not array
+  // index — an index computed at render time can point at the WRONG
+  // question once `update` runs against the queue's own latest array
+  // (which may have a different order/length by then), `property_key` is
+  // stable regardless of which array it's found in.
+  function saveQuestions(update: QuestionsUpdater) {
+    if (onSetQuestions) {
+      onSetQuestions(update);
+    } else {
+      onConfigChange({ questions: update(questions), submission_permissions: "none" });
+    }
   }
 
   function handleAddQuestion(propertyKey: string) {
-    saveQuestions([...questions, { property_key: propertyKey, required: false }]);
+    saveQuestions((current) => [...current, { property_key: propertyKey, required: false }]);
   }
-  function handlePatchQuestion(index: number, patch: Partial<FormQuestion>) {
-    saveQuestions(questions.map((q, i) => (i === index ? { ...q, ...patch } : q)));
+  function handlePatchQuestion(key: string, patch: Partial<FormQuestion>) {
+    saveQuestions((current) => current.map((q) => (q.property_key === key ? { ...q, ...patch } : q)));
   }
-  function handleRemoveQuestion(index: number) {
-    saveQuestions(questions.filter((_, i) => i !== index));
+  function handleRemoveQuestion(key: string) {
+    saveQuestions((current) => current.filter((q) => q.property_key !== key));
   }
-  function handleMoveQuestion(index: number, direction: -1 | 1) {
-    const target = index + direction;
-    if (target < 0 || target >= questions.length) return;
-    const next = [...questions];
-    [next[index], next[target]] = [next[target], next[index]];
-    saveQuestions(next);
+  function handleMoveQuestion(key: string, direction: -1 | 1) {
+    saveQuestions((current) => {
+      const index = current.findIndex((q) => q.property_key === key);
+      if (index < 0) return current;
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   }
-
   async function patchPropertyConfig(propertyId: string, currentConfig: Record<string, unknown>, patch: Record<string, unknown>) {
     try {
       const res = await fetch(`/api/db/properties/${propertyId}`, {
@@ -686,9 +724,9 @@ export function FormView({ viewId, properties, config, onConfigChange, onPropert
               property={property}
               index={index}
               total={questions.length}
-              onPatch={(patch) => handlePatchQuestion(index, patch)}
-              onMove={(direction) => handleMoveQuestion(index, direction)}
-              onDelete={() => handleRemoveQuestion(index)}
+              onPatch={(patch) => handlePatchQuestion(q.property_key, patch)}
+              onMove={(direction) => handleMoveQuestion(q.property_key, direction)}
+              onDelete={() => handleRemoveQuestion(q.property_key)}
               onPatchPropertyConfig={(patch) => patchPropertyConfig(property.id, property.config, patch)}
               onCreateOption={() => createOption(property)}
             />

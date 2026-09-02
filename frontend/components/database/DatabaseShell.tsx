@@ -23,7 +23,8 @@ import { FeedView } from "./views/FeedView";
 import { CalendarView } from "./views/CalendarView";
 import { TimelineView } from "./views/TimelineView";
 import { ChartView } from "./views/ChartView";
-import { FormView } from "./views/FormView";
+import { FormView, readFormQuestions } from "./views/FormView";
+import type { QuestionsUpdater } from "./views/FormView";
 import { DashboardView } from "./views/DashboardView";
 import { ViewTabs } from "./ViewTabs";
 import { DatabaseHeader } from "./DatabaseHeader";
@@ -289,6 +290,43 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             updated = await updateView(viewId, { config: merged });
           } catch (err) {
             showToast(err instanceof Error ? err.message : "Could not group", "error");
+            return undefined;
+          }
+          latestConfigByViewRef.current.set(viewId, updated.config);
+          return updated;
+        })
+        .finally(() => {
+          if (pendingPatchByViewRef.current.get(viewId) === nextQueue) {
+            pendingPatchByViewRef.current.delete(viewId);
+          }
+        });
+      pendingPatchByViewRef.current.set(viewId, nextQueue);
+      return nextQueue;
+    },
+    [updateView, showToast]
+  );
+
+  // `config.questions` (FormView.tsx) has the identical "whole-array
+  // REPLACE, needs the queue's own latest, not a stale render-time
+  // closure" hazard `sorts`/`group_by` above were each fixed for once —
+  // see `QuestionsUpdater`'s own doc comment (FormView.tsx) for the exact
+  // reachable scenario (two question edits landing within the same
+  // in-flight-PATCH window silently drop one of them). Same shared-refs
+  // reasoning as `queueGroupByUpdate` above.
+  const queueQuestionsUpdate = useCallback(
+    (viewId: string, renderTimeConfig: Record<string, unknown>, updater: QuestionsUpdater) => {
+      const prevQueue = pendingPatchByViewRef.current.get(viewId) ?? Promise.resolve();
+      const nextQueue = prevQueue
+        .catch(() => undefined)
+        .then(async () => {
+          const base = latestConfigByViewRef.current.get(viewId) ?? renderTimeConfig;
+          const next = updater(readFormQuestions(base));
+          const merged = { ...base, questions: next, submission_permissions: "none" };
+          let updated: ViewResponse;
+          try {
+            updated = await updateView(viewId, { config: merged });
+          } catch (err) {
+            showToast(err instanceof Error ? err.message : "Could not save this question", "error");
             return undefined;
           }
           latestConfigByViewRef.current.set(viewId, updated.config);
@@ -602,6 +640,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             properties={properties}
             config={activeView.config}
             onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
+            onSetQuestions={(updater) => queueQuestionsUpdate(activeView.id, activeView.config, updater)}
             onPropertiesChanged={refetch}
           />
         );

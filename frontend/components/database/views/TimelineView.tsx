@@ -471,7 +471,7 @@ export function TimelineView({
   // M12: `useRowPeek` — a card's Open button now respects the view's "Open
   // pages in" default the same way Table/List/Feed/Board/Gallery/Calendar
   // already do, instead of always hard-navigating.
-  const { peekRowId, peekMode, openRow, closePeek } = useRowPeek(config);
+  const { peekRowId, peekMode, openRow, closePeek, toggleRow } = useRowPeek(config);
 
   const datePropertyId = readDatePropertyId(config);
   const dateProperty = properties.find((p) => p.key === datePropertyId && p.type === "date");
@@ -681,7 +681,7 @@ export function TimelineView({
                   <OpenNoteButton
                     noteId={event.rowId}
                     className="!p-0.5 shrink-0 scale-75"
-                    onOpen={openRow}
+                    onOpen={toggleRow}
                     isOpen={peekRowId === event.rowId}
                   />
                   <span className="truncate min-w-0 flex-1">

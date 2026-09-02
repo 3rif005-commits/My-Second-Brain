@@ -853,3 +853,209 @@ the earlier test's throw, not system load, was the cause.
 No FormView.tsx change was needed — the component was correct; the test was stale.
 
 Frontend 61 files / 953 tests green (was 947 pre-M12-Form), `tsc` clean.
+
+---
+
+## Checkpoint 4 — whole-branch pass, M12 all nine views + row-peek + M7 create-flow
+(2026-09-03)
+
+The workstream's own last review checkpoint (`README.md`'s "Review loop": batched after
+M1-M3, M4-M6, M7-M11, "plus one whole-branch pass at the end" — this is that pass), run
+per the same budget-first instruction every prior checkpoint used: **not**
+`/code-review high`/`max`/`ultra` (Checkpoint 2's own attempt at that mostly hit the
+account rate limit) and **not** a subagent (README.md's own "Working rules": "No
+subagents. Every step runs inline in the main session"). A manual read-through instead,
+over `d610476..HEAD` (`git diff --stat`, `frontend/` only, screenshots excluded: 48
+files, +5421/-1233) — every M12 commit: all nine per-view sessions (List, Feed, Gallery,
+Chart, Form, Dashboard, Board, Calendar, Timeline), the cross-cutting row-peek pass, and
+the M7 create-flow rewrite. `d610476` is Checkpoint 2's own last-reviewed commit.
+
+Prioritized by size and by the specific risk areas the hand-off named, given the
+recurring pattern across M12's own nine sessions (documented in `PROGRESS.md`'s Log):
+whether `RowMenuTrigger.tsx`'s new controlled `open`/`onOpenChange` mode (added for
+Calendar) has edge cases with its other callers; whether the `resolveBarMove`/
+`resolveDropDate`/`resolveBarResize` family stayed consistent across Calendar/Timeline/
+Board; whether any view's own `onConfigChange`/`onCellChange` threading has the same
+kind of prop-drilling gap the M1-M3 checkpoint found once (a hook value read from a
+stale closure). Read `DatabaseShell.tsx`'s full diff first (the one file every view
+threads through), then every view file, `RowGutter.tsx`/`RowMenuTrigger.tsx`/
+`useRowPeek.ts` (the three cross-cutting M12 extractions), `ViewToolbar.tsx`/
+`QueryBar.tsx`/`ColumnHeaderMenu.tsx`/`GroupBuilder.tsx`/`ViewSettingsSidebar.tsx`/
+`ViewLayoutPanel.tsx` (the M3-era hosts M12 only lightly touched), and
+`filterAst.ts`/`filterOperators.ts`/`types.ts`/`useDatabaseView.ts` (already reviewed
+piece-by-piece in this file's own five "Live Chrome checklist run" entries above, each
+with its own fix and regression test — re-read to confirm no further drift, not
+re-litigated).
+
+The three specifically-named risk areas turned out clean: `RowMenuTrigger`'s controlled
+mode has exactly one caller (`CalendarEventBar`) and every existing uncontrolled caller
+(`RowGutter.tsx`, Board/Gallery/Feed's own cards) is unaffected, confirmed by reading
+`controlled = open !== undefined` — a per-render boolean, never a value that could go
+stale across renders for a single call site. `resolveBarMove`/`resolveDropDate`/
+`resolveBarResize` all correctly return `undefined` for a zero-delta/no-op case and all
+three shift `end` only when it's non-null (a point marker stays a point marker) —
+consistent by design, not by accident (`resolveBarMove`'s own doc comment says outright
+it mirrors `resolveDropDate`). `hidden_properties`/`property_order` wiring is consistent
+across all nine views (Calendar/Timeline's own deliberate non-wiring, reconfirmed
+correct: no rendering path on either view ever reads either key).
+
+### Fixed
+
+1. **`DashboardView.tsx`'s own per-widget query (`useWidgetQuery`) never sanitized a
+   widget's underlying view's `filter` before sending it to `POST .../query` — the
+   exact 400-and-silently-stall bug `useDatabaseView.loadRows` was already fixed for,
+   in an earlier session captured in this file's own "Live Chrome checklist run —
+   filter-panel.md, M4" entry above (`sanitizeFilterForQuery`).** A filter tree can be,
+   and routinely is, mid-edit (an empty "+ Add advanced filter" group, a freshly-picked
+   property with no value typed yet) — this app persists the filter tree to
+   `view.filter` on every edit, no separate draft — and any OTHER view that happens to
+   also be a dashboard widget inherits that same in-progress state the instant it's
+   being edited in its own regular tab. `useWidgetQuery` built its query body from
+   `view.filter ?? null` directly, with no sanitize pass, so a widget showing a
+   mid-edit view would 400 on `POST .../query` and its rows would silently stop
+   updating (`loadError` is set but the earlier bug's own root cause — no toast, easy
+   to miss — doesn't apply here since `loadError` IS rendered; the bug is the
+   unnecessary 400 itself on an ordinary, non-erroneous editing state, not a fully
+   silent failure). Pre-existing (this exact code predates M12 — `useWidgetQuery` was
+   untouched by this diff until this fix), not introduced by M12, but never reviewed
+   before either (Dashboard is M12-scoped; no earlier checkpoint's diff range included
+   `DashboardView.tsx`). Fixed by importing `asFilterNode`/`sanitizeFilterForQuery`
+   (`filterAst.ts`) into `useWidgetQuery`, threading `properties` into it (a new third
+   argument) the same way `useDatabaseView.loadRows` already takes it, and running the
+   widget's own `view.filter` through the identical sanitize pass before it reaches the
+   query body. `DashboardView.test.tsx`'s existing 18 tests all still pass unchanged —
+   none of them exercise a mid-edit filter, so this closes a real gap without touching
+   any asserted behavior.
+
+2. **Timeline's title-column `OpenNoteButton` (added this session, M12 Timeline) is
+   LABELLED (`isOpen={peekRowId === event.rowId}` makes it show "Close" once that row's
+   peek is open — `OpenNoteButton.tsx`'s own `isOpen` contract) but was wired
+   `onOpen={openRow}`, not `toggleRow` — the identical OPEN/CLOSE-doesn't-actually-toggle
+   bug class this file's own log already records fixing THREE times before (Table/M10,
+   Gallery's own M12 session, Board's own M12 session).** A second click on the same
+   button (now reading "Close") just called `openRow(event.rowId)` again — a no-op
+   re-open, not a close, contradicting the button's own label. Reachable and real:
+   Timeline's title column is the ONE place in this file that renders a labelled
+   OPEN/CLOSE control at all (the bar itself has no hover affordance by design, per
+   Calendar's own established "whole bar is the open-trigger, no toggle" pattern — the
+   bar's own `onOpenRow={openRow}` is correct as-is and was left unchanged). Fixed by
+   destructuring `toggleRow` from this component's own `useRowPeek(config)` call and
+   wiring it as the title column's `onOpen`. Regression test added to
+   `TimelineView.test.tsx` (mirroring `GalleryView.test.tsx`'s own identical regression
+   test's structure exactly): clicks the same button twice, asserts the URL gains
+   `p=row-1` after the first click and loses it after the second, and asserts the
+   accessible name flips Open → Close → Open.
+
+3. **`FormView.tsx`'s question-array writers (`saveQuestions`, reached by every
+   add/patch/remove/move action) computed their next `config.questions` array by
+   reading the CURRENT `questions` prop — a value closed over at render time, stale
+   until the in-flight PATCH it came from resolves — the same "whole-value REPLACE,
+   needs the queue's own latest, not a stale render-time closure" hazard this file's own
+   Checkpoint 1 already fixed once for `sorts`, and the M6 group-panel session again for
+   `group_by`.** Two question edits landing within the same in-flight-PATCH window (e.g.
+   two quick "Required" toggles on two different questions, or a reorder immediately
+   followed by an edit) would each compute against the SAME stale snapshot, so whichever
+   PATCH resolves last silently drops the other's change. New this session (`FormView`
+   was rebuilt from scratch in M12's own Form session — `readFormQuestions`/
+   `saveQuestions` did not exist before this diff), not carried over from before.
+   Fixed with `QuestionsUpdater` (`FormView.tsx`, mirrors `GroupByUpdater`'s own doc
+   comment and shape exactly) and `queueQuestionsUpdate` (`DatabaseShell.tsx`, mirrors
+   `queueGroupByUpdate`'s own shared-refs reasoning exactly — same
+   `pendingPatchByViewRef`/`latestConfigByViewRef`). Also switched every question
+   writer (`handlePatchQuestion`/`handleRemoveQuestion`/`handleMoveQuestion`) from
+   identifying its target by array INDEX to the stable `property_key`: an index
+   computed at render time can point at the WRONG question once the updater actually
+   runs against the queue's own latest array (which may have a different order/length
+   by then than what the user was looking at when they clicked) — `property_key` is
+   unique per question (enforced by `selectedKeys`/`availableProperties`'s own filter)
+   and stays correct regardless of which array snapshot it's found in.
+   `onSetQuestions` is optional on FormView's own props, same "degrade gracefully"
+   convention `onSetGroupBy`/`onFilter` already use (ColumnHeaderMenu.tsx) — omitted,
+   `saveQuestions` falls back to the exact pre-fix `onConfigChange`-based plain replace,
+   which is why all 20 pre-existing `FormView.test.tsx` tests pass completely unchanged
+   (none of them pass `onSetQuestions`, so none of their assertions on `onConfigChange`
+   needed touching). `DatabaseShell.tsx`'s own `case "form"` now threads
+   `onSetQuestions={(updater) => queueQuestionsUpdate(activeView.id, activeView.config,
+   updater)}` for the real, race-protected path. Regression test added to
+   `DatabaseShell.test.tsx`, mirroring the file's own existing `group_by` race test's
+   structure exactly: a held-pending first `updateView` call (toggle Required on
+   question 1), a second write queued behind it (toggle Required on question 2), and an
+   assertion that the second PATCH's body contains BOTH toggles once the first resolves.
+
+### Checked, not fixed (no defect found)
+
+- `RowMenuTrigger.tsx`'s controlled `open`/`onOpenChange` mode (added for Calendar) —
+  exactly one caller (`CalendarEventBar`), every other caller stays uncontrolled;
+  `controlled = open !== undefined` is recomputed fresh every render from a prop that
+  never flips for a given call site, so there is no stale-mode window to hit.
+- `resolveBarMove`/`resolveDropDate`/`resolveBarResize` (Timeline/Calendar) — consistent
+  by design: all three return `undefined` for a zero-delta/no-op drag, all three shift
+  `end` only when the value already has one (a point marker never gains a fake range).
+- `hidden_properties`/`property_order` — wired consistently via the shared
+  `viewConfig.ts` helpers (`getHiddenKeys`/`orderProperties`) across all nine M12 views;
+  Calendar/Timeline's own deliberate non-wiring re-confirmed correct by reading both
+  files fresh — neither the event bar nor `RowPeek.tsx` (M10's own established
+  always-alphabetical behavior) ever consults either key on either view.
+- `onOpenRow`/`toggleRow` wiring across all nine views — Board and Gallery both
+  correctly use `toggleRow` (post their own M12 fixes); List/Feed/Calendar/Timeline's
+  own bar-or-row body click correctly uses bare `openRow` (none of those renders a
+  labelled OPEN/CLOSE control on that click target, so there is no toggle contract to
+  violate) — Timeline's title-column button was the one exception, fixed above (item 2).
+- `TimelineBar`'s own click-vs-drag threshold (`startBodyInteraction`) has one narrow,
+  low-severity edge case: dragging the pointer out past the 5px threshold and back to
+  the exact starting pixel sets `moved = true` (skipping the click-opens-the-peek
+  branch) while also computing a final `deltaPx` of `0` (`resolveBarMove` then returns
+  `undefined`, skipping the commit) — the row peek simply doesn't open on that
+  particular gesture. Not counted as a bug: it requires an exact round-trip back to the
+  starting pixel, which is a much narrower gesture than an ordinary click, and mirrors
+  dnd-kit's own convention elsewhere in this codebase of not treating a
+  past-threshold-then-cancelled drag as a click.
+- `ViewToolbar.tsx`/`QueryBar.tsx`'s `forwardRef` fixes (already applied earlier this
+  session per their own doc comments, same `3b4a079` root cause as `SortRowsList.tsx`/
+  `FilterBuilder.tsx`'s identical fixes) — re-read fresh, both correctly forward the ref
+  and spread `...rest` past `label`/`icon`, no drift from the established pattern.
+
+### Deferred, tracked (real, not fixed here)
+
+4. **`DashboardView.tsx`'s entire write surface (`saveRows`, the debounced row-height/
+   widget-width commits, and — critically — `patchThisWidgetsView`, which every
+   config-driven widget's `onConfigChange` now routes through, Board's own M12 addition
+   included) bypasses `patchViewConfig`'s queue entirely: `DatabaseShell.tsx` wires
+   `onUpdateView={updateView}` raw, not through the shared merge-safe queue every other
+   config write in this app uses.** Every one of those writers computes its next
+   `config` by spreading a render-time prop (`view.config` or the dashboard's own
+   `config`) and calling `updateView` directly — the identical "second write clobbers
+   the first" race class fixed three separate times elsewhere in this exact codebase
+   now (`sorts`, `group_by`, and `questions` above). Confirmed reachable in principle,
+   not live-verified: two rapid Layout-panel toggles on the SAME embedded Board widget
+   (both racing `patchThisWidgetsView`, which targets that widget's own view id), or a
+   dashboard-row resize immediately followed by a remove-widget click (both racing
+   `saveRows`, which targets the dashboard's own view id), would each compute against
+   the same stale snapshot. Real, but pre-existing (this wiring predates M12 entirely —
+   the `case "dashboard"` block and `saveRows`/the debounced commits are untouched by
+   this diff; M12 only added ONE more call site onto the SAME already-unprotected path,
+   Board's `onConfigChange={patchThisWidgetsView}`) and never reviewed before (Dashboard
+   is M12-scoped, outside every earlier checkpoint's own diff range). Not fixed here:
+   unlike `sorts`/`group_by`/`questions` above (each a single field on the ONE active
+   view, with a natural updater-function shape), `DashboardView` writes to MANY
+   different view ids from ONE component (the dashboard's own view for `saveRows`/
+   resize, plus a different id per widget for `patchThisWidgetsView`) across five
+   separate call sites, all built around "caller computes the full merged config
+   up front, then PATCHes it" rather than an updater function — bringing this in line
+   would mean re-plumbing DashboardView's entire write interface (a new prop shape,
+   five call sites), not a bounded one-writer fix like the three above. The natural fix
+   is a direct, small one, though: `patchViewConfig`/`queueGroupByUpdate`/
+   `queueQuestionsUpdate` are all already keyed by an arbitrary `viewId` in a shared
+   `Map`, not just `activeView`'s own id, so reusing that exact queue for
+   `DashboardView`'s writes (passing `patchViewConfig` itself, or an updater-shaped
+   sibling, down as `onUpdateView`) is a bounded follow-up whenever Dashboard's own
+   write surface gets its next dedicated look — just disproportionate to force inside
+   this whole-branch pass.
+
+Frontend 61 files / 975 → 977 tests green (2 new: `TimelineView.test.tsx`'s OPEN/CLOSE
+regression, `DatabaseShell.test.tsx`'s `queueQuestionsUpdate` race regression), `tsc`
+clean.
+
+**The Notion-databases UI-parity workstream is now complete.** All 15 spec'd surfaces
+(M1-M11), all nine M12 per-view sessions, the cross-cutting row-peek pass, the M7
+create-flow rewrite, and all four review checkpoints (this one included) are done.

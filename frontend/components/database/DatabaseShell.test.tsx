@@ -617,6 +617,94 @@ describe("DatabaseShell", () => {
     });
   });
 
+  it("M12 whole-branch checkpoint fix: two Form question writes fired before the first's response lands do not clobber each other (queueQuestionsUpdate's stale-array race)", async () => {
+    // FormView.tsx's own question writers (`saveQuestions`, reached from
+    // Required/Move/etc.) used to build their next `config.questions` array
+    // by reading the CURRENT `questions` prop — closed over at render time,
+    // stale until the in-flight PATCH it came from resolves. Toggling
+    // Required on TWO different questions before the first write resolves
+    // would each compute against the SAME stale array, so the second write
+    // would silently drop the first's change — the same "second write
+    // clobbers the first" bug class already fixed for `sorts`/`group_by`
+    // above.
+    const user = userEvent.setup();
+    mockHook.views = [
+      {
+        id: "v11",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Form",
+        icon: null,
+        type: "form",
+        config: {
+          questions: [
+            { property_key: "title", required: false },
+            { property_key: "status", required: false },
+          ],
+        },
+        filter: null,
+        sorts: [],
+        is_locked: false,
+        position: 0,
+      },
+    ];
+    mockHook.activeViewId = "v11";
+
+    let resolveFirst: (v: ViewResponse) => void = () => {};
+    mockHook.updateView.mockImplementationOnce(
+      () => new Promise<ViewResponse>((resolve) => { resolveFirst = resolve; })
+    );
+
+    render(<DatabaseShell databaseId="db-1" />);
+
+    // First write: toggle Required on question 1 (Title).
+    await user.click(screen.getByRole("button", { name: "Question 1 options" }));
+    await user.click(screen.getByText("Required"));
+    expect(mockHook.updateView).toHaveBeenCalledTimes(1);
+    // Still unresolved — deliberately, so the second write races it.
+
+    // Second write: toggle Required on question 2 (Status) — its own
+    // updater closes over the render-time `questions` (the client hasn't
+    // heard back from the first write yet), exactly the stale input the
+    // old code would have sent.
+    await user.click(screen.getByRole("button", { name: "Question 2 options" }));
+    await user.click(screen.getByText("Required"));
+    // Queued, not fired yet — chained behind the still-pending first write.
+    expect(mockHook.updateView).toHaveBeenCalledTimes(1);
+
+    resolveFirst({
+      id: "v11",
+      data_source_id: "ds-1",
+      user_id: "user-1",
+      name: "Form",
+      icon: null,
+      type: "form",
+      config: {
+        questions: [
+          { property_key: "title", required: true },
+          { property_key: "status", required: false },
+        ],
+        submission_permissions: "none",
+      },
+      filter: null,
+      sorts: [],
+      is_locked: false,
+      position: 0,
+    });
+
+    await vi.waitFor(() => expect(mockHook.updateView).toHaveBeenCalledTimes(2));
+
+    // The bug: the second call's questions would be
+    // [{title, required:false}, {status, required:true}] — question 1's
+    // Required toggle gone entirely — if it had been computed from the
+    // stale render-time array instead of the first write's resolved result.
+    const [, secondBody] = mockHook.updateView.mock.calls[1];
+    expect(secondBody.config.questions).toEqual([
+      { property_key: "title", required: true },
+      { property_key: "status", required: true },
+    ]);
+  });
+
   it("renders DashboardView (not some other component, not a blank fallback) for a dashboard-typed active view", () => {
     // Empty config.rows -- no widgets to mount, so no per-widget fetch is
     // needed for this render-dispatch check (DashboardView.test.tsx owns

@@ -329,6 +329,31 @@ describe("TimelineView", () => {
     expect(url).toContain("pm=s");
   });
 
+  // M12 whole-branch checkpoint fix: the title column's Open button is
+  // LABELLED (`isOpen={peekRowId === event.rowId}` makes `OpenNoteButton`
+  // show "Close" once open — see its own doc comment) but was wired to bare
+  // `openRow`, the same OPEN/CLOSE-doesn't-actually-toggle bug M10/Gallery/
+  // Board already found and fixed for Table/Gallery/Board — a second click
+  // just re-opened the same row instead of closing it. Reuses the SAME
+  // button element across both clicks, same disambiguation reason
+  // GalleryView.test.tsx's identical regression test documents (RowPeek's
+  // own close control also reads "Close" once open).
+  it("OPEN/CLOSE actually toggles — a second click on the title column's Open button closes the peek, not re-opens it", async () => {
+    const user = userEvent.setup();
+    const rows = [row("row-1", "Task A", { start: "2026-01-01T00:00:00.000Z", end: "2026-01-11T00:00:00.000Z", time_zone: null })];
+    renderTimeline({ rows, config: { date_property_id: "due", preference: { zoom_level: "month" } } });
+
+    const openBtn = screen.getByRole("button", { name: "Open" });
+    await user.click(openBtn);
+    expect(routerReplace).toHaveBeenLastCalledWith(expect.stringContaining("p=row-1"), { scroll: false });
+    expect(openBtn).toHaveAccessibleName("Close");
+
+    await user.click(openBtn);
+    const [lastUrl] = routerReplace.mock.calls[routerReplace.mock.calls.length - 1];
+    expect(lastUrl).not.toContain("p=row-1");
+    expect(openBtn).toHaveAccessibleName("Open");
+  });
+
   it("all 8 zoom levels render distinguishably different bar widths for the same fixed date range", () => {
     const rows = [row("row-1", "Task A", { start: "2026-01-01T00:00:00.000Z", end: "2026-01-11T00:00:00.000Z", time_zone: null })];
     const { rerender } = render(

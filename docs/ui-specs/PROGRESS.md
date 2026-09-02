@@ -8,27 +8,46 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 **Branch:** `feat/notion-databases-ui-parity` (from `feat/workspaces-compact-redesign` @ 25a08b4)
 
-**M12 — Timeline's own dedicated work: DONE (2026-09-02/03).** The last of the nine
-M12 views. 4 of the plan's 5 named items (zoom levels, dependency arrows, event peek,
-edge-resize) were already built pre-session (task-34, pre-dates this UI-parity plan) —
-confirmed by reading the code, then re-confirmed by a fresh live-Notion capture
-(`docs/ui-specs/timeline-view.md`). The one real, capture-confirmed gap: dragging a
-bar's BODY (not an edge) moves the whole event in real Notion, distinct from resize and
-never captured by the original build — the bar previously had no click target of its
-own at all. Built `resolveBarMove` (mirrors `resolveBarResize`/Calendar's own
-`resolveDropDate`) plus a click-vs-drag threshold (stationary click opens the peek, a
-real drag moves it). The table/timeline split view and the off-screen "jump to
-project" arrow were both reconfirmed live as real Notion features but stay
-deliberately unbuilt — task-34-brief.md's own original scope cut, upheld not
-rediscovered. `hidden_properties`/`property_order` deliberately left unwired, same
-reasoning as Calendar's own session. Full account: this file's own Log entry below.
-Live-verified against real Notion; verification against this app's own build was not
-possible — the browser automation extension disconnected entirely partway through this
-session, a further failure mode beyond the memory-exhaustion class Board's/Calendar's
-own sessions already hit — disclosed in `timeline-view.md`, not forced. **Resume
-point: the workstream's one remaining review checkpoint** — a whole-branch pass
-covering everything since M7–M11's own checkpoint, all nine M12 per-view sessions
-included.
+**The workstream is COMPLETE (2026-09-03).** Checkpoint 4 — the whole-branch review
+pass, the plan's own last remaining item — is done: `REVIEW-LOG.md`'s own "Checkpoint 4"
+entry has the full account. Manual read-through (no `/code-review high/max/ultra`, no
+subagents, same discipline every prior checkpoint used) over `d610476..HEAD` (48
+files, +5421/-1233): all nine M12 per-view sessions (List, Feed, Gallery, Chart, Form,
+Dashboard, Board, Calendar, Timeline), the cross-cutting row-peek pass, and the M7
+create-flow rewrite. Three confirmed defects found and fixed, one deferred with reason:
+
+1. **Fixed** — `DashboardView.tsx`'s own per-widget query never sanitized a widget's
+   underlying view's `filter` before querying, missing the exact fix
+   `useDatabaseView.loadRows` already got in an earlier session — a widget showing a
+   mid-edit filter would 400 unnecessarily. Pre-existing, first reviewed this pass.
+2. **Fixed** — Timeline's title-column Open button (added this session) was labelled
+   OPEN/CLOSE but wired to a plain re-opening `openRow`, not `toggleRow` — the same
+   toggle bug already fixed three times before (Table/M10, Gallery, Board).
+3. **Fixed** — `FormView.tsx`'s question-array writers computed their next array from a
+   stale render-time closure, the same race class already fixed for `sorts`/`group_by`
+   — two quick question edits could silently drop one. Fixed with a `QuestionsUpdater`
+   + `queueQuestionsUpdate`, mirroring `GroupByUpdater`'s own established shape exactly.
+4. **Deferred, tracked** — `DashboardView.tsx`'s entire write surface bypasses the
+   shared merge-safe config queue every other view routes through (pre-existing, not
+   M12-introduced); the natural fix is bounded (reuse the same queue) but touches five
+   call sites, disproportionate to force inside this pass.
+
+**Frontend 61 files / 977 tests green (was 975), `tsc` clean.** Full account:
+`REVIEW-LOG.md`'s "Checkpoint 4" entry. **There is no milestone after this one** — see
+"Verify it yourself" below for the commands to confirm.
+
+---
+
+## Verify it yourself
+
+```
+cd frontend
+npx tsc --noEmit
+npx vitest run
+```
+
+Expect: `tsc` prints nothing (clean), and the suite reports **61 files / 977 tests
+green, 0 failed**.
 
 ---
 

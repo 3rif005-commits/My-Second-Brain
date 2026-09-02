@@ -77,6 +77,7 @@ import { MenuList, Popover } from "@/components/ui/primitives";
 import type { MenuPanel } from "@/components/ui/primitives";
 import { getQueryExtras } from "@/lib/database/types";
 import type { DatabaseRow, Group, PropertyValue, PropertyResponse, ViewResponse } from "@/lib/database/types";
+import { asFilterNode, sanitizeFilterForQuery } from "@/lib/database/filterAst";
 import { TableView } from "./TableView";
 import { BoardView } from "./BoardView";
 import { GalleryView } from "./GalleryView";
@@ -194,7 +195,7 @@ async function widgetErrorMessage(res: Response): Promise<string> {
  * "optional — caller just gets a degraded but non-crashing behaviour"
  * contract), it just doesn't get every table affordance DatabaseShell's own
  * active view gets. */
-function useWidgetQuery(dataSourceId: string, view: ViewResponse | undefined) {
+function useWidgetQuery(dataSourceId: string, view: ViewResponse | undefined, properties: PropertyResponse[]) {
   const { showToast } = useToast();
   const [rows, setRows] = useState<DatabaseRow[]>([]);
   const [groups, setGroups] = useState<Group[] | null>(null);
@@ -216,8 +217,21 @@ function useWidgetQuery(dataSourceId: string, view: ViewResponse | undefined) {
     setLoading(true);
     setLoadError(null);
     try {
+      // M12 whole-branch checkpoint fix: a widget's own underlying view can
+      // be mid-edit in the SAME way `useDatabaseView.loadRows` already
+      // guards against (an empty "+ Add advanced filter" group, a
+      // freshly-picked property with no value typed yet) — this app
+      // persists the filter tree to `view.filter` on every edit, no
+      // separate draft, so without sanitizing first the backend 400s on
+      // every such moment and this widget's rows silently stop updating
+      // (`loadError` would surface it, unlike the main view's own now-fixed
+      // silent-swallow, but the widget still shouldn't 400 on an ordinary
+      // in-progress edit happening in the view's own regular tab). Same
+      // fix, same reasoning as `filterAst.ts`'s own `sanitizeFilterForQuery`
+      // doc comment.
+      const sanitizedFilter = sanitizeFilterForQuery(asFilterNode(view.filter ?? null), properties);
       const body: Record<string, unknown> = {
-        filter: view.filter ?? null,
+        filter: sanitizedFilter,
         sorts: view.sorts ?? [],
         ...getQueryExtras(view),
       };
@@ -253,6 +267,7 @@ function useWidgetQuery(dataSourceId: string, view: ViewResponse | undefined) {
     JSON.stringify(view?.filter ?? null),
     JSON.stringify(view?.sorts ?? []),
     JSON.stringify(view?.config ?? {}),
+    properties,
   ]);
 
   useEffect(() => {
@@ -434,7 +449,8 @@ interface DashboardWidgetContentProps {
 function DashboardWidgetContent({ view, properties, dataSourceId, editable, onUpdateView }: DashboardWidgetContentProps) {
   const { rows, groups, aggregates, loading, loadError, updateCell, refetchRows } = useWidgetQuery(
     dataSourceId,
-    view
+    view,
+    properties
   );
 
   function patchThisWidgetsView(patch: Record<string, unknown>) {
