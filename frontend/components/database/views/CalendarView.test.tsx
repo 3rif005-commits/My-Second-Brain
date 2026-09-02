@@ -75,30 +75,30 @@ function row(id: string, title: string, dateValue?: DateValue["date"]): Database
 
 // ── Pure-function tests (no DOM/dnd-kit simulation needed) ────────────────
 
-describe("buildMonthGrid (Monday-first day-in-month grid generator)", () => {
+describe("buildMonthGrid (Sunday-first day-in-month grid generator — live-Notion capture, 2026-09-02)", () => {
   // August 2026: Aug 1 is a Saturday, Aug 31 is a Monday — a non-trivial
   // fixture with real leading (from July) and trailing (into September)
   // days, live-verified via plain Date math before writing this test.
-  it("covers the full visible month with Monday-first leading/trailing days from adjacent months", () => {
+  it("covers the full visible month with Sunday-first leading/trailing days from adjacent months", () => {
     const grid = buildMonthGrid("2026-08-15", true);
     expect(grid).toHaveLength(6);
     expect(grid[0]).toEqual([
+      { dayKey: "2026-07-26", inCurrentMonth: false },
       { dayKey: "2026-07-27", inCurrentMonth: false },
       { dayKey: "2026-07-28", inCurrentMonth: false },
       { dayKey: "2026-07-29", inCurrentMonth: false },
       { dayKey: "2026-07-30", inCurrentMonth: false },
       { dayKey: "2026-07-31", inCurrentMonth: false },
       { dayKey: "2026-08-01", inCurrentMonth: true },
-      { dayKey: "2026-08-02", inCurrentMonth: true },
     ]);
     expect(grid[5]).toEqual([
+      { dayKey: "2026-08-30", inCurrentMonth: true },
       { dayKey: "2026-08-31", inCurrentMonth: true },
       { dayKey: "2026-09-01", inCurrentMonth: false },
       { dayKey: "2026-09-02", inCurrentMonth: false },
       { dayKey: "2026-09-03", inCurrentMonth: false },
       { dayKey: "2026-09-04", inCurrentMonth: false },
       { dayKey: "2026-09-05", inCurrentMonth: false },
-      { dayKey: "2026-09-06", inCurrentMonth: false },
     ]);
   });
 
@@ -106,7 +106,7 @@ describe("buildMonthGrid (Monday-first day-in-month grid generator)", () => {
     expect(buildMonthGrid("2026-08-01", true)).toEqual(buildMonthGrid("2026-08-31", true));
   });
 
-  it("drops the weekend columns (5 per row) when show_weekends=false, keeping Monday-first ordering", () => {
+  it("drops the weekend columns (5 per row, Monday..Friday) when show_weekends=false", () => {
     const grid = buildMonthGrid("2026-08-15", false);
     expect(grid).toHaveLength(6);
     for (const week of grid) {
@@ -122,24 +122,25 @@ describe("buildMonthGrid (Monday-first day-in-month grid generator)", () => {
   });
 });
 
-describe("buildWeekGrid (Monday-first single-week grid generator)", () => {
-  it("returns exactly one Monday-first row of 7 days covering the anchor's week", () => {
-    // 2026-08-19 is a Wednesday; its week runs Mon 2026-08-17 .. Sun 2026-08-23.
+describe("buildWeekGrid (Sunday-first single-week grid generator — live-Notion capture, 2026-09-02)", () => {
+  it("returns exactly one Sunday-first row of 7 days covering the anchor's week", () => {
+    // 2026-08-19 is a Wednesday; its (Sunday-first) week runs
+    // Sun 2026-08-16 .. Sat 2026-08-22.
     const grid = buildWeekGrid("2026-08-19", true);
     expect(grid).toHaveLength(1);
     expect(grid[0].map((d) => d.dayKey)).toEqual([
+      "2026-08-16",
       "2026-08-17",
       "2026-08-18",
       "2026-08-19",
       "2026-08-20",
       "2026-08-21",
       "2026-08-22",
-      "2026-08-23",
     ]);
     expect(grid[0].every((d) => d.inCurrentMonth)).toBe(true);
   });
 
-  it("drops the weekend columns (5 per row) when show_weekends=false", () => {
+  it("drops the weekend columns (5 per row, Monday..Friday) when show_weekends=false", () => {
     const grid = buildWeekGrid("2026-08-19", false);
     expect(grid[0].map((d) => d.dayKey)).toEqual([
       "2026-08-17",
@@ -374,10 +375,12 @@ describe("CalendarView", () => {
     expect(onConfigChange).toHaveBeenCalledWith({ date_property_id: "due" });
   });
 
-  // M12: an event bar's Open button now opens the row's side peek (the
-  // same `?p=&pm=s` URL Table/List/Feed/Board/Gallery already write)
-  // instead of always hard-navigating.
-  it("clicking an event's Open button opens the row's side peek (writes ?p=&pm=s), not a bare navigation", async () => {
+  // M12 (Calendar's own live-Notion capture, 2026-09-02): real Notion's
+  // event bar has no dedicated Open button at all — the whole bar IS the
+  // open-trigger (same class as List's own finding), opening the row's
+  // side peek (the same `?p=&pm=s` URL Table/List/Feed/Board/Gallery
+  // already write) instead of always hard-navigating.
+  it("clicking anywhere on an event bar opens the row's side peek (writes ?p=&pm=s), not a bare navigation", async () => {
     const user = userEvent.setup();
     renderAt(
       "2026-08-18T00:00:00.000Z",
@@ -391,13 +394,39 @@ describe("CalendarView", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: "Open" }));
+    expect(screen.queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("calendar-event-row-1"));
 
     expect(push).not.toHaveBeenCalled();
     expect(routerReplace).toHaveBeenCalled();
     const [url] = routerReplace.mock.calls[routerReplace.mock.calls.length - 1];
     expect(url).toContain("p=row-1");
     expect(url).toContain("pm=s");
+  });
+
+  // M12 (Calendar's own live-Notion capture, 2026-09-02): hovering an
+  // event bar reveals nothing at all (no "···" icon, unlike Board/
+  // Gallery's cards) — right-click anywhere on the bar is the ONLY entry
+  // point to the row menu (RowMenu.tsx's own "right-click opens the same
+  // menu" convention), and it must NOT also open the peek.
+  it("right-clicking an event bar opens the row menu instead of the peek", async () => {
+    renderAt(
+      "2026-08-18T00:00:00.000Z",
+      <CalendarView
+        properties={[TITLE_PROP, DUE_PROP]}
+        rows={[row("row-1", "Task A", { start: "2026-08-18", end: null, time_zone: null })]}
+        editable={true}
+        onCellChange={vi.fn()}
+        config={{ date_property_id: "due" }}
+        onConfigChange={vi.fn()}
+      />
+    );
+
+    fireEvent.contextMenu(screen.getByTestId("calendar-event-row-1"));
+
+    expect(await screen.findByText("Add to Favorites")).toBeInTheDocument();
+    expect(screen.getByText("Move to Trash")).toBeInTheDocument();
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 
   it("month view renders an event on its correct day cell", () => {
@@ -414,9 +443,9 @@ describe("CalendarView", () => {
     );
     const bar = screen.getByTestId("calendar-event-row-1");
     expect(within(bar).getByText("Task A")).toBeInTheDocument();
-    // 2026-08-18 falls in the week Mon 2026-08-17..Sun 2026-08-23 — column
-    // index 1 (0-based) — see layoutWeekRow's own tests for the same fixture.
-    expect(bar.style.gridColumn).toBe("2 / span 1");
+    // 2026-08-18 falls in the (Sunday-first) week Sun 2026-08-16..Sat
+    // 2026-08-22 — column index 2 (0-based, Tue).
+    expect(bar.style.gridColumn).toBe("3 / span 1");
   });
 
   it("week view renders the same data windowed to 7 days, excluding rows outside the visible week", () => {
@@ -473,8 +502,8 @@ describe("CalendarView", () => {
     // Rendered exactly once (not duplicated per day it covers)...
     expect(screen.getAllByTestId("calendar-event-row-1")).toHaveLength(1);
     // ...but its own inline grid placement spans 3 columns (Aug18-20: col
-    // index 1, colSpan 3 — see layoutWeekRow's own equivalent fixture test).
-    expect(screen.getByTestId("calendar-event-row-1").style.gridColumn).toBe("2 / span 3");
+    // index 2, colSpan 3, in the Sunday-first Sun-2026-08-16..Sat-2026-08-22 week).
+    expect(screen.getByTestId("calendar-event-row-1").style.gridColumn).toBe("3 / span 3");
   });
 
   it("the +N more overflow indicator appears once a day has past MAX_EVENTS_PER_DAY (3) events", () => {
@@ -625,6 +654,57 @@ describe("CalendarView", () => {
     const checkbox = screen.getByRole("checkbox", { name: /show weekends/i });
     await user.click(checkbox);
     expect(onConfigChange).toHaveBeenCalledWith({ show_weekends: false });
+  });
+
+  // M12 (Calendar's own live-Notion capture, 2026-09-02): no weekday header
+  // row existed before this session at all.
+  it("renders a fixed Sun..Sat weekday header row, reduced to Mon..Fri when weekends are hidden", () => {
+    const { rerender } = renderAt(
+      "2026-08-18T00:00:00.000Z",
+      <CalendarView
+        properties={[TITLE_PROP, DUE_PROP]}
+        rows={[]}
+        editable={true}
+        onCellChange={vi.fn()}
+        config={{ date_property_id: "due", view_range: "week" }}
+        onConfigChange={vi.fn()}
+      />
+    );
+    expect(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => screen.getByText(d))).toHaveLength(7);
+
+    rerender(
+      <CalendarView
+        properties={[TITLE_PROP, DUE_PROP]}
+        rows={[]}
+        editable={true}
+        onCellChange={vi.fn()}
+        config={{ date_property_id: "due", view_range: "week", show_weekends: false }}
+        onConfigChange={vi.fn()}
+      />
+    );
+    expect(screen.queryByText("Sun")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sat")).not.toBeInTheDocument();
+    expect(["Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => screen.getByText(d))).toHaveLength(5);
+  });
+
+  // M12: live-Notion capture shows today's date number carrying a filled
+  // red circle — absent before this session.
+  it("highlights today's day cell, and no other", () => {
+    renderAt(
+      "2026-08-18T00:00:00.000Z",
+      <CalendarView
+        properties={[TITLE_PROP, DUE_PROP]}
+        rows={[]}
+        editable={true}
+        onCellChange={vi.fn()}
+        config={{ date_property_id: "due", view_range: "week" }}
+        onConfigChange={vi.fn()}
+      />
+    );
+    const today = screen.getByTestId("calendar-day-2026-08-18");
+    expect(within(today).getByText("18")).toHaveClass("bg-red-500");
+    const other = screen.getByTestId("calendar-day-2026-08-17");
+    expect(within(other).getByText("17")).not.toHaveClass("bg-red-500");
   });
 
   it("clicking Next then Today navigates and returns to the anchor day's week", () => {

@@ -1,11 +1,15 @@
 "use client";
 
-// Month/week calendar view (Milestone 9, task-33). Follows the same shape
-// as every other M6 view (Board/Gallery/List/Feed): consumes `rows` from
-// `useDatabaseView` (no grouping — task-33-brief.md's reference facts, the
-// hook needs no change for this task), renders through the shared
-// `renderCellValue` dispatcher (never a second cell renderer), and mirrors
-// BoardView.tsx's drag-and-drop shape exactly: `DndContext`/`PointerSensor`
+// Month/week calendar view (Milestone 9, task-33; M12 2026-09-02 gave it its
+// own dedicated live-Notion capture — see docs/ui-specs/calendar-view.md).
+// Follows the same shape as every other M6 view (Board/Gallery/List/Feed):
+// consumes `rows` from `useDatabaseView` (no grouping — task-33-brief.md's
+// reference facts, the hook needs no change for this task). An event bar's
+// title is plain text, NOT the shared `renderCellValue` dispatcher — real
+// Notion capture confirmed clicking a bar always opens the row peek, never
+// inline title editing (List.tsx's own established reasoning: a dedicated
+// "Edit" affordance owns editing there, editing here happens inside the peek
+// itself). Drag-and-drop mirrors BoardView.tsx's shape exactly: `DndContext`/`PointerSensor`
 // from `@dnd-kit/core`, `useDraggable`/`useDroppable` (an event moves
 // *between* day-cell drop targets, the same shape as a card moving between
 // Board columns — not a reorder-within-one-list shape), and a pure
@@ -20,11 +24,17 @@
 // `config.view_range: "week" | "month"` (default "month"),
 // `config.show_weekends: boolean` (default true).
 //
-// Monday-first weeks (matches `services/db/query/grouping.py`'s
-// `_week_start`/`GroupBySpec.start_day_of_week` default of 1=Monday — this
-// app has no per-user locale/timezone concept anywhere, M3's already-
-// recorded UTC-only ruling, so every date computation here works in UTC via
-// `Date#getUTC*`/`setUTCDate`, never local-timezone-sensitive getters).
+// Sunday-first weeks — live-Notion capture, 2026-09-02 (M12): a real
+// Calendar view's header row reads Sun/Mon/Tue/Wed/Thu/Fri/Sat, independently
+// confirmed by the highlighted "today" cell landing under "Wed" on
+// 2026-09-02 (a real Wednesday). NOT the same convention as
+// `services/db/query/grouping.py`'s `_week_start`/`GroupBySpec.
+// start_day_of_week` default of 1=Monday — that convention is for the
+// grouping engine's own "group by week" BUCKETING feature (an unrelated
+// surface), not this view's own grid layout. This app has no per-user
+// locale/timezone concept anywhere, M3's already-recorded UTC-only ruling,
+// so every date computation here works in UTC via `Date#getUTC*`/
+// `setUTCDate`, never local-timezone-sensitive getters.
 //
 // Scope cuts, decided in task-33-brief.md (not gaps, deliberate rulings):
 //  - no resize interaction (dragging an event's edge to grow/shrink its
@@ -55,8 +65,7 @@ import {
 import { useToast } from "@/app/providers";
 import type { DatabaseRow, DateValue, PropertyResponse, PropertyValue } from "@/lib/database/types";
 import { useRowPeek } from "@/lib/database/useRowPeek";
-import { renderCellValue } from "../cells/renderCellValue";
-import { OpenNoteButton } from "../OpenNoteButton";
+import { RowMenuTrigger } from "../RowMenuTrigger";
 import { RowPeek } from "../RowPeek";
 
 /** Matches TableView.tsx's own local copy — FastAPI's HTTPException body is
@@ -93,12 +102,14 @@ export function dayDiff(fromDayKey: string, toDayKeyArg: string): number {
   return Math.round((b - a) / 86_400_000);
 }
 
-/** The Monday on or before `dayKey` (Monday-first week convention). */
-function mondayOf(dayKey: string): string {
+/** The Sunday on or before `dayKey` (Sunday-first week convention — see the
+ * file header's own capture note). */
+function weekStartOf(dayKey: string): string {
   const weekday = new Date(`${dayKey}T00:00:00.000Z`).getUTCDay(); // 0=Sun..6=Sat
-  const offsetFromMonday = (weekday + 6) % 7;
-  return addDays(dayKey, -offsetFromMonday);
+  return addDays(dayKey, -weekday);
 }
+
+export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** Shifts a raw ISO date/instant string by `deltaDays`, preserving whether
  * it was a bare date (`YYYY-MM-DD`) or a full instant (keeps its
@@ -121,29 +132,33 @@ export interface CalendarGridDay {
   inCurrentMonth: boolean;
 }
 
+/** `weekStartDayKey` is always a Sunday. With weekends shown, the 7 days
+ * starting there ARE the week. With weekends hidden, the visible weekdays
+ * are Monday..Friday — `weekStartDayKey + 1`..`+ 5`, not `+ 0`..`+ 4` (that
+ * would keep Sunday and drop Friday). */
 function buildWeekDays(weekStartDayKey: string, showWeekends: boolean): string[] {
-  const count = showWeekends ? 7 : 5;
-  return Array.from({ length: count }, (_, i) => addDays(weekStartDayKey, i));
+  if (showWeekends) return Array.from({ length: 7 }, (_, i) => addDays(weekStartDayKey, i));
+  return Array.from({ length: 5 }, (_, i) => addDays(weekStartDayKey, i + 1));
 }
 
-/** Month view: a 5-or-6-row grid covering the visible month (Monday-first),
+/** Month view: a 5-or-6-row grid covering the visible month (Sunday-first),
  * with leading/trailing days from adjacent months included and marked
  * `inCurrentMonth: false`. */
 export function buildMonthGrid(anchorDayKey: string, showWeekends: boolean): CalendarGridDay[][] {
   const [yearStr, monthStr] = anchorDayKey.split("-");
   const monthPrefix = `${yearStr}-${monthStr}`;
   const firstOfMonth = `${monthPrefix}-01`;
-  const gridStart = mondayOf(firstOfMonth);
+  const gridStart = weekStartOf(firstOfMonth);
 
   const year = Number(yearStr);
   const month = Number(monthStr); // 1-based
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const lastOfMonth = `${monthPrefix}-${pad2(daysInMonth)}`;
-  const lastWeekStart = mondayOf(lastOfMonth);
+  const lastWeekStart = weekStartOf(lastOfMonth);
 
   const weeks: CalendarGridDay[][] = [];
   let weekStart = gridStart;
-  // Bounded by construction (a month is never more than 6 Monday-starts
+  // Bounded by construction (a month is never more than 6 Sunday-starts
   // wide), but capped defensively so a date-math mistake can't loop forever.
   for (let guard = 0; guard < 8; guard++) {
     weeks.push(
@@ -158,11 +173,11 @@ export function buildMonthGrid(anchorDayKey: string, showWeekends: boolean): Cal
   return weeks;
 }
 
-/** Week view: one row, Monday-first, 7 (or 5 with weekends hidden) columns —
+/** Week view: one row, Sunday-first, 7 (or 5 with weekends hidden) columns —
  * every day `inCurrentMonth: true` (there's no "adjacent month" concept in
  * week view). */
 export function buildWeekGrid(anchorDayKey: string, showWeekends: boolean): CalendarGridDay[][] {
-  const weekStart = mondayOf(anchorDayKey);
+  const weekStart = weekStartOf(anchorDayKey);
   return [buildWeekDays(weekStart, showWeekends).map((dayKey) => ({ dayKey, inCurrentMonth: true }))];
 }
 
@@ -369,7 +384,7 @@ function formatShortDate(dayKey: string): string {
 
 function formatRangeLabel(anchorDayKey: string, viewRange: ViewRange): string {
   if (viewRange === "week") {
-    const start = mondayOf(anchorDayKey);
+    const start = weekStartOf(anchorDayKey);
     const end = addDays(start, 6);
     return `${formatShortDate(start)} – ${formatShortDate(end)}`;
   }
@@ -388,12 +403,16 @@ function CalendarDayCell({
   col,
   isEmpty,
   editable,
+  isToday,
   onCreate,
 }: {
   day: CalendarGridDay;
   col: number;
   isEmpty: boolean;
   editable: boolean;
+  /** Live-Notion capture (2026-09-02): today's date number carries a filled
+   * red circle. */
+  isToday: boolean;
   onCreate: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `${DAY_DROPPABLE_PREFIX}${day.dayKey}` });
@@ -408,7 +427,13 @@ function CalendarDayCell({
         day.inCurrentMonth ? "" : "opacity-40"
       } ${isOver ? "ring-2 ring-indigo-400 ring-inset" : ""}`}
     >
-      <div className="text-[11px] text-gray-400">{dayNumber}</div>
+      <div
+        className={`text-[11px] leading-4 w-4 text-center ${
+          isToday ? "rounded-full bg-red-500 text-white" : "text-gray-400"
+        }`}
+      >
+        {dayNumber}
+      </div>
       {editable && day.inCurrentMonth && isEmpty && (
         <button
           type="button"
@@ -427,23 +452,25 @@ function CalendarEventBar({
   row,
   properties,
   editable,
-  onCellChange,
   weekStartDayKey,
   style,
   onOpenRow,
-  isPeekOpen,
+  onTrashed,
 }: {
   row: DatabaseRow;
   properties: PropertyResponse[];
   editable: boolean;
-  onCellChange: (rowId: string, propertyKey: string, value: PropertyValue | null) => void;
   weekStartDayKey: string;
   style: React.CSSProperties;
-  /** M12: `useRowPeek`'s own `openRow`/`peekRowId`, threaded down instead
-   * of a bare `useOpenNote` navigation. */
+  /** M12: `useRowPeek`'s own `openRow`, threaded down instead of a bare
+   * `useOpenNote` navigation. */
   onOpenRow?: (noteId: string) => void;
-  isPeekOpen?: boolean;
+  /** M12 (Calendar's own live capture, 2026-09-02): `refetchRows`, so the
+   * row menu's Move to Trash has somewhere to report back to. */
+  onTrashed?: () => void | Promise<void>;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   // Disabled (not just unwired) when read-only — task-33-brief.md's test
   // requirement: "a read-only (All Notes) render never wires a working drag
   // handler". `listeners` is only spread onto the DOM when `editable`,
@@ -455,7 +482,16 @@ function CalendarEventBar({
   });
 
   const titleProp = properties.find((p) => p.type === "title");
+  const titleValue = titleProp ? (row.properties[titleProp.key] as { title?: string } | undefined)?.title : undefined;
 
+  // Live-Notion capture (2026-09-02): an event bar has NO hover-revealed
+  // icon of any kind — unlike Board/Gallery's cards, there's no room for a
+  // dedicated OPEN button or "···" trigger on a ~20px bar. The whole bar
+  // IS the open-trigger (same class as List's own "no separate OPEN
+  // button" finding), and the row menu (Favorite/Copy link/Move to
+  // Trash/…) opens only via right-click anywhere on the bar — RowMenu.tsx's
+  // own "right-click opens the same menu" convention, here the ONLY entry
+  // point rather than an alternate one.
   return (
     <div
       ref={setNodeRef}
@@ -463,25 +499,25 @@ function CalendarEventBar({
       style={style}
       {...attributes}
       {...(editable ? listeners : {})}
-      className={`relative flex items-center gap-0.5 mx-0.5 my-0.5 px-1 rounded text-[11px] overflow-hidden bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200 ${
-        editable ? "cursor-grab active:cursor-grabbing touch-none" : ""
+      onClick={() => onOpenRow?.(row.id)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenuOpen(true);
+      }}
+      className={`relative flex items-center mx-0.5 my-0.5 px-1 rounded text-[11px] overflow-hidden bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200 cursor-pointer ${
+        editable ? "active:cursor-grabbing touch-none" : ""
       } ${isDragging ? "opacity-40" : ""}`}
     >
-      <OpenNoteButton
-        noteId={row.id}
-        className="!p-0.5 shrink-0 scale-75"
-        onOpen={onOpenRow}
-        isOpen={onOpenRow ? isPeekOpen : undefined}
+      <RowMenuTrigger
+        rowId={row.id}
+        onOpenSidePeek={(id) => onOpenRow?.(id)}
+        onTrashed={() => onTrashed?.()}
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
+        trigger={
+          <span className="truncate min-w-0 flex-1">{titleValue || <span className="text-gray-400">Untitled</span>}</span>
+        }
       />
-      <span className="truncate min-w-0 flex-1">
-        {titleProp ? (
-          renderCellValue(titleProp, row.properties[titleProp.key], editable, (value) =>
-            onCellChange(row.id, titleProp.key, value)
-          )
-        ) : (
-          <span className="text-gray-400">Untitled</span>
-        )}
-      </span>
     </div>
   );
 }
@@ -492,20 +528,20 @@ function CalendarWeekRow({
   properties,
   rowsById,
   editable,
-  onCellChange,
   onCreateOnDay,
   onOpenRow,
-  peekRowId,
+  onTrashed,
+  todayKey,
 }: {
   weekDays: CalendarGridDay[];
   events: CalendarEvent[];
   properties: PropertyResponse[];
   rowsById: Record<string, DatabaseRow>;
   editable: boolean;
-  onCellChange: (rowId: string, propertyKey: string, value: PropertyValue | null) => void;
   onCreateOnDay: (dayKey: string) => void;
   onOpenRow?: (noteId: string) => void;
-  peekRowId?: string | null;
+  onTrashed?: () => void | Promise<void>;
+  todayKey: string;
 }) {
   const weekDayKeys = weekDays.map((d) => d.dayKey);
   const { spans, overflowByCol } = layoutWeekRow(weekDayKeys, events);
@@ -531,6 +567,7 @@ function CalendarWeekRow({
           col={col}
           isEmpty={!colHasEvents[col]}
           editable={editable}
+          isToday={day.dayKey === todayKey}
           onCreate={() => onCreateOnDay(day.dayKey)}
         />
       ))}
@@ -543,11 +580,10 @@ function CalendarWeekRow({
             row={row}
             properties={properties}
             editable={editable}
-            onCellChange={onCellChange}
             weekStartDayKey={weekStartDayKey}
             style={{ gridColumn: `${span.startCol + 1} / span ${span.colSpan}`, gridRow: span.lane + 2 }}
             onOpenRow={onOpenRow}
-            isPeekOpen={peekRowId === span.rowId}
+            onTrashed={onTrashed}
           />
         );
       })}
@@ -656,6 +692,8 @@ export function CalendarView({
   const events = extractCalendarEvents(rows, datePropertyKey);
   const rowsById: Record<string, DatabaseRow> = {};
   for (const row of rows) rowsById[row.id] = row;
+  const todayKey = toDayKey(new Date().toISOString());
+  const weekdayLabels = showWeekends ? WEEKDAY_LABELS : WEEKDAY_LABELS.slice(1, 6);
 
   async function handleCreateOnDay(dayKey: string) {
     if (!dataSourceId || rowCreating) return;
@@ -738,6 +776,20 @@ export function CalendarView({
         </label>
       </div>
 
+      {/* Live-Notion capture (2026-09-02): a fixed weekday header row above
+        * the grid — Sunday-first, absent from this view before this
+        * session. */}
+      <div
+        className="grid shrink-0 border-b border-gray-100 dark:border-gray-800 text-[11px] font-medium text-gray-400"
+        style={{ gridTemplateColumns: `repeat(${weekdayLabels.length}, 1fr)` }}
+      >
+        {weekdayLabels.map((label) => (
+          <div key={label} className="px-1 py-1 text-center">
+            {label}
+          </div>
+        ))}
+      </div>
+
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <div className="flex-1 min-h-0 overflow-auto flex flex-col">
           {grid.map((weekDays) => (
@@ -748,10 +800,10 @@ export function CalendarView({
               properties={properties}
               rowsById={rowsById}
               editable={editable}
-              onCellChange={onCellChange}
               onCreateOnDay={handleCreateOnDay}
               onOpenRow={openRow}
-              peekRowId={peekRowId}
+              onTrashed={refetchRows}
+              todayKey={todayKey}
             />
           ))}
         </div>

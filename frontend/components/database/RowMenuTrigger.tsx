@@ -26,11 +26,24 @@ export interface RowMenuTriggerProps {
   /** Caller's own refetch — called after a successful trash. */
   onTrashed: () => void | Promise<void>;
   trigger: ReactNode;
+  /** M12 (Calendar): externally controlled open state. When given, `trigger`
+   * renders as plain content instead of Popover's own click-to-open trigger
+   * — Calendar's event bar has no room for a dedicated "···" icon (real-
+   * Notion capture: hovering an event bar reveals nothing at all), so the
+   * caller owns how the menu opens (Calendar wires its own `onContextMenu`
+   * on the whole bar, matching RowMenu.tsx's own "right-click anywhere on
+   * the row opens the same menu" convention) rather than a click on
+   * `trigger` itself. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function RowMenuTrigger({ rowId, onOpenSidePeek, onTrashed, trigger }: RowMenuTriggerProps) {
+export function RowMenuTrigger({ rowId, onOpenSidePeek, onTrashed, trigger, open, onOpenChange }: RowMenuTriggerProps) {
   const { showToast } = useToast();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const controlled = open !== undefined;
+  const menuOpen = controlled ? open : internalOpen;
+  const setMenuOpen = controlled ? onOpenChange! : setInternalOpen;
 
   async function favorite() {
     try {
@@ -65,35 +78,60 @@ export function RowMenuTrigger({ rowId, onOpenSidePeek, onTrashed, trigger }: Ro
     }
   }
 
+  const menu = (
+    <MenuList
+      root={buildRowMenu({
+        onFavorite: () => {
+          setMenuOpen(false);
+          favorite();
+        },
+        onOpenNewTab: () => {
+          setMenuOpen(false);
+          window.open(noteWorkspacePath(rowId), "_blank");
+        },
+        onOpenSidePeek: () => {
+          setMenuOpen(false);
+          onOpenSidePeek(rowId);
+        },
+        onCopyLink: () => {
+          setMenuOpen(false);
+          copyLink();
+        },
+        onMoveToTrash: () => {
+          setMenuOpen(false);
+          moveToTrash();
+        },
+      })}
+      nav="flyout"
+      onClose={() => setMenuOpen(false)}
+      label="Row options"
+    />
+  );
+
+  if (controlled) {
+    // The trigger element itself must never be independently clickable-to-
+    // open here (the caller — Calendar's whole-bar `onClick` already means
+    // "open the row peek", a conflicting meaning) — Popover's own trigger is
+    // an invisible, `pointer-events-none` anchor purely for positioning;
+    // `open` is driven entirely by the caller's own state.
+    return (
+      <>
+        <Popover
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          label="Row options"
+          trigger={<span aria-hidden className="absolute inset-0 pointer-events-none" />}
+        >
+          {menu}
+        </Popover>
+        {trigger}
+      </>
+    );
+  }
+
   return (
     <Popover open={menuOpen} onOpenChange={setMenuOpen} label="Row options" trigger={trigger}>
-      <MenuList
-        root={buildRowMenu({
-          onFavorite: () => {
-            setMenuOpen(false);
-            favorite();
-          },
-          onOpenNewTab: () => {
-            setMenuOpen(false);
-            window.open(noteWorkspacePath(rowId), "_blank");
-          },
-          onOpenSidePeek: () => {
-            setMenuOpen(false);
-            onOpenSidePeek(rowId);
-          },
-          onCopyLink: () => {
-            setMenuOpen(false);
-            copyLink();
-          },
-          onMoveToTrash: () => {
-            setMenuOpen(false);
-            moveToTrash();
-          },
-        })}
-        nav="flyout"
-        onClose={() => setMenuOpen(false)}
-        label="Row options"
-      />
+      {menu}
     </Popover>
   );
 }

@@ -8,16 +8,23 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 **Branch:** `feat/notion-databases-ui-parity` (from `feat/workspaces-compact-redesign` @ 25a08b4)
 
-**M12 — Board's own dedicated work: DONE (2026-09-02).** Row hover affordances (OPEN +
-"···" row menu, hover-gated) built to match Gallery's own identical M12 pattern; Card
-preview/Card size/Card layout options added (`docs/ui-specs/board-view.md`, a fresh
-live-Notion capture); the OPEN/CLOSE-toggle bug already flagged for this milestone
-fixed. `hidden_properties` wiring turned out to be already done in an earlier session
-(confirmed by reading the code, not re-built). Full account: this file's own Log entry
-below. Live verification against this app's own build was blocked by this machine's
-own recurring memory exhaustion — disclosed in `board-view.md`, not forced. Resume
-point: **Calendar's own dedicated per-view work**, next in M12's decided order (the
-second of the three L-sized views).
+**M12 — Calendar's own dedicated work: DONE (2026-09-02).** 3 of the plan's 4 named
+items (date-range bars, drag-reschedule range preservation, event peek) were already
+built pre-session — confirmed by reading the code, then re-confirmed by a fresh
+live-Notion capture (`docs/ui-specs/calendar-view.md`). Real, capture-confirmed gaps
+found and fixed instead: a Monday-first vs. real Notion's Sunday-first week-start bug
+(plus the weekend-hidden offset bug it exposed), a missing weekday header row, the
+event bar's permanent icon replaced by a whole-bar click (no hover affordance in real
+Notion), and a new right-click row-menu trigger (Calendar had ZERO row-menu access
+before this session) built by giving `RowMenuTrigger.tsx` an additive controlled
+`open`/`onOpenChange` mode — every other caller unaffected.
+`hidden_properties`/`property_order` deliberately left unwired, disclosed rather than
+guessed: no rendering path on Calendar (bar or peek) ever consults it. Full account:
+this file's own Log entry below. Live-verified against real Notion in full;
+verification against this app's own build was blocked by this machine's own recurring
+memory exhaustion — disclosed in `calendar-view.md`, not forced. Resume point:
+**Timeline's own dedicated per-view work**, next in M12's decided order (the last of
+the nine views).
 
 ---
 
@@ -624,7 +631,8 @@ zero results" is in practice.
 | M12 — Chart's own dedicated work | **DONE (2026-09-02): the real post-creation config surface `view-tab-bar.md`'s own "Chart is a disclosed exception" section named as missing — built, unit-tested, live-verified (persisted through a hard reload).** |
 | M12 — Form's own dedicated work | **DONE (2026-09-02): rebuilt from scratch as a real WYSIWYG builder (`docs/ui-specs/form-view.md`, a fresh live-Notion capture) — per-type answer previews, the full "Question options" popover, "Add question", the toolbar's own Filter/Sort/Search suppression + new Preview link. Live-verified against both real Notion and this app's own build.** |
 | M12 — Dashboard's own dedicated work | **DONE (2026-09-02), disclosed capture gap: real Notion's widget-grid editing is Business-plan-gated on this account (confirmed live) — user chose a best-effort rebuild (`docs/ui-specs/dashboard-view.md`) over skipping or paying. The Add-widget picker and per-widget actions menu now reuse this app's own established Popover+MenuList primitives; the toolbar is now correctly reduced to Settings-only. Live-verified against this app's own build.** |
-| M12 — Board's own dedicated work | **DONE (2026-09-02): row hover affordances (OPEN + "···" row menu, hover-gated, matching Gallery's own M12 pattern) built against a fresh live-Notion capture (`docs/ui-specs/board-view.md`); Card preview/Card size/Card layout options added, reusing `GalleryView.tsx`'s own exported helpers rather than a third copy; the OPEN/CLOSE-toggle bug already flagged for this milestone fixed. `hidden_properties` wiring was already done in an earlier session. Live verification against this app's own build blocked by recurring memory exhaustion, disclosed not forced. Calendar/Timeline's own dedicated per-view work not started** |
+| M12 — Board's own dedicated work | **DONE (2026-09-02): row hover affordances (OPEN + "···" row menu, hover-gated, matching Gallery's own M12 pattern) built against a fresh live-Notion capture (`docs/ui-specs/board-view.md`); Card preview/Card size/Card layout options added, reusing `GalleryView.tsx`'s own exported helpers rather than a third copy; the OPEN/CLOSE-toggle bug already flagged for this milestone fixed. `hidden_properties` wiring was already done in an earlier session. Live verification against this app's own build blocked by recurring memory exhaustion, disclosed not forced.** |
+| M12 — Calendar's own dedicated work | **DONE (2026-09-02): 3 of the plan's 4 named items (date-range bars, drag-reschedule range preservation, event peek) were already built pre-session, confirmed by code + a fresh live-Notion capture (`docs/ui-specs/calendar-view.md`). Real, capture-confirmed gaps found and fixed instead: a Monday-first vs. real Notion's Sunday-first week-start bug (plus the weekend-hidden offset bug it exposed), a missing weekday header row, the event bar's permanent icon replaced by a whole-bar click (no hover affordance in real Notion), and — since Calendar had ZERO row-menu access before this session — a new right-click trigger reusing `RowMenuTrigger.tsx` (given an additive controlled `open`/`onOpenChange` mode, every other caller unaffected). `hidden_properties`/`property_order` deliberately left unwired and disclosed: no rendering path on Calendar (bar or peek) ever consults it, confirmed by capture and by `RowPeek.tsx`'s own established always-alphabetical behavior — wiring it would be dead code. Live-verified against real Notion in full; verification against this app's own build blocked by the same recurring memory exhaustion as Board's own session, disclosed not forced. Timeline's own dedicated per-view work not started, the last of the nine views.** |
 
 `docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
 a code-verified survey of what M1-M11 already ship for free across every view type (view
@@ -729,6 +737,7 @@ differs from List's row shape).
 | — | `form-view.md` (M12) | **written** (per-type previews beyond title/rich_text/select TBD, keyboard TBD) | reconstructed from inline screenshots + targeted `read_page`/`find` reads, not a saved `raw-dom/*.txt` dump | none saved to `screenshots/` this session |
 | — | `dashboard-view.md` (M12) | **written, explicitly partial** — real widget-grid chrome is **(inferred)**/**(documented)**, not **(captured)**: the plan's own Business-plan gate blocked it, confirmed live | none — the paywalled state itself was screenshotted inline, not the (inaccessible) widget grid | none saved to `screenshots/` this session |
 | — | `board-view.md` (M12) | **written** — hover affordances + Layout panel fully captured live; Card size's own per-setting visual effect inferred, not captured; live verification against this app's own build blocked by memory exhaustion, disclosed | inline screenshots + targeted zoom/hover reads, no saved `raw-dom/*.txt` | none saved to `screenshots/` this session |
+| — | `calendar-view.md` (M12) | **written** — Sunday-first week-start, the event bar's click/right-click model, and the missing weekday header all fully captured live; `hidden_properties`'s own real effect (if any) not captured — the sub-panel itself could not be held open under this session's own memory exhaustion, disclosed rather than guessed; live verification against this app's own build blocked by the same exhaustion | inline screenshots + a direct date-math cross-check, no saved `raw-dom/*.txt` | none saved to `screenshots/` this session |
 
 ---
 
@@ -804,11 +813,17 @@ Built by me, with the user's authorisation, 2026-08-29:
 - **2 rows**: "Row one" (all values empty), "Row two" (added 2026-09-02 for M12's List
   capture — also all values empty)
 - **Views**: `Table`, `Board` (Board auto-grouped by Status), `List` (added 2026-09-02
-  for M12's row-affordances capture), plus a **"Form builder" view** — found already
-  present when M12's Form session opened the view switcher (2026-09-02), not previously
-  recorded in this section; likely created ad hoc in an earlier, unlogged session. Used
-  as-is for `form-view.md`'s capture; a temporary `Select`-type question added and
-  removed again during that capture (no lasting fixture change).
+  for M12's row-affordances capture), `Calendar` (added 2026-09-02 for M12's Calendar
+  capture — `Show calendar by: Date`, `Show calendar as: Month`), plus a **"Form
+  builder" view** — found already present when M12's Form session opened the view
+  switcher (2026-09-02), not previously recorded in this section; likely created ad hoc
+  in an earlier, unlogged session. Used as-is for `form-view.md`'s capture; a temporary
+  `Select`-type question added and removed again during that capture (no lasting
+  fixture change).
+- **Row two's `Date` was set to a range** (Sep 2 – Sep 4, 2026) during Calendar's own
+  capture, to observe a real multi-day event bar. Left as-is (a real, still-honest date
+  value, not reverted) — the same "no lasting fixture change needed" call the Form
+  session made for its own temporary edit.
 - **1 Select option**: `Alpha`, created via create-on-type, applied to Row one
 - **1 calculation**: `Sum` on the Number column, so the footer row renders
 - **TYPES CORRECTED 2026-08-31.** Four properties had been created with the wrong type
@@ -820,6 +835,77 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M12 — Calendar's own dedicated work: week-start fix, event bar
+  redesign, right-click row menu)** — Picked up the decided M12 order's next item after
+  Board. Read the plan's own scope first (four items: date-range bars, drag-reschedule
+  refinement, event peek, row peek/`hidden_properties` wiring) and checked each against
+  the actual code before assuming any of it still needed doing, same discipline Board's
+  own session established: `layoutWeekRow`/`CalendarEventBar` already rendered a
+  multi-day event as one spanning bar (M9-original), `resolveDropDate` already shifted a
+  ranged event's end by the drop delta (M9-original, already unit-tested), and row peek
+  (`?p=&pm=c`, defaulting to Center per the earlier "Open pages in defaults" session) was
+  already wired via the M12 cross-cutting `useRowPeek` pass. Only `hidden_properties`
+  wiring was real, undone scope from the plan's own four items.
+  Added a Calendar view to the fixture database (`Show calendar by: Date`, `Show
+  calendar as: Month`) and set Row two's Date to a range (Sep 2–4, 2026) to observe a
+  real multi-day event. Live capture surfaced four gaps the plan never named, all
+  fixed:
+  1. **Monday-first vs. real Notion's Sunday-first week start** — the original M9 build
+     assumed Monday-first "to match the grouping engine's own convention," never
+     actually captured against Calendar's own grid; real Notion's header reads Sun
+     first, independently confirmed by today's highlighted cell landing under "Wed" on
+     2026-09-02 (a real Wednesday, verified by date-math). Fixed `mondayOf` →
+     `weekStartOf`, and a real bug it exposed: `buildWeekDays`'s "hide weekends" branch
+     needed a `+1` offset under a Sunday anchor to still land on Monday–Friday (it
+     previously kept Sunday and dropped Friday). Every week-boundary-dependent test
+     fixture in `CalendarView.test.tsx` was recomputed and rewritten, not just the
+     helper functions.
+  2. **No weekday header row existed at all** — confirmed absent by reading the full
+     render tree before assuming it was just unstyled. Added, Sun–Sat reduced to
+     Mon–Fri when weekends are hidden.
+  3. **The event bar's permanent `OpenNoteButton` icon and icon-only click target** —
+     real Notion's bar reveals nothing on hover and opens the peek from anywhere on the
+     bar (List's own "no separate OPEN button" pattern). Removed the icon, moved
+     `onClick` to the bar's own outer div, and switched the title from the shared
+     `renderCellValue` dispatcher to plain text (real Notion never went into inline-edit
+     on a bar click).
+  4. **Zero row-menu access on Calendar** — with no hover icon and no column header (a
+     table-only concept), Calendar had no way to reach Favorite/Copy link/Move to Trash
+     before this session. Real Notion opens the same row menu via right-click.
+     `RowMenuTrigger.tsx` gained an additive, optional `open`/`onOpenChange` controlled
+     mode (Popover's own trigger becomes an invisible `pointer-events-none` positioning
+     anchor; the caller owns how/when it opens) — reused, not a second copy of the
+     menu's favorite/copy-link/trash logic. Every existing caller (`RowGutter.tsx`,
+     Table/List) is unchanged, confirmed by the full suite staying green.
+  Also added a small capture-confirmed polish: today's date number carries a filled red
+  circle in real Notion, absent before this session — added to `CalendarDayCell`.
+  **`hidden_properties`/`property_order` deliberately left unwired, disclosed rather
+  than guessed:** the Property visibility panel exists in Calendar's sidebar (confirmed:
+  a row with a count badge), but its own sub-panel content could not be captured — the
+  automation session's own memory exhaustion (see below) closed it before it could be
+  read, across every attempt. More decisively: there is nowhere in Calendar's own
+  rendering hidden_properties COULD affect even if captured — the event bar shows only
+  the title (confirmed identical in real Notion and this app's build) and `RowPeek.tsx`
+  already deliberately ignores `hidden_properties` (M10's own established
+  always-alphabetical behavior). Wiring it would be dead code pretending to be a real
+  feature; left unbuilt and named here instead.
+  Full write-up: `docs/ui-specs/calendar-view.md`.
+  Frontend 963 → 966 tests green (61 files unchanged — `CalendarView.test.tsx` grew from
+  42 to 44), `tsc` clean. **Live-verified against real Notion in full** (the week-start
+  header, the continuous multi-day bar, click-opens-center-peek, no hover icon,
+  right-click's full menu, today's highlight — all captured directly). **Live
+  verification against this app's own build not completed, disclosed rather than
+  forced:** `./app.sh`'s stack was already running; a fresh database with a Date
+  property was created via the browser to test against, but `Page.captureScreenshot`
+  timed out five times across two fresh tabs (`free -h`: 298–337Mi free, 3.3–3.7Gi/
+  3.7Gi swap across three checks) — the identical failure class `board-view.md`'s own
+  session and List's own M12 session already hit and disclosed. Per this session's own
+  instructions (retry once, one fresh tab, then disclose), two fresh tabs were tried,
+  not forced further. Unit tests are the substitute, same acceptable-fallback class as
+  Board's own write-up.
+  **Resume point: Timeline's own dedicated per-view work** (the last of the nine views,
+  per M12's decided order), then the workstream's one remaining review checkpoint (a
+  whole-branch pass).
 - **2026-09-02 (M12 — Board's own dedicated work: row hover affordances + card layout
   options)** — Picked up the decided M12 order's next item after Dashboard. Read the
   plan's own scope first (three items: row hover affordances/peek, card layout options,
