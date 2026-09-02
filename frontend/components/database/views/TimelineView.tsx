@@ -399,14 +399,36 @@ export function TimelineView({
   const dependencyForward = findSystemRelationProperty(properties, "dependency", "forward");
   const titleProp = properties.find((p) => p.type === "title");
 
-  // task-34-brief.md's ruling: ViewTabs.tsx requires picking a date
-  // property before a Timeline view can even be created, but this stays
-  // defensive (a deleted property, or a hand-edited config) rather than
-  // crashing — mirrors CalendarView.tsx's identical early return.
+  // view-tab-bar.md (M7 create-flow rewrite): Timeline now creates
+  // immediately like every other type — ViewTabs.tsx only auto-selects an
+  // existing date property, it no longer gates creation on picking one.
+  // Mirrors CalendarView.tsx's identical picker: this placeholder is the
+  // only place `date_property_id` can ever be set post-creation (no
+  // settings-sidebar panel owns it, unlike Board's group-by).
   if (!datePropertyId || !dateProperty) {
+    const dateProperties = properties.filter((p) => p.type === "date");
     return (
-      <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500 text-center px-6">
-        no date property configured yet — add a Date property first
+      <div className="flex flex-col items-center justify-center h-full gap-2 text-sm text-gray-400 dark:text-gray-500 text-center px-6">
+        <p>no date property configured yet</p>
+        {dateProperties.length === 0 ? (
+          <p>add a Date property first</p>
+        ) : (
+          <select
+            aria-label="Date property"
+            defaultValue=""
+            onChange={(e) => e.target.value && onConfigChange({ date_property_id: e.target.value })}
+            className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+          >
+            <option value="" disabled>
+              Choose a date property…
+            </option>
+            {dateProperties.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
     );
   }

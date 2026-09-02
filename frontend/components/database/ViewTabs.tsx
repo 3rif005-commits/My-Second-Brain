@@ -1,16 +1,28 @@
 "use client";
 
-// Tab row over a data source's views + the "+ New view" inline creation
-// form (task-16). Kept as its own component rather than folded into
-// DatabaseShell.tsx — the creation form has enough of its own state
-// (name/type/group-by-property draft, submit/error state) that inlining it
-// would make DatabaseShell noticeably harder to read.
+// Tab row over a data source's views + the "+ New view" create-first-
+// configure-after popover (view-tab-bar.md, M7 create-flow rewrite).
+// Kept as its own component rather than folded into DatabaseShell.tsx —
+// even the trimmed create flow (a card grid, plus Chart's own follow-up
+// step) has enough of its own state that inlining it would make
+// DatabaseShell noticeably harder to read.
 import { useState } from "react";
+import {
+  BarChart3,
+  Calendar,
+  ClipboardList,
+  GalleryHorizontal,
+  GanttChartSquare,
+  Kanban,
+  LayoutDashboard,
+  List,
+  Rss,
+  Table2,
+} from "lucide-react";
 import { useToast } from "@/app/providers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { MenuList, Popover } from "@/components/ui/primitives";
 import type { PropertyResponse, ViewResponse } from "@/lib/database/types";
-import { GROUPABLE_PROPERTY_TYPES } from "@/lib/database/types";
 import type { ViewPatch } from "@/lib/database/useDatabaseView";
 import { getDisplayAs, setDisplayAs } from "@/lib/database/viewTabPrefs";
 import { buildViewTabMenu } from "./ViewTabMenu";
@@ -37,23 +49,16 @@ interface ViewTabsProps {
   views: ViewResponse[];
   activeViewId: string;
   onSelect: (viewId: string) => void;
-  /** Used to build the Board-creation "group by" dropdown — restricted to
-   * `GROUPABLE_PROPERTY_TYPES` (types.ts, widened past select/status/
-   * multi_select by Phase 0c) — and the Calendar/
-   * Timeline-creation "date property" dropdown (both require the same
-   * `date_property_id`, task-34-brief.md extending task-33's pattern),
-   * restricted to `type === "date"`. Also handed to Chart-creation's own
-   * `ChartCreateFields` (task-35), which does its own filtering for its
-   * x_axis/stack_by (groupable types, same restriction as Board) and
-   * y_axis (any property) pickers. */
+  /** Handed to Chart's own follow-up `ChartCreateFields` step (task-35) —
+   * the one type this create flow still asks to be configured before it
+   * creates anything (see the `handlePickViewType` comment below). Every
+   * other type's creation-time config (Board's group-by, Calendar/
+   * Timeline's date property) is now auto-selected by `onCreateView`'s
+   * caller (`DatabaseShell.handleCreateView`) from its OWN `properties`,
+   * not chosen here — this component no longer needs the groupable/date
+   * property lists for anything but Chart. */
   properties: PropertyResponse[];
-  onCreateView: (input: {
-    name: string;
-    type: string;
-    groupPropertyKey?: string;
-    datePropertyKey?: string;
-    chartConfig?: Record<string, unknown>;
-  }) => Promise<void>;
+  onCreateView: (input: { type: string; chartConfig?: Record<string, unknown> }) => Promise<void>;
   /** M3's view toolbar (Filter/Sort/Automations/AI Autofill/Search/Settings)
    * — rendered in THIS SAME row, right-aligned via its own `ml-auto`, per
    * view-options-panel.md's diagram (`[ Table ▾ ] ... [toolbar] [ New ▾ ]`).
@@ -79,32 +84,53 @@ interface ViewTabsProps {
   onOpenSettings?: () => void;
 }
 
-// The ten view types this milestone supports creating (table/board —
-// Task 16; gallery/list/feed — Task 17; calendar — Task 33; timeline —
-// Task 34; chart — Task 35; form — Task 44; dashboard — Task 45). Map is
-// explicitly out of scope for the whole milestone (user decision — no
-// geocoding/tile provider configured, docs/plans/2026-08-08-notion-
-// databases.md M13).
-//
-// Dashboard needs no creation-time fields the way Board/Calendar/Timeline/
-// Chart do (task-45-brief.md, confirmed against `ViewCreate` in
-// models/database.py: it has no `config` field at all) — a freshly created
-// dashboard always starts at `config: {}` (empty `rows`), and every widget
-// is added afterward through DashboardView's own Edit mode, which PATCHes
-// `config` through the same `_validate_dashboard_config`-guarded
-// `update_view` endpoint every other config change already goes through.
-const VIEW_TYPE_OPTIONS = [
-  { value: "table", label: "Table" },
-  { value: "board", label: "Board" },
-  { value: "gallery", label: "Gallery" },
-  { value: "list", label: "List" },
-  { value: "feed", label: "Feed" },
-  { value: "calendar", label: "Calendar" },
-  { value: "timeline", label: "Timeline" },
-  { value: "chart", label: "Chart" },
-  { value: "form", label: "Form" },
-  { value: "dashboard", label: "Dashboard" },
+// view-tab-bar.md's "Add a new view" card grid: 11 types, 4 columns, Table
+// highlighted as the default — we cut Map (deliberate, whole-milestone
+// decision: no geocoding/tile provider), so 10 cards in the same 4-column
+// shape, same row order the capture shows (Table/Board/Gallery/List ·
+// Chart/Dashboard/Timeline/Feed · Map/Calendar/Form minus Map). Icons reuse
+// ViewLayoutPanel.tsx's own set for the eight types both grids share, so a
+// type doesn't wear two different icons across the app; Form has no
+// existing icon anywhere else in this codebase to reuse.
+const ADD_VIEW_TYPES = [
+  { type: "table", label: "Table", icon: <Table2 size={17} /> },
+  { type: "board", label: "Board", icon: <Kanban size={17} /> },
+  { type: "gallery", label: "Gallery", icon: <GalleryHorizontal size={17} /> },
+  { type: "list", label: "List", icon: <List size={17} /> },
+  { type: "chart", label: "Chart", icon: <BarChart3 size={17} /> },
+  { type: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={17} /> },
+  { type: "timeline", label: "Timeline", icon: <GanttChartSquare size={17} /> },
+  { type: "feed", label: "Feed", icon: <Rss size={17} /> },
+  { type: "calendar", label: "Calendar", icon: <Calendar size={17} /> },
+  { type: "form", label: "Form", icon: <ClipboardList size={17} /> },
 ] as const;
+
+function AddViewGrid({ onPick }: { onPick: (type: string) => void }) {
+  return (
+    <div className="py-1">
+      <div className="px-2.5 pt-1 pb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+        Add a new view
+      </div>
+      <div className="grid grid-cols-4 gap-1.5 px-2 pb-2">
+        {ADD_VIEW_TYPES.map((card) => (
+          <button
+            key={card.type}
+            type="button"
+            onClick={() => onPick(card.type)}
+            className={`flex flex-col items-center gap-1 rounded-md border px-2 py-2.5 text-[11px] hover:bg-menu-hover ${
+              card.type === "table"
+                ? "border-brand/40 text-brand"
+                : "border-transparent text-gray-600 dark:text-gray-300"
+            }`}
+          >
+            {card.icon}
+            {card.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function ViewTabs({
   views,
@@ -194,78 +220,63 @@ export function ViewTabs({
     }
   }
 
-  const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
-  const [type, setType] = useState<string>("table");
-  const [groupPropertyKey, setGroupPropertyKey] = useState("");
-  const [datePropertyKey, setDatePropertyKey] = useState("");
+  // view-tab-bar.md's "create first, configure after": one click on a card
+  // creates the view IMMEDIATELY — no name prompt, no group-by prompt, no
+  // Create button, no validation gate — for every type except Chart. Chart
+  // is a disclosed, deliberate exception: unlike Board (M6's Group panel)
+  // and Calendar/Timeline (their own placeholder's inline picker, added
+  // alongside this rewrite), there is still no post-creation surface
+  // anywhere that can set Chart's x/y/stack axes — only `ChartCreateFields`
+  // here can. Removing this gate without building that surface first (real
+  // scope, matching M12's own "Chart config panel already dense" sizing
+  // note — future work, not this session's) would create permanently-stuck
+  // Chart views with no way to ever configure them. So Chart alone keeps a
+  // pre-creation step, reached only after its own card is clicked, not
+  // gating any other type's immediate creation.
+  const [addViewOpen, setAddViewOpen] = useState(false);
+  const [addViewStep, setAddViewStep] = useState<"grid" | "chart">("grid");
   const [chartDraft, setChartDraft] = useState<ChartDraftConfig>(DEFAULT_CHART_DRAFT);
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
 
-  const groupableProperties = properties.filter((p) =>
-    (GROUPABLE_PROPERTY_TYPES as readonly string[]).includes(p.type)
-  );
-  const dateProperties = properties.filter((p) => p.type === "date");
-
-  function resetForm() {
-    setCreating(false);
-    setName("");
-    setType("table");
-    setGroupPropertyKey("");
-    setDatePropertyKey("");
+  function closeAddView() {
+    setAddViewOpen(false);
+    setAddViewStep("grid");
     setChartDraft(DEFAULT_CHART_DRAFT);
-    setSubmitting(false);
-    setFormError(null);
   }
 
-  // task-16-brief.md's deliberate deviation from Notion (which auto-creates
-  // a status property and mutates the schema): a Board view here requires
-  // picking an existing groupable property. No property picked yet, or
-  // none exists at all, both keep Create disabled — never silently falls
-  // back to inventing one.
-  const boardNeedsPropertyButHasNone = type === "board" && groupableProperties.length === 0;
-  const boardMissingSelection = type === "board" && !boardNeedsPropertyButHasNone && !groupPropertyKey;
-  // Calendar mirrors Board's gate exactly (task-33-brief.md's ruling,
-  // decided rather than guessing at calendar's undocumented empty-state
-  // behaviour): require picking a date property before Create is enabled.
-  // Timeline needs the identical required `date_property_id` (task-34-
-  // brief.md) — extended into the same boolean/condition rather than
-  // duplicated, since both types share one "Date property" picker below.
-  const isDateDrivenView = type === "calendar" || type === "timeline";
-  const calendarNeedsPropertyButHasNone = isDateDrivenView && dateProperties.length === 0;
-  const calendarMissingSelection = isDateDrivenView && !calendarNeedsPropertyButHasNone && !datePropertyKey;
-  // Chart (task-35): its own `canSubmit`-gated pattern, same standard as
-  // Board/Calendar/Timeline above — don't let a chart be created that would
-  // render nothing. `isChartConfigComplete` is the one source of truth for
-  // "is this draft submittable" (also unit-tested directly against
-  // `ChartDraftConfig` fixtures in ChartView.test.tsx), not re-derived here.
-  const chartMissingSelection = type === "chart" && !isChartConfigComplete(chartDraft);
-  const canSubmit =
-    !submitting &&
-    !boardNeedsPropertyButHasNone &&
-    !boardMissingSelection &&
-    !calendarNeedsPropertyButHasNone &&
-    !calendarMissingSelection &&
-    !chartMissingSelection;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!canSubmit) return;
-    setSubmitting(true);
-    setFormError(null);
+  async function handlePickViewType(type: string) {
+    if (type === "chart") {
+      setAddViewStep("chart");
+      return;
+    }
+    closeAddView();
     try {
-      await onCreateView({
-        name: name.trim() || "New view",
-        type,
-        groupPropertyKey: type === "board" ? groupPropertyKey : undefined,
-        datePropertyKey: isDateDrivenView ? datePropertyKey : undefined,
-        chartConfig: type === "chart" ? buildChartViewConfig(chartDraft, properties) : undefined,
-      });
-      resetForm();
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Could not create view");
-      setSubmitting(false);
+      await onCreateView({ type });
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not create view", "error");
+    }
+  }
+
+  // Live-found bug, fixed here: this used to close the popover only AFTER
+  // `await onCreateView(...)` resolved — the one place this create flow
+  // diverged from `handlePickViewType`'s own "close, THEN create" order.
+  // `onCreateView`'s caller (DatabaseShell.handleCreateView) opens the
+  // settings sidebar as its very last step, so with the old order that open
+  // happened while THIS popover was still mounted — two Radix overlays
+  // alive at once, and this popover's own dismissal (triggered by
+  // `closeAddView()` a tick later) silently closed the sidebar right back.
+  // Reproduced live: the settings sidebar never appeared after creating a
+  // Chart, though it opened correctly for every other type. `chartConfig`
+  // is read into a local BEFORE closing (which resets `chartDraft`), same
+  // reasoning `handlePickViewType` never had to think about since it never
+  // reads component state after starting its own close.
+  async function handleCreateChart() {
+    if (!isChartConfigComplete(chartDraft)) return;
+    const chartConfig = buildChartViewConfig(chartDraft, properties);
+    closeAddView();
+    try {
+      await onCreateView({ type: "chart", chartConfig });
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not create view", "error");
     }
   }
 
@@ -370,105 +381,51 @@ export function ViewTabs({
         );
       })}
 
-      {!creating ? (
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="text-xs font-medium px-2.5 py-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-        >
-          + New view
-        </button>
-      ) : (
-        <form onSubmit={handleSubmit} className="flex items-center gap-1.5 flex-wrap">
-          <input
-            autoFocus
-            aria-label="View name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="New view"
-            className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-          />
-          <select
-            aria-label="View type"
-            value={type}
-            onChange={(e) => {
-              setType(e.target.value);
-              setGroupPropertyKey("");
-              setDatePropertyKey("");
-              setChartDraft(DEFAULT_CHART_DRAFT);
-            }}
-            className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-          >
-            {VIEW_TYPE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-
-          {type === "board" &&
-            (boardNeedsPropertyButHasNone ? (
-              <span className="text-xs text-amber-600 dark:text-amber-400">
-                no groupable property yet — add one first
-              </span>
-            ) : (
-              <select
-                aria-label="Group by"
-                value={groupPropertyKey}
-                onChange={(e) => setGroupPropertyKey(e.target.value)}
-                className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-              >
-                <option value="">Group by…</option>
-                {groupableProperties.map((p) => (
-                  <option key={p.key} value={p.key}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            ))}
-
-          {isDateDrivenView &&
-            (calendarNeedsPropertyButHasNone ? (
-              <span className="text-xs text-amber-600 dark:text-amber-400">
-                no date property yet — add a Date property first
-              </span>
-            ) : (
-              <select
-                aria-label="Date property"
-                value={datePropertyKey}
-                onChange={(e) => setDatePropertyKey(e.target.value)}
-                className="text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-              >
-                <option value="">Date property…</option>
-                {dateProperties.map((p) => (
-                  <option key={p.key} value={p.key}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            ))}
-
-          {type === "chart" && (
-            <ChartCreateFields properties={properties} value={chartDraft} onChange={setChartDraft} />
-          )}
-
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="text-xs px-2 py-1 rounded bg-indigo-600 text-white disabled:opacity-40"
-          >
-            Create
-          </button>
+      <Popover
+        open={addViewOpen}
+        onOpenChange={(open) => (open ? setAddViewOpen(true) : closeAddView())}
+        // view-tab-bar.md's Anchor table: "Add a new view" ≈390px — the
+        // named `sm`/`md`/`lg` tokens (248/285/378px) are all narrower than
+        // the 4-column card grid needs, so this is the one popover on this
+        // surface with an explicit numeric width instead of a token.
+        width={390}
+        label="Add a new view"
+        trigger={
           <button
             type="button"
-            onClick={resetForm}
-            className="text-xs px-1.5 py-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            aria-label="Add a new view"
+            className="text-xs font-medium px-2.5 py-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
-            Cancel
+            +
           </button>
-          {formError && <span className="text-xs text-red-500">{formError}</span>}
-        </form>
-      )}
+        }
+      >
+        {addViewStep === "grid" ? (
+          <AddViewGrid onPick={handlePickViewType} />
+        ) : (
+          <div className="p-2.5 flex flex-col gap-1.5">
+            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Configure chart</div>
+            <ChartCreateFields properties={properties} value={chartDraft} onChange={setChartDraft} />
+            <div className="flex items-center gap-1.5 mt-1">
+              <button
+                type="button"
+                disabled={!isChartConfigComplete(chartDraft)}
+                onClick={handleCreateChart}
+                className="text-xs px-2 py-1 rounded bg-indigo-600 text-white disabled:opacity-40"
+              >
+                Create
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddViewStep("grid")}
+                className="text-xs px-1.5 py-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                Back
+              </button>
+            </div>
+          </div>
+        )}
+      </Popover>
       {trailing}
 
       <ConfirmDialog

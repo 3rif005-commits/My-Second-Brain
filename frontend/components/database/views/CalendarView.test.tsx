@@ -320,6 +320,43 @@ describe("CalendarView", () => {
     expect(screen.getByText(/no date property configured yet/i)).toBeInTheDocument();
   });
 
+  it("the placeholder offers no picker when there's no date property to choose from at all", () => {
+    render(
+      <CalendarView
+        properties={[TITLE_PROP]}
+        rows={[]}
+        editable={true}
+        onCellChange={vi.fn()}
+        config={{}}
+        onConfigChange={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/add a date property first/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/date property/i)).not.toBeInTheDocument();
+  });
+
+  // view-tab-bar.md's M7 create-flow rewrite: Calendar now creates
+  // immediately, auto-selecting an existing date property only when one
+  // exists — this placeholder's own picker is the ONLY post-creation way to
+  // ever set `date_property_id` (no settings-sidebar panel owns it, unlike
+  // Board's group-by), so it has to actually work, not just explain the gap.
+  it("picking a date property from the placeholder's picker calls onConfigChange with date_property_id", async () => {
+    const user = userEvent.setup();
+    const onConfigChange = vi.fn();
+    render(
+      <CalendarView
+        properties={[TITLE_PROP, DUE_PROP]}
+        rows={[]}
+        editable={true}
+        onCellChange={vi.fn()}
+        config={{}}
+        onConfigChange={onConfigChange}
+      />
+    );
+    await user.selectOptions(screen.getByLabelText(/date property/i), "due");
+    expect(onConfigChange).toHaveBeenCalledWith({ date_property_id: "due" });
+  });
+
   it("month view renders an event on its correct day cell", () => {
     renderAt(
       "2026-08-18T00:00:00.000Z",

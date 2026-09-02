@@ -583,3 +583,104 @@ Frontend 61 files / 893 tests green (was 892 before this run's fix; the 5
 `GroupBuilder.test.tsx` tests affected were corrected in place, not counted
 as new; +1 new race regression test in `DatabaseShell.test.tsx`), `tsc`
 clean.
+
+## view-tab-bar.md, M7 create-flow rewrite (2026-09-02)
+
+The user reported real problems with view create/edit/delete — asked directly rather than
+assuming the M7 spec's own disclosed gap (the create-first-configure-after flow never
+built) was the whole story. Confirmed: just the create flow, plus a request to re-verify
+rename/duplicate/delete hadn't regressed since the M7-M11 sessions last fixed them.
+
+### Built
+
+`ViewTabs.tsx`'s "+ New view" replaced the native `<select>` name/type/group-by form with
+`AddViewGrid`: a 4-column, 10-card icon grid (Table/Board/Gallery/List/Chart/Dashboard/
+Timeline/Feed/Calendar/Form — Map excluded, this app's own pre-existing deviation). One
+click creates the view immediately for every type except Chart (a disclosed exception —
+see view-tab-bar.md's own new section). `DatabaseShell.tsx`'s `handleCreateView` auto-
+selects Board's group-by from an existing select/status/multi_select property and
+Calendar/Timeline's date property from an existing `date` property (restricted families,
+not the wider `GROUPABLE_PROPERTY_TYPES` list other surfaces use — see the spec's own
+reasoning). `?view=<viewId>` is now read on load and written on every switch
+(`DatabaseShell.tsx`'s new `selectView`, mirroring `TableView.tsx`'s existing `?p=`/`?pm=`
+pattern) — previously write-only since M7.
+
+### Settled by live-testing against real Notion, not guessed
+
+**Both of the spec's own open questions, closed with real evidence:**
+
+1. **No groupable property at all → Notion auto-creates a Status property, mutating the
+   schema.** Built a throwaway Notion database with only a Title property, created a
+   Board, watched a real `Status` property (Not started/In progress/Done) appear in the
+   Table view too. This is a genuine product decision, not an implementation detail —
+   surfaced to the user via `AskUserQuestion` rather than decided unilaterally (this
+   workstream's own established precedent, M11's new-row-chevron IA question). **Decision:
+   keep this app's refusal to auto-create one** — a Board with nothing to group by lands
+   on `BoardView.tsx`'s existing placeholder, fixable afterward via the Group panel.
+2. **An empty-string view name falls back to showing the type as the tab label** —
+   confirmed live (an unnamed Board's tab read `Board`, not `New view`). `viewTabLabel`
+   already handled this correctly; only `createView`'s call site needed to stop defaulting
+   to the literal `"New view"`.
+
+### A real functional gap this create-flow rewrite would otherwise have introduced, closed
+
+Removing the pre-creation gate meant Calendar/Timeline could now be created with NO date
+property configured — and unlike Board (which already has a real post-creation fix path,
+M6's Group panel), there was **no surface anywhere** that could ever set
+`config.date_property_id` after creation; the old pre-creation `<select>` was the only one.
+Fixed by adding a real inline picker to `CalendarView.tsx`/`TimelineView.tsx`'s own "no
+date property configured yet" placeholder (previously pure explanatory text), writing via
+the `onConfigChange` prop both components already received but the placeholder branch
+never used.
+
+### One real bug found and fixed: Chart's settings sidebar silently never opened
+
+Live-tested the new create flow (2026-09-02) — Board, Calendar, and Gallery all correctly
+opened the M3 settings sidebar afterward ("opens the view settings sidebar for configuring
+afterward", the spec's own words), but Chart never did, even though
+`DatabaseShell.handleCreateView`'s `setSettingsOpen(true)` is unconditional and runs for
+every type.
+
+Root cause: `ViewTabs.tsx`'s `handleCreateChart` (the one type with its own two-step
+follow-up form) closed its popover only AFTER awaiting `onCreateView(...)` — the ONE place
+this create flow diverged from `handlePickViewType`'s own "close, THEN create" order, which
+every other type already followed. Since `onCreateView`'s caller opens the settings sidebar
+as its very last synchronous step, the old order meant that open happened while the Add-
+view popover was STILL mounted — two Radix overlays alive in the same tick, and the
+popover's own dismissal (triggered by `closeAddView()` a tick later) silently closed the
+sidebar right back. The exact same class of bug as M7's own "Edit view" no-op fix (a
+same-tick race between a popover closing and the settings SidePeek opening), not a new one
+— and fixed the identical way, by deferring the sidebar's own `setSettingsOpen(true)` one
+tick (`DatabaseShell.tsx`) to let the closing popover finish first, AND fixing
+`handleCreateChart`'s own ordering to match every other type's (close first, read
+`chartConfig` into a local before `closeAddView()` resets the draft, then create).
+
+Caught by a new `DatabaseShell.test.tsx` regression test (`findByText("Layout")` after
+creating a Chart through the real UI) — NOT caught by the live-Chrome manual click-then-
+screenshot pass, which happened to give Radix enough real wall-clock time between actions
+to settle the race before each screenshot. Re-verified live after the fix, both orderings:
+Board/Calendar/Gallery still open the sidebar correctly, and Chart now does too.
+
+### Rename / Duplicate / Delete re-verified live, unregressed
+
+Ran fresh against the current branch tip (not reusing an old fixture, since these were
+last confirmed working across several M7-M11 sessions and the user asked specifically
+whether they'd broken again): Rename (tab → "Photos", persisted across reload), Duplicate
+(new "Photos (copy)" tab appeared immediately, selected, config copied), Delete (confirm
+dialog → tab removed → fell back to Default view). All three worked correctly — no
+regression found.
+
+### Tests
+
+`ViewTabs.test.tsx`: the 14 old select-form creation tests replaced with a parametrized
+"every non-Chart card creates immediately" test plus dedicated Chart-follow-up-step tests
+(disabled-until-configured, Back returns to the grid without creating, a second Chart
+creation isn't blocked by stale draft state). `DatabaseShell.test.tsx`: the two Board
+group-by tests adapted to the new auto-select flow (plus a new "no groupable property
+leaves it ungrouped" test), two new `?view=` URL-sync tests, and the two new
+settings-sidebar-opens-afterward tests (Board and Chart) that caught the ordering bug
+above. `CalendarView.test.tsx`/`TimelineView.test.tsx`: three new tests each for the
+placeholder's picker (no-properties state, picking one, `onConfigChange` call shape).
+
+Frontend 61 files / 905 tests green (was 903 mid-session, 893 at the top of this entry),
+`tsc` clean. Full suite run, not just the affected files.

@@ -4,11 +4,15 @@
 > **Ground truth:** `raw-dom/view-tab-bar.txt` · `screenshots/44-view-tab-menu.jpg`,
 > `44b-view-display-as.jpg`, `44c-view-tab-menu-two-views.jpg`, `46-new-view-popover.jpg`,
 > `46b-view-created-configure-after.jpg`
-> **Today:** `ViewTabs.tsx` renders a bare `<button>` per view and an inline creation form
-> with a native `<select>`. No per-view menu, no rename, no duplicate, no delete, no
-> reorder, no icon.
+> **Today (2026-09-02):** `ViewTabs.tsx` renders a per-view tab with rename/duplicate/
+> delete/display-as, all live-verified working. "+ New view" is a real create-first-
+> configure-after popover (`AddViewGrid`): a 4-column, 10-card grid (Map excluded), one
+> click creates the view immediately with no name/config prompt, opens the settings
+> sidebar afterward. Chart is a disclosed exception — see its own section below.
+> `?view=<viewId>` is read on load and written on every switch (`DatabaseShell.tsx`'s
+> `selectView`), previously write-only since M7. Reorder tabs by drag is still unbuilt.
 > **Binds to:** `ViewResponse`, `POST /db/data-sources/{id}/views`, `PATCH /db/views/{id}`,
-> and **`DELETE /db/views/{id}` — which does not exist (plan gap B1).**
+> `DELETE /db/views/{id}` (Phase 0b, B1).
 
 ---
 
@@ -140,30 +144,45 @@ one and no endpoint adds another. **Out of scope — note, do not build.**
    and drew real columns with counts.
 4. Opens the view settings sidebar for configuring *afterwards*.
 
-### Against ours
+### Built (2026-09-02), and how it settles both of this section's own open questions
 
-`ViewTabs.tsx:99-122` collects name + type + group-by **before** creating, and `canSubmit`
-blocks creation when a Board has no group-by chosen, or when no groupable property exists.
+`ViewTabs.tsx`'s `AddViewGrid` now creates immediately, no name/config prompt, for every
+type except Chart (see below). `DatabaseShell.tsx`'s `handleCreateView` auto-selects a
+Board's group-by from an EXISTING select/status/multi_select property (restricted to that
+three-type "kanban-native" family, not the wider `GROUPABLE_PROPERTY_TYPES` list the Group
+panel and column header use — a fresh Board grouped by its own Title or a Created-time
+property would be a strange first impression a real select-family property never risks),
+and a Calendar/Timeline's date property from an existing `date` property, same pattern.
 
-`task-16-brief.md` justified that gate as avoiding Notion's "auto-creates a status property
-and mutates the schema". **On this evidence that justification is only half right** —
-Notion invented nothing; a Status property already existed and it auto-selected it. The
-real difference is *auto-select* versus *require-select*.
+**Settled, live-tested against a real empty Notion database (2026-09-02):** when NO
+select/status/multi-select property exists at all, Notion auto-creates a brand-new Status
+property (Not started/In progress/Done) and mutates the schema. **Asked the user
+directly rather than guessing which to build** (`AskUserQuestion`) — decision: **keep this
+app's refusal to auto-create one.** A Board created with nothing to group by lands on
+`BoardView.tsx`'s existing "no groupable property yet" placeholder instead, fixable
+afterward via the settings sidebar's Group panel (M6) — the same "asks rather than
+invents" spirit `task-16-brief.md` originally had, now confirmed against real evidence
+instead of assumption. Calendar/Timeline mirror this with their own inline "Choose a date
+property…" picker in the placeholder (new this session — there was previously no
+post-creation way to ever set `date_property_id` at all, a real gap this create-flow
+rewrite would otherwise have made worse by removing the only pre-creation entry point).
 
-> **Open question for the user, not for me to settle:** what does Notion do when **no**
-> groupable property exists at all? That is the case the original deviation actually
-> guarded. Re-test on a database with no select/status/multi-select before deciding
-> whether to keep our gate.
+**Settled:** an empty-string `name` (this app's `createView("", type)`, not the literal
+`"New view"` it used to store) DOES fall back to showing the view's type as the tab label
+— `viewTabLabel` already handled this correctly from M7; only the create-time default
+needed to change from the stored literal to a genuinely empty string.
 
-### An unnamed view shows its type
+### Chart is a disclosed, deliberate exception
 
-At creation the tab read `New view` with an empty name input; once the sidebar closed
-without a name typed, the tab read `Board`. So Notion appears to leave `name` empty and
-render the **type** as a fallback label.
-
-Our `createView` defaults `name` to `"New view"` and **stores** it. That is a data-model
-difference, not a label: renaming to `""` should show the type again. `TBD` — confirm
-before implementing.
+Chart's card does not create immediately — it opens a second step in the SAME popover
+(`ChartCreateFields`, the same x/y/stack-axis picker this flow used to show before every
+type, per-type, gated on `canSubmit`). Reason: unlike Board (Group panel) and Calendar/
+Timeline (their own placeholder's picker, above), there is still no surface anywhere that
+can set a Chart's axes after creation — only this form can. Removing the gate without
+building that surface first would create permanently-stuck Chart views. Matches the M12
+plan's own sizing note ("Chart config panel already dense — mostly a `<select>` → MenuList
+migration") — building a real post-creation Chart config panel is that future work, not
+this session's.
 
 ---
 
@@ -190,16 +209,22 @@ before implementing.
 
 | Action | Writes | When |
 |---|---|---|
-| Switch view | Client state + URL `?v=<viewId>` | Immediately |
+| Switch view | Client state + URL `?view=<viewId>` (built, read on load 2026-09-02) | Immediately |
 | Rename | `PATCH /db/views/{id}` `{name}` | On blur / Enter |
-| Create | `POST /db/data-sources/{id}/views` `{type}` — **no name, no config** | On card click |
-| Duplicate | `POST` + `PATCH` client-side | Immediately |
-| **Delete** | **`DELETE /db/views/{id}` — does not exist (gap B1)** | Immediately |
-| Reorder tabs | `PATCH /db/views/{id}` `{position}` | On drop |
-| Display as | **User prefs, not `view.config`** | Immediately |
+| Create | `POST /db/data-sources/{id}/views` `{name: "", type}` — no config; Board/Calendar/ Timeline/Chart follow with one PATCH each if a value was auto-selected/configured | On card click (Chart: on its own Create) |
+| Duplicate | `POST` + `PATCH`, through the hook's own `createView`/`updateView` (not a bare `fetch()` — that was a live-checklist regression, fixed M7-M11, re-verified live 2026-09-02) | Immediately |
+| Delete | `DELETE /db/views/{id}` (Phase 0b, B1) | Immediately |
+| Reorder tabs | `PATCH /db/views/{id}` `{position}` | On drop — **still unbuilt** |
+| Display as | User prefs (`viewTabPrefs.ts` localStorage), not `view.config` | Immediately |
 
-The active view is already in the URL as `?v=<viewId>` — Notion does this and so should we;
-`DatabaseShell` keeps it in component state only.
+**Built and live-verified (2026-09-02):** the active view's `?view=` param — read once on
+load (only overrides the hook's own "keep current tab, else first view" default when the
+param names a real view of this database; a stale/foreign id is silently ignored) and
+written on every switch, preserving every other param (`?p=`/`?pm=` included) — the
+identical `router.replace`-preserving-params pattern `TableView.tsx`'s row peek already
+used for its own `?p=`/`?pm=`. `DatabaseShell.tsx`'s `selectView` is the one place this
+happens; every caller of the old bare `setActiveViewId` (tab click, post-create select,
+duplicate, delete's fall-back-to-remaining) now routes through it.
 
 ---
 
@@ -224,4 +249,17 @@ The active view is already in the URL as `?v=<viewId>` — Notion does this and 
 17. Click `Delete view`. → assert the tab disappears and the view is gone after reload.
 18. Delete down to one view, open its menu. → assert `Delete view` is absent again.
 19. Rename a view. → assert the tab label updates and persists across reload.
-20. Switch views. → assert the URL's `?v=` changes and a reload restores the same view.
+20. Switch views. → assert the URL's `?view=` changes and a reload restores the same view.
+
+**Re-verified live against the running app, 2026-09-02** (the M7-M11-era passes only ever
+tested the OLD select-based create form): 7, 8 (our own 4-column, 10-card grid — Map
+excluded, matching this app's own established deviation, not Notion's 11), 11-14 (Gallery
+card: created immediately, tab showed `Gallery`, settings sidebar opened, `?view=` in the
+URL), 16 (Duplicate: new tab appeared immediately, selected, config copied), 17 (Delete:
+confirm dialog, tab removed, fell back to Default view), 19 (Rename → reload → persisted),
+20 (`?view=` restored the exact same tab after a hard reload). One real bug found and
+fixed along the way (not a checklist step, since this create flow didn't exist before this
+session): Chart's own settings-sidebar-opens-afterward silently never fired — see
+`REVIEW-LOG.md`'s "view-tab-bar.md, M7 create-flow rewrite" entry. Steps 1, 2, 5, 6, 10,
+18 not independently re-run this session (no code path affecting them changed) — see
+PROGRESS.md's M7 section for their last confirmed pass.

@@ -4,7 +4,8 @@
 // switch over the active view's `type` that renders the matching view
 // component. Was hardcoded to `views[0]` + TableView only (Milestone 2);
 // task-16 adds real view switching/creation and the Board view.
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/app/providers";
 import { useDatabaseView } from "@/lib/database/useDatabaseView";
 import type { ViewResponse } from "@/lib/database/types";
@@ -71,6 +72,50 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
   } = useDatabaseView(databaseId);
   const { showToast } = useToast();
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // view-tab-bar.md's Persistence table: "The active view is already in the
+  // URL as ?view=<viewId> — Notion does this and so should we." Copy link
+  // to view (ViewTabs.tsx's copyViewLink) has written this since M7; nothing
+  // read it back until now (M3/M7's own recorded gap). `page.tsx` already
+  // wraps this component in <Suspense> (confirmed before relying on that,
+  // same discipline M10's identical `useSearchParams` addition to
+  // TableView.tsx used) so `useSearchParams` is safe here.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Applies the URL's view id AT MOST ONCE, the first render `views` is
+  // non-empty — a ref guard, not a dependency-array trick, because this
+  // must NOT re-fire every time `activeViewId` itself changes (that would
+  // fight `selectView` below on every ordinary tab switch). Only overrides
+  // the hook's own "keep current tab, else first view" default
+  // (useDatabaseView.ts's `load`) when the param actually names one of
+  // THIS database's views — a stale or foreign id is silently ignored,
+  // same as `?p=`'s row-peek precedent.
+  const appliedViewParamRef = useRef(false);
+  useEffect(() => {
+    if (appliedViewParamRef.current || views.length === 0) return;
+    appliedViewParamRef.current = true;
+    const fromUrl = searchParams.get("view");
+    if (fromUrl && fromUrl !== activeViewId && views.some((v) => v.id === fromUrl)) {
+      setActiveViewId(fromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views]);
+
+  // The one place `activeViewId` changes in response to a user action
+  // (switching tabs, a fresh view's own post-create select, duplicate,
+  // delete's fall-back-to-remaining) writes the URL too, preserving every
+  // other param (`?p=`/`?pm=` included — TableView.tsx's own writePeekUrl
+  // does the same in reverse) — router.replace, not push, matching row
+  // peek's identical "not a distinct navigable page" reasoning.
+  function selectView(viewId: string) {
+    setActiveViewId(viewId);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("view", viewId);
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
 
   // Live-discovered fix (post-M13-review, controller-added): every
   // config-driven view below (Gallery/Feed/Calendar/Timeline/Form) used to
@@ -287,52 +332,70 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
   const dataSourceId = dataSource.id;
   const dataSourceName = dataSource.name;
 
-  /** "+ New view" (ViewTabs.tsx): create, then — for a Board with a chosen
-   * group-by property — persist that choice via the existing `PATCH
-   * /db/views/{id}` endpoint before switching to it, so the new view never
-   * renders with a dangling/missing group_by.
+  /** "+" (ViewTabs.tsx, view-tab-bar.md's create-first-configure-after
+   * rewrite): create IMMEDIATELY with an empty name (so the tab falls back
+   * to showing the view's TYPE — `viewTabLabel`) and no config, then
+   * auto-select whatever this makes sense to pre-fill from the database's
+   * OWN existing properties — mirroring live Notion's confirmed behaviour
+   * ("a Board auto-selected an EXISTING Status property to group by") for
+   * the case where an eligible property already exists, while keeping this
+   * app's own deliberate refusal to *invent* one when none does (BoardView/
+   * CalendarView/TimelineView's own placeholders handle that gap, each with
+   * a real way to fix it afterward — Group panel for Board, an inline
+   * picker for Calendar/Timeline, added alongside this rewrite). Opens the
+   * settings sidebar afterward either way — "opens the view settings
+   * sidebar for configuring afterward", the spec's own words.
    *
-   * Live-verified regression: `services.db.query.grouping.GroupBySpec` has
-   * no implicit default `mode` for `status` (Milestone 4's own "fail loud,
-   * don't guess" decision — `mode=None` raises `ValueError`, surfaced as a
-   * real 400 from `POST .../query`, confirmed by actually creating a Board
-   * grouped by a Status property and watching it 400 with "status requires
-   * mode='option' or 'group'"). `defaultGroupBySpec` (types.ts, Phase 0c)
-   * is the one place that decision lives now — it also covers Date/Text,
-   * which `GROUPABLE_PROPERTY_TYPES` grew to include once 0c widened it
-   * past select/status/multi_select. */
-  async function handleCreateView(input: {
-    name: string;
-    type: string;
-    groupPropertyKey?: string;
-    datePropertyKey?: string;
-    chartConfig?: Record<string, unknown>;
-  }) {
-    const created = await createView(input.name, input.type);
-    if (input.type === "board" && input.groupPropertyKey) {
-      const groupProperty = properties.find((p) => p.key === input.groupPropertyKey);
-      const groupBy = groupProperty ? defaultGroupBySpec(groupProperty) : { property_key: input.groupPropertyKey };
-      await updateView(created.id, { config: { group_by: groupBy } });
-    }
-    // Calendar's creation-time required config (task-33-brief.md), extended
-    // to Timeline (task-34-brief.md — identical shape, same required
-    // `date_property_id` field): create bare, then PATCH the chosen date
-    // property into config.date_property_id before switching to it, so the
-    // new view never renders with a dangling/missing date property.
-    if ((input.type === "calendar" || input.type === "timeline") && input.datePropertyKey) {
-      await updateView(created.id, { config: { date_property_id: input.datePropertyKey } });
-    }
-    // Chart's creation-time required config (task-35-brief.md): same
-    // "create bare, then PATCH" mechanism as Board/Calendar/Timeline above,
-    // but the config itself (chart_type + y_axis + optionally x_axis/
-    // stack_by/hide_empty_groups) is assembled by ViewTabs.tsx's
-    // `ChartCreateFields` form (via `buildChartViewConfig`) rather than a
-    // single property key, since Chart's config is more involved than any
-    // of theirs.
-    if (input.type === "chart" && input.chartConfig) {
+   * Live-verified regression this mirrors: `services.db.query.grouping.
+   * GroupBySpec` has no implicit default `mode` for `status` (Milestone 4's
+   * own "fail loud, don't guess" decision) — `defaultGroupBySpec` (types.ts,
+   * Phase 0c) is the one place that's filled in, so the auto-selected Board
+   * group-by below goes through it rather than a bare `{property_key}`. */
+  async function handleCreateView(input: { type: string; chartConfig?: Record<string, unknown> }) {
+    const created = await createView("", input.type);
+    if (input.type === "board") {
+      // Restricted to the three "kanban-native" types, NOT the full
+      // `GROUPABLE_PROPERTY_TYPES` (which Phase 0c widened to 17 types —
+      // Text/Number/Date/Person/etc. — for the Group panel and column
+      // header's own "Group" row, surfaces where a broader set makes
+      // sense). Live Notion's only observed auto-select picked an existing
+      // Status property; defaulting a fresh Board to group by, say, its own
+      // Title or a Created-time property would be a strange first
+      // impression a real select-family property never risks. Falls
+      // through to BoardView's own "no groupable property yet" placeholder
+      // (which the user chose over auto-creating a Status property) when
+      // none of the three exist yet, even if a wider-family property does.
+      const groupProperty = properties
+        .filter((p) => p.type === "select" || p.type === "status" || p.type === "multi_select")
+        .sort((a, b) => a.position - b.position)[0];
+      if (groupProperty) {
+        await updateView(created.id, { config: { group_by: defaultGroupBySpec(groupProperty) } });
+      }
+    } else if (input.type === "calendar" || input.type === "timeline") {
+      const dateProperty = properties
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .find((p) => p.type === "date");
+      if (dateProperty) {
+        await updateView(created.id, { config: { date_property_id: dateProperty.key } });
+      }
+    } else if (input.type === "chart" && input.chartConfig) {
       await updateView(created.id, { config: input.chartConfig });
     }
-    setActiveViewId(created.id);
+    selectView(created.id);
+    // Deferred one tick, same fix and same reason as ViewTabs.tsx's
+    // `onEditView` (M7 live-checklist finding): the "+" popover this was
+    // just clicked from (ViewTabs.tsx's AddViewGrid/Chart-step Popover) is
+    // still finishing its own close/unmount in the same tick — opening this
+    // SidePeek synchronously here raced it, and the popover's own dismissal
+    // silently closed the sidebar right back (a Radix DismissableLayer
+    // focus-transition conflict between two overlays alive at once, the
+    // same class M7's bug was). Caught by DatabaseShell.test.tsx, not live
+    // Chrome — the manual click-then-screenshot pacing there gave Radix
+    // enough real wall-clock time to settle before each screenshot, so the
+    // race never visibly manifested there the way it did deterministically
+    // in jsdom.
+    setTimeout(() => setSettingsOpen(true), 0);
   }
 
   function renderActiveView() {
@@ -611,7 +674,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
           <ViewTabs
             views={views}
             activeViewId={activeView?.id ?? ""}
-            onSelect={setActiveViewId}
+            onSelect={selectView}
             properties={properties}
             onCreateView={handleCreateView}
             onCreateViewRaw={createView}

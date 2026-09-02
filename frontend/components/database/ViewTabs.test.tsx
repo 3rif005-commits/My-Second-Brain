@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -69,182 +69,56 @@ describe("ViewTabs", () => {
     expect(onSelect).toHaveBeenCalledWith("v2");
   });
 
-  it("creating a Table view calls onCreateView with type=table and no groupPropertyKey", async () => {
+  // view-tab-bar.md's "create first, configure after": one click on a card
+  // creates the view IMMEDIATELY — no name prompt, no group-by prompt, no
+  // Create button, no validation gate. Confirmed live against Notion
+  // (2026-09-02): a Board auto-selects an EXISTING groupable property, and
+  // an unnamed view's tab shows its TYPE. `onCreateView`'s caller
+  // (DatabaseShell.handleCreateView) owns that auto-select/auto-open-
+  // settings behaviour now — these tests only prove ViewTabs itself creates
+  // immediately and passes the right bare `{ type }`.
+  it.each(["table", "board", "gallery", "list", "feed", "calendar", "timeline", "form", "dashboard"])(
+    "clicking the %s card creates the view immediately, no gate, no name prompt",
+    async (type) => {
+      const user = userEvent.setup();
+      const onCreateView = vi.fn().mockResolvedValue(undefined);
+      render(
+        <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={onCreateView} />
+      );
+
+      await user.click(screen.getByRole("button", { name: "Add a new view" }));
+      const dialog = screen.getByRole("dialog", { name: "Add a new view" });
+      const label = type.charAt(0).toUpperCase() + type.slice(1);
+      await user.click(within(dialog).getByRole("button", { name: label }));
+
+      expect(onCreateView).toHaveBeenCalledWith({ type });
+      // The popover closes itself right after — no lingering dialog to
+      // configure, matching "opens the view settings sidebar for
+      // configuring afterward" (a DatabaseShell-level effect, not this
+      // popover staying open).
+      expect(screen.queryByRole("dialog", { name: "Add a new view" })).not.toBeInTheDocument();
+    }
+  );
+
+  it("the Table card is visually highlighted as the default, per the capture", async () => {
     const user = userEvent.setup();
-    const onCreateView = vi.fn().mockResolvedValue(undefined);
-    render(
-      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={onCreateView} />
-    );
+    render(<ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={vi.fn()} />);
 
-    await user.click(screen.getByText("+ New view"));
-    await user.type(screen.getByLabelText(/view name/i), "My Table");
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
-
-    expect(onCreateView).toHaveBeenCalledWith({ name: "My Table", type: "table", groupPropertyKey: undefined });
+    await user.click(screen.getByRole("button", { name: "Add a new view" }));
+    const dialog = screen.getByRole("dialog", { name: "Add a new view" });
+    expect(within(dialog).getByRole("button", { name: "Table" }).className).toMatch(/border-brand/);
+    expect(within(dialog).getByRole("button", { name: "Board" }).className).not.toMatch(/border-brand/);
   });
 
-  it("when creating a Board view with no groupable property on the database, shows the plain message and disables Create — does not auto-invent a property", async () => {
+  it("Map is not offered as a creatable view type (out of scope for the whole milestone)", async () => {
     const user = userEvent.setup();
-    const onCreateView = vi.fn();
-    render(
-      <ViewTabs
-        views={VIEWS}
-        activeViewId="v1"
-        onSelect={vi.fn()}
-        // `files` is genuinely ungroupable (`grouping._NOT_GROUPABLE`) —
-        // `rich_text` no longer is, since Phase 0c widened
-        // GROUPABLE_PROPERTY_TYPES to match the engine's real support.
-        properties={[prop({ key: "attachments", type: "files" })]}
-        onCreateView={onCreateView}
-      />
-    );
+    render(<ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={vi.fn()} />);
 
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "board");
-
-    expect(screen.getByText(/no groupable property yet — add one first/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
-
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
-    expect(onCreateView).not.toHaveBeenCalled();
-  });
-
-  it("creating a Board view with a groupable property available requires picking one, then passes it through", async () => {
-    const user = userEvent.setup();
-    const onCreateView = vi.fn().mockResolvedValue(undefined);
-    render(
-      <ViewTabs
-        views={VIEWS}
-        activeViewId="v1"
-        onSelect={vi.fn()}
-        properties={[prop({ key: "status", name: "Status", type: "status" })]}
-        onCreateView={onCreateView}
-      />
-    );
-
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "board");
-
-    // No property picked yet -> Create stays disabled (can't silently fall
-    // back to inventing/guessing one).
-    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
-
-    await user.selectOptions(screen.getByLabelText(/group by/i), "status");
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
-
-    expect(onCreateView).toHaveBeenCalledWith({
-      name: "New view",
-      type: "board",
-      groupPropertyKey: "status",
-    });
-  });
-
-  it("when creating a Calendar view with no date property on the database, shows the plain message and disables Create — does not auto-invent a property", async () => {
-    const user = userEvent.setup();
-    const onCreateView = vi.fn();
-    render(
-      <ViewTabs
-        views={VIEWS}
-        activeViewId="v1"
-        onSelect={vi.fn()}
-        properties={[prop({ key: "notes", type: "rich_text" })]}
-        onCreateView={onCreateView}
-      />
-    );
-
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "calendar");
-
-    expect(screen.getByText(/no date property yet — add a Date property first/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
-
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
-    expect(onCreateView).not.toHaveBeenCalled();
-  });
-
-  it("creating a Calendar view with a date property available requires picking one, then passes it through", async () => {
-    const user = userEvent.setup();
-    const onCreateView = vi.fn().mockResolvedValue(undefined);
-    render(
-      <ViewTabs
-        views={VIEWS}
-        activeViewId="v1"
-        onSelect={vi.fn()}
-        properties={[prop({ key: "due", name: "Due", type: "date" })]}
-        onCreateView={onCreateView}
-      />
-    );
-
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "calendar");
-
-    // No property picked yet -> Create stays disabled (can't silently fall
-    // back to inventing/guessing one).
-    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
-
-    await user.selectOptions(screen.getByLabelText(/date property/i), "due");
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
-
-    expect(onCreateView).toHaveBeenCalledWith({
-      name: "New view",
-      type: "calendar",
-      groupPropertyKey: undefined,
-      datePropertyKey: "due",
-    });
-  });
-
-  it("when creating a Timeline view with no date property on the database, shows the plain message and disables Create — does not auto-invent a property", async () => {
-    const user = userEvent.setup();
-    const onCreateView = vi.fn();
-    render(
-      <ViewTabs
-        views={VIEWS}
-        activeViewId="v1"
-        onSelect={vi.fn()}
-        properties={[prop({ key: "notes", type: "rich_text" })]}
-        onCreateView={onCreateView}
-      />
-    );
-
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "timeline");
-
-    expect(screen.getByText(/no date property yet — add a Date property first/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
-
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
-    expect(onCreateView).not.toHaveBeenCalled();
-  });
-
-  it("creating a Timeline view with a date property available requires picking one, then passes it through", async () => {
-    const user = userEvent.setup();
-    const onCreateView = vi.fn().mockResolvedValue(undefined);
-    render(
-      <ViewTabs
-        views={VIEWS}
-        activeViewId="v1"
-        onSelect={vi.fn()}
-        properties={[prop({ key: "due", name: "Due", type: "date" })]}
-        onCreateView={onCreateView}
-      />
-    );
-
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "timeline");
-
-    // No property picked yet -> Create stays disabled (can't silently fall
-    // back to inventing/guessing one).
-    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
-
-    await user.selectOptions(screen.getByLabelText(/date property/i), "due");
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
-
-    expect(onCreateView).toHaveBeenCalledWith({
-      name: "New view",
-      type: "timeline",
-      groupPropertyKey: undefined,
-      datePropertyKey: "due",
-    });
+    await user.click(screen.getByRole("button", { name: "Add a new view" }));
+    const dialog = screen.getByRole("dialog", { name: "Add a new view" });
+    expect(within(dialog).queryByText("Map")).not.toBeInTheDocument();
+    // 10 types (11 minus Map), not the 11 Notion itself offers.
+    expect(within(dialog).getAllByRole("button")).toHaveLength(10);
   });
 
   const CHART_PROPERTIES = [
@@ -252,29 +126,38 @@ describe("ViewTabs", () => {
     prop({ key: "amount", name: "Amount", type: "number" }),
   ];
 
-  it("creating a Chart view: Create stays disabled until chart_type's required fields (x_axis here) are filled in", async () => {
+  // Chart is the one disclosed exception to "creates immediately" (see
+  // ViewTabs.tsx's own comment on `handlePickViewType`): there is still no
+  // post-creation surface anywhere that can set its x/y/stack axes, so
+  // clicking its card opens a follow-up step in the SAME popover instead of
+  // creating right away.
+  async function openChartStep(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Add a new view" }));
+    const grid = screen.getByRole("dialog", { name: "Add a new view" });
+    await user.click(within(grid).getByRole("button", { name: "Chart" }));
+    return screen.getByRole("dialog", { name: "Add a new view" });
+  }
+
+  it("clicking the Chart card does not create immediately — it opens a configure step, Create stays disabled until x_axis is filled in", async () => {
     const user = userEvent.setup();
     const onCreateView = vi.fn();
     render(
       <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={CHART_PROPERTIES} onCreateView={onCreateView} />
     );
 
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "chart");
+    const step = await openChartStep(user);
+    expect(onCreateView).not.toHaveBeenCalled();
 
     // Default chart_type is "column" (needs an x_axis) with y_axis
     // defaulting to aggregator "count" (no property needed) — Create stays
     // disabled until an x_axis property is picked.
-    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
+    expect(within(step).getByRole("button", { name: /^create$/i })).toBeDisabled();
 
-    await user.selectOptions(screen.getByLabelText(/x-axis property/i), "status");
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
+    await user.selectOptions(within(step).getByLabelText(/x-axis property/i), "status");
+    await user.click(within(step).getByRole("button", { name: /^create$/i }));
 
     expect(onCreateView).toHaveBeenCalledWith({
-      name: "New view",
       type: "chart",
-      groupPropertyKey: undefined,
-      datePropertyKey: undefined,
       chartConfig: {
         chart_type: "column",
         y_axis: { aggregator: "count" },
@@ -295,19 +178,15 @@ describe("ViewTabs", () => {
       <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={CHART_PROPERTIES} onCreateView={onCreateView} />
     );
 
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "chart");
-    await user.selectOptions(screen.getByLabelText(/chart type/i), "number");
+    const step = await openChartStep(user);
+    await user.selectOptions(within(step).getByLabelText(/chart type/i), "number");
 
     // count aggregator + no x_axis required for "number" -> already valid.
-    expect(screen.getByRole("button", { name: /^create$/i })).not.toBeDisabled();
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
+    expect(within(step).getByRole("button", { name: /^create$/i })).not.toBeDisabled();
+    await user.click(within(step).getByRole("button", { name: /^create$/i }));
 
     expect(onCreateView).toHaveBeenCalledWith({
-      name: "New view",
       type: "chart",
-      groupPropertyKey: undefined,
-      datePropertyKey: undefined,
       chartConfig: { chart_type: "number", y_axis: { aggregator: "count" } },
     });
   });
@@ -319,21 +198,17 @@ describe("ViewTabs", () => {
       <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={CHART_PROPERTIES} onCreateView={onCreateView} />
     );
 
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "chart");
-    await user.selectOptions(screen.getByLabelText(/chart type/i), "number");
-    await user.selectOptions(screen.getByLabelText(/y-axis aggregator/i), "sum");
+    const step = await openChartStep(user);
+    await user.selectOptions(within(step).getByLabelText(/chart type/i), "number");
+    await user.selectOptions(within(step).getByLabelText(/y-axis aggregator/i), "sum");
 
-    expect(screen.getByRole("button", { name: /^create$/i })).toBeDisabled();
+    expect(within(step).getByRole("button", { name: /^create$/i })).toBeDisabled();
 
-    await user.selectOptions(screen.getByLabelText(/y-axis property/i), "amount");
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
+    await user.selectOptions(within(step).getByLabelText(/y-axis property/i), "amount");
+    await user.click(within(step).getByRole("button", { name: /^create$/i }));
 
     expect(onCreateView).toHaveBeenCalledWith({
-      name: "New view",
       type: "chart",
-      groupPropertyKey: undefined,
-      datePropertyKey: undefined,
       chartConfig: { chart_type: "number", y_axis: { aggregator: "sum", property_id: "amount" } },
     });
   });
@@ -344,106 +219,52 @@ describe("ViewTabs", () => {
       <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={CHART_PROPERTIES} onCreateView={vi.fn()} />
     );
 
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "chart");
-    await user.selectOptions(screen.getByLabelText(/chart type/i), "donut");
+    const step = await openChartStep(user);
+    await user.selectOptions(within(step).getByLabelText(/chart type/i), "donut");
 
-    expect(screen.queryByLabelText(/stack by/i)).not.toBeInTheDocument();
+    expect(within(step).queryByLabelText(/stack by/i)).not.toBeInTheDocument();
   });
 
-  // Live-click-through regression: found by creating a Timeline, then a
-  // Calendar, then a Chart view back to back in one running session (no page
-  // reload in between) -- the third Create button stayed permanently
-  // disabled. Root cause: resetForm() cleared every draft field but never
-  // reset `submitting` back to false after a successful onCreateView call,
-  // so `canSubmit`'s `!submitting` clause stayed false for the rest of the
-  // component's lifetime. Pre-existing since Milestone 6 (Task 16,
-  // fc906fb) -- every view type was affected, not just Chart; no prior test
-  // exercised a second creation in the same render.
-  it("Create is usable again after a successful creation -- a second view isn't permanently blocked by stale submitting state", async () => {
+  it("Chart's Back button returns to the card grid without creating anything", async () => {
+    const user = userEvent.setup();
+    const onCreateView = vi.fn();
+    render(
+      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={CHART_PROPERTIES} onCreateView={onCreateView} />
+    );
+
+    const step = await openChartStep(user);
+    await user.click(within(step).getByRole("button", { name: /^back$/i }));
+
+    const dialog = screen.getByRole("dialog", { name: "Add a new view" });
+    expect(within(dialog).getByRole("button", { name: "Board" })).toBeInTheDocument();
+    expect(onCreateView).not.toHaveBeenCalled();
+  });
+
+  // A second creation in the same render must work — regression class this
+  // workstream has hit before (Milestone 6, Task 16, fc906fb): stale state
+  // left over from a prior create silently blocking every view after the
+  // first. Proves `closeAddView` actually resets `chartDraft` (Create is
+  // disabled again on the second open, same as the first) rather than
+  // leaving the first chart's config lingering into the second.
+  it("Chart's Create is usable again after a successful creation — a second Chart isn't blocked by stale draft state", async () => {
     const user = userEvent.setup();
     const onCreateView = vi.fn().mockResolvedValue(undefined);
     render(
-      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={onCreateView} />
+      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={CHART_PROPERTIES} onCreateView={onCreateView} />
     );
 
-    await user.click(screen.getByText("+ New view"));
-    await user.type(screen.getByLabelText(/view name/i), "First");
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
+    let step = await openChartStep(user);
+    await user.selectOptions(within(step).getByLabelText(/x-axis property/i), "status");
+    await user.click(within(step).getByRole("button", { name: /^create$/i }));
     expect(onCreateView).toHaveBeenCalledTimes(1);
 
-    await user.click(screen.getByText("+ New view"));
-    expect(screen.getByRole("button", { name: /^create$/i })).not.toBeDisabled();
-    await user.type(screen.getByLabelText(/view name/i), "Second");
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
+    step = await openChartStep(user);
+    expect(within(step).getByRole("button", { name: /^create$/i })).toBeDisabled();
+    await user.selectOptions(within(step).getByLabelText(/x-axis property/i), "status");
+    expect(within(step).getByRole("button", { name: /^create$/i })).not.toBeDisabled();
+    await user.click(within(step).getByRole("button", { name: /^create$/i }));
 
     expect(onCreateView).toHaveBeenCalledTimes(2);
-    expect(onCreateView).toHaveBeenLastCalledWith({ name: "Second", type: "table", groupPropertyKey: undefined });
-  });
-
-  // task-44 (Milestone 13, Form view): a new view type added to
-  // VIEW_TYPE_OPTIONS, additive only. Unlike Board/Calendar/Timeline/Chart,
-  // Form has no creation-time required config (its config all defaults
-  // client-side in FormView.tsx), so this only has to prove the option is
-  // selectable and Create submits it plainly, with no extra required field
-  // appearing and no other view type's creation flow disturbed.
-  it("creating a Form view calls onCreateView with type=form and no extra required fields", async () => {
-    const user = userEvent.setup();
-    const onCreateView = vi.fn().mockResolvedValue(undefined);
-    render(
-      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={onCreateView} />
-    );
-
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "form");
-    await user.type(screen.getByLabelText(/view name/i), "My Form");
-
-    // No Board-style "Group by", Calendar/Timeline-style "Date property",
-    // or Chart-style config fields render for Form.
-    expect(screen.queryByLabelText(/group by/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/date property/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/chart type/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^create$/i })).not.toBeDisabled();
-
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
-
-    expect(onCreateView).toHaveBeenCalledWith({ name: "My Form", type: "form", groupPropertyKey: undefined });
-  });
-
-  // task-45 (Milestone 13, Dashboard view): a new view type added to
-  // VIEW_TYPE_OPTIONS, additive only alongside task-44's Form entry above.
-  // Dashboard has no creation-time required config either (`ViewCreate` has
-  // no `config` field at all — a freshly created dashboard always starts at
-  // `config: {}`, widgets are added afterward via DashboardView's own Edit
-  // mode), so this mirrors the Form test above exactly.
-  it("creating a Dashboard view calls onCreateView with type=dashboard and no extra required fields", async () => {
-    const user = userEvent.setup();
-    const onCreateView = vi.fn().mockResolvedValue(undefined);
-    render(
-      <ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={onCreateView} />
-    );
-
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "dashboard");
-    await user.type(screen.getByLabelText(/view name/i), "My Dashboard");
-
-    expect(screen.queryByLabelText(/group by/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/date property/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/chart type/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^create$/i })).not.toBeDisabled();
-
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
-
-    expect(onCreateView).toHaveBeenCalledWith({ name: "My Dashboard", type: "dashboard", groupPropertyKey: undefined });
-  });
-
-  it("Map is not offered as a creatable view type (out of scope for the whole milestone)", async () => {
-    const user = userEvent.setup();
-    render(<ViewTabs views={VIEWS} activeViewId="v1" onSelect={vi.fn()} properties={[]} onCreateView={vi.fn()} />);
-
-    await user.click(screen.getByText("+ New view"));
-    const options = screen.getAllByRole("option", { name: /.+/ }).map((o) => o.textContent);
-    expect(options).not.toContain("Map");
   });
 
   // M7 — the active tab's own menu (view-tab-bar.md).

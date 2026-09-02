@@ -225,6 +225,24 @@ describe("TimelineView", () => {
     expect(screen.getByText(/no date property configured yet/i)).toBeInTheDocument();
   });
 
+  it("the placeholder offers no picker when there's no date property to choose from at all", () => {
+    renderTimeline({ properties: [TITLE_PROP], config: {} });
+    expect(screen.getByText(/add a date property first/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/date property/i)).not.toBeInTheDocument();
+  });
+
+  // view-tab-bar.md's M7 create-flow rewrite: Timeline now creates
+  // immediately, auto-selecting an existing date property only when one
+  // exists — this placeholder's own picker is the ONLY post-creation way to
+  // ever set `date_property_id` (no settings-sidebar panel owns it).
+  it("picking a date property from the placeholder's picker calls onConfigChange with date_property_id", async () => {
+    const user = userEvent.setup();
+    const onConfigChange = vi.fn();
+    renderTimeline({ config: {}, onConfigChange });
+    await user.selectOptions(screen.getByLabelText(/date property/i), "due");
+    expect(onConfigChange).toHaveBeenCalledWith({ date_property_id: "due" });
+  });
+
   it("all 8 zoom levels render distinguishably different bar widths for the same fixed date range", () => {
     const rows = [row("row-1", "Task A", { start: "2026-01-01T00:00:00.000Z", end: "2026-01-11T00:00:00.000Z", time_zone: null })];
     const { rerender } = render(

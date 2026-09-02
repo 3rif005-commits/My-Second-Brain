@@ -182,11 +182,10 @@ files touched this milestone).** `npx tsc --noEmit` clean.
 - **The `New ▾` split button stays at the bottom of the table**, where
   M11's row-add already put it — the spec's own scope bullet lists only the
   six toolbar icons as new.
-- **`?view=` deep links are written but not yet read on load** — Copy link
-  to view produces a real, sensible URL; nothing in `DatabaseShell` parses
-  `?view=` on mount yet. Recorded rather than silently left half-working;
-  low risk since it is a clipboard action, not a persisted setting the UI
-  must render.
+- **`?view=` deep links: written since M7, read on load since 2026-09-02** —
+  `DatabaseShell` now parses `?view=` on mount (this file's own Log entry,
+  "M7 create-flow rewrite") and writes it on every switch, not just Copy
+  link to view.
 
 ---
 
@@ -324,12 +323,11 @@ wired to B1's `DELETE /db/views/{id}`, already built and previously unused). "Ad
 sidebar" is omitted outright (no per-view sidebar entries exist), matching the spec's own
 hidden-not-disabled instruction for a genuinely inapplicable row.
 
-**Deferred, noted rather than silently skipped:** the "+ New view" trigger keeps its existing
-native-`<select>` creation form instead of the spec's 4-column create-first card grid. That form
-is exhaustively tested (14 tests covering every view type's creation-time gating) and functionally
-complete; reshaping it into a card grid is presentation cost with no new capability, and was
-judged not worth this session's budget. `useDatabaseView` gained `deleteView`/`updateDatabase`/
-`deleteDatabase`, mirroring `updateView`'s existing shape.
+**Deferred at the time, since closed (2026-09-02):** the "+ New view" trigger kept its existing
+native-`<select>` creation form instead of the spec's 4-column create-first card grid — this
+session's own budget-first call. Built for real in the 2026-09-02 session (this file's own Log
+entry, "M7 create-flow rewrite") once the user asked for it directly. `useDatabaseView` gained
+`deleteView`/`updateDatabase`/`deleteDatabase`, mirroring `updateView`'s existing shape.
 
 ### M8 — database header
 
@@ -718,6 +716,41 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M7 create-flow rewrite: view create/edit/delete parity, Part 1 of the
+  next prompt)** — The user reported real problems with view create/edit/delete; asked
+  directly what they'd seen rather than assuming M7's own disclosed gap (the create-
+  first-configure-after flow never built) was the whole story — confirmed it was that
+  plus a request to re-verify rename/duplicate/delete hadn't regressed. Replaced
+  `ViewTabs.tsx`'s native-`<select>` name/type/group-by creation form with a real
+  create-first-configure-after popover (`AddViewGrid`: 4-column, 10-card icon grid, Map
+  excluded) — one click creates every type immediately except Chart, a disclosed
+  exception (no post-creation surface exists yet to set its axes, matching M12's own
+  "Chart config panel already dense" sizing note). `DatabaseShell.handleCreateView` now
+  auto-selects Board's group-by and Calendar/Timeline's date property from an existing
+  eligible property, opens the M3 settings sidebar afterward either way. Both of the
+  spec's own open questions closed by testing against real Notion, not guessed: Notion
+  DOES auto-create a Status property when none exists (confirmed live) — surfaced as a
+  genuine product decision via `AskUserQuestion` rather than decided alone (this
+  workstream's own established precedent), user chose to KEEP this app's refusal to
+  auto-invent one; and an empty-string name does fall back to the type as the tab label
+  (confirmed live, `viewTabLabel` already handled it). Also built: `?view=<viewId>` now
+  read on load and written on every switch (previously write-only since M7, mirroring
+  `TableView.tsx`'s own `?p=`/`?pm=` pattern), and a real inline date-property picker in
+  `CalendarView.tsx`/`TimelineView.tsx`'s own placeholder — a genuine gap this rewrite
+  would otherwise have introduced (removing the pre-creation gate left no other way to
+  ever set `date_property_id` post-creation). One real bug found and fixed along the
+  way: Chart's own settings-sidebar-open silently never fired — a same-tick race between
+  its follow-up popover closing and the sidebar opening, the identical class M7's own
+  "Edit view" no-op bug already was, fixed the same way (a one-tick defer) plus
+  correcting `handleCreateChart`'s close-before-create ordering to match every other
+  type. Caught by a new test, not the live-Chrome pass (real wall-clock pacing between
+  manual actions happened to avoid the race there). Rename/Duplicate/Delete re-verified
+  live against the current branch tip, fresh (not reused fixtures) — all three still
+  work correctly, no regression. Full write-up: `REVIEW-LOG.md`'s new "view-tab-bar.md,
+  M7 create-flow rewrite" section. Frontend 61 files / 905 tests green (was 893), `tsc`
+  clean. **Part 2 (M12: apply the pattern to the other nine view types) is not started —
+  no task breakdown written yet, per the prompt's own instruction that this is the next
+  session's first job.**
 - **2026-09-02 (M6 checklist steps 16/17/19)** — Closed out `group-panel.md`'s last
   three unverified checklist steps. Step 17 (Status grouping, mode='option')
   confirmed working. Step 16 (`+ New group`) has a real, disclosed-not-fixed gap:

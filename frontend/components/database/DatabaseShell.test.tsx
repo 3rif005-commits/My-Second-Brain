@@ -9,11 +9,17 @@ import type { Group, RelatedRow, RowTemplateResponse, ViewResponse } from "@/lib
 // ListView.test.tsx does on its own.
 // TableView (rendered for the "table" active-view case below) reads/writes
 // the row peek's `?p=&pm=` via useSearchParams/usePathname/router.replace
-// (M10, row-peek.md) — mocked the same no-op way as useRouter above.
+// (M10, row-peek.md) — mocked the same way. DatabaseShell ITSELF now reads/
+// writes `?view=` the identical way (M7's create-flow rewrite) — `mockSearch`
+// mutable and `routerReplace` a shared spy, same shape TableView.test.tsx's
+// own `?p=`/`?pm=` mock already established, so a test can seed the URL the
+// component reads at mount and assert what it writes back.
+const routerReplace = vi.fn();
+let mockSearch = "";
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: routerReplace }),
   usePathname: () => "/brain/db/db-1",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(mockSearch),
 }));
 
 // Factories, not shared object literals — `mockHook.database`/`dataSource`/
@@ -133,6 +139,7 @@ beforeEach(() => {
   ];
   mockHook.groups = null;
   mockHook.aggregates = null;
+  mockSearch = "";
   // Reset in case a test (e.g. the "group by a Select property" test below)
   // appends to this array — `mockHook.properties` is otherwise a single
   // module-scoped object every test shares, so a mutation would otherwise
@@ -630,7 +637,54 @@ describe("DatabaseShell", () => {
     expect(mockHook.setActiveViewId).toHaveBeenCalledWith("v2");
   });
 
-  it("creating a Board view grouped by a Status property: creates it, sets group_by with mode='option', then switches to it", async () => {
+  // view-tab-bar.md's Persistence table: "The active view is already in the
+  // URL as ?view=<viewId> ... DatabaseShell keeps it in component state
+  // only" — a disclosed, previously-unclosed gap (M3/M7's own recorded
+  // notes). ViewTabs.tsx's "Copy link to view" has written `?view=` since
+  // M7; these prove DatabaseShell now reads it back too.
+  it("switching tabs writes ?view=<viewId> onto the URL, preserving other params", async () => {
+    mockHook.views = [
+      { id: "v1", data_source_id: "ds-1", user_id: "user-1", name: "Table view", icon: null, type: "table", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },
+      { id: "v2", data_source_id: "ds-1", user_id: "user-1", name: "Board", icon: null, type: "board", config: {}, filter: null, sorts: [], is_locked: false, position: 1 },
+    ];
+    mockSearch = "p=row-1";
+    const user = userEvent.setup();
+    render(<DatabaseShell databaseId="db-1" />);
+    await user.click(screen.getByText("Board"));
+
+    expect(mockHook.setActiveViewId).toHaveBeenCalledWith("v2");
+    const [url] = routerReplace.mock.calls[routerReplace.mock.calls.length - 1];
+    const params = new URLSearchParams(url.split("?")[1]);
+    expect(params.get("view")).toBe("v2");
+    expect(params.get("p")).toBe("row-1"); // untouched
+  });
+
+  it("a ?view= param matching one of this database's views overrides the hook's own default selection on load", () => {
+    mockHook.views = [
+      { id: "v1", data_source_id: "ds-1", user_id: "user-1", name: "Table view", icon: null, type: "table", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },
+      { id: "v2", data_source_id: "ds-1", user_id: "user-1", name: "Board", icon: null, type: "board", config: {}, filter: null, sorts: [], is_locked: false, position: 1 },
+    ];
+    mockSearch = "view=v2";
+    render(<DatabaseShell databaseId="db-1" />);
+    expect(mockHook.setActiveViewId).toHaveBeenCalledWith("v2");
+  });
+
+  it("a ?view= param naming a view that doesn't exist is silently ignored", () => {
+    mockHook.views = [
+      { id: "v1", data_source_id: "ds-1", user_id: "user-1", name: "Table view", icon: null, type: "table", config: {}, filter: null, sorts: [], is_locked: false, position: 0 },
+    ];
+    mockSearch = "view=does-not-exist";
+    render(<DatabaseShell databaseId="db-1" />);
+    expect(mockHook.setActiveViewId).not.toHaveBeenCalledWith("does-not-exist");
+  });
+
+  it("creating a Board view auto-selects the existing Status property, sets group_by with mode='option', then switches to it", async () => {
+    // view-tab-bar.md's M7 create-flow rewrite: Board creates IMMEDIATELY
+    // (no name/group-by prompt) and DatabaseShell.handleCreateView
+    // auto-selects the first select/status/multi_select property by
+    // position — mockHook.properties' default fixture is [title, status],
+    // so "status" is the only candidate.
+    //
     // Regression, live-verified: services.db.query.grouping.GroupBySpec has no
     // implicit default `mode` for `status` (Milestone 4's own "fail loud, don't
     // guess" decision) — omitting it isn't a no-op, it's a real 400 from
@@ -640,7 +694,7 @@ describe("DatabaseShell", () => {
     // previously asserted the buggy shape (`{ property_key: "status" }`, no
     // `mode`) and passed, which is exactly how it shipped uncaught.
     const user = userEvent.setup();
-    const createdView = { id: "v9", data_source_id: "ds-1", user_id: "user-1", name: "New view", icon: null, type: "board", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
+    const createdView = { id: "v9", data_source_id: "ds-1", user_id: "user-1", name: "", icon: null, type: "board", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
     mockHook.createView.mockResolvedValue(createdView);
     mockHook.updateView.mockResolvedValue({
       ...createdView,
@@ -649,38 +703,104 @@ describe("DatabaseShell", () => {
 
     render(<DatabaseShell databaseId="db-1" />);
 
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "board");
-    await user.selectOptions(screen.getByLabelText(/group by/i), "status");
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
+    await user.click(screen.getByRole("button", { name: "Add a new view" }));
+    const dialog = screen.getByRole("dialog", { name: "Add a new view" });
+    await user.click(within(dialog).getByRole("button", { name: "Board" }));
 
-    expect(mockHook.createView).toHaveBeenCalledWith("New view", "board");
+    expect(mockHook.createView).toHaveBeenCalledWith("", "board");
     expect(mockHook.updateView).toHaveBeenCalledWith("v9", {
       config: { group_by: { property_key: "status", mode: "option", hide_empty_groups: true } },
     });
     expect(mockHook.setActiveViewId).toHaveBeenCalledWith("v9");
   });
 
-  it("creating a Board view grouped by a Select property: no mode needed, group_by stays bare", async () => {
+  it("creating a Board view auto-selects a Select property when no Status property exists: no mode needed, group_by stays bare", async () => {
+    // Restricted to title (ungroupable-for-Board-purposes, see
+    // DatabaseShell.tsx's own comment) + a lone "select" property — proves
+    // the auto-select doesn't need `mode` for a plain select, and doesn't
+    // pick "title" even though it's in the wider GROUPABLE_PROPERTY_TYPES
+    // list other surfaces (Group panel, column header) use.
     mockHook.properties = [
-      ...mockHook.properties,
+      mockHook.properties[0],
       { id: "p3", data_source_id: "ds-1", user_id: "user-1", key: "priority", name: "Priority", type: "select", config: {}, description: null, storage: "jsonb", column_name: null, result_type: null, is_volatile: false, position: 2, created_at: "2026-01-01T00:00:00Z" },
     ];
     const user = userEvent.setup();
-    const createdView = { id: "v10", data_source_id: "ds-1", user_id: "user-1", name: "New view", icon: null, type: "board", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
+    const createdView = { id: "v10", data_source_id: "ds-1", user_id: "user-1", name: "", icon: null, type: "board", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
     mockHook.createView.mockResolvedValue(createdView);
     mockHook.updateView.mockResolvedValue({ ...createdView, config: { group_by: { property_key: "priority" } } });
 
     render(<DatabaseShell databaseId="db-1" />);
 
-    await user.click(screen.getByText("+ New view"));
-    await user.selectOptions(screen.getByLabelText(/view type/i), "board");
-    await user.selectOptions(screen.getByLabelText(/group by/i), "priority");
-    await user.click(screen.getByRole("button", { name: /^create$/i }));
+    await user.click(screen.getByRole("button", { name: "Add a new view" }));
+    const dialog = screen.getByRole("dialog", { name: "Add a new view" });
+    await user.click(within(dialog).getByRole("button", { name: "Board" }));
 
     expect(mockHook.updateView).toHaveBeenCalledWith("v10", {
       config: { group_by: { property_key: "priority", hide_empty_groups: true } },
     });
+  });
+
+  it("creating a Board view with no select/status/multi_select property leaves it ungrouped — does not auto-invent one", async () => {
+    // The user's own decision (2026-09-02, asked live rather than guessed):
+    // keep this app's refusal to auto-create a Status property the way
+    // Notion itself does (confirmed live against a real Notion database
+    // with no groupable property at all) — land on BoardView's own "no
+    // groupable property yet" placeholder instead, fixable afterward via
+    // the Group panel.
+    mockHook.properties = [mockHook.properties[0]]; // title only
+    const user = userEvent.setup();
+    const createdView = { id: "v11", data_source_id: "ds-1", user_id: "user-1", name: "", icon: null, type: "board", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
+    mockHook.createView.mockResolvedValue(createdView);
+
+    render(<DatabaseShell databaseId="db-1" />);
+
+    await user.click(screen.getByRole("button", { name: "Add a new view" }));
+    const dialog = screen.getByRole("dialog", { name: "Add a new view" });
+    await user.click(within(dialog).getByRole("button", { name: "Board" }));
+
+    expect(mockHook.createView).toHaveBeenCalledWith("", "board");
+    expect(mockHook.updateView).not.toHaveBeenCalled();
+    expect(mockHook.setActiveViewId).toHaveBeenCalledWith("v11");
+  });
+
+  // view-tab-bar.md: "opens the view settings sidebar for configuring
+  // afterward" — DatabaseShell.handleCreateView's own last step.
+  it("creating a Board view opens the view settings sidebar afterward", async () => {
+    const user = userEvent.setup();
+    const createdView = { id: "v12", data_source_id: "ds-1", user_id: "user-1", name: "", icon: null, type: "board", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
+    mockHook.createView.mockResolvedValue(createdView);
+    mockHook.updateView.mockResolvedValue({ ...createdView, config: { group_by: { property_key: "status", mode: "option" } } });
+
+    render(<DatabaseShell databaseId="db-1" />);
+    await user.click(screen.getByRole("button", { name: "Add a new view" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Add a new view" })).getByRole("button", { name: "Board" }));
+
+    expect(await screen.findByText("Layout")).toBeInTheDocument();
+  });
+
+  // Live-found bug, fixed alongside this create-flow rewrite: Chart's own
+  // follow-up step (ViewTabs.tsx's `handleCreateChart`) used to close its
+  // popover only AFTER awaiting `onCreateView`, one tick after this sidebar
+  // had already opened — two Radix overlays alive at once, and the
+  // popover's own dismissal silently closed the sidebar right back. Every
+  // other type closed BEFORE creating and never hit this. Reproduced live
+  // (2026-09-02): the sidebar opened for Board/Calendar but never for
+  // Chart. Fixed by matching the same "close, then create" order.
+  it("creating a Chart view ALSO opens the settings sidebar afterward — regression, this specifically broke once", async () => {
+    const user = userEvent.setup();
+    const createdView = { id: "v13", data_source_id: "ds-1", user_id: "user-1", name: "", icon: null, type: "chart", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
+    mockHook.createView.mockResolvedValue(createdView);
+    mockHook.updateView.mockResolvedValue({ ...createdView, config: { chart_type: "column", y_axis: { aggregator: "count" }, x_axis: { property_id: "status", mode: "option" }, hide_empty_groups: false } });
+
+    render(<DatabaseShell databaseId="db-1" />);
+    await user.click(screen.getByRole("button", { name: "Add a new view" }));
+    let dialog = screen.getByRole("dialog", { name: "Add a new view" });
+    await user.click(within(dialog).getByRole("button", { name: "Chart" }));
+    dialog = screen.getByRole("dialog", { name: "Add a new view" });
+    await user.selectOptions(within(dialog).getByLabelText(/x-axis property/i), "status");
+    await user.click(within(dialog).getByRole("button", { name: /^create$/i }));
+
+    expect(await screen.findByText("Layout")).toBeInTheDocument();
   });
 
   it("threads dataSource.id and refetchRows down to TableView's Add row control (task-18)", async () => {
