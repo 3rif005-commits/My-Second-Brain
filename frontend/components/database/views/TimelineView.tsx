@@ -207,6 +207,31 @@ export function resolveBarResize(
   };
 }
 
+/** M12 (Timeline's own dedicated work, 2026-09-02) — live-Notion capture:
+ * dragging a bar's BODY (not an edge) moves the whole event, shifting
+ * `date.start` AND (when present) `date.end` by the identical delta — the
+ * range's length never changes, only its position. Directly confirmed live:
+ * a 3-day event dragged +1 day went from Sep 2–4 to Sep 3–5, not a resize.
+ * Mirrors Calendar's own `resolveDropDate` (shift both edges by the same
+ * amount), generalized from whole-day deltas to arbitrary pixel deltas, the
+ * same way `resolveBarResize` above already is. `undefined` for a zero-pixel
+ * drag (a click that never moved — the caller's own job, same contract as
+ * `resolveBarResize`) or a value with no date to move. Works for a point
+ * marker too (`date.end === null`): only `start` shifts. */
+export function resolveBarMove(value: DateValue, deltaPx: number, zoom: ZoomLevel): DateValue | undefined {
+  if (!value.date || !value.date.start) return undefined;
+  if (deltaPx === 0) return undefined;
+  const deltaMs = (deltaPx / pixelsPerDay(zoom)) * MS_PER_DAY;
+  return {
+    type: "date",
+    date: {
+      start: shiftIso(value.date.start, deltaMs),
+      end: value.date.end ? shiftIso(value.date.end, deltaMs) : null,
+      time_zone: value.date.time_zone,
+    },
+  };
+}
+
 // ── Dependency arrow endpoint geometry (pure) ──────────────────────────────
 
 export interface ArrowEndpoints {
@@ -288,6 +313,14 @@ const TRACK_END_PADDING = 80;
 
 // ── Components ──────────────────────────────────────────────────────────
 
+/** Below this pixel distance, a mousedown→mouseup on the bar body is a
+ * click (open the peek), not a drag (move the bar) — same distance-
+ * threshold convention as dnd-kit's `activationConstraint` elsewhere in
+ * this codebase (Board/Calendar's own draggables), just hand-rolled here
+ * since `TimelineBar` already uses plain mouse events for resize, not
+ * dnd-kit. */
+const MOVE_CLICK_THRESHOLD_PX = 5;
+
 function TimelineBar({
   event,
   geometry,
@@ -296,6 +329,7 @@ function TimelineBar({
   datePropertyKey,
   zoomLevel,
   onCellChange,
+  onOpenRow,
   title,
 }: {
   event: TimelineEvent;
@@ -305,6 +339,11 @@ function TimelineBar({
   datePropertyKey: string;
   zoomLevel: ZoomLevel;
   onCellChange: (rowId: string, propertyKey: string, value: PropertyValue | null) => void;
+  /** M12: `useRowPeek`'s own `openRow` — live-Notion capture confirmed a
+   * stationary click (no drag) on the bar body opens the side peek, the
+   * same "whole bar is the open-trigger" pattern Calendar's own M12 session
+   * already found. */
+  onOpenRow?: (noteId: string) => void;
   title: string;
 }) {
   // Commits on drop (mouseup) only — never continuously while dragging, so
@@ -328,9 +367,38 @@ function TimelineBar({
     document.addEventListener("mouseup", onUp);
   }
 
+  // The bar BODY's own mousedown — distinct from the edge handles above,
+  // which `stopPropagation()` before this ever fires. Below the movement
+  // threshold this is a click (open the peek, works read-only too — the
+  // same "click always opens, drag needs `editable`" split row-affordances
+  // already established elsewhere); at/above it, a real Notion-confirmed
+  // whole-bar move, gated on `editable` same as resize.
+  function startBodyInteraction(downEvent: React.MouseEvent) {
+    const startClientX = downEvent.clientX;
+    let moved = false;
+    function onMove(moveEvent: MouseEvent) {
+      if (Math.abs(moveEvent.clientX - startClientX) >= MOVE_CLICK_THRESHOLD_PX) moved = true;
+    }
+    function onUp(upEvent: MouseEvent) {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      if (!moved) {
+        onOpenRow?.(event.rowId);
+        return;
+      }
+      if (!editable) return;
+      const deltaPx = upEvent.clientX - startClientX;
+      const next = resolveBarMove(event.value, deltaPx, zoomLevel);
+      if (next) onCellChange(event.rowId, datePropertyKey, next);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
   return (
     <div
       data-testid={`timeline-bar-${event.rowId}`}
+      onMouseDown={startBodyInteraction}
       style={{
         position: "absolute",
         top: rowIndex * ROW_HEIGHT + (ROW_HEIGHT - (geometry.isPoint ? MARKER_SIZE : BAR_HEIGHT)) / 2,
@@ -339,9 +407,9 @@ function TimelineBar({
         height: geometry.isPoint ? MARKER_SIZE : BAR_HEIGHT,
       }}
       title={title}
-      className={`${
-        geometry.isPoint ? "rounded-full" : "rounded"
-      } bg-indigo-400/80 dark:bg-indigo-600/70`}
+      className={`${geometry.isPoint ? "rounded-full" : "rounded"} bg-indigo-400/80 dark:bg-indigo-600/70 ${
+        editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+      }`}
     >
       {editable && !geometry.isPoint && (
         <>
@@ -702,6 +770,7 @@ export function TimelineView({
                     datePropertyKey={datePropertyKey}
                     zoomLevel={zoomLevel}
                     onCellChange={onCellChange}
+                    onOpenRow={openRow}
                     title={title}
                   />
                 );

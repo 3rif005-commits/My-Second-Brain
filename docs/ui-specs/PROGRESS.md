@@ -8,23 +8,27 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 **Branch:** `feat/notion-databases-ui-parity` (from `feat/workspaces-compact-redesign` @ 25a08b4)
 
-**M12 — Calendar's own dedicated work: DONE (2026-09-02).** 3 of the plan's 4 named
-items (date-range bars, drag-reschedule range preservation, event peek) were already
-built pre-session — confirmed by reading the code, then re-confirmed by a fresh
-live-Notion capture (`docs/ui-specs/calendar-view.md`). Real, capture-confirmed gaps
-found and fixed instead: a Monday-first vs. real Notion's Sunday-first week-start bug
-(plus the weekend-hidden offset bug it exposed), a missing weekday header row, the
-event bar's permanent icon replaced by a whole-bar click (no hover affordance in real
-Notion), and a new right-click row-menu trigger (Calendar had ZERO row-menu access
-before this session) built by giving `RowMenuTrigger.tsx` an additive controlled
-`open`/`onOpenChange` mode — every other caller unaffected.
-`hidden_properties`/`property_order` deliberately left unwired, disclosed rather than
-guessed: no rendering path on Calendar (bar or peek) ever consults it. Full account:
-this file's own Log entry below. Live-verified against real Notion in full;
-verification against this app's own build was blocked by this machine's own recurring
-memory exhaustion — disclosed in `calendar-view.md`, not forced. Resume point:
-**Timeline's own dedicated per-view work**, next in M12's decided order (the last of
-the nine views).
+**M12 — Timeline's own dedicated work: DONE (2026-09-02/03).** The last of the nine
+M12 views. 4 of the plan's 5 named items (zoom levels, dependency arrows, event peek,
+edge-resize) were already built pre-session (task-34, pre-dates this UI-parity plan) —
+confirmed by reading the code, then re-confirmed by a fresh live-Notion capture
+(`docs/ui-specs/timeline-view.md`). The one real, capture-confirmed gap: dragging a
+bar's BODY (not an edge) moves the whole event in real Notion, distinct from resize and
+never captured by the original build — the bar previously had no click target of its
+own at all. Built `resolveBarMove` (mirrors `resolveBarResize`/Calendar's own
+`resolveDropDate`) plus a click-vs-drag threshold (stationary click opens the peek, a
+real drag moves it). The table/timeline split view and the off-screen "jump to
+project" arrow were both reconfirmed live as real Notion features but stay
+deliberately unbuilt — task-34-brief.md's own original scope cut, upheld not
+rediscovered. `hidden_properties`/`property_order` deliberately left unwired, same
+reasoning as Calendar's own session. Full account: this file's own Log entry below.
+Live-verified against real Notion; verification against this app's own build was not
+possible — the browser automation extension disconnected entirely partway through this
+session, a further failure mode beyond the memory-exhaustion class Board's/Calendar's
+own sessions already hit — disclosed in `timeline-view.md`, not forced. **Resume
+point: the workstream's one remaining review checkpoint** — a whole-branch pass
+covering everything since M7–M11's own checkpoint, all nine M12 per-view sessions
+included.
 
 ---
 
@@ -632,7 +636,8 @@ zero results" is in practice.
 | M12 — Form's own dedicated work | **DONE (2026-09-02): rebuilt from scratch as a real WYSIWYG builder (`docs/ui-specs/form-view.md`, a fresh live-Notion capture) — per-type answer previews, the full "Question options" popover, "Add question", the toolbar's own Filter/Sort/Search suppression + new Preview link. Live-verified against both real Notion and this app's own build.** |
 | M12 — Dashboard's own dedicated work | **DONE (2026-09-02), disclosed capture gap: real Notion's widget-grid editing is Business-plan-gated on this account (confirmed live) — user chose a best-effort rebuild (`docs/ui-specs/dashboard-view.md`) over skipping or paying. The Add-widget picker and per-widget actions menu now reuse this app's own established Popover+MenuList primitives; the toolbar is now correctly reduced to Settings-only. Live-verified against this app's own build.** |
 | M12 — Board's own dedicated work | **DONE (2026-09-02): row hover affordances (OPEN + "···" row menu, hover-gated, matching Gallery's own M12 pattern) built against a fresh live-Notion capture (`docs/ui-specs/board-view.md`); Card preview/Card size/Card layout options added, reusing `GalleryView.tsx`'s own exported helpers rather than a third copy; the OPEN/CLOSE-toggle bug already flagged for this milestone fixed. `hidden_properties` wiring was already done in an earlier session. Live verification against this app's own build blocked by recurring memory exhaustion, disclosed not forced.** |
-| M12 — Calendar's own dedicated work | **DONE (2026-09-02): 3 of the plan's 4 named items (date-range bars, drag-reschedule range preservation, event peek) were already built pre-session, confirmed by code + a fresh live-Notion capture (`docs/ui-specs/calendar-view.md`). Real, capture-confirmed gaps found and fixed instead: a Monday-first vs. real Notion's Sunday-first week-start bug (plus the weekend-hidden offset bug it exposed), a missing weekday header row, the event bar's permanent icon replaced by a whole-bar click (no hover affordance in real Notion), and — since Calendar had ZERO row-menu access before this session — a new right-click trigger reusing `RowMenuTrigger.tsx` (given an additive controlled `open`/`onOpenChange` mode, every other caller unaffected). `hidden_properties`/`property_order` deliberately left unwired and disclosed: no rendering path on Calendar (bar or peek) ever consults it, confirmed by capture and by `RowPeek.tsx`'s own established always-alphabetical behavior — wiring it would be dead code. Live-verified against real Notion in full; verification against this app's own build blocked by the same recurring memory exhaustion as Board's own session, disclosed not forced. Timeline's own dedicated per-view work not started, the last of the nine views.** |
+| M12 — Calendar's own dedicated work | **DONE (2026-09-02): 3 of the plan's 4 named items (date-range bars, drag-reschedule range preservation, event peek) were already built pre-session, confirmed by code + a fresh live-Notion capture (`docs/ui-specs/calendar-view.md`). Real, capture-confirmed gaps found and fixed instead: a Monday-first vs. real Notion's Sunday-first week-start bug (plus the weekend-hidden offset bug it exposed), a missing weekday header row, the event bar's permanent icon replaced by a whole-bar click (no hover affordance in real Notion), and — since Calendar had ZERO row-menu access before this session — a new right-click trigger reusing `RowMenuTrigger.tsx` (given an additive controlled `open`/`onOpenChange` mode, every other caller unaffected). `hidden_properties`/`property_order` deliberately left unwired and disclosed: no rendering path on Calendar (bar or peek) ever consults it, confirmed by capture and by `RowPeek.tsx`'s own established always-alphabetical behavior — wiring it would be dead code. Live-verified against real Notion in full; verification against this app's own build blocked by the same recurring memory exhaustion as Board's own session, disclosed not forced.** |
+| M12 — Timeline's own dedicated work | **DONE (2026-09-02/03): 4 of the plan's 5 named items (zoom levels, dependency arrows, event peek, edge-resize) were already built pre-session (task-34, pre-dates this UI-parity plan), confirmed by code + a fresh live-Notion capture (`docs/ui-specs/timeline-view.md`). The one real, capture-confirmed gap: dragging a bar's BODY (not an edge) moves the whole event in real Notion — genuinely distinct from resize, never captured by the original task-34 build. Built `resolveBarMove` (mirrors `resolveBarResize`/Calendar's own `resolveDropDate`) and a click-vs-drag threshold on the bar body (stationary click opens the peek, a real drag moves it) — the bar previously had NO click target of its own at all. The table/timeline split view and the off-screen "jump to project" arrow were both reconfirmed live as real Notion features, but stay deliberately unbuilt — task-34-brief.md's own original scope cut, upheld rather than silently dropped. `hidden_properties`/`property_order` deliberately left unwired, same reasoning and same disclosure as Calendar's own session. Live-verified against real Notion; verification against this app's own build was not possible this session — the browser automation extension disconnected entirely partway through (a further failure mode beyond the memory-exhaustion class Board/Calendar already hit), and a Chrome restart (the known fix) was not done unilaterally. This was the last of the nine M12 views. Resume point: the workstream's one remaining review checkpoint (a whole-branch pass covering everything since M7-M11's own checkpoint, all nine M12 sessions included).** |
 
 `docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
 a code-verified survey of what M1-M11 already ship for free across every view type (view
@@ -738,6 +743,7 @@ differs from List's row shape).
 | — | `dashboard-view.md` (M12) | **written, explicitly partial** — real widget-grid chrome is **(inferred)**/**(documented)**, not **(captured)**: the plan's own Business-plan gate blocked it, confirmed live | none — the paywalled state itself was screenshotted inline, not the (inaccessible) widget grid | none saved to `screenshots/` this session |
 | — | `board-view.md` (M12) | **written** — hover affordances + Layout panel fully captured live; Card size's own per-setting visual effect inferred, not captured; live verification against this app's own build blocked by memory exhaustion, disclosed | inline screenshots + targeted zoom/hover reads, no saved `raw-dom/*.txt` | none saved to `screenshots/` this session |
 | — | `calendar-view.md` (M12) | **written** — Sunday-first week-start, the event bar's click/right-click model, and the missing weekday header all fully captured live; `hidden_properties`'s own real effect (if any) not captured — the sub-panel itself could not be held open under this session's own memory exhaustion, disclosed rather than guessed; live verification against this app's own build blocked by the same exhaustion | inline screenshots + a direct date-math cross-check, no saved `raw-dom/*.txt` | none saved to `screenshots/` this session |
+| — | `timeline-view.md` (M12) | **written** — the whole-bar-move interaction fully captured live (dragged, then read the resulting date back from the row peek to confirm the exact shift); the table/timeline split view and the off-screen jump arrow both reconfirmed live but stay deliberately unbuilt (task-34's own original scope cut); live verification against this app's own build not possible — the browser automation extension disconnected entirely this session | inline screenshots + a direct before/after date read via the row peek, no saved `raw-dom/*.txt` | none saved to `screenshots/` this session |
 
 ---
 
@@ -814,16 +820,21 @@ Built by me, with the user's authorisation, 2026-08-29:
   capture — also all values empty)
 - **Views**: `Table`, `Board` (Board auto-grouped by Status), `List` (added 2026-09-02
   for M12's row-affordances capture), `Calendar` (added 2026-09-02 for M12's Calendar
-  capture — `Show calendar by: Date`, `Show calendar as: Month`), plus a **"Form
-  builder" view** — found already present when M12's Form session opened the view
-  switcher (2026-09-02), not previously recorded in this section; likely created ad hoc
-  in an earlier, unlogged session. Used as-is for `form-view.md`'s capture; a temporary
-  `Select`-type question added and removed again during that capture (no lasting
-  fixture change).
+  capture — `Show calendar by: Date`, `Show calendar as: Month`), `Timeline` (added
+  2026-09-02/03 for M12's Timeline capture — `Show timeline by: Date`; its own `Show
+  table` toggle was switched on then an attempted revert-off was interrupted by a stray
+  navigation click, so it may still read on — a harmless, cosmetic view-setting leftover,
+  not a data change), plus a **"Form builder" view** — found already present when M12's
+  Form session opened the view switcher (2026-09-02), not previously recorded in this
+  section; likely created ad hoc in an earlier, unlogged session. Used as-is for
+  `form-view.md`'s capture; a temporary `Select`-type question added and removed again
+  during that capture (no lasting fixture change).
 - **Row two's `Date` was set to a range** (Sep 2 – Sep 4, 2026) during Calendar's own
-  capture, to observe a real multi-day event bar. Left as-is (a real, still-honest date
-  value, not reverted) — the same "no lasting fixture change needed" call the Form
-  session made for its own temporary edit.
+  capture, to observe a real multi-day event bar; reused as-is for Timeline's own
+  capture (dragged during the whole-bar-move test, then restored to Sep 2–4 via the row
+  peek's own date picker). Left as a real, still-honest date value, not reverted — the
+  same "no lasting fixture change needed" call the Form session made for its own
+  temporary edit.
 - **1 Select option**: `Alpha`, created via create-on-type, applied to Row one
 - **1 calculation**: `Sum` on the Number column, so the footer row renders
 - **TYPES CORRECTED 2026-08-31.** Four properties had been created with the wrong type
@@ -835,6 +846,71 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02/03 (M12 — Timeline's own dedicated work: whole-bar drag-to-move — the
+  last of the nine views)** — Picked up the decided M12 order's next item after
+  Calendar. Read `TimelineView.tsx` and `task-34-brief.md` first (the original
+  Milestone 9 build, pre-dating this UI-parity plan): a mature, already-tested
+  implementation — 8 zoom levels, bar geometry, edge-resize with the real
+  dependency-shift-cascade propagation test, dependency arrows, event peek. Checked the
+  plan's own five named items against this before assuming any were still undone scope,
+  same discipline Calendar's own session established: zoom levels, dependency arrows,
+  event peek, and edge-resize were all already built. Only "drag-to-reschedule" needed
+  checking against a real capture, since edge-resize alone might or might not be all
+  Notion means by that phrase.
+  Added a Timeline view to the fixture database (`Show timeline by: Date`) and
+  live-captured a real bar's interactions directly: the 8 zoom levels matched exactly
+  (same labels, same order); clicking a bar's body opens a **side** peek (Timeline's own
+  distinct default from Calendar/Gallery's Center, matching what `TimelineView.tsx`
+  already read from config); and — the real finding — **dragging a bar's BODY (not an
+  edge) moves the whole event**, shifting both `start` and `end` by the identical delta.
+  Confirmed concretely, not inferred: dragged a Sep 2–4 event one column right, then
+  read its own row peek's Date field back to see it now read Sep 3–5. This is genuinely
+  distinct from edge-resize (which was already built) and had no click target of its
+  own at all before this session — the bar's outer div wired NO mouse handlers except on
+  the two resize handles.
+  **Built:** `resolveBarMove(value, deltaPx, zoom)`, mirroring `resolveBarResize`'s own
+  shape and Calendar's own `resolveDropDate` (shift every edge that exists by the
+  identical delta, `end` only when non-null so a point marker still works).
+  `TimelineBar` gained a single `onMouseDown` on its own outer div — the resize
+  handles' own handlers already `stopPropagation()`, so they're unaffected — that tracks
+  movement against a 5px threshold (dnd-kit's own `activationConstraint` convention,
+  hand-rolled here since this component already uses plain mouse events, not dnd-kit):
+  below it, a stationary click opens the peek (via the newly-threaded `onOpenRow`,
+  works read-only too); at/above it, a real drag commits `resolveBarMove` through
+  `onCellChange`, gated on `editable` same as resize. Cursor affordance added
+  (`cursor-grab`/`active:cursor-grabbing` when editable, `cursor-pointer` read-only).
+  Also live-reconfirmed, both already ruled out by task-34-brief.md's own original
+  scope cut and **deliberately left unbuilt, not rediscovered as new scope**: the
+  "Show table" split-view panel (a real, working secondary mini-table pinned beside the
+  Gantt track — genuinely closer in size to a scoped-down `TableView.tsx` than a
+  per-view polish item) and the off-screen "jump to project" arrow it reveals for
+  undated/out-of-window rows.
+  **`hidden_properties`/`property_order` deliberately left unwired, same reasoning as
+  Calendar's own session:** Timeline's title column shows only the title, in both real
+  Notion and this app's build; `RowPeek.tsx` already ignores both keys regardless
+  (M10's own established always-alphabetical behavior). Wiring either would be dead
+  code with no rendering path that ever reads it.
+  Full write-up: `docs/ui-specs/timeline-view.md`.
+  Frontend 966 → 975 tests green (61 files unchanged — `TimelineView.test.tsx` grew
+  from 38 to 47: new `resolveBarMove` pure-function tests mirroring
+  `resolveBarResize`'s own fixtures, plus three component tests for drag-vs-click and
+  the read-only case), `tsc` clean. **Live-verified against real Notion in full**
+  (zoom levels, the side-peek default, and the whole-bar-move interaction, the last one
+  confirmed by reading the shifted date back from the row's own peek, not inferred).
+  **Live verification against this app's own build not possible, disclosed rather than
+  forced:** partway through this session the browser automation extension disconnected
+  entirely (`tabs_context_mcp` returned "Browser extension is not connected") — a
+  further failure mode beyond the `Page.captureScreenshot`-timeout/memory-exhaustion
+  class Board's and Calendar's own sessions already hit and disclosed. A Chrome restart
+  is the known fix for this class (per the List session's own precedent), but it closes
+  the user's open tabs — not done unilaterally without the user asking for a
+  live-verify pass. Unit tests are the substitute, same acceptable-fallback class as
+  Board's and Calendar's own write-ups.
+  **This was the last of the nine M12 views.** Resume point: **the workstream's one
+  remaining review checkpoint** — a whole-branch pass covering everything since
+  M7–M11's own checkpoint (per `README.md`'s "Review loop"), all nine M12 per-view
+  sessions included (List, Feed, Gallery, Chart, Form, Dashboard, Board, Calendar,
+  Timeline) plus the cross-cutting row-peek pass and the M7 create-flow rewrite.
 - **2026-09-02 (M12 — Calendar's own dedicated work: week-start fix, event bar
   redesign, right-click row menu)** — Picked up the decided M12 order's next item after
   Board. Read the plan's own scope first (four items: date-range bars, drag-reschedule

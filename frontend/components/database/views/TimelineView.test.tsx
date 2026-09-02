@@ -32,6 +32,7 @@ import {
   computeOriginMs,
   extractTimelineEvents,
   pixelsPerDay,
+  resolveBarMove,
   resolveBarResize,
   type ZoomLevel,
 } from "./TimelineView";
@@ -194,6 +195,57 @@ describe("resolveBarResize (pure bar-resize -> new DateValue resolution)", () =>
   it("is a no-op (undefined) for a point marker (no end to anchor a range against)", () => {
     const point: DateValue = { type: "date", date: { start: "2026-01-01", end: null, time_zone: null } };
     expect(resolveBarResize(point, "end", 120, "day")).toBeUndefined();
+  });
+});
+
+// M12 (Timeline's own dedicated work, 2026-09-02): live-Notion capture found
+// dragging a bar's BODY moves the whole event (both edges shift by the same
+// delta), a genuinely different interaction from resolveBarResize above —
+// not named anywhere in task-34-brief.md, since the original M9 build never
+// captured it live.
+describe("resolveBarMove (pure whole-bar-drag -> new DateValue resolution)", () => {
+  const rangedValue: DateValue = {
+    type: "date",
+    date: { start: "2026-01-01T00:00:00.000Z", end: "2026-01-11T00:00:00.000Z", time_zone: null },
+  };
+
+  it("shifts both start and end by the identical delta, preserving the range length", () => {
+    // "day" zoom = 120 px/day -> 120px = +1 day.
+    const result = resolveBarMove(rangedValue, 120, "day");
+    expect(result).toEqual({
+      type: "date",
+      date: { start: "2026-01-02T00:00:00.000Z", end: "2026-01-12T00:00:00.000Z", time_zone: null },
+    });
+  });
+
+  it("shifts backward for a negative delta", () => {
+    const result = resolveBarMove(rangedValue, -240, "day"); // -2 days
+    expect(result).toEqual({
+      type: "date",
+      date: { start: "2025-12-30T00:00:00.000Z", end: "2026-01-09T00:00:00.000Z", time_zone: null },
+    });
+  });
+
+  it("preserves a date-only (no time-of-day) format across a move", () => {
+    const dateOnly: DateValue = { type: "date", date: { start: "2026-01-01", end: "2026-01-11", time_zone: null } };
+    const result = resolveBarMove(dateOnly, 120, "day");
+    expect(result?.date?.start).toBe("2026-01-02");
+    expect(result?.date?.end).toBe("2026-01-12");
+    expect(result?.date?.start).not.toContain("T");
+  });
+
+  it("shifts only start for a point marker (no end to move)", () => {
+    const point: DateValue = { type: "date", date: { start: "2026-01-01", end: null, time_zone: null } };
+    const result = resolveBarMove(point, 120, "day");
+    expect(result).toEqual({ type: "date", date: { start: "2026-01-02", end: null, time_zone: null } });
+  });
+
+  it("is a no-op (undefined) for a zero-pixel drag", () => {
+    expect(resolveBarMove(rangedValue, 0, "day")).toBeUndefined();
+  });
+
+  it("is a no-op (undefined) for a value with no date to move", () => {
+    expect(resolveBarMove({ type: "date", date: null }, 120, "day")).toBeUndefined();
   });
 });
 
@@ -362,6 +414,60 @@ describe("TimelineView", () => {
     renderTimeline({ rows, editable: false });
     expect(screen.queryByLabelText("Resize end of Task A")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Resize start of Task A")).not.toBeInTheDocument();
+  });
+
+  // M12 (Timeline's own dedicated work, 2026-09-02): live-Notion capture —
+  // dragging a bar's BODY (not an edge handle) moves the whole event.
+  describe("whole-bar drag-to-move (live-Notion capture, 2026-09-02)", () => {
+    it("dragging a bar's body (mousedown -> mousemove past the threshold -> mouseup) calls onCellChange with both dates shifted", () => {
+      const onCellChange = vi.fn();
+      const rows = [row("row-1", "Task A", { start: "2026-01-01T00:00:00.000Z", end: "2026-01-11T00:00:00.000Z", time_zone: null })];
+      renderTimeline({ rows, onCellChange, config: { date_property_id: "due", preference: { zoom_level: "day" } } });
+
+      const bar = screen.getByTestId("timeline-bar-row-1");
+      fireEvent.mouseDown(bar, { clientX: 100 });
+      // "day" zoom = 120 px/day -> +120px = +1 day; also clears the 5px click threshold.
+      fireEvent.mouseMove(document, { clientX: 220 });
+      fireEvent.mouseUp(document, { clientX: 220 });
+
+      expect(onCellChange).toHaveBeenCalledWith("row-1", "due", {
+        type: "date",
+        date: { start: "2026-01-02T00:00:00.000Z", end: "2026-01-12T00:00:00.000Z", time_zone: null },
+      });
+      expect(routerReplace).not.toHaveBeenCalled();
+    });
+
+    it("a stationary click on a bar's body (no movement past the threshold) opens the peek instead of moving it", () => {
+      const onCellChange = vi.fn();
+      const rows = [row("row-1", "Task A", { start: "2026-01-01T00:00:00.000Z", end: "2026-01-11T00:00:00.000Z", time_zone: null })];
+      renderTimeline({ rows, onCellChange, config: { date_property_id: "due", preference: { zoom_level: "day" } } });
+
+      const bar = screen.getByTestId("timeline-bar-row-1");
+      fireEvent.mouseDown(bar, { clientX: 100 });
+      fireEvent.mouseUp(document, { clientX: 100 });
+
+      expect(onCellChange).not.toHaveBeenCalled();
+      expect(routerReplace).toHaveBeenCalled();
+      const [url] = routerReplace.mock.calls[routerReplace.mock.calls.length - 1];
+      expect(url).toContain("p=row-1");
+      expect(url).toContain("pm=s");
+    });
+
+    it("a read-only (All Notes) bar still opens the peek on click but never moves on drag", () => {
+      const onCellChange = vi.fn();
+      const rows = [row("row-1", "Task A", { start: "2026-01-01T00:00:00.000Z", end: "2026-01-11T00:00:00.000Z", time_zone: null })];
+      renderTimeline({ rows, onCellChange, editable: false, config: { date_property_id: "due", preference: { zoom_level: "day" } } });
+
+      const bar = screen.getByTestId("timeline-bar-row-1");
+      fireEvent.mouseDown(bar, { clientX: 100 });
+      fireEvent.mouseMove(document, { clientX: 220 });
+      fireEvent.mouseUp(document, { clientX: 220 });
+      expect(onCellChange).not.toHaveBeenCalled();
+
+      fireEvent.mouseDown(bar, { clientX: 100 });
+      fireEvent.mouseUp(document, { clientX: 100 });
+      expect(routerReplace).toHaveBeenCalled();
+    });
   });
 
   describe("dependency arrows", () => {
