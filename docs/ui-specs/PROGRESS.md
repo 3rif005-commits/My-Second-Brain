@@ -718,6 +718,25 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M6 group-order checklist steps)** — Closed out `group-panel.md`'s
+  last unverified checklist steps (11-13: the group-order popover, `Alphabetical`
+  re-sort, manual drag-reorder's persistence), against the same fixture database.
+  `computer` click actions were unreliable again (same memory-pressure class as the
+  entries below); direct DOM interaction via `javascript_tool` worked reliably and
+  is now this environment's established fallback. Confirmed: the group-order
+  popover's exact row set, `Alphabetical` correctly re-sorting the Groups list
+  lexically in both panel and table, and (since the literal drag gesture isn't
+  reliably simulable here, a documented limitation from every prior session in this
+  file) a directly-PATCHed manual order surviving a full reload in the table, the
+  panel, and the `Sort` row's own label. One real but minor, deliberately-undecided
+  gap found and disclosed, not fixed: drag handles stay fully live (not "inert or
+  hidden" as the spec's own checklist asserts) while sorted Alphabetical/Reverse —
+  not silently harmful (dragging just switches back to Manual with the dropped
+  order) and the spec's own wording is ambiguous about which of "inert"/"hidden"
+  Notion actually does, so left as a named gap rather than guessed at. Full
+  write-up: `REVIEW-LOG.md`'s new "group-panel.md, M6 group-order steps" section.
+  No code changes this session — findings-only. This closes out every item this
+  workstream's own M4/M5/M6 checklist review had left unverified.
 - **2026-09-02 (M4/M5/M6 live Chrome checklist, completed)** — Resumed the partial
   run below after the automation environment's memory exhaustion was cleared (at the
   user's direction: killed ~15 accumulated Chrome renderer processes, which also

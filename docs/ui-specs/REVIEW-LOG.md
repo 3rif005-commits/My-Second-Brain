@@ -432,3 +432,51 @@ Frontend 61 files / 892 tests green (was 888 before this run's two fixes;
 +2 in `filterAst.test.ts` for finding 2, +2 in `types.test.ts` for finding 3,
 plus 4 existing tests corrected in place rather than counted as new), `tsc`
 clean.
+
+---
+
+## Live Chrome checklist run — group-panel.md, M6 group-order steps (2026-09-02, continued)
+
+Follow-up to close out the last unverified part of `group-panel.md`'s checklist:
+steps 11-13 (the group-order popover, `Alphabetical` re-sort, and manual
+drag-reorder's persistence). `computer` click/screenshot actions were
+unreliable again this session (same class of resource pressure as the earlier
+entries above — confirmed via `free -h`, ~230-290MB free); direct DOM
+interaction via `javascript_tool` (`querySelector` + `.click()`) worked
+reliably throughout and is now the established fallback for this environment.
+
+### Confirmed working
+
+- **Step 11**: the group-order popover shows exactly `Manual✓ / Alphabetical /
+  Reverse alphabetical`, overlaying the panel.
+- **Step 12 (reorder half)**: choosing `Alphabetical` re-sorts the Groups list
+  correctly — `Article, No Kind, Note` (lexical order; `"No Kind"` sorts before
+  `"Note"` since a space precedes `t`), confirmed in both the panel and the
+  table.
+- **Step 13**: PATCHed `group_order: "manual"` /
+  `group_order_manual: ["__no_value__", "Note", "Article"]` directly (the
+  literal pointer/keyboard drag gesture itself is not reliably simulable in
+  this automation environment — the same documented limitation every prior
+  session in this file has hit, not new) and reloaded: the table's group
+  order, the panel's own Groups list order, and the `Sort` row (`Manual ›`)
+  all correctly reflect the persisted order after a full page reload.
+
+### Checked, not fixed — a real but minor, deliberately-undecided gap
+
+**Step 12's second clause doesn't hold**: `group-panel.md`'s checklist asserts
+per-group drag handles "become inert or hidden" once sorted `Alphabetical`/
+`Reverse alphabetical` (dragging a group that's about to be re-sorted out
+from under you doesn't make sense). Checked in code, not assumed:
+`GroupsSection` (`GroupBuilder.tsx`) never reads `groupBy.group_order` at
+all — its `DndContext`/`PointerSensor` and `handleDragEnd` are active
+unconditionally, and confirmed live via the DOM: every `Reorder <Group>`
+handle stays `tabIndex=0` with its `aria-label` unchanged regardless of the
+current sort mode. The practical effect isn't silent data loss (unlike this
+session's other findings) — dragging while sorted just switches `group_order`
+back to `"manual"` with the dropped order, which is a defensible, even
+arguably helpful, interaction, not obviously broken. Not fixed here because
+the spec's own wording ("inert **or** hidden") is itself ambiguous about
+which of the two Notion actually does, and no raw-DOM/screenshot evidence in
+this workstream's `raw-dom/`/`screenshots/` settles it either way — matching
+`group-panel.md`'s and this whole workstream's own "no invented numbers, TBD
+until captured" rule. Left as a named, disclosed gap rather than guessed at.
