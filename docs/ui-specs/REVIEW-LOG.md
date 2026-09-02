@@ -738,3 +738,86 @@ covered by the two regression tests above, which do reproduce the actual bug mec
 silent skip.
 
 Frontend 61 files / 916 tests green (was 905), `tsc` clean.
+
+## row-gutter mismatch — investigated, no bug found (2026-09-02)
+
+Not a code-review checkpoint — a user-reported issue
+(`ISSUE-row-gutter-mismatch.md`), investigated per that doc's own plan rather than
+patched on assumption. The user reported (screenshot) that Table's row gutter
+(`+`/`⠿`/`☐`, M9) didn't match their own real Notion.
+
+### Investigated, found NOT a bug
+
+Asked the user directly rather than guessing (full-page vs. embedded database, hovered
+and waited, browser vs. desktop, fresh evidence). The user confirmed full-page/hovered/
+browser and supplied two fresh screenshots — real Notion and our app, side by side, both
+in the bulk-selected state. **Both show the identical `+`/`⠿`/`☑` gutter shape.** The
+user's own words: "the same, only the notion are well render so i did not notice them
+all this time" — real Notion does show this; it had rendered subtly enough that the user
+hadn't consciously registered it, not an app defect.
+
+Verified by reading the two screenshots closely (not taken at face value): the "Aa"
+title-column icon in one confirms it as real Notion (Notion's own glyph convention,
+distinct from our app's "T"); the bulk-bar showing only a trash icon in the other
+confirms it as our app, consistent with `row-affordances.md`'s own already-documented
+M9 scope-down ("the overflow ⋯ ... were not built").
+
+**Resolution:** no code change. `RowGutter.tsx`'s existing implementation already
+matches real Notion. `row-affordances.md`'s "Trigger" section was tightened to state
+the full-page-database condition explicitly (previously implicit) and record this
+second confirmation. `ISSUE-row-gutter-mismatch.md` gained a "Resolution" section.
+`PROGRESS.md`'s OPEN ISSUE banner closed out, Log entry added.
+
+**Live verification:** not completed — a sanity check of our app's own resting/hover
+states was attempted (the user's screenshot only showed the bulk-selected state) but the
+Chrome tab froze under this session's own memory exhaustion (`free -h`: 447Mi free,
+3.2Gi/3.7Gi swap — same recurring class this workstream has hit before). Not forced:
+this was a documentation-only resolution, and the user's own fresh screenshots already
+settled the actual question in dispute (which icons appear in real Notion), independent
+of our app's hover-gating logic, which M9 already tested and this issue never disputed.
+
+## Gallery view — a real OPEN/CLOSE-toggle bug, found and fixed (2026-09-02)
+
+Not a code-review checkpoint — found while building Gallery's own dedicated M12 work
+(`row-affordances.md`'s new "Gallery view" section has the full account of that session;
+this entry covers the one real bug in isolation, matching this file's own convention).
+
+### Confirmed and fixed
+
+**`GalleryView.tsx` had the identical OPEN/CLOSE-doesn't-actually-toggle bug M10 already
+found and fixed once for `TableView.tsx`** (this file's own Checkpoint 2 doesn't list it
+because M10 fixed it inline before any checkpoint ran — see `PROGRESS.md`'s own M10
+section: "clicking CLOSE... fired the identical onOpen handler as OPEN — re-opening the
+same row instead of closing it"). `GalleryCard` was wired `onOpenRow={openRow}` — plain
+`openRow`, not `useRowPeek`'s own `toggleRow` — so clicking a second time on a row whose
+peek was already open re-opened it (a no-op from the user's perspective, but not the
+CLOSE the button's own label promised) instead of closing it.
+
+**Root cause:** M10's fix pattern (a local `toggleRow` wrapper in `TableView.tsx`,
+checking `peekRowId` before deciding whether to open or close) was never generalized
+into `useRowPeek.ts` itself when M12 extracted that hook — the hook already exposed a
+`toggleRow` control, but only `TableView.tsx` (its original owner) ever called it; every
+other view built afterward (List, Feed, Board, Gallery) received `openRow` in their own
+copy-paste and inherited the pre-M10 bug fresh, since `openRow`/`toggleRow` are both
+valid-looking, same-shaped functions with no compiler signal distinguishing "the right
+one for a toggle button."
+
+**Confirmed present in `BoardView.tsx` too** (same `onOpenRow={openRow}` wiring, read
+directly, not assumed) — **deliberately NOT fixed this session**, out of scope for
+Gallery's own named milestone; tracked for Board's own upcoming M12 milestone instead,
+same "flag, don't silently expand scope" discipline this workstream uses throughout.
+`ListView.tsx`/`FeedView.tsx` were checked and do NOT have this bug (List has no
+OPEN/CLOSE toggle at all — the whole row is the open-trigger; Feed's title-click always
+opens, never toggles closed by clicking the title again — so neither one had a `toggleRow`
+call to get wrong).
+
+**Fix:** `GalleryView.tsx` now passes `useRowPeek`'s own `toggleRow` to `GalleryCard`'s
+`onOpenRow`, the same one-line fix shape M10 already established for Table.
+
+Regression test: `GalleryView.test.tsx`'s new "OPEN/CLOSE actually toggles" test reuses
+the SAME button DOM element across both clicks (rather than re-querying by accessible
+name) to sidestep the disambiguation `TableView.test.tsx`'s own "the Close button closes
+the peek" test already documents (RowPeek's own close control also reads "Close" once
+open) — asserts the exact `router.replace` URL after each click, not just "no crash."
+
+Frontend 61 files / 935 tests green (was 928), `tsc` clean.

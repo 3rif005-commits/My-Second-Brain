@@ -1,3 +1,39 @@
+## Resolution (2026-09-02) — case 1, no code bug
+
+Followed the investigation plan below rather than guessing. Asked the user directly
+(`AskUserQuestion`): which kind of database (**full-page**, confirmed), whether they'd
+deliberately hovered and waited for the gutter (**yes**), and which platform (**browser**).
+Then asked for fresh evidence.
+
+The user supplied two screenshots side by side, both in the bulk-selected "1 selected"
+state: their own real Notion (a full-page database, row "Presidential Decree 21-285",
+colored Module pills — confirmed real Notion by the "Aa" title-column icon, which is
+Notion's own convention, distinct from our app's "T") and our app (the "Untitled Database"
+fixture, row "Untitled", € Count, Kind "Guide" — confirmed ours by the "T" title icon and
+by the bulk-bar showing only a trash icon, matching `row-affordances.md`'s own documented
+scope-down: "the overflow ⋯ ... were not built" for M9).
+
+**Both screenshots show the identical `+` / `⠿` drag-handle / `☑` checkbox gutter and
+`OPEN` button.** The user's own words: "the same, only the notion are well render so i did
+not notice them all this time" — real Notion does show this gutter; it renders subtly
+enough that the user hadn't consciously registered it before, not an app bug.
+
+This is **possibility 1** from this doc's own list below: the 2026-08-29 capture was
+accurate then, and still is. **No `RowGutter.tsx` change was made** — the existing
+implementation already matches. `row-affordances.md`'s "Trigger" section was tightened to
+state the full-page-database condition explicitly and record this confirmation, so a
+future report against an *embedded/linked* database (still unverified) isn't assumed to be
+the same case. Logged in `PROGRESS.md`'s Log and `REVIEW-LOG.md`.
+
+A live before/after sanity check of our own app (resting vs. hover, to confirm no stuck-
+visible state) was attempted but blocked by this session's Chrome tab freezing under the
+same memory exhaustion this workstream has hit repeatedly (`free -h`: 447Mi free,
+3.2Gi/3.7Gi swap) — not forced, since this was a documentation-only resolution with no code
+change to verify, and the user's own fresh screenshots already answered the actual
+question in dispute (which icons appear, not whether hover-vs-rest gating still works).
+
+---
+
 # Issue: Table row gutter (`+` / drag-handle / checkbox) — reported mismatch vs live Notion
 
 **Reported:** 2026-09-02, by the user, from direct visual comparison of our app against
