@@ -167,6 +167,28 @@ export function operatorFor(type: string, name: string): FilterOperator | undefi
   return operatorsForType(type).find((o) => o.name === name);
 }
 
+/** The value a fresh condition should carry for `operator.argType`, so the
+ * value editor's own DISPLAYED default and what's actually PERSISTED never
+ * diverge. Live-verified reachable and wrong without this: `ValueEditor`'s
+ * `bool`/`verification_status` editors are `<select>`s that show a real,
+ * specific option selected (`Unchecked`/`None`) purely from a local
+ * `value == null` fallback — but a `<select>` only fires `onChange` on an
+ * actual change event, so that shown-but-never-chosen default was never
+ * written to the condition. Combined with `sanitizeFilterForQuery` (which
+ * correctly treats a still-`undefined` value as incomplete), a fresh
+ * Checkbox or Verification condition looked complete in the UI yet silently
+ * never filtered anything — caught live in an `Or`-group where the
+ * checkbox condition's contribution vanished entirely, narrowing the table
+ * to only the OTHER rule's matches. Every other `argType` has no honest
+ * non-empty default (an empty text/number/date input already displays as
+ * empty, matching what's persisted), so this only needs the two argTypes
+ * whose editor pre-selects a real option. */
+export function defaultValueForOperator(operator: FilterOperator): unknown {
+  if (operator.argType === "bool") return false;
+  if (operator.argType === "verification_status") return "none";
+  return undefined;
+}
+
 /** The option list a Select/Status/Multi-select's `str_or_list` value editor
  * (a searchable, chip-rendered checkbox list) offers — `property.config`'s
  * own configured options, same shape `pillStyleForOption` (cells/

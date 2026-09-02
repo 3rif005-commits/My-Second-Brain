@@ -331,21 +331,104 @@ correctly.
   debounced commit, not one per keystroke) — checklist step 8, confirmed via
   `read_network_requests`.
 
-### Not completed this run — an environment limitation, not a product finding
+### Blocked, then resumed — a genuine environment limitation, not a product finding
 
 This session's automation environment became memory-constrained partway through
 (`free -h`: <650MB free RAM, ~3GB/3.7GB swap in use) — `Page.captureScreenshot`
-started timing out on EVERY call, and clicking the toolbar's `Filter`/`Sort`
+started timing out on every call, and clicking the toolbar's `Filter`/`Sort`
 buttons (confirmed via `read_page`'s accessibility tree, not screenshots) stopped
-opening their popovers at all, reproducibly, across two fresh tabs, for BOTH
+opening their popovers at all, reproducibly, across two fresh tabs, for both
 buttons — ruling out a regression from the fix above and pointing at resource
-exhaustion rather than the app. This closed the window on live-verifying the fix
-itself (steps 10-20 of `filter-panel.md`'s checklist: operator-list narrowing by
-type, `Add filter rule`/`Add filter group`, the settings-sidebar entry point,
-`Delete filter`, concurrent-edit ordering, the empty-result state) plus all of
-`sort-panel.md` and `group-panel.md`'s own checklists. The fix itself is
-unit-tested (`filterAst.test.ts`) and was live-confirmed for the specific
-`Article`-narrows-to-zero repro before the environment degraded — not merely
-inferred from reading the code. Resume point for a future session: re-run
-`filter-panel.md` steps 10-20, `sort-panel.md`, and `group-panel.md` live once a
-less memory-constrained session is available.
+exhaustion rather than the app. At the user's direction, all ~15 accumulated
+Chrome renderer processes were killed to free memory (RAM: 567MB → 1.1GB free);
+this also killed the `claude-in-chrome` extension's own background process,
+requiring a full Chrome restart (with the user's help) before the browser
+extension would reconnect. The checklist below was completed after that restart.
+
+---
+
+## Live Chrome checklist run — filter-panel.md / sort-panel.md / group-panel.md, M4/M5/M6 (2026-09-02, continued)
+
+Resumed against the same fixture database after the environment recovered.
+Completed `filter-panel.md` steps 5-18, `sort-panel.md` steps 2-13, and
+`group-panel.md` steps 1-10/14/15/18 live — operator-list narrowing by type
+(Text's 8, Checkbox's 2), `Add filter rule`/`Add filter group` (AND→OR, widening
+the result set to the correct union), the settings-sidebar entry point rendering
+identical content as a pushed panel with a back arrow, `Delete filter`, the
+sort picker's alphabetical/no-`None` list, per-type direction labels (`Sort A →
+Z`/`Sort low → high`), `+ Add sort` excluding the already-sorted property,
+per-row remove vs. `Delete sort`, the group property picker, grouped-table
+rendering (repeated headers, `+ New page` per group, `No Kind` implicit bucket
+correctly renamed), the per-group eye toggle (hides from the table, stays
+listed greyed in the panel), and `Remove grouping`. Two more real, live-only
+defects found and fixed.
+
+### Fixed
+
+2. **A Checkbox (or Verification) filter condition looks complete the instant
+   it's created, but silently never filters anything until the user manually
+   toggles its value editor away and back.** `ValueEditor`'s `bool` and
+   `verification_status` branches are `<select>`s whose DISPLAYED default
+   (`Unchecked`, `None`) comes from a local `value == null` fallback — but a
+   `<select>` only fires `onChange` on an actual change event, so that
+   shown-but-never-chosen default was never written back into the condition.
+   Combined with this file's own Checkpoint-3 fix (`sanitizeFilterForQuery`,
+   which correctly treats a still-`undefined` value as incomplete and strips
+   it from the compiled query), a fresh Checkbox condition looked fully
+   specified in the UI yet contributed nothing to every query it was part of.
+   Caught live, not by inspection: built `Done equals <shown as Unchecked> OR
+   Count equals 5` expecting the union of "not done" (2 rows) and "count is
+   5" (1 row) = 3 rows; got exactly 1 (only the Count match) — read
+   `view.filter` directly and found the Done condition's `value` key
+   genuinely absent, despite the dropdown showing "Unchecked" selected.
+
+   Fixed with `defaultValueForOperator` (new, `filterOperators.ts`): `false`
+   for `bool`, `"none"` for `verification_status` (itself a legal, distinct
+   value in `_VERIFICATION_STATUSES`, not a placeholder), `undefined`
+   everywhere else — every other `argType`'s empty state already displays
+   honestly empty (a blank text/number/date input), so only these two needed
+   it. Wired into every place a condition's operator gets set: fresh pick
+   (`defaultConditionFor`), property switch, and operator switch (all three
+   in `FilterBuilder.tsx`/`filterAst.ts`). Re-verified live after the fix:
+   picking `Done` immediately persisted `value: false`; the same `Or` repro
+   (once a fixture data gap — see below — was patched) returned exactly the
+   expected 3-row union. Regression tests: `filterAst.test.ts` (Checkbox and
+   Verification both default to an explicit value, not `undefined`),
+   `FilterBuilder.test.tsx` (the "Add filter rule" wrap test now expects
+   `value: false` on the fresh Checkbox condition it creates).
+
+3. **A freshly-grouped table doesn't hide its own empty bucket by default,
+   contradicting `group-panel.md`'s own capture.** The spec's Rows table
+   (`Hide empty groups | toggle, **ON** by default`) and its checklist step 6
+   both state Notion's default is ON; `defaultGroupBySpec` (types.ts) never
+   set `hide_empty_groups` at all, so `GroupStageTwo`'s own `?? false`
+   fallback rendered it OFF. Live-verified: grouping this fixture by `Kind`
+   left the implicit `No Kind` bucket (0 rows) visible in the table and the
+   panel's toggle reading `aria-checked="false"`; the spec calls for it
+   hidden from the very first grouping action. Fixed by adding
+   `hide_empty_groups: true` to `defaultGroupBySpec`'s returned spec (used by
+   every entry point that first sets `group_by`: the column header's Group
+   row, the group panel, and Board/Chart creation). Re-verified live:
+   removing and re-adding the Kind grouping now shows `aria-checked="true"`
+   and drops `No Kind` from the table immediately; toggling it back off
+   brings the bucket back (checklist step 10). Four existing tests had
+   asserted the old, spec-contradicting shape (`DatabaseShell.test.tsx` x2,
+   `GroupBuilder.test.tsx`, `ViewSettingsSidebar.test.tsx`) and are corrected;
+   a new `defaultGroupBySpec` test suite added to `types.test.ts`.
+
+### A fixture-data gap, not a product bug
+
+While reproducing finding 2's `Or` repro, one row ("Note one") returned only
+2 of the expected 3 matches — traced to that row never receiving its
+Done/Due/Status values from an earlier session's interrupted batch-PATCH loop
+(a `Runtime.evaluate` timeout mid-loop, unrelated to app code). Its `Done`
+property was genuinely **absent** from `properties`, not `false` — correct
+SQL three-valued logic (`NULL = false` is `NULL`, not `TRUE`) excluded it from
+`equals: false`, which is accurate behavior given the data, not a filter bug.
+Patched the row directly via the API and re-confirmed the expected 3-row
+union.
+
+Frontend 61 files / 892 tests green (was 888 before this run's two fixes;
++2 in `filterAst.test.ts` for finding 2, +2 in `types.test.ts` for finding 3,
+plus 4 existing tests corrected in place rather than counted as new), `tsc`
+clean.

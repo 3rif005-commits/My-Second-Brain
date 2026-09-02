@@ -12,7 +12,7 @@
 // on every render, so a path is only ever used within the same render pass
 // that produced it (no path is ever held across a re-render).
 import type { FilterOperator } from "./filterOperators";
-import { isFilterableType, operatorFor, operatorsForType } from "./filterOperators";
+import { defaultValueForOperator, isFilterableType, operatorFor, operatorsForType } from "./filterOperators";
 import type { PropertyResponse } from "./types";
 
 export interface FilterCondition {
@@ -136,7 +136,16 @@ export function defaultOperatorFor(type: string): FilterOperator | undefined {
 
 export function defaultConditionFor(property: PropertyResponse): FilterCondition {
   const operator = defaultOperatorFor(property.type);
-  return { type: "condition", property: property.key, operator: operator?.name ?? "is_empty" };
+  // `defaultValueForOperator` — bool/verification_status only, see its own
+  // doc comment: without this the condition looks complete (its value
+  // editor shows a real option selected) but silently never filters.
+  const value = operator ? defaultValueForOperator(operator) : undefined;
+  return {
+    type: "condition",
+    property: property.key,
+    operator: operator?.name ?? "is_empty",
+    ...(value !== undefined ? { value } : {}),
+  };
 }
 
 /** Every property this app can filter by at all — mirrors the backend's own

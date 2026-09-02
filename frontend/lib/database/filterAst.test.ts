@@ -144,6 +144,32 @@ describe("defaultConditionFor / isFilterableProperty", () => {
     });
   });
 
+  // Live-verified reachable and silently wrong: a Checkbox condition's value
+  // editor is a <select> that shows "Unchecked" selected the instant it
+  // exists (ValueEditor's own `value === true` fallback) — but a <select>
+  // only fires onChange on an actual change, so without an explicit default
+  // value here the condition looked complete yet never carried one, and
+  // `sanitizeFilterForQuery` correctly (but silently) dropped it from every
+  // query. Reproduced in an `Or` group: the checkbox rule's contribution
+  // vanished entirely, narrowing the result to only the other rule's match.
+  it("a Checkbox condition carries an explicit `value: false` from creation, not undefined", () => {
+    expect(defaultConditionFor(prop({ key: "done", type: "checkbox" }))).toEqual({
+      type: "condition",
+      property: "done",
+      operator: "equals",
+      value: false,
+    });
+  });
+
+  it("a Verification condition carries an explicit `value: \"none\"` from creation, same reason", () => {
+    expect(defaultConditionFor(prop({ key: "check", type: "verification" }))).toEqual({
+      type: "condition",
+      property: "check",
+      operator: "status",
+      value: "none",
+    });
+  });
+
   it("place/button/formula/rollup are not filterable", () => {
     expect(isFilterableProperty(prop({ type: "place" }))).toBe(false);
     expect(isFilterableProperty(prop({ type: "button" }))).toBe(false);

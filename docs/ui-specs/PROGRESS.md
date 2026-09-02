@@ -718,6 +718,32 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M4/M5/M6 live Chrome checklist, completed)** — Resumed the partial
+  run below after the automation environment's memory exhaustion was cleared (at the
+  user's direction: killed ~15 accumulated Chrome renderer processes, which also
+  killed the `claude-in-chrome` extension's own background process and required a
+  full Chrome restart before it reconnected). Completed `filter-panel.md` steps
+  5-18, `sort-panel.md` steps 2-13, and `group-panel.md` steps 1-10/14/15/18 live.
+  Found and fixed two more real, live-only-visible defects: (1) a Checkbox or
+  Verification filter condition's value editor shows a real option selected
+  ("Unchecked"/"None") from the moment it's created, but a `<select>` only fires
+  `onChange` on an actual change, so that default was never written — reproduced by
+  building `Done equals <shown Unchecked> OR Count equals 5` and getting only 1 row
+  back (the Count match) instead of the expected 3-row union, since the Checkbox
+  condition's `value` was genuinely absent. Fixed with `defaultValueForOperator`
+  (filterOperators.ts), wired into every place a condition's operator gets set. (2)
+  `defaultGroupBySpec` never set `hide_empty_groups`, defaulting it OFF — but
+  `group-panel.md`'s own capture is explicit that Notion defaults it ON; grouping by
+  `Kind` left an empty `No Kind` bucket visible in the table when it should have
+  been hidden from the first click. Fixed by adding `hide_empty_groups: true` to
+  the spec every "first group by this property" entry point builds. Along the way,
+  traced an apparent third failure (an incomplete-looking Or repro) to a genuine
+  fixture-data gap from an earlier interrupted batch-PATCH loop, not a product bug
+  — SQL's `NULL = false` correctly evaluates to not-true. Full write-up:
+  `REVIEW-LOG.md`'s new "Live Chrome checklist run" section (continued). Frontend
+  61 files / 892 tests green (was 888), `tsc` clean. This closes out the M4/M5/M6
+  live-checklist item that Checkpoint 3's own review had left as a resume point —
+  no further live verification outstanding for this batch.
 - **2026-09-02 (M4 live Chrome checklist, partial)** — Followed up on the review
   checkpoint below by actually running `filter-panel.md`'s checklist live, against a
   fresh throwaway fixture database (Title/Count/Kind-select/Done-checkbox/Due-date/

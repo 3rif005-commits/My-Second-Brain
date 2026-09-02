@@ -264,7 +264,10 @@ describe("ViewSettingsSidebar", () => {
     expect(calcRow).toHaveAttribute("aria-disabled", "true");
 
     await user.click(screen.getByText("Kind"));
-    expect(onPatchConfig).toHaveBeenCalledWith({ group_by: { property_key: "kind" } });
+    // group-panel.md's own capture: "Hide empty groups" is ON by default.
+    expect(onPatchConfig).toHaveBeenCalledWith({
+      group_by: { property_key: "kind", hide_empty_groups: true },
+    });
   });
 
   it("Sort with no existing sort shows 'New sort' and selecting a property sets a single ascending sort", async () => {

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getGroupBySpec, getQueryExtras, getSubGroupBySpec, isGroupablePropertyType } from "./types";
+import {
+  defaultGroupBySpec,
+  getGroupBySpec,
+  getQueryExtras,
+  getSubGroupBySpec,
+  isGroupablePropertyType,
+} from "./types";
 
 describe("getGroupBySpec", () => {
   it("returns the spec when config.group_by has a property_key", () => {
@@ -13,6 +19,28 @@ describe("getGroupBySpec", () => {
 
   it("returns undefined when config.group_by is malformed (no property_key)", () => {
     expect(getGroupBySpec({ group_by: { mode: "option" } })).toBeUndefined();
+  });
+});
+
+// group-panel.md's own capture (its table + checklist step 6): "Hide empty
+// groups | toggle, ON by default". Live-verified reachable and wrong before
+// this fix — grouping by a property with an implicit "No <Property>" bucket
+// left that empty group visible in the table from the moment it was picked,
+// instead of hidden the way Notion's own default behaves.
+describe("defaultGroupBySpec", () => {
+  it("defaults hide_empty_groups to true, for every groupable type", () => {
+    expect(defaultGroupBySpec({ key: "kind", type: "select" })).toEqual({
+      property_key: "kind",
+      hide_empty_groups: true,
+    });
+  });
+
+  it("still fills in the type's required mode alongside the new default", () => {
+    expect(defaultGroupBySpec({ key: "status", type: "status" })).toEqual({
+      property_key: "status",
+      mode: "option",
+      hide_empty_groups: true,
+    });
   });
 });
 

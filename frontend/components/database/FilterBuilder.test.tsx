@@ -141,7 +141,11 @@ describe("filterPanel — stage 2, a single condition", () => {
       op: "and",
       // "flag" is alphabetically first among filterable properties (Flag <
       // Name < Number < Text) — same picker order the stage-1 test asserts.
-      children: [filter, { type: "condition", property: "flag", operator: "equals" }],
+      // `value: false` (not absent): a checkbox condition's value editor
+      // shows "Unchecked" selected from the moment it exists, so it must
+      // actually carry that value or it would look complete but silently
+      // never filter (see `defaultValueForOperator`'s own doc comment).
+      children: [filter, { type: "condition", property: "flag", operator: "equals", value: false }],
     });
   });
 });

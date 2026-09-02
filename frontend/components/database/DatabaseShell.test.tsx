@@ -574,7 +574,7 @@ describe("DatabaseShell", () => {
 
     expect(mockHook.createView).toHaveBeenCalledWith("New view", "board");
     expect(mockHook.updateView).toHaveBeenCalledWith("v9", {
-      config: { group_by: { property_key: "status", mode: "option" } },
+      config: { group_by: { property_key: "status", mode: "option", hide_empty_groups: true } },
     });
     expect(mockHook.setActiveViewId).toHaveBeenCalledWith("v9");
   });
@@ -597,7 +597,7 @@ describe("DatabaseShell", () => {
     await user.click(screen.getByRole("button", { name: /^create$/i }));
 
     expect(mockHook.updateView).toHaveBeenCalledWith("v10", {
-      config: { group_by: { property_key: "priority" } },
+      config: { group_by: { property_key: "priority", hide_empty_groups: true } },
     });
   });
 

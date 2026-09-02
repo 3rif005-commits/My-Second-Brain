@@ -104,7 +104,10 @@ describe("groupPanel — stage 1, the property picker", () => {
       <MenuList root={groupPanel(PROPERTIES, undefined, null, onPatchConfig)} nav="flyout" onClose={() => {}} label="Group" />
     );
     await user.click(screen.getByText("Kind"));
-    expect(onPatchConfig).toHaveBeenCalledWith({ group_by: { property_key: "kind" } });
+    // group-panel.md's own capture: "Hide empty groups" is ON by default.
+    expect(onPatchConfig).toHaveBeenCalledWith({
+      group_by: { property_key: "kind", hide_empty_groups: true },
+    });
   });
 });
 

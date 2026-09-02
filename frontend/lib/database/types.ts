@@ -249,7 +249,13 @@ export function defaultGroupMode(type: string): string | undefined {
 }
 
 export function defaultGroupBySpec(property: Pick<PropertyResponse, "key" | "type">): GroupBySpec {
-  const spec: GroupBySpec = { property_key: property.key };
+  // group-panel.md's own capture (line 85's table, restated by its checklist
+  // step 6): "Hide empty groups | toggle, ON by default". Live-verified
+  // reachable and wrong without this: grouping by a property with an
+  // implicit "No <Property>" bucket left that empty group visible in the
+  // table from the first click, rather than hidden the way Notion's own
+  // default behaves.
+  const spec: GroupBySpec = { property_key: property.key, hide_empty_groups: true };
   const mode = defaultGroupMode(property.type);
   if (mode) spec.mode = mode;
   return spec;

@@ -26,7 +26,13 @@ import {
   type FilterCondition,
   type FilterNode,
 } from "@/lib/database/filterAst";
-import { configuredOptions, operatorFor, operatorsForType, type FilterOperator } from "@/lib/database/filterOperators";
+import {
+  configuredOptions,
+  defaultValueForOperator,
+  operatorFor,
+  operatorsForType,
+  type FilterOperator,
+} from "@/lib/database/filterOperators";
 import { MenuList, Popover } from "@/components/ui/primitives";
 import type { MenuPanel, MenuRow } from "@/components/ui/primitives";
 import { propertyTypeIcon } from "./ColumnHeaderMenu";
@@ -371,7 +377,7 @@ function ConditionRow({
                   checked: p.key === condition.property,
                   onSelect: () => {
                     const fresh = defaultConditionFor(p);
-                    replaceCondition({ property: fresh.property, operator: fresh.operator, value: undefined });
+                    replaceCondition({ property: fresh.property, operator: fresh.operator, value: fresh.value });
                   },
                 })),
               },
@@ -398,7 +404,7 @@ function ConditionRow({
                   id: op.name,
                   label: op.label,
                   checked: op.name === condition.operator,
-                  onSelect: () => replaceCondition({ operator: op.name, value: undefined }),
+                  onSelect: () => replaceCondition({ operator: op.name, value: defaultValueForOperator(op) }),
                 })),
               },
             ],
