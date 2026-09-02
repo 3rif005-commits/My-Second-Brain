@@ -480,6 +480,8 @@ function DashboardWidgetContent({ view, properties, dataSourceId, editable, onUp
           }}
           editable={editable}
           onCellChange={updateCell}
+          config={view.config}
+          onConfigChange={patchThisWidgetsView}
         />
       );
     case "gallery":

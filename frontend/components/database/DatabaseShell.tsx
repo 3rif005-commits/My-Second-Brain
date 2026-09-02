@@ -496,6 +496,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             editable={editable}
             onCellChange={updateCell}
             config={activeView.config}
+            onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
             dataSourceId={dataSourceId}
             refetch={refetch}
           />

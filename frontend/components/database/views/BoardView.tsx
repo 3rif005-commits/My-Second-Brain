@@ -22,12 +22,86 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import { MoreHorizontal } from "lucide-react";
 import type { DatabaseRow, Group, MultiSelectValue, PropertyResponse, PropertyValue } from "@/lib/database/types";
 import { getHiddenKeys, orderProperties } from "@/lib/database/viewConfig";
 import { useRowPeek } from "@/lib/database/useRowPeek";
+import { HoverAffordance } from "@/components/ui/primitives";
 import { renderCellValue } from "../cells/renderCellValue";
 import { OpenNoteButton } from "../OpenNoteButton";
+import { RowMenuTrigger } from "../RowMenuTrigger";
 import { RowPeek } from "../RowPeek";
+import { CARD_LAYOUTS, CoverPlaceholder, extractFileUrl, readCardLayout, type CardLayout } from "./GalleryView";
+
+// M12 (2026-09-02) — Board's own dedicated per-view work, live-captured
+// against real Notion (`docs/ui-specs/board-view.md`). Two real gaps the
+// plan's own scope named:
+//
+// 1. Row hover affordances: a card's hover reveals the identical pencil-
+//    shaped "open" icon + "···" row menu Gallery's own M12 session already
+//    built (same trigger shape, same `RowMenuTrigger`/`HoverAffordance`
+//    primitives, not a second copy) — before this, Board's `OpenNoteButton`
+//    was always-visible, never hover-gated, and there was no row menu at
+//    all (the M12 code survey's own "Board and Gallery... none has the
+//    gutter, bulk bar, or row menu at all").
+// 2. Card layout options: real Notion's Board Layout panel has "Card
+//    preview" (None / Page cover / a `files` property — reusing Gallery's
+//    own `extractFileUrl`/`CoverPlaceholder`), "Card layout" (List/Compact
+//    — reusing Gallery's own identical list-vs-joined-line semantic,
+//    `readCardLayout`), and "Card size." Defaults differ from Gallery's,
+//    confirmed by the capture, not assumed: a fresh Board's own "Card
+//    preview" reads **None**, not Gallery's "Page cover" — Board cards are
+//    data-oriented by default, Gallery's are image-grid-oriented. There is
+//    also no "Cover fit" row for Board (Gallery has one) — not built here,
+//    matching the capture's own absence, not an oversight.
+//
+// Also fixed along the way: the identical OPEN/CLOSE-doesn't-toggle bug
+// M10 (Table) and Gallery's own M12 session each already fixed once —
+// `onOpenRow` was wired to bare `openRow` instead of `useRowPeek`'s own
+// `toggleRow`, confirmed by reading the code (row-affordances.md's Gallery
+// section had already flagged this exact bug as present in Board, left for
+// this milestone on purpose).
+//
+// Deliberately NOT built, disclosed in `board-view.md` rather than
+// guessed: "Color columns" (colors each column by its group option's own
+// color — real, captured, moderate new surface, no existing infrastructure
+// to reuse) and "Page content" as a Card-preview source (needs first-block
+// extraction, the same real cost this workstream has flagged and skipped
+// everywhere it comes up, Gallery's own session included).
+const BOARD_CARD_SIZES = ["small", "medium", "large"] as const;
+type BoardCardSize = (typeof BOARD_CARD_SIZES)[number];
+
+// Board's own column is a fixed width (`w-72`, unlike Gallery's freeform
+// wrapping grid) — "Card size" can't mean card WIDTH here the way it does
+// for Gallery. Interpreted as the cover image's own height instead (the one
+// visibly resizable element within a fixed-width card), same spirit as
+// Gallery's `COVER_SIZE_CLASSES` but applied to height, not width. Not
+// verified against a real capture at each size setting (the live session
+// confirmed the row exists and its default, not what changes visually at
+// each of the three sizes) — disclosed as inferred in `board-view.md`.
+const BOARD_COVER_HEIGHT_CLASSES: Record<BoardCardSize, string> = {
+  small: "h-16",
+  medium: "h-28",
+  large: "h-40",
+};
+
+function readBoardCardSize(config: Record<string, unknown>): BoardCardSize {
+  return (BOARD_CARD_SIZES as readonly string[]).includes(config.card_size as string)
+    ? (config.card_size as BoardCardSize)
+    : "medium";
+}
+
+/** Board's own default is "none" — confirmed live (a fresh Board view's
+ * Layout panel reads "Card preview: None"), the opposite of Gallery's own
+ * "cover" default (`GalleryView.tsx`'s own `readCardPreview`, not reused
+ * here since the default differs) — Board cards are data-oriented by
+ * default in real Notion, not image-grid-oriented. */
+function readBoardCardPreview(config: Record<string, unknown>, filesProperties: PropertyResponse[]): string {
+  const raw = config.card_preview;
+  if (raw === "cover") return "cover";
+  if (typeof raw === "string" && filesProperties.some((p) => p.key === raw)) return raw;
+  return "none";
+}
 
 // Mirrors services.db.query.grouping._NO_VALUE_KEY exactly — the implicit
 // bucket every grouped type gets for rows with no value on the grouped
@@ -56,6 +130,13 @@ interface BoardViewProps {
    * previously only `TableView`/`ListView`/`FeedView` respected this;
    * Board's `OpenNoteButton` always hard-navigated regardless of it. */
   config?: Record<string, unknown>;
+  /** M12 (Board's own dedicated work): writes `card_preview`/`card_size`/
+   * `card_layout` — the same "component reports, caller PATCHes" split
+   * `GalleryView.tsx`'s own `onConfigChange` already established. Optional
+   * so existing callers/tests that never touch Layout controls (none of
+   * this component's OWN tests exercised writes before this) don't need a
+   * no-op stub — the three `<select>`s below no-op via `?.()` if omitted. */
+  onConfigChange?: (patch: Record<string, unknown>) => void;
   dataSourceId?: string;
   refetch?: () => void | Promise<void>;
 }
@@ -138,6 +219,11 @@ function BoardCard({
   subgroupKey,
   onOpenRow,
   isPeekOpen,
+  onOpenSidePeek,
+  onTrashed,
+  cardPreview,
+  cardSize,
+  cardLayout,
 }: {
   row: DatabaseRow;
   properties: PropertyResponse[];
@@ -158,11 +244,19 @@ function BoardCard({
    * `sourceGroupKey`-only, matching what `resolveDropValue`/`handleDragEnd`
    * expect), only the draggable *id*. */
   subgroupKey?: string;
-  /** M12: `useRowPeek`'s own `openRow`/`peekRowId` — threaded down instead
+  /** M12: `useRowPeek`'s own `toggleRow`/`peekRowId` — threaded down instead
    * of a bare `useOpenNote` navigation, so a Board card respects the
    * view's "Open pages in" default the same way Table/List/Feed already do. */
   onOpenRow?: (noteId: string) => void;
   isPeekOpen?: boolean;
+  /** M12: real Notion's row menu's own "Open in → Side peek" — Gallery's
+   * identical prop, reused rather than a fourth copy of this optionality
+   * convention. */
+  onOpenSidePeek?: (rowId: string) => void;
+  onTrashed?: () => void | Promise<void>;
+  cardPreview: string;
+  cardSize: BoardCardSize;
+  cardLayout: CardLayout;
 }) {
   // id must be unique per (row, column[, sub-bucket]) instance, not just
   // per row — a multi_select-grouped card can appear in more than one
@@ -174,6 +268,7 @@ function BoardCard({
   });
 
   const titleProp = properties.find((p) => p.type === "title");
+  const coverUrl = cardPreview === "cover" ? row.cover_image_url ?? undefined : extractFileUrl(row.properties[cardPreview]);
 
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
@@ -185,32 +280,84 @@ function BoardCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`relative rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 mb-2 shadow-sm cursor-grab active:cursor-grabbing touch-none ${
+      className={`group relative rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 mb-2 shadow-sm cursor-grab active:cursor-grabbing touch-none overflow-hidden ${
         isDragging ? "opacity-40" : ""
       }`}
     >
-      <OpenNoteButton
-        noteId={row.id}
-        className="absolute top-1 right-1"
-        onOpen={onOpenRow}
-        isOpen={onOpenRow ? isPeekOpen : undefined}
-      />
-      {titleProp && (
-        <div className="text-sm font-medium mb-1 pr-5 text-gray-900 dark:text-gray-100">
-          {renderCellValue(titleProp, row.properties[titleProp.key], editable, (value) =>
-            onCellChange(row.id, titleProp.key, value)
+      {/* Real Notion (live capture, `board-view.md`): both icons are
+        * hover-only, top-right of the whole card — identical trigger shape
+        * Gallery's own M12 session already established, reused as-is. */}
+      <HoverAffordance className="absolute top-1 right-1 z-10 flex items-center gap-0.5">
+        <OpenNoteButton noteId={row.id} onOpen={onOpenRow} isOpen={onOpenRow ? isPeekOpen : undefined} />
+        {onOpenSidePeek && (
+          <RowMenuTrigger
+            rowId={row.id}
+            onOpenSidePeek={onOpenSidePeek}
+            onTrashed={onTrashed ?? (() => {})}
+            trigger={
+              <button
+                type="button"
+                aria-label="Row options"
+                aria-haspopup="menu"
+                className="flex h-5 w-5 items-center justify-center rounded bg-white/80 dark:bg-gray-900/80 text-gray-500 hover:bg-white hover:text-gray-800 dark:hover:bg-gray-900 dark:hover:text-gray-100"
+              >
+                <MoreHorizontal size={13} />
+              </button>
+            }
+          />
+        )}
+      </HoverAffordance>
+
+      {cardPreview !== "none" && (
+        <div className={`relative ${BOARD_COVER_HEIGHT_CLASSES[cardSize]}`}>
+          {coverUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- arbitrary
+            // user-provided URLs, not a local/optimizable asset Next's
+            // <Image> is built for (same reasoning as GalleryView.tsx's
+            // identical cover image).
+            <img src={coverUrl} alt="Cover" className="w-full h-full object-cover" />
+          ) : (
+            <CoverPlaceholder />
           )}
         </div>
       )}
-      <div className="space-y-1">
-        {otherProps.map((p) => (
-          <div key={p.key} className="text-xs flex items-start gap-1">
-            <span className="text-gray-400 shrink-0">{p.name}:</span>
-            <span className="min-w-0 flex-1">
-              {renderCellValue(p, row.properties[p.key], editable, (value) => onCellChange(row.id, p.key, value))}
-            </span>
+
+      <div className="p-2">
+        {titleProp && (
+          <div className="text-sm font-medium mb-1 pr-5 text-gray-900 dark:text-gray-100">
+            {renderCellValue(titleProp, row.properties[titleProp.key], editable, (value) =>
+              onCellChange(row.id, titleProp.key, value)
+            )}
           </div>
-        ))}
+        )}
+        {cardLayout === "list" ? (
+          <div className="space-y-1">
+            {otherProps.map((p) => (
+              <div key={p.key} className="text-xs flex items-start gap-1">
+                <span className="text-gray-400 shrink-0">{p.name}:</span>
+                <span className="min-w-0 flex-1">
+                  {renderCellValue(p, row.properties[p.key], editable, (value) => onCellChange(row.id, p.key, value))}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          otherProps.length > 0 && (
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+              {otherProps
+                .map((p) => {
+                  const v = row.properties[p.key];
+                  const text =
+                    v && typeof v === "object" && "type" in v
+                      ? (v as Record<string, unknown>)[v.type]
+                      : undefined;
+                  return typeof text === "string" || typeof text === "number" ? String(text) : null;
+                })
+                .filter(Boolean)
+                .join(" · ")}
+            </div>
+          )
+        )}
       </div>
     </div>
   );
@@ -269,6 +416,11 @@ function BoardColumn({
   onCellChange,
   onOpenRow,
   peekRowId,
+  onOpenSidePeek,
+  onTrashed,
+  cardPreview,
+  cardSize,
+  cardLayout,
 }: {
   group: Group;
   properties: PropertyResponse[];
@@ -277,6 +429,11 @@ function BoardColumn({
   onCellChange: BoardViewProps["onCellChange"];
   onOpenRow?: (noteId: string) => void;
   peekRowId?: string | null;
+  onOpenSidePeek?: (rowId: string) => void;
+  onTrashed?: () => void | Promise<void>;
+  cardPreview: string;
+  cardSize: BoardCardSize;
+  cardLayout: CardLayout;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `${COLUMN_DROPPABLE_PREFIX}${group.key}` });
 
@@ -315,6 +472,11 @@ function BoardColumn({
                 subgroupKey={sub.key}
                 onOpenRow={onOpenRow}
                 isPeekOpen={peekRowId === row.id}
+                onOpenSidePeek={onOpenSidePeek}
+                onTrashed={onTrashed}
+                cardPreview={cardPreview}
+                cardSize={cardSize}
+                cardLayout={cardLayout}
               />
             ))}
           </div>
@@ -331,6 +493,11 @@ function BoardColumn({
             sourceGroupKey={group.key}
             onOpenRow={onOpenRow}
             isPeekOpen={peekRowId === row.id}
+            onOpenSidePeek={onOpenSidePeek}
+            onTrashed={onTrashed}
+            cardPreview={cardPreview}
+            cardSize={cardSize}
+            cardLayout={cardLayout}
           />
         ))
       )}
@@ -347,6 +514,7 @@ export function BoardView({
   editable,
   onCellChange,
   config = {},
+  onConfigChange,
   dataSourceId,
   refetch,
 }: BoardViewProps) {
@@ -362,7 +530,7 @@ export function BoardView({
   // return below (hooks can't follow a conditional return) — an ungrouped
   // Board still needs `openRow` to work once a card exists via some other
   // path, and the rule against conditional hooks applies regardless.
-  const { peekRowId, peekMode, openRow, closePeek } = useRowPeek(config);
+  const { peekRowId, peekMode, openRow, closePeek, toggleRow } = useRowPeek(config);
 
   // task-16-brief.md's deliberate deviation from Notion (which
   // auto-mutates the schema to invent a status property): this app
@@ -401,6 +569,11 @@ export function BoardView({
     (p) => p.type !== "title" && !hiddenKeys.has(p.key)
   );
 
+  const filesProperties = properties.filter((p) => p.type === "files");
+  const cardPreview = readBoardCardPreview(config, filesProperties);
+  const cardSize = readBoardCardSize(config);
+  const cardLayout = readCardLayout(config);
+
   // Board has no flat `rows` prop — `groups`/`subgroups` are the only place
   // a row lives, so the peek's own row lookup has to walk both levels.
   const peekRow = peekRowId
@@ -411,14 +584,61 @@ export function BoardView({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="px-3 py-2 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 shrink-0">
-        <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+      <div className="px-3 py-2 flex items-center gap-3 flex-wrap border-b border-gray-100 dark:border-gray-800 shrink-0 text-xs text-gray-500 dark:text-gray-400">
+        <label className="flex items-center gap-1.5">
           <input
             type="checkbox"
             checked={hideEmptyGroups}
             onChange={(e) => onToggleHideEmptyGroups(e.target.checked)}
           />
           Hide empty groups
+        </label>
+        <label className="flex items-center gap-1.5">
+          Card preview
+          <select
+            aria-label="Card preview"
+            value={cardPreview}
+            onChange={(e) => onConfigChange?.({ card_preview: e.target.value })}
+            className="px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+          >
+            <option value="none">None</option>
+            <option value="cover">Page cover</option>
+            {filesProperties.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5">
+          Card size
+          <select
+            aria-label="Card size"
+            value={cardSize}
+            onChange={(e) => onConfigChange?.({ card_size: e.target.value })}
+            className="px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+          >
+            {BOARD_CARD_SIZES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5">
+          Card layout
+          <select
+            aria-label="Card layout"
+            value={cardLayout}
+            onChange={(e) => onConfigChange?.({ card_layout: e.target.value })}
+            className="px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+          >
+            {CARD_LAYOUTS.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
         </label>
       </div>
 
@@ -437,8 +657,13 @@ export function BoardView({
                 otherProps={otherProps}
                 editable={editable}
                 onCellChange={onCellChange}
-                onOpenRow={openRow}
+                onOpenRow={toggleRow}
                 peekRowId={peekRowId}
+                onOpenSidePeek={(id) => openRow(id, "side")}
+                onTrashed={() => refetch?.()}
+                cardPreview={cardPreview}
+                cardSize={cardSize}
+                cardLayout={cardLayout}
               />
             ))}
           </div>

@@ -8,17 +8,16 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 **Branch:** `feat/notion-databases-ui-parity` (from `feat/workspaces-compact-redesign` @ 25a08b4)
 
-**M12 — Dashboard's own dedicated work: DONE (2026-09-02), with a disclosed capture
-gap.** Real Notion's widget-grid editing is Business-plan-gated on this account —
-confirmed live, not assumed. The user was asked directly (`AskUserQuestion`) how to
-proceed; chose a best-effort rebuild using this app's own primitives +
-`task-45-brief.md`/`research`'s own documented facts over skipping the milestone or
-paying for a capture. Full account: `docs/ui-specs/dashboard-view.md`, this file's own
-Log entry below. Resume point: **Board's own dedicated per-view work**, next in M12's
-decided order (the first of the three L-sized views — row hover affordances/peek for
-cards, card layout options, `hidden_properties` wiring — plus a known carried-over bug:
-Board has the same OPEN/CLOSE-toggle bug M10/Gallery already fixed once each,
-deliberately left for this milestone per `row-affordances.md`'s own Gallery section).
+**M12 — Board's own dedicated work: DONE (2026-09-02).** Row hover affordances (OPEN +
+"···" row menu, hover-gated) built to match Gallery's own identical M12 pattern; Card
+preview/Card size/Card layout options added (`docs/ui-specs/board-view.md`, a fresh
+live-Notion capture); the OPEN/CLOSE-toggle bug already flagged for this milestone
+fixed. `hidden_properties` wiring turned out to be already done in an earlier session
+(confirmed by reading the code, not re-built). Full account: this file's own Log entry
+below. Live verification against this app's own build was blocked by this machine's
+own recurring memory exhaustion — disclosed in `board-view.md`, not forced. Resume
+point: **Calendar's own dedicated per-view work**, next in M12's decided order (the
+second of the three L-sized views).
 
 ---
 
@@ -624,7 +623,8 @@ zero results" is in practice.
 | M12 — Gallery's own dedicated work | **DONE (2026-09-02): Card preview source (None/Page cover/a `files` property) built, unit-tested; row hover affordances (OPEN + new "···" menu, hover-gated) built — a real gap the code survey named, closed; a real OPEN/CLOSE-toggle bug (same class M10 fixed once for Table) found and fixed. Card size/fit-image were already built pre-session. Live-verified partially — see `row-affordances.md`'s "Gallery view" section for the environment-exhaustion gap.** |
 | M12 — Chart's own dedicated work | **DONE (2026-09-02): the real post-creation config surface `view-tab-bar.md`'s own "Chart is a disclosed exception" section named as missing — built, unit-tested, live-verified (persisted through a hard reload).** |
 | M12 — Form's own dedicated work | **DONE (2026-09-02): rebuilt from scratch as a real WYSIWYG builder (`docs/ui-specs/form-view.md`, a fresh live-Notion capture) — per-type answer previews, the full "Question options" popover, "Add question", the toolbar's own Filter/Sort/Search suppression + new Preview link. Live-verified against both real Notion and this app's own build.** |
-| M12 — Dashboard's own dedicated work | **DONE (2026-09-02), disclosed capture gap: real Notion's widget-grid editing is Business-plan-gated on this account (confirmed live) — user chose a best-effort rebuild (`docs/ui-specs/dashboard-view.md`) over skipping or paying. The Add-widget picker and per-widget actions menu now reuse this app's own established Popover+MenuList primitives; the toolbar is now correctly reduced to Settings-only. Live-verified against this app's own build. Board/Calendar/Timeline's own dedicated per-view work not started** |
+| M12 — Dashboard's own dedicated work | **DONE (2026-09-02), disclosed capture gap: real Notion's widget-grid editing is Business-plan-gated on this account (confirmed live) — user chose a best-effort rebuild (`docs/ui-specs/dashboard-view.md`) over skipping or paying. The Add-widget picker and per-widget actions menu now reuse this app's own established Popover+MenuList primitives; the toolbar is now correctly reduced to Settings-only. Live-verified against this app's own build.** |
+| M12 — Board's own dedicated work | **DONE (2026-09-02): row hover affordances (OPEN + "···" row menu, hover-gated, matching Gallery's own M12 pattern) built against a fresh live-Notion capture (`docs/ui-specs/board-view.md`); Card preview/Card size/Card layout options added, reusing `GalleryView.tsx`'s own exported helpers rather than a third copy; the OPEN/CLOSE-toggle bug already flagged for this milestone fixed. `hidden_properties` wiring was already done in an earlier session. Live verification against this app's own build blocked by recurring memory exhaustion, disclosed not forced. Calendar/Timeline's own dedicated per-view work not started** |
 
 `docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
 a code-verified survey of what M1-M11 already ship for free across every view type (view
@@ -728,6 +728,7 @@ differs from List's row shape).
 | 16 | `states.md` | **written** (loading/error/empty-group TBD) | `resize-and-states.txt`, `empty-database-toolbar.txt` | 94 |
 | — | `form-view.md` (M12) | **written** (per-type previews beyond title/rich_text/select TBD, keyboard TBD) | reconstructed from inline screenshots + targeted `read_page`/`find` reads, not a saved `raw-dom/*.txt` dump | none saved to `screenshots/` this session |
 | — | `dashboard-view.md` (M12) | **written, explicitly partial** — real widget-grid chrome is **(inferred)**/**(documented)**, not **(captured)**: the plan's own Business-plan gate blocked it, confirmed live | none — the paywalled state itself was screenshotted inline, not the (inaccessible) widget grid | none saved to `screenshots/` this session |
+| — | `board-view.md` (M12) | **written** — hover affordances + Layout panel fully captured live; Card size's own per-setting visual effect inferred, not captured; live verification against this app's own build blocked by memory exhaustion, disclosed | inline screenshots + targeted zoom/hover reads, no saved `raw-dom/*.txt` | none saved to `screenshots/` this session |
 
 ---
 
@@ -819,6 +820,60 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M12 — Board's own dedicated work: row hover affordances + card layout
+  options)** — Picked up the decided M12 order's next item after Dashboard. Read the
+  plan's own scope first (three items: row hover affordances/peek, card layout options,
+  `hidden_properties` wiring) and checked each against the actual code before assuming
+  any of it still needed doing: row peek (`?p=&pm=`) and `hidden_properties`/
+  `property_order` were BOTH already wired in an earlier M12 commit
+  (`a228e72 fix(db): Board/Gallery cards ignored Property Visibility's own order`) —
+  only row hover affordances and card layout options were real, and a known bug was
+  already flagged for this exact milestone (`row-affordances.md`'s own Gallery section:
+  "Confirmed present in `BoardView.tsx` too... tracked for Board's own upcoming M12
+  milestone").
+  Live-captured Notion's real Board view (the fixture database's own auto-grouped-by-
+  Person Board): hovering a card reveals the identical pencil "open" icon + "···" row
+  menu Gallery's own M12 session already built (byte-identical row-menu content,
+  confirmed live), and the Layout panel has "Card preview" (None/Page cover/a `files`
+  property/Page content), "Card size," "Card layout" (List/Compact), and a new,
+  Board-specific "Color columns" toggle no other captured view type has. Full capture:
+  `docs/ui-specs/board-view.md`.
+  **One real, capture-confirmed finding that changed scope:** Board's own "Card preview"
+  default reads **None**, the opposite of Gallery's own "Page cover" default — Board
+  cards are data-oriented by default in real Notion, Gallery's are image-grid-oriented.
+  `BoardView.tsx`'s own `readBoardCardPreview` defaults to `"none"` for this reason,
+  not Gallery's helper reused verbatim.
+  **Built, reusing Gallery's own M12 work rather than a second copy:** exported
+  `CARD_LAYOUTS`/`CardLayout`/`readCardLayout`, `extractFileUrl`, `CoverPlaceholder`
+  from `GalleryView.tsx`; `BoardCard` gained a cover slot, the SAME `HoverAffordance`-
+  wrapped OPEN + `RowMenuTrigger` "···" Gallery's own cards already use (needed adding
+  a `group` class to the card's own wrapper div — previously absent), and applies
+  `cardLayout` identically. `BoardView` gained the same native-`<select>`-based toolbar
+  row style `GalleryView.tsx`'s own Layout row already established (not the docked
+  sidebar's MenuList/Popover system) — matching the pre-existing pattern for this exact
+  control class, not diverging from it. `BoardViewProps` gained `onConfigChange`
+  (mirrors Gallery's own prop); `DatabaseShell.tsx`'s `case "board"` and
+  `DashboardView.tsx`'s own Board-widget branch both wired it.
+  Also fixed the flagged OPEN/CLOSE-toggle bug: `onOpenRow={openRow}` → `toggleRow`.
+  **Deliberately NOT built, disclosed in `board-view.md` rather than guessed:** "Color
+  columns" (no existing infrastructure to read a group's own option color), "Page
+  content" as a Card-preview source (needs first-block extraction, the same recurring
+  flagged-and-skipped cost this whole workstream keeps hitting), the row menu's own
+  Layout/Property-visibility shortcuts (same scope-down Gallery's identical two rows
+  already got), and Card size's own exact per-setting visual effect (the row's
+  existence and "Medium" default were captured; what changes at Small/Large was not —
+  inferred as the cover image's own height, disclosed as inferred, not captured, since
+  Board's card sits in a FIXED-width column unlike Gallery's freeform grid).
+  Frontend 954 → 963 tests green (61 files unchanged — `BoardView.test.tsx` grew by 9),
+  `tsc` clean. **Live verification: partial.** The Notion capture itself is complete
+  and real; re-verifying the BUILT result against this app's own running instance was
+  attempted (a fresh tab, one retry) but blocked by this machine's own recurring memory
+  exhaustion (`free -h`: ~530Mi free, 3.3Gi/3.7Gi swap — the same class this workstream
+  has hit repeatedly) — not forced further, disclosed in `board-view.md`'s own
+  Checklist section rather than claimed. Every interaction path IS covered by the new
+  unit tests, which assert real DOM output and real `onConfigChange` payloads.
+  **Resume point: Calendar's own dedicated per-view work** (next in M12's decided
+  order — the second of the three L-sized views).
 - **2026-09-02 (M12 — Dashboard's own dedicated work: a real capture blocker, resolved
   by asking the user)** — Picked up the decided M12 order's next item after Form.
   Read the existing `DashboardView.tsx` first (task-45, M13, pre-dates this plan): a

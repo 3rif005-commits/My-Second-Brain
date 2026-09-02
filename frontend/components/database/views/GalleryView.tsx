@@ -65,8 +65,12 @@ type CoverSize = (typeof COVER_SIZES)[number];
 const COVER_ASPECTS = ["contain", "cover"] as const;
 type CoverAspect = (typeof COVER_ASPECTS)[number];
 
-const CARD_LAYOUTS = ["list", "compact"] as const;
-type CardLayout = (typeof CARD_LAYOUTS)[number];
+// Exported for BoardView.tsx's own M12 dedicated-work session: real
+// Notion's Board Layout panel has the identical "list vs. compact" concept
+// (captured live, `docs/ui-specs/board-view.md`) — same semantics, reused
+// rather than a third copy.
+export const CARD_LAYOUTS = ["list", "compact"] as const;
+export type CardLayout = (typeof CARD_LAYOUTS)[number];
 
 const COVER_SIZE_CLASSES: Record<CoverSize, string> = {
   small: "w-40",
@@ -86,7 +90,7 @@ function readCoverAspect(config: Record<string, unknown>): CoverAspect {
     : "cover";
 }
 
-function readCardLayout(config: Record<string, unknown>): CardLayout {
+export function readCardLayout(config: Record<string, unknown>): CardLayout {
   return (CARD_LAYOUTS as readonly string[]).includes(config.card_layout as string)
     ? (config.card_layout as CardLayout)
     : "list";
@@ -122,7 +126,7 @@ function readCardPreview(config: Record<string, unknown>, filesProperties: Prope
  * No dedicated `FilesValue` type exists anywhere in this app yet (no
  * `FilesCell` editor either — `renderCellValue` falls through to
  * `GenericCell`), so this parses defensively rather than assuming a shape. */
-function extractFileUrl(value: PropertyValue | undefined): string | undefined {
+export function extractFileUrl(value: PropertyValue | undefined): string | undefined {
   const raw = value && typeof value === "object" && "files" in value ? (value as { files?: unknown }).files : undefined;
   if (!Array.isArray(raw) || raw.length === 0) return undefined;
   const first = raw[0];
@@ -134,7 +138,7 @@ function extractFileUrl(value: PropertyValue | undefined): string | undefined {
   return undefined;
 }
 
-function CoverPlaceholder() {
+export function CoverPlaceholder() {
   return (
     <div
       data-testid="cover-placeholder"

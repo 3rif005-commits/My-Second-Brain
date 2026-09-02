@@ -313,6 +313,230 @@ describe("BoardView", () => {
     expect(url).toContain("p=row-1");
     expect(url).toContain("pm=s");
   });
+
+  // M12 (Board's own dedicated work, 2026-09-02) — the identical OPEN/
+  // CLOSE-doesn't-actually-toggle bug M10 (Table) and Gallery's own M12
+  // session each already fixed once: `onOpenRow` was wired to bare
+  // `openRow` (always re-opens) instead of `useRowPeek`'s own `toggleRow`.
+  // Reuses the SAME button element across both clicks — RowPeek's own close
+  // control also reads "Close" once open, the same disambiguation
+  // TableView.test.tsx's/GalleryView.test.tsx's own identical test documents.
+  it("OPEN/CLOSE actually toggles — a second click on the same button closes the peek, not re-opens it", async () => {
+    const user = userEvent.setup();
+    render(
+      <BoardView
+        properties={[TITLE_PROP, STATUS_PROP]}
+        groups={GROUPS}
+        groupPropertyKey="status"
+        hideEmptyGroups={false}
+        onToggleHideEmptyGroups={vi.fn()}
+        editable={true}
+        onCellChange={vi.fn()}
+      />
+    );
+
+    const openBtn = screen.getAllByRole("button", { name: "Open" })[0];
+    await user.click(openBtn);
+    expect(routerReplace).toHaveBeenLastCalledWith("/brain/db/ds-1?p=row-1&pm=s", { scroll: false });
+    expect(openBtn).toHaveAccessibleName("Close");
+
+    await user.click(openBtn);
+    expect(routerReplace).toHaveBeenLastCalledWith("/brain/db/ds-1", { scroll: false });
+  });
+
+  // M12 — real Notion's card hover reveals a "···" row-menu trigger
+  // alongside the pencil/Open icon, byte-identical in content to every
+  // other view's own row menu (`board-view.md`'s own live capture).
+  // Previously ABSENT — the M12 code survey named Board and Gallery as the
+  // two views with no row menu at all; Gallery's own session closed its
+  // half already.
+  it("hovering a card reveals a row-options menu trigger with the shared row menu", async () => {
+    const user = userEvent.setup();
+    render(
+      <BoardView
+        properties={[TITLE_PROP, STATUS_PROP]}
+        groups={GROUPS}
+        groupPropertyKey="status"
+        hideEmptyGroups={false}
+        onToggleHideEmptyGroups={vi.fn()}
+        editable={true}
+        onCellChange={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getAllByRole("button", { name: "Row options" })[0]);
+    expect(screen.getByText("Move to Trash")).toBeInTheDocument();
+    expect(screen.getByText("Add to Favorites")).toBeInTheDocument();
+  });
+
+  // M12 — real Notion's Layout panel "Card preview" for Board, live-
+  // captured: default is "None" (the opposite of Gallery's own "Page
+  // cover" default — Board cards are data-oriented by default, confirmed
+  // live, not assumed).
+  describe("Card preview (M12)", () => {
+    it("defaults to no cover slot, even when cover_image_url is present", () => {
+      const groupsWithCover: Group[] = [
+        {
+          key: "todo",
+          label: "To do",
+          row_count: 1,
+          rows: [
+            {
+              id: "row-1",
+              properties: { title: { type: "title", title: "First" }, status: { type: "status", status: "todo" } },
+              cover_image_url: "https://example.com/cover.png",
+            },
+          ],
+          subgroups: null,
+        },
+      ];
+      render(
+        <BoardView
+          properties={[TITLE_PROP, STATUS_PROP]}
+          groups={groupsWithCover}
+          groupPropertyKey="status"
+          hideEmptyGroups={false}
+          onToggleHideEmptyGroups={vi.fn()}
+          editable={false}
+          onCellChange={vi.fn()}
+          config={{}}
+        />
+      );
+      expect(screen.queryByAltText("Cover")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("cover-placeholder")).not.toBeInTheDocument();
+    });
+
+    it("'Page cover' renders row.cover_image_url when config.card_preview is 'cover'", () => {
+      const groupsWithCover: Group[] = [
+        {
+          key: "todo",
+          label: "To do",
+          row_count: 1,
+          rows: [
+            {
+              id: "row-1",
+              properties: { title: { type: "title", title: "First" }, status: { type: "status", status: "todo" } },
+              cover_image_url: "https://example.com/cover.png",
+            },
+          ],
+          subgroups: null,
+        },
+      ];
+      render(
+        <BoardView
+          properties={[TITLE_PROP, STATUS_PROP]}
+          groups={groupsWithCover}
+          groupPropertyKey="status"
+          hideEmptyGroups={false}
+          onToggleHideEmptyGroups={vi.fn()}
+          editable={false}
+          onCellChange={vi.fn()}
+          config={{ card_preview: "cover" }}
+        />
+      );
+      expect(screen.getByAltText("Cover")).toHaveAttribute("src", "https://example.com/cover.png");
+    });
+
+    it("selecting a different Card preview option PATCHes config.card_preview", async () => {
+      const user = userEvent.setup();
+      const onConfigChange = vi.fn();
+      render(
+        <BoardView
+          properties={[TITLE_PROP, STATUS_PROP]}
+          groups={GROUPS}
+          groupPropertyKey="status"
+          hideEmptyGroups={false}
+          onToggleHideEmptyGroups={vi.fn()}
+          editable={true}
+          onCellChange={vi.fn()}
+          config={{}}
+          onConfigChange={onConfigChange}
+        />
+      );
+
+      await user.selectOptions(screen.getByLabelText("Card preview"), "cover");
+      expect(onConfigChange).toHaveBeenCalledWith({ card_preview: "cover" });
+    });
+  });
+
+  it("selecting a different Card size PATCHes config.card_size", async () => {
+    const user = userEvent.setup();
+    const onConfigChange = vi.fn();
+    render(
+      <BoardView
+        properties={[TITLE_PROP, STATUS_PROP]}
+        groups={GROUPS}
+        groupPropertyKey="status"
+        hideEmptyGroups={false}
+        onToggleHideEmptyGroups={vi.fn()}
+        editable={true}
+        onCellChange={vi.fn()}
+        config={{}}
+        onConfigChange={onConfigChange}
+      />
+    );
+
+    await user.selectOptions(screen.getByLabelText("Card size"), "large");
+    expect(onConfigChange).toHaveBeenCalledWith({ card_size: "large" });
+  });
+
+  // M12 — reuses GalleryView.tsx's own "list vs. compact" semantic
+  // (`readCardLayout`, exported for this reason) rather than a second copy.
+  describe("Card layout (M12)", () => {
+    it("'list' (the default) renders one line per property, label then value", () => {
+      render(
+        <BoardView
+          properties={[TITLE_PROP, STATUS_PROP]}
+          groups={GROUPS}
+          groupPropertyKey="status"
+          hideEmptyGroups={false}
+          onToggleHideEmptyGroups={vi.fn()}
+          editable={false}
+          onCellChange={vi.fn()}
+          config={{}}
+        />
+      );
+      expect(screen.getAllByText("Status:")).toHaveLength(3);
+    });
+
+    it("'compact' joins property values onto one line, no per-property labels", () => {
+      render(
+        <BoardView
+          properties={[TITLE_PROP, STATUS_PROP]}
+          groups={GROUPS}
+          groupPropertyKey="status"
+          hideEmptyGroups={false}
+          onToggleHideEmptyGroups={vi.fn()}
+          editable={false}
+          onCellChange={vi.fn()}
+          config={{ card_layout: "compact" }}
+        />
+      );
+      expect(screen.queryByText("Status:")).not.toBeInTheDocument();
+      expect(screen.getAllByText("todo")).toHaveLength(2);
+    });
+
+    it("selecting 'compact' PATCHes config.card_layout", async () => {
+      const user = userEvent.setup();
+      const onConfigChange = vi.fn();
+      render(
+        <BoardView
+          properties={[TITLE_PROP, STATUS_PROP]}
+          groups={GROUPS}
+          groupPropertyKey="status"
+          hideEmptyGroups={false}
+          onToggleHideEmptyGroups={vi.fn()}
+          editable={true}
+          onCellChange={vi.fn()}
+          config={{}}
+          onConfigChange={onConfigChange}
+        />
+      );
+
+      await user.selectOptions(screen.getByLabelText("Card layout"), "compact");
+      expect(onConfigChange).toHaveBeenCalledWith({ card_layout: "compact" });
+    });
+  });
 });
 
 describe("cardDraggableId (pure id-shaping logic, task-17 fix round, finding 2)", () => {
