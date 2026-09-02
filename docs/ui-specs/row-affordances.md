@@ -261,3 +261,48 @@ differences:
 environment's own established drag-simulation limitation), and which two properties this
 session's fixture had set visible (the settings sidebar's Property visibility submenu
 kept dismissing on click — a repro not chased down, out of scope for this capture).
+
+### Built (2026-09-02)
+
+`ListView.tsx` rebuilt around this capture, reusing shared M9/M10 infra rather than a
+second copy: `RowGutter` (new `showCheckbox` prop, `false` here — List's own gutter has
+only `+`/drag-handle), the row menu (`buildRowMenu`, unchanged), and the row peek's own
+URL sync — extracted out of `TableView.tsx` into a new shared `lib/database/useRowPeek.ts`
+hook (identical behavior, just no longer duplicated; every future M12 view reuses this
+same hook instead of copy-pasting Table's own ~60 lines). `hidden_properties`/
+`property_order` now read via the same `viewConfig.ts` helpers Table already uses — a real
+gap this view had (silently no-op before now, confirmed by the M12 code survey).
+
+**The title's inline-edit + revealed-properties area is genuinely new UI** (delta #3
+above) — there was nothing to reuse. Built as local component state
+(`editingRowId`/`titleDraft`), toggled by the Edit button, closed on Escape or on the
+ROW's own blur (not the title input's blur in isolation — see the live-found bug below).
+
+**A real bug found live, fixed, and regression-tested:** the title input's own `onBlur`
+closed the whole editing row (unmounting the revealed properties with it) on every
+mousedown, BEFORE a click headed to one of those properties ever landed — the identical
+"trigger swaps mid-interaction, dismiss logic wins the race" class M11's cell-editing
+session already hit twice (`AddPropertyPopover`, `SelectCell`). Reproduced live: clicking
+a revealed property's own value right after typing a title never worked, the row
+collapsed back to read-only first. Fixed by moving the exit-edit decision to the row's own
+`onBlur` (checking `e.relatedTarget` stayed inside the row), matching this codebase's own
+established fix pattern for this exact bug class.
+
+**Live-verified before the fix was found:** resting state (nothing visible), hover
+(gutter + Edit appear, no layout shift), the Edit toggle (title becomes editable, revealed
+property chip appears), the row menu (drag handle click, identical rows to Table's),
+`Open in → Side peek`, a plain click opening the peek via `?p=&pm=s`. **Not re-verified
+live after the blur-race fix** — the automation environment ran out of memory mid-session
+(confirmed via `free -h`: 590MB free, 3.4/3.7GB swap — the same class of exhaustion
+several prior sessions in this workstream have hit) and the Chrome extension didn't
+reconnect after freeing memory; a full Chrome restart would fix it but closes the user's
+open tabs, so left for the user rather than done unilaterally. The fix itself is covered
+by two new jsdom regression tests reproducing the exact blur/`relatedTarget` sequence a
+real click triggers, not just asserted "should work."
+
+Tests: `ListView.test.tsx` rewritten (13 tests — rest-state-hides-properties, Edit reveals
+them in position order, `hidden_properties` respected, inline title commit, peek-opens-not-
+navigates, no-checkbox, read-only suppression, the two blur-race tests, add-row via both
+the gutter and the bottom "+ New page"). `RowGutter.test.tsx` gained one test for
+`showCheckbox={false}`. `DashboardView.test.tsx`'s own `next/navigation` mock extended
+(it embeds List as a widget type, which now needs `usePathname`/`useSearchParams` too).

@@ -684,3 +684,57 @@ placeholder's picker (no-properties state, picking one, `onConfigChange` call sh
 
 Frontend 61 files / 905 tests green (was 903 mid-session, 893 at the top of this entry),
 `tsc` clean. Full suite run, not just the affected files.
+
+## row-affordances.md, M12 List build (2026-09-02)
+
+Built List's row hover affordances from this session's own live capture
+(`raw-dom/row-affordances-list-view.txt`, `row-affordances.md`'s new "List view"
+section). See PROGRESS.md's own "M12 — List built" log entry for the full account;
+this entry covers the one real bug found and fixed.
+
+### Fixed
+
+1. **The title input's own `onBlur` closed the whole editing row — including the
+   revealed properties next to it — before a click meant for one of them could ever
+   land.** `ListView.tsx`'s new per-row "Edit" toggle turns the title into an inline
+   text input AND reveals the row's other visible properties as quick-fill chips on
+   the same line. The title input's `onBlur` handler originally called
+   `setEditingRowId(null)` directly — but a browser fires `blur` on `mousedown`, before
+   the corresponding `click` reaches whatever the pointer landed on. Clicking one of the
+   revealed properties (e.g. a Status chip reading "—") fired the title's blur FIRST,
+   unmounting the entire "editing" block — the property the click was headed to no
+   longer existed in the DOM by the time the click itself would have landed. Live-
+   reproduced: typing a new title then immediately clicking the Status chip next to it
+   silently did nothing; the row just collapsed back to read-only.
+
+   Same root-cause SHAPE as two bugs M11's cell-editing session already found and fixed
+   (`AddPropertyPopover.tsx`'s trigger-swap race, `SelectCell`/`StatusCell`'s own
+   Radix-dismiss race) — "a component that swaps its own DOM structure mid-interaction
+   loses a race against the very click that triggered the swap." Fixed the same class of
+   way: moved the exit-edit decision from the title input's own blur to the ROW
+   CONTAINER's blur, checking `e.relatedTarget` (the element about to receive focus) —
+   if it's still inside the row (the property the user just clicked), editing stays
+   open; only a genuine focus-leaves-the-row closes it. The title input's own `onBlur`
+   now only commits the draft value, it no longer decides whether to exit edit mode.
+
+   Regression tests: two in `ListView.test.tsx`, using `fireEvent.blur` with an explicit
+   `relatedTarget` to reproduce the exact DOM event sequence a real click triggers
+   (`userEvent`'s own focus/blur simulation doesn't reliably reproduce this particular
+   race in jsdom — same class of jsdom-vs-real-browser gap this workstream has
+   documented before, e.g. `SortRowsList.test.tsx`'s `DndContext`+`Popover` hang) —
+   one asserting the row STAYS expanded when `relatedTarget` is still inside it, one
+   asserting it correctly CLOSES when `relatedTarget` is genuinely outside (`document.body`).
+
+**Live verification status:** confirmed live BEFORE this bug was found (resting state,
+hover, the Edit toggle appearing, the row menu, `Open in → Side peek`, plain-click opens
+the peek). The fix itself was NOT re-confirmed live — the automation session ran out of
+memory mid-verification (`free -h`: 590MB free, 3.4GB/3.7GB swap, confirmed not guessed)
+partway through re-testing. Freeing several stale Chrome renderer processes (leftover
+from an earlier boot, `ps aux` start-time-filtered) did not reconnect the
+`claude-in-chrome` extension; the known fix is a full Chrome restart, left for the user
+rather than done unilaterally since it closes their open tabs and windows. The fix is
+covered by the two regression tests above, which do reproduce the actual bug mechanism
+(not a hypothetical), so this is disclosed as a real but bounded verification gap, not a
+silent skip.
+
+Frontend 61 files / 916 tests green (was 905), `tsc` clean.

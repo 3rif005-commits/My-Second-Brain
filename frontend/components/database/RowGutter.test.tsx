@@ -26,6 +26,26 @@ describe("RowGutter", () => {
     expect(screen.getByRole("checkbox", { name: "Select row" })).toBeInTheDocument();
   });
 
+  // M12: List's own live capture (row-affordances-list-view.txt) confirmed
+  // its gutter has only `+` and the drag handle — no checkbox at all, unlike
+  // Table's three affordances.
+  it("showCheckbox=false renders + and the drag handle, but no checkbox (List's own gutter shape)", () => {
+    render(
+      <RowGutter
+        rowId="row-1"
+        selected={false}
+        onToggleSelected={vi.fn()}
+        onAddRow={vi.fn()}
+        onOpenSidePeek={vi.fn()}
+        onTrashed={vi.fn()}
+        showCheckbox={false}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Add a row below" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Row options" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Select row" })).not.toBeInTheDocument();
+  });
+
   it("clicking the drag handle both opens the row menu and selects the row", async () => {
     const user = userEvent.setup();
     const onToggleSelected = vi.fn();

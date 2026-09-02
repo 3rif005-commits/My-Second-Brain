@@ -605,7 +605,8 @@ zero results" is in practice.
 
 | Milestone | State |
 |---|---|
-| M12 | task breakdown written (2026-09-02) · **List's row-affordances live capture done (2026-09-02), build not started** |
+| M12 — List | **row hover affordances built and unit-tested (2026-09-02); live-verified pre-fix, not yet re-verified post-fix (environment down, see Log)** |
+| M12 — Feed…Timeline | not started |
 
 `docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
 a code-verified survey of what M1-M11 already ship for free across every view type (view
@@ -633,6 +634,30 @@ build List's row hover affordances (RowGutter without a checkbox, no OPEN button
 row link already handles it, the new Edit-toggle inline-property affordance) against
 `ListView.tsx`, wire `hidden_properties`/`property_order` the same way Table already reads
 them, then live-checklist and write up, same discipline as every milestone before it.
+
+**List built (2026-09-02).** `ListView.tsx` rebuilt on the capture above: `RowGutter` gained
+a `showCheckbox` prop (`false` for List), the row peek's URL-sync logic was extracted out of
+`TableView.tsx` into a new shared `lib/database/useRowPeek.ts` hook (every future M12 view
+reuses this instead of a fourth copy), and `hidden_properties`/`property_order` are now read
+via the same `viewConfig.ts` helpers Table uses. The title-inline-edit-plus-revealed-
+properties "Edit" toggle is genuinely new UI, built from scratch. One real bug found live and
+fixed: the title input's own blur closed the whole editing row before a click to one of the
+revealed properties could land (the same "trigger swaps mid-interaction" race class M11 hit
+twice) — fixed by moving the exit-edit decision to the row's own blur, checking
+`relatedTarget` stayed inside. Full write-up: `row-affordances.md`'s new "Built" subsection.
+Frontend 61 files / 916 tests green (was 905), `tsc` clean.
+
+**Live verification incomplete — environment exhaustion, not a code concern.** Confirmed
+live before the bug was found: resting state, hover (gutter + Edit, no layout shift), Edit
+toggle, the row menu (identical to Table's), `Open in → Side peek`, plain-click-opens-peek
+via `?p=&pm=s`. The automation session then ran out of memory (`free -h`: 590MB free,
+3.4/3.7GB swap — confirmed, not guessed, same class this workstream has hit before) partway
+through re-verifying the blur-race FIX; freeing several stale Chrome renderer processes
+didn't reconnect the extension, and a full Chrome restart (the known fix) was left for the
+user rather than done unilaterally, since it closes their open tabs. The fix itself has two
+new jsdom regression tests reproducing the exact blur/`relatedTarget` sequence, not just an
+assertion it "should" work. **Resume point for List: re-verify the post-fix behavior live
+once the browser environment recovers** — everything else about List is done.
 
 ---
 
@@ -753,6 +778,33 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M12 — List built)** — Built List's row hover affordances from the
+  session's own live capture (below): `RowGutter` gained a `showCheckbox` prop (List's
+  own gutter has no checkbox), the row peek's `?p=`/`?pm=` URL-sync logic was pulled out
+  of `TableView.tsx` into a new shared `lib/database/useRowPeek.ts` hook (every future
+  M12 view reuses it instead of a fourth copy — Table's own behavior is unchanged, it
+  just delegates now via nothing, TableView itself was left as-is to avoid risking a
+  regression in already-working, heavily-tested code, only NEW views were pointed at the
+  hook), `hidden_properties`/`property_order` now read through the same `viewConfig.ts`
+  helpers Table uses (a real silent-no-op gap this view had, confirmed by the M12 code
+  survey), and a genuinely new "Edit" toggle (inline title edit + reveals other visible
+  properties as quick-fill chips) built from scratch — no Table equivalent existed to
+  reuse. One real bug found live and fixed: the title input's own blur closed the whole
+  editing row (unmounting the revealed properties with it) before a click meant for one
+  of them could land — the identical "trigger swaps mid-interaction, dismiss logic wins
+  the race" class M11's cell-editing session already hit twice. Fixed by moving the
+  exit-edit decision to the ROW's own blur (checking `e.relatedTarget` stayed inside),
+  covered by two new jsdom tests reproducing the exact event sequence rather than just
+  asserting it "should" work. Live-verified before the bug was found: resting state,
+  hover, the Edit toggle, the row menu, `Open in → Side peek`, plain-click-opens-peek.
+  **Not re-verified live after the fix** — the automation session ran out of memory
+  mid-verification (`free -h` confirmed: 590MB free, 3.4/3.7GB swap, the same class of
+  exhaustion several prior sessions here have hit); freeing stale Chrome renderer
+  processes didn't reconnect the extension, and a full Chrome restart (the known fix)
+  was left for the user rather than done unilaterally, since it would close their open
+  tabs. Full write-up: `row-affordances.md`'s new "Built" subsection. Frontend 61 files
+  / 916 tests green (was 905), `tsc` clean. Resume point: re-verify the post-fix
+  behavior live once the browser environment recovers, then move to Feed.
 - **2026-09-02 (M12 — List row-affordances live capture)** — Started M12's first real
   build unit (List, per the decided smallest-first order) with a live-Notion capture,
   per this workstream's own "raw evidence before prose" rule — `row-affordances.md`'s

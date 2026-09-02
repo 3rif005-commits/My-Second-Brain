@@ -5,9 +5,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 // ListView (task-17) navigates via next/navigation's useRouter — outside a
 // real Next.js app router tree (as here, a plain RTL render) that throws
 // "invariant expected app router to be mounted" unless mocked, same as
-// DatabaseShell.test.tsx / ListView.test.tsx already do.
+// DatabaseShell.test.tsx / ListView.test.tsx already do. M12: ListView now
+// also reads/writes the row peek's `?p=&pm=` via `useRowPeek`
+// (usePathname/useSearchParams/router.replace) when embedded as a
+// dashboard widget — mocked the same no-op way as useRouter above.
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/brain/db/ds-1",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const showToast = vi.fn();

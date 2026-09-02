@@ -493,7 +493,16 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
         );
       case "list":
         return (
-          <ListView properties={properties} rows={rows} editable={editable} onCellChange={updateCell} />
+          <ListView
+            properties={properties}
+            rows={rows}
+            editable={editable}
+            onCellChange={updateCell}
+            config={activeView.config}
+            dataSourceId={dataSourceId}
+            refetchRows={refetchRows}
+            refetch={refetch}
+          />
         );
       case "feed":
         return (

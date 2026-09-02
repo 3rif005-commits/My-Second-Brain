@@ -35,9 +35,24 @@ export interface RowGutterProps {
   onOpenSidePeek: (rowId: string) => void;
   /** useDatabaseView's `refetchRows` — called after a successful trash. */
   onTrashed: () => void | Promise<void>;
+  /** M12: List's own live capture (row-affordances.md's "List view"
+   * section) confirmed List's gutter has only `+` and the drag handle —
+   * no checkbox, unlike Table's three. Defaults `true` so every existing
+   * Table caller is unaffected; a caller that passes `false` still gets
+   * `onToggleSelected` fired by the drag handle's own click (for the
+   * row's visual tint), it just renders no checkbox control for it. */
+  showCheckbox?: boolean;
 }
 
-export function RowGutter({ rowId, selected, onToggleSelected, onAddRow, onOpenSidePeek, onTrashed }: RowGutterProps) {
+export function RowGutter({
+  rowId,
+  selected,
+  onToggleSelected,
+  onAddRow,
+  onOpenSidePeek,
+  onTrashed,
+  showCheckbox = true,
+}: RowGutterProps) {
   const { showToast } = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -137,25 +152,26 @@ export function RowGutter({ rowId, selected, onToggleSelected, onAddRow, onOpenS
         * selected — a selected row's checkbox must stay visible even after
         * the pointer leaves, or there would be no way to see (or undo) the
         * selection. */}
-      {selected ? (
-        <input
-          type="checkbox"
-          aria-label="Select row"
-          checked
-          onChange={() => onToggleSelected(rowId)}
-          className="h-3.5 w-3.5"
-        />
-      ) : (
-        <HoverAffordance>
+      {showCheckbox &&
+        (selected ? (
           <input
             type="checkbox"
             aria-label="Select row"
-            checked={false}
+            checked
             onChange={() => onToggleSelected(rowId)}
             className="h-3.5 w-3.5"
           />
-        </HoverAffordance>
-      )}
+        ) : (
+          <HoverAffordance>
+            <input
+              type="checkbox"
+              aria-label="Select row"
+              checked={false}
+              onChange={() => onToggleSelected(rowId)}
+              className="h-3.5 w-3.5"
+            />
+          </HoverAffordance>
+        ))}
     </div>
   );
 }
