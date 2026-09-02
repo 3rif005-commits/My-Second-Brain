@@ -335,16 +335,25 @@ Table's own ~60 lines:
 **No new UI shape was invented anywhere** — every one of these already had the exact
 `OpenNoteButton` control M9 built; this only changed what clicking it DOES (peek vs. bare
 navigation), matching each view's own "Open pages in" config the same way Table/List
-already did. `hidden_properties`/`property_order` were NOT touched on Gallery (it already
-allows hiding the title itself, a deliberate difference from List/Table/Feed — out of
-scope for a peek-only pass) or on Board/Calendar/Timeline (no live capture confirms
-whether those views even read Property Visibility at all yet — left for their own,
-in-order M12 passes, not guessed at here).
+already did. Calendar/Timeline's event bars show no property list at all (just the
+title), so `hidden_properties`/`property_order` don't apply there — nothing to fix.
+
+**A second, closely-related fix landed the same pass, once the pattern was visible in
+Board/Gallery's own code:** their cards ALSO silently ignored `property_order` (both
+always sorted by schema `position`, never the Property Visibility panel's own drag-
+reorder), and Board additionally ignored `hidden_properties` outright — the identical
+"Property Visibility writes a key, nothing reads it" class Table's own `orderedProperties`
+had before M3's review checkpoint fixed it once. Both now read through the same
+`viewConfig.ts` helpers (`orderProperties`/`getHiddenKeys`) List's own build already
+established, via a precomputed `otherProps` list passed down to `BoardCard`/`GalleryCard`
+rather than each card re-deriving its own order. Gallery's own DELIBERATE difference —
+`hidden_properties` may include the title key there, hiding it — was left untouched;
+only its missing `property_order` support was added.
 
 **Not live-verified** — same environment-exhaustion reason as List's own post-fix
 re-check above. Every one of these changes is covered by a new jsdom test per view
 (`BoardView.test.tsx`, `GalleryView.test.tsx`, `CalendarView.test.tsx`,
 `TimelineView.test.tsx`, `FeedView.test.tsx`) asserting the `?p=<rowId>&pm=s` URL a real
 click writes, replacing each file's own now-obsolete "navigates to the workspace route"
-assertion — not just a hope it behaves the same as List's already-live-verified version of
-the identical hook.
+assertion, plus one hidden/ordered-properties test each for Board and Gallery — not just
+a hope it behaves the same as List's already-live-verified version of the identical hook.

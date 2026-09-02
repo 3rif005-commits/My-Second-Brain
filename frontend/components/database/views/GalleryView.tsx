@@ -38,6 +38,7 @@
 // making the whole card navigate would fire both on a title click. See
 // `OpenNoteButton.tsx` for the full reasoning (same call as BoardView).
 import type { DatabaseRow, PropertyResponse, PropertyValue } from "@/lib/database/types";
+import { orderProperties } from "@/lib/database/viewConfig";
 import { useRowPeek } from "@/lib/database/useRowPeek";
 import { renderCellValue } from "../cells/renderCellValue";
 import { OpenNoteButton } from "../OpenNoteButton";
@@ -100,6 +101,7 @@ function CoverPlaceholder() {
 function GalleryCard({
   row,
   properties,
+  otherProps,
   editable,
   onCellChange,
   coverSize,
@@ -111,6 +113,13 @@ function GalleryCard({
 }: {
   row: DatabaseRow;
   properties: PropertyResponse[];
+  /** M12: precomputed by `GalleryView` via `viewConfig.ts`'s
+   * `orderProperties` — Gallery's own `hidden_properties` reading (which
+   * ALSO allows hiding the title, a deliberate difference from Table/List/
+   * Board/Feed, left untouched) already worked; `property_order` never did,
+   * cards stayed in schema `position` order regardless of a drag-reorder in
+   * the Property Visibility panel. */
+  otherProps: PropertyResponse[];
   editable: boolean;
   onCellChange: GalleryViewProps["onCellChange"];
   coverSize: CoverSize;
@@ -125,10 +134,6 @@ function GalleryCard({
 }) {
   const titleProp = properties.find((p) => p.type === "title");
   const titleHidden = titleProp ? hiddenProperties.includes(titleProp.key) : false;
-  const otherProps = properties
-    .filter((p) => p.type !== "title" && !hiddenProperties.includes(p.key))
-    .slice()
-    .sort((a, b) => a.position - b.position);
 
   return (
     <div
@@ -225,6 +230,9 @@ export function GalleryView({
   const hiddenProperties = readHiddenProperties(config);
   const titleProp = properties.find((p) => p.type === "title");
   const titleHidden = titleProp ? hiddenProperties.includes(titleProp.key) : false;
+  const otherProps = orderProperties(properties, config).filter(
+    (p) => p.type !== "title" && !hiddenProperties.includes(p.key)
+  );
   const peekRow = peekRowId ? rows.find((r) => r.id === peekRowId) : undefined;
 
   function toggleHideTitle() {
@@ -302,6 +310,7 @@ export function GalleryView({
               key={row.id}
               row={row}
               properties={properties}
+              otherProps={otherProps}
               editable={editable}
               onCellChange={onCellChange}
               coverSize={coverSize}

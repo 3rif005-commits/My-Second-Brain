@@ -833,6 +833,24 @@ Built by me, with the user's authorisation, 2026-08-29:
   proceed with Feed's own dedicated row-hover-affordance capture (its card shape turned
   out to be Gallery-like, not List-like, contradicting the original plan's "Same [as
   List]" sizing note — confirm live before building anything there).
+- **2026-09-02 (M12 — Board/Gallery's own Property Visibility gap, found while wiring the
+  peek)** — Noticed while touching `BoardCard`/`GalleryCard` for the row-peek fix above:
+  both cards computed their own "other properties" list locally, sorted by schema
+  `position`, never reading `config.property_order` — and Board never read
+  `hidden_properties` at all. The identical "Property Visibility panel writes a key,
+  nothing reads it" class Table's own `orderedProperties` already had once, before M3's
+  review checkpoint fixed it (Checkpoint 1, finding 1). Fixed by computing the
+  hidden/ordered list ONCE per view (via `viewConfig.ts`'s `orderProperties`/
+  `getHiddenKeys`, the same helpers List's own build already uses) and passing it down as
+  a precomputed `otherProps` prop, rather than each card re-deriving its own — every card
+  now agrees on the same order/visibility instead of each computing it independently.
+  Gallery's own deliberate difference (its `hidden_properties` may include the title key,
+  hiding it) was left untouched; only its missing `property_order` support was added.
+  Two new regression tests (`BoardView.test.tsx`, `GalleryView.test.tsx`). Full write-up:
+  `row-affordances.md`'s same "Row peek rolled out to every remaining view" section (a
+  second, closely-related fix noted inline, not a separate section). **Not live-verified**
+  — same reason as everything else this session past List's own live capture. Frontend 61
+  files / 921 tests green (was 919), `tsc` clean.
 - **2026-09-02 (M12 — List row-affordances live capture)** — Started M12's first real
   build unit (List, per the decided smallest-first order) with a live-Notion capture,
   per this workstream's own "raw evidence before prose" rule — `row-affordances.md`'s

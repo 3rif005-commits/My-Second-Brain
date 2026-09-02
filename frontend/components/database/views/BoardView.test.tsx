@@ -206,6 +206,27 @@ describe("BoardView", () => {
     expect(screen.getByText("1")).toBeInTheDocument();
   });
 
+  // M12: cards used to always show every non-title property, in schema
+  // order, regardless of Property Visibility (`config.hidden_properties`/
+  // `property_order`) — a silent no-op, the same class of bug Table's own
+  // `orderedProperties` already had fixed once (Checkpoint 1, finding 1).
+  it("a property hidden via config.hidden_properties does not render on any card", () => {
+    render(
+      <BoardView
+        properties={[TITLE_PROP, STATUS_PROP]}
+        groups={GROUPS}
+        groupPropertyKey="status"
+        hideEmptyGroups={false}
+        onToggleHideEmptyGroups={vi.fn()}
+        editable={true}
+        onCellChange={vi.fn()}
+        config={{ hidden_properties: ["status"] }}
+      />
+    );
+
+    expect(screen.queryByText("Status:")).not.toBeInTheDocument();
+  });
+
   it("renders a card's title and other properties read-only when editable=false", () => {
     render(
       <BoardView

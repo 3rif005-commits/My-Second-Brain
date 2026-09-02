@@ -23,6 +23,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import type { DatabaseRow, Group, MultiSelectValue, PropertyResponse, PropertyValue } from "@/lib/database/types";
+import { getHiddenKeys, orderProperties } from "@/lib/database/viewConfig";
 import { useRowPeek } from "@/lib/database/useRowPeek";
 import { renderCellValue } from "../cells/renderCellValue";
 import { OpenNoteButton } from "../OpenNoteButton";
@@ -130,6 +131,7 @@ export function cardDraggableId(sourceGroupKey: string, subgroupKey: string | un
 function BoardCard({
   row,
   properties,
+  otherProps,
   editable,
   onCellChange,
   sourceGroupKey,
@@ -139,6 +141,15 @@ function BoardCard({
 }: {
   row: DatabaseRow;
   properties: PropertyResponse[];
+  /** M12: precomputed by `BoardView` via `viewConfig.ts`'s
+   * `orderProperties`/`getHiddenKeys` — the SAME hidden/ordered list Table's
+   * `orderedProperties` and List's own already-built read use, closing the
+   * identical "Property Visibility panel writes hidden_properties/
+   * property_order, nothing here ever read either" gap Table itself had
+   * before M3's own review checkpoint fixed it once. Not derived from
+   * `properties` locally anymore — every card must agree on the same order/
+   * visibility, not re-sort itself. */
+  otherProps: PropertyResponse[];
   editable: boolean;
   onCellChange: BoardViewProps["onCellChange"];
   sourceGroupKey: string;
@@ -163,10 +174,6 @@ function BoardCard({
   });
 
   const titleProp = properties.find((p) => p.type === "title");
-  const otherProps = properties
-    .filter((p) => p.type !== "title")
-    .slice()
-    .sort((a, b) => a.position - b.position);
 
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
@@ -257,6 +264,7 @@ export function computeDragEndWrite(
 function BoardColumn({
   group,
   properties,
+  otherProps,
   editable,
   onCellChange,
   onOpenRow,
@@ -264,6 +272,7 @@ function BoardColumn({
 }: {
   group: Group;
   properties: PropertyResponse[];
+  otherProps: PropertyResponse[];
   editable: boolean;
   onCellChange: BoardViewProps["onCellChange"];
   onOpenRow?: (noteId: string) => void;
@@ -299,6 +308,7 @@ function BoardColumn({
                 key={row.id}
                 row={row}
                 properties={properties}
+                otherProps={otherProps}
                 editable={editable}
                 onCellChange={onCellChange}
                 sourceGroupKey={group.key}
@@ -315,6 +325,7 @@ function BoardColumn({
             key={row.id}
             row={row}
             properties={properties}
+            otherProps={otherProps}
             editable={editable}
             onCellChange={onCellChange}
             sourceGroupKey={group.key}
@@ -380,6 +391,16 @@ export function BoardView({
     onCellChange(result.rowId, resolvedGroupPropertyKey, result.value);
   }
 
+  // M12: the same hidden/ordered read Table's `orderedProperties` and
+  // List's own build already use — Board's cards used to always show every
+  // non-title property, in schema order, regardless of what the Property
+  // Visibility panel wrote (a silent no-op, same class as the M1-era Table
+  // bug M3's review checkpoint already fixed once).
+  const hiddenKeys = new Set(getHiddenKeys(config));
+  const otherProps = orderProperties(properties, config).filter(
+    (p) => p.type !== "title" && !hiddenKeys.has(p.key)
+  );
+
   // Board has no flat `rows` prop — `groups`/`subgroups` are the only place
   // a row lives, so the peek's own row lookup has to walk both levels.
   const peekRow = peekRowId
@@ -413,6 +434,7 @@ export function BoardView({
                 key={group.key}
                 group={group}
                 properties={properties}
+                otherProps={otherProps}
                 editable={editable}
                 onCellChange={onCellChange}
                 onOpenRow={openRow}

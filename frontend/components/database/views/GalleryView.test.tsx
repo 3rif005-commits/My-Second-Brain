@@ -53,6 +53,7 @@ function prop(overrides: Partial<PropertyResponse>): PropertyResponse {
 
 const TITLE_PROP = prop({ key: "title", name: "Title", type: "title", position: 0 });
 const STATUS_PROP = prop({ key: "status", name: "Status", type: "status", position: 1 });
+const NUMBER_PROP = prop({ key: "number", name: "Number", type: "number", position: 2 });
 
 function row(id: string, title: string, extra: Partial<DatabaseRow> = {}): DatabaseRow {
   return { id, properties: { title: { type: "title", title } }, ...extra };
@@ -177,6 +178,31 @@ describe("GalleryView", () => {
     );
 
     expect(screen.queryByText("First")).not.toBeInTheDocument();
+  });
+
+  // M12: cards used to always show every non-title property in schema
+  // `position` order, ignoring `config.property_order` — the same class of
+  // silent-no-op bug Table's own `orderedProperties` already had fixed once
+  // (`hidden_properties` was already wired here; the ORDER never was).
+  it("property_order (config) reorders which property renders first on a card", () => {
+    render(
+      <GalleryView
+        properties={[TITLE_PROP, STATUS_PROP, NUMBER_PROP]}
+        rows={[
+          row("row-1", "First", {
+            status: { type: "status", status: "todo" },
+            number: { type: "number", number: 42 },
+          }),
+        ]}
+        editable={false}
+        onCellChange={vi.fn()}
+        config={{ property_order: ["title", "number", "status"] }}
+        onConfigChange={vi.fn()}
+      />
+    );
+
+    const labels = [screen.getByText("Number:"), screen.getByText("Status:")];
+    expect(labels[0].compareDocumentPosition(labels[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("renders 'No rows yet.' for an empty rows array", () => {
