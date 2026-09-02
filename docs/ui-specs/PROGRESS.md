@@ -8,6 +8,15 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 **Branch:** `feat/notion-databases-ui-parity` (from `feat/workspaces-compact-redesign` @ 25a08b4)
 
+**OPEN ISSUE (reported 2026-09-02, not yet resolved):** the user reports Table's row
+gutter (`+` / drag-handle `⠿` / checkbox `☐`, built in M9 from a live-Notion capture) does
+not match what they see hovering a row in their own real Notion. This may be a stale
+capture, a condition the spec never recorded (full-page vs. embedded database?), or a real
+rendering bug — not yet determined. See `docs/ui-specs/ISSUE-row-gutter-mismatch.md` for
+the full writeup and the investigation plan. Treat this as higher priority than continuing
+the M12 view-by-view work below, since M9's row gutter is reused by every view already
+built (Table, List, and — via `RowMenuTrigger` — Feed).
+
 ---
 
 ## Phase 0 — COMPLETE (2026-08-31)
