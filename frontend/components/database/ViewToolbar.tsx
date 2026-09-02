@@ -112,10 +112,17 @@ export function ViewToolbar({
   // Search's own disabled state elsewhere in this app is about row search,
   // equally inapplicable here.
   const isForm = view.type === "form";
+  // Dashboard's own live capture (dashboard-view.md, M12): even more
+  // reduced than Form's — Settings only, no Automations/AI Autofill either.
+  // Consistent with it being a composite view over OTHER views' own rows,
+  // not a row-data view itself (task-45-brief.md) — there is nothing here
+  // for Automations to act on, and AI Autofill fills property VALUES, which
+  // a dashboard has none of.
+  const isDashboard = view.type === "dashboard";
 
   return (
     <div className="ml-auto flex items-center gap-0.5" role="toolbar" aria-label="View toolbar">
-      {!isForm && (
+      {!isForm && !isDashboard && (
         <>
           <Popover
             open={filterOpen}
@@ -165,15 +172,19 @@ export function ViewToolbar({
         </>
       )}
 
-      <ToolbarButton
-        label="Automations"
-        icon={<Wand2 size={14} />}
-        onClick={() => setAutomationsOpen(true)}
-      />
+      {!isDashboard && (
+        <>
+          <ToolbarButton
+            label="Automations"
+            icon={<Wand2 size={14} />}
+            onClick={() => setAutomationsOpen(true)}
+          />
 
-      <ToolbarButton label="AI Autofill" icon={<Sparkles size={14} />} disabled disabledReason="Out of scope for this app" />
+          <ToolbarButton label="AI Autofill" icon={<Sparkles size={14} />} disabled disabledReason="Out of scope for this app" />
+        </>
+      )}
 
-      {!isForm && (
+      {!isForm && !isDashboard && (
         <ToolbarButton label="Search" icon={<SearchIcon size={14} />} disabled disabledReason="In-view search isn't available yet" />
       )}
 

@@ -35,10 +35,46 @@
 // 1-12) for widget width and a plain numeric pixel input for row height —
 // the brief's documented "acceptable, simpler substitute" for a full
 // drag-resize, chosen to keep this task's scope to the grid mechanic itself
-// rather than a new pointer-drag interaction.
+// rather than a new pointer-drag interaction. UNCHANGED by M12's own
+// dedicated-work pass below — see that note for why.
+//
+// M12 (2026-09-02) — Dashboard's own dedicated per-view work, WITH A REAL
+// CAPTURE GAP, disclosed rather than guessed (`docs/ui-specs/dashboard-
+// view.md`): real Notion's whole widget-grid EDITING surface is gated
+// behind the Business plan — confirmed live (the fixture workspace shows
+// "Dashboards require the Business plan to add widgets or edit the
+// dashboard layout," no widget grid rendered at all, just an upgrade
+// prompt). The user was asked directly (AskUserQuestion) how to proceed
+// given this; chose a best-effort rebuild using this app's own established
+// primitives + `research`/`task-45-brief.md`'s own documented interaction
+// facts, over skipping the milestone or paying for a real capture.
+// What COULD be captured live (free tier): the View-settings popover
+// (rename, Layout type-grid, "Show icons in heading", Manage data sources,
+// Lock database) and the toolbar's own reduced icon set (Settings only —
+// no Filter/Sort/Automations/AI/Search, an even narrower set than Form's).
+// Neither needed a code change — both already matched this app's existing
+// shared `ViewSettingsSidebar`/`ViewToolbar` behavior for a view type with
+// no filter/sort/group meaning, confirmed by reading that code, not
+// re-guessed.
+// What changed here, using primitives already proven elsewhere rather than
+// inventing pixel-exact Notion chrome nobody could verify: the native
+// `<select>`-based "add widget" control is now the same Popover+MenuList
+// picker `FormView.tsx`'s own "+ Add question" already established (icon +
+// name + type caption, reusing `ViewTabs.tsx`'s own `ADD_VIEW_TYPES` icon
+// set rather than a third copy); the bare "×" remove button is now a
+// `MenuList`-based "···" widget menu carrying `Duplicate` (disabled — real,
+// research §13.5 documents it as a right-click action, not built here) and
+// `Remove`. The resize inputs, the View/Edit toggle, and the grid mechanic
+// itself are UNCHANGED — none of those could be checked against a real
+// capture either, and this session's own judgment was that swapping
+// verified-safe chrome (menus we already know the shape of) beats
+// reskinning interactions (drag-resize, exact widget-menu layout) blind.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Copy, MoreHorizontal, Plus } from "lucide-react";
 import { useToast } from "@/app/providers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { MenuList, Popover } from "@/components/ui/primitives";
+import type { MenuPanel } from "@/components/ui/primitives";
 import { getQueryExtras } from "@/lib/database/types";
 import type { DatabaseRow, Group, PropertyValue, PropertyResponse, ViewResponse } from "@/lib/database/types";
 import { TableView } from "./TableView";
@@ -49,6 +85,15 @@ import { FeedView } from "./FeedView";
 import { CalendarView } from "./CalendarView";
 import { TimelineView } from "./TimelineView";
 import { ChartView } from "./ChartView";
+import { ADD_VIEW_TYPES } from "../ViewTabs";
+
+function widgetTypeIcon(type: string): React.ReactNode {
+  return ADD_VIEW_TYPES.find((t) => t.type === type)?.icon ?? null;
+}
+
+function widgetTypeLabel(type: string): string {
+  return ADD_VIEW_TYPES.find((t) => t.type === type)?.label ?? type;
+}
 
 // research §13.2: "Up to 4 widgets per row" / "Up to 12 widgets total" —
 // mirrors `_DASHBOARD_MAX_WIDGETS_PER_ROW`/`_DASHBOARD_MAX_WIDGETS_TOTAL`
@@ -254,6 +299,123 @@ function useWidgetQuery(dataSourceId: string, view: ViewResponse | undefined) {
   return { rows, groups, aggregates, loading, loadError, updateCell, refetchRows: load };
 }
 
+/** The widget header's "···" menu — replaces a bare "×" button with the
+ * same Popover+MenuList shape every other per-item menu in this app uses
+ * (`RowMenuTrigger.tsx`, `FormView.tsx`'s own Question options). `Duplicate`
+ * is real, not invented: research §13.5 documents Notion's own widget
+ * actions menu as exactly "Duplicate, Delete" — disabled here with a
+ * reason since duplicating a widget means duplicating the VIEW it
+ * references, not built this session. */
+function WidgetActionsMenu({ widgetName, onRemove }: { widgetName: string; onRemove: () => void }) {
+  const [open, setOpen] = useState(false);
+  const panel: MenuPanel = {
+    sections: [
+      {
+        rows: [
+          {
+            id: "duplicate",
+            icon: <Copy size={14} />,
+            label: "Duplicate",
+            disabled: true,
+            disabledReason: "Would duplicate the underlying view, not built",
+          },
+          {
+            id: "remove",
+            icon: <span aria-hidden>×</span>,
+            label: "Remove",
+            danger: true,
+            onSelect: () => {
+              setOpen(false);
+              onRemove();
+            },
+          },
+        ],
+      },
+    ],
+  };
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      label={`Widget options for ${widgetName}`}
+      trigger={
+        <button
+          type="button"
+          aria-label={`Widget options for ${widgetName}`}
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        >
+          <MoreHorizontal size={13} />
+        </button>
+      }
+    >
+      <MenuList
+        root={panel}
+        nav="flyout"
+        onClose={() => setOpen(false)}
+        label={`Widget options for ${widgetName}`}
+      />
+    </Popover>
+  );
+}
+
+/** The "+ Add" picker — same Popover+MenuList shape `FormView.tsx`'s own
+ * "+ Add question" picker uses (icon + name + type caption), reused rather
+ * than a native `<select>`. Real Notion's own "+" also offers creating a
+ * brand-new view for the dashboard (research §13.5); this app's picker
+ * covers existing views only, same disclosed scope-down `FormView.tsx`'s
+ * own "New question" section names for the identical situation. */
+function AddWidgetPicker({
+  ariaLabel,
+  candidates,
+  onPick,
+}: {
+  /** Row-scoped (`Add widget to {row.id}`), not a fixed "Add widget" —
+   * a dashboard has one of these per row, and each needs its own
+   * accessible name for `getByLabelText`/`getByRole(name:)` queries to
+   * disambiguate them, same reason the pre-M12 native `<select>` this
+   * replaces carried the identical row-scoped label. */
+  ariaLabel: string;
+  candidates: ViewResponse[];
+  onPick: (viewId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const panel: MenuPanel = {
+    search: { placeholder: "Search views..." },
+    sections: [
+      {
+        rows: candidates.map((v) => ({
+          id: v.id,
+          icon: widgetTypeIcon(v.type),
+          label: v.name,
+          description: widgetTypeLabel(v.type),
+          onSelect: () => {
+            setOpen(false);
+            onPick(v.id);
+          },
+        })),
+      },
+    ],
+  };
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      label={ariaLabel}
+      trigger={
+        <button
+          type="button"
+          aria-label={ariaLabel}
+          className="flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-indigo-600 text-white"
+        >
+          <Plus size={12} /> Add widget
+        </button>
+      }
+    >
+      <MenuList root={panel} nav="flyout" onClose={() => setOpen(false)} label={ariaLabel} />
+    </Popover>
+  );
+}
+
 interface DashboardWidgetContentProps {
   view: ViewResponse;
   properties: PropertyResponse[];
@@ -417,7 +579,6 @@ export function DashboardView({ viewId, dataSourceId, properties, views, config,
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [confirmRemoveWidget, setConfirmRemoveWidget] = useState<{ rowId: string; widgetId: string } | null>(null);
   const [confirmRemoveRow, setConfirmRemoveRow] = useState<string | null>(null);
-  const [addWidgetViewId, setAddWidgetViewId] = useState<Record<string, string>>({});
 
   // Combined-M13-review fix: row-height/widget-width numeric inputs used to
   // PATCH on every keystroke, fire-and-forget, with no ordering guarantee —
@@ -493,9 +654,7 @@ export function DashboardView({ viewId, dataSourceId, properties, views, config,
     commitRowHeight(rowId, draft);
   }
 
-  function handleAddWidget(rowId: string) {
-    const targetViewId = addWidgetViewId[rowId];
-    if (!targetViewId) return;
+  function handleAddWidget(rowId: string, targetViewId: string) {
     saveRows(
       rows.map((r) =>
         r.id === rowId
@@ -503,7 +662,6 @@ export function DashboardView({ viewId, dataSourceId, properties, views, config,
           : r
       )
     );
-    setAddWidgetViewId((prev) => ({ ...prev, [rowId]: "" }));
   }
 
   function handleRemoveWidgetConfirmed() {
@@ -652,14 +810,10 @@ export function DashboardView({ viewId, dataSourceId, properties, views, config,
                               className="w-10 text-[11px] px-1 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
                             />
                           </label>
-                          <button
-                            type="button"
-                            aria-label={`Remove widget ${widgetView?.name ?? widget.id}`}
-                            onClick={() => setConfirmRemoveWidget({ rowId: row.id, widgetId: widget.id })}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            ×
-                          </button>
+                          <WidgetActionsMenu
+                            widgetName={widgetView?.name ?? widget.id}
+                            onRemove={() => setConfirmRemoveWidget({ rowId: row.id, widgetId: widget.id })}
+                          />
                         </div>
                       )}
                       <div className="flex-1 min-h-0">
@@ -697,29 +851,11 @@ export function DashboardView({ viewId, dataSourceId, properties, views, config,
                         No other views on this data source yet.
                       </span>
                     ) : (
-                      <>
-                        <select
-                          aria-label={`Add widget to ${row.id}`}
-                          value={addWidgetViewId[row.id] ?? ""}
-                          onChange={(e) => setAddWidgetViewId((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                          className="flex-1 min-w-0 text-[11px] px-1.5 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-                        >
-                          <option value="">Pick a view…</option>
-                          {widgetCandidates.map((v) => (
-                            <option key={v.id} value={v.id}>
-                              {v.name} ({v.type})
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => handleAddWidget(row.id)}
-                          disabled={!addWidgetViewId[row.id]}
-                          className="text-[11px] px-2 py-1 rounded bg-indigo-600 text-white disabled:opacity-40"
-                        >
-                          + Add
-                        </button>
-                      </>
+                      <AddWidgetPicker
+                        ariaLabel={`Add widget to ${row.id}`}
+                        candidates={widgetCandidates}
+                        onPick={(viewId) => handleAddWidget(row.id, viewId)}
+                      />
                     )}
                   </div>
                 )}

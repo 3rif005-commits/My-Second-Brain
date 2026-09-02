@@ -8,11 +8,17 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 **Branch:** `feat/notion-databases-ui-parity` (from `feat/workspaces-compact-redesign` @ 25a08b4)
 
-**M12 — Form's own dedicated work: DONE (2026-09-02).** Rebuilt as a real WYSIWYG builder
-against a fresh live-Notion capture (`docs/ui-specs/form-view.md`) — see this file's own
-Log entry below for the full account. Resume point: **Dashboard's own dedicated work**,
-next in M12's decided order (widget grid, per-widget config — "least overlap" reasoning,
-same class as Form).
+**M12 — Dashboard's own dedicated work: DONE (2026-09-02), with a disclosed capture
+gap.** Real Notion's widget-grid editing is Business-plan-gated on this account —
+confirmed live, not assumed. The user was asked directly (`AskUserQuestion`) how to
+proceed; chose a best-effort rebuild using this app's own primitives +
+`task-45-brief.md`/`research`'s own documented facts over skipping the milestone or
+paying for a capture. Full account: `docs/ui-specs/dashboard-view.md`, this file's own
+Log entry below. Resume point: **Board's own dedicated per-view work**, next in M12's
+decided order (the first of the three L-sized views — row hover affordances/peek for
+cards, card layout options, `hidden_properties` wiring — plus a known carried-over bug:
+Board has the same OPEN/CLOSE-toggle bug M10/Gallery already fixed once each,
+deliberately left for this milestone per `row-affordances.md`'s own Gallery section).
 
 ---
 
@@ -617,7 +623,8 @@ zero results" is in practice.
 | M12 — Open pages in defaults (Gallery, Calendar) | **DONE (2026-09-02): both now default to Center peek at creation, matching real Notion, live-verified; checked systematically across every view type, not just Feed** |
 | M12 — Gallery's own dedicated work | **DONE (2026-09-02): Card preview source (None/Page cover/a `files` property) built, unit-tested; row hover affordances (OPEN + new "···" menu, hover-gated) built — a real gap the code survey named, closed; a real OPEN/CLOSE-toggle bug (same class M10 fixed once for Table) found and fixed. Card size/fit-image were already built pre-session. Live-verified partially — see `row-affordances.md`'s "Gallery view" section for the environment-exhaustion gap.** |
 | M12 — Chart's own dedicated work | **DONE (2026-09-02): the real post-creation config surface `view-tab-bar.md`'s own "Chart is a disclosed exception" section named as missing — built, unit-tested, live-verified (persisted through a hard reload).** |
-| M12 — Form's own dedicated work | **DONE (2026-09-02): rebuilt from scratch as a real WYSIWYG builder (`docs/ui-specs/form-view.md`, a fresh live-Notion capture) — per-type answer previews, the full "Question options" popover, "Add question", the toolbar's own Filter/Sort/Search suppression + new Preview link. Live-verified against both real Notion and this app's own build. Dashboard/Board/Calendar/Timeline's own dedicated per-view work not started** |
+| M12 — Form's own dedicated work | **DONE (2026-09-02): rebuilt from scratch as a real WYSIWYG builder (`docs/ui-specs/form-view.md`, a fresh live-Notion capture) — per-type answer previews, the full "Question options" popover, "Add question", the toolbar's own Filter/Sort/Search suppression + new Preview link. Live-verified against both real Notion and this app's own build.** |
+| M12 — Dashboard's own dedicated work | **DONE (2026-09-02), disclosed capture gap: real Notion's widget-grid editing is Business-plan-gated on this account (confirmed live) — user chose a best-effort rebuild (`docs/ui-specs/dashboard-view.md`) over skipping or paying. The Add-widget picker and per-widget actions menu now reuse this app's own established Popover+MenuList primitives; the toolbar is now correctly reduced to Settings-only. Live-verified against this app's own build. Board/Calendar/Timeline's own dedicated per-view work not started** |
 
 `docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
 a code-verified survey of what M1-M11 already ship for free across every view type (view
@@ -720,6 +727,7 @@ differs from List's row shape).
 | 15 | `cell-editing.md` | **written** (Select, Status, Date; 7 types TBD) | `cell-editing.txt` | 85a-d, 87, 88 |
 | 16 | `states.md` | **written** (loading/error/empty-group TBD) | `resize-and-states.txt`, `empty-database-toolbar.txt` | 94 |
 | — | `form-view.md` (M12) | **written** (per-type previews beyond title/rich_text/select TBD, keyboard TBD) | reconstructed from inline screenshots + targeted `read_page`/`find` reads, not a saved `raw-dom/*.txt` dump | none saved to `screenshots/` this session |
+| — | `dashboard-view.md` (M12) | **written, explicitly partial** — real widget-grid chrome is **(inferred)**/**(documented)**, not **(captured)**: the plan's own Business-plan gate blocked it, confirmed live | none — the paywalled state itself was screenshotted inline, not the (inaccessible) widget grid | none saved to `screenshots/` this session |
 
 ---
 
@@ -811,6 +819,57 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M12 — Dashboard's own dedicated work: a real capture blocker, resolved
+  by asking the user)** — Picked up the decided M12 order's next item after Form.
+  Read the existing `DashboardView.tsx` first (task-45, M13, pre-dates this plan): a
+  fully functional 12-column widget grid — add/remove/resize rows and widgets, all
+  correctly PATCHing `config` — built with plain-HTML chrome (a native `<select>` for
+  "add widget," a bare `×` for "remove"), the same class of gap Form had before this
+  session.
+  Went to capture Notion's real widget grid and hit a hard blocker, not a partial one:
+  creating a Dashboard view works, but the page immediately shows "Dashboards require
+  the Business plan to add widgets or edit the dashboard layout" — no grid renders at
+  all on this workspace's plan, confirmed live (screenshotted), not assumed. Did NOT
+  click "Upgrade now" — a real subscription purchase on the user's account is not
+  something to do unilaterally. Stopped and asked the user directly (`AskUserQuestion`:
+  best-effort rebuild without a full capture / skip Dashboard for now / the user
+  upgrades the plan themselves). **The user chose the best-effort rebuild.**
+  Combined what WAS free to capture live (the View-settings popover — rename, the same
+  `ViewLayoutPanel.tsx` type-grid every view already shares, a new-to-this-app "Show
+  icons in heading" toggle not built, Manage data sources, Lock database — and the
+  toolbar's own single-Settings-icon reduction) with `docs/research/notion-databases-
+  research.md` §13, written from Notion's own public help docs well before this session
+  (not training recall, and predating this UI-parity plan) — "+" adds an existing OR
+  new view, a widget's own actions menu is "Duplicate, Delete," resize is drag-based.
+  Full capture, all of it tagged **(captured)**/**(documented)**/**(inferred)** so nothing
+  reads as verified when it wasn't: `docs/ui-specs/dashboard-view.md`.
+  **Built, using only pieces already proven safe** (this app's own established
+  Popover+MenuList primitives, not guessed-at Notion pixels): the native `<select>`
+  "add widget" control is now the same picker `FormView.tsx`'s own "+ Add question"
+  already established (icon + name + type caption, reusing `ViewTabs.tsx`'s own
+  `ADD_VIEW_TYPES` icon set, now exported, rather than a third copy); the bare `×`
+  remove button is now a "···" `MenuList` menu carrying `Duplicate` (disabled, real —
+  research §13.5 documents it, not built here) and `Remove` (unchanged). `ViewToolbar.tsx`
+  gained a `view.type === "dashboard"` branch — Settings only, even more reduced than
+  Form's own 3-icon branch, matching the free-tier toolbar capture exactly.
+  **Deliberately left unchanged, disclosed why in the spec:** resize stays a numeric
+  stepper (task-45-brief.md's own pre-existing, documented call — inventing a NEW drag
+  interaction with no way to verify its shape would be guessing, not matching); the
+  View/Edit toggle and grid mechanic; `ViewSettingsSidebar`'s own Filter/Sort/Group rows
+  for Dashboard (still unconditional — a bigger, cross-cutting change than this
+  session's own scope).
+  Frontend 953 → 954 tests green (61 files unchanged — `DashboardView.test.tsx`/
+  `ViewToolbar.test.tsx` both updated in place for the new interaction shape, one new
+  toolbar test added), `tsc` clean. **Live-verified against this app's own build**
+  (`localhost:3000`): created a Dashboard view, confirmed the reduced toolbar, entered
+  Edit mode, added a row, used the new Add-widget picker (Form correctly excluded),
+  confirmed a real Table widget mounted with real row data, opened the new widget
+  actions menu (Duplicate greyed out, Remove red), opened and cancelled the Remove
+  confirmation, and confirmed View mode renders the same widget with no edit chrome.
+  **Resume point: Board's own dedicated per-view work** (next in M12's decided order —
+  the first of the three L-sized views, and carries a known bug forward: Board has the
+  same OPEN/CLOSE-toggle bug M10/Gallery each already fixed once, per
+  `row-affordances.md`'s own Gallery section, deliberately left for this milestone).
 - **2026-09-02 (M12 — Form's own dedicated work: rebuilt as a real WYSIWYG builder)** —
   Picked up the decided M12 order's next item after Chart. First committed the prior
   session's own uncommitted Gallery/Chart/row-gutter-resolution work (three commits,

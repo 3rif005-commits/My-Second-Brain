@@ -92,7 +92,7 @@ interface ViewTabsProps {
 // ViewLayoutPanel.tsx's own set for the eight types both grids share, so a
 // type doesn't wear two different icons across the app; Form has no
 // existing icon anywhere else in this codebase to reuse.
-const ADD_VIEW_TYPES = [
+export const ADD_VIEW_TYPES = [
   { type: "table", label: "Table", icon: <Table2 size={17} /> },
   { type: "board", label: "Board", icon: <Kanban size={17} /> },
   { type: "gallery", label: "Gallery", icon: <GalleryHorizontal size={17} /> },

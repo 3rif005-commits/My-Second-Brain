@@ -154,4 +154,18 @@ describe("ViewToolbar", () => {
     expect(preview).toHaveAttribute("href", "/forms/v-form");
     expect(preview).toHaveAttribute("target", "_blank");
   });
+
+  // dashboard-view.md's own live capture: a Dashboard view's toolbar shows
+  // ONLY Settings — even more reduced than Form's, since a dashboard has no
+  // rows of its own for Filter/Sort/Search/Automations/AI Autofill to act
+  // on (its widgets each reference a separate view with its own toolbar).
+  it("Dashboard view shows only Settings — no Filter/Sort/Search/Automations/AI Autofill", () => {
+    setup({ view: view({ type: "dashboard", id: "v-dash" }) });
+    expect(screen.queryByRole("button", { name: /^Filter/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Sort/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Automations" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "AI Autofill" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+  });
 });

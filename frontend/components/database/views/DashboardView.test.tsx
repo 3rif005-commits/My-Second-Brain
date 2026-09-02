@@ -248,8 +248,8 @@ describe("DashboardView", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    await user.selectOptions(screen.getByLabelText("Add widget to row-1"), "list-1");
-    await user.click(screen.getByRole("button", { name: "+ Add" }));
+    await user.click(screen.getByRole("button", { name: "Add widget to row-1" }));
+    await user.click(screen.getByText("My List"));
 
     expect(onUpdateView).toHaveBeenCalledTimes(1);
     const [, patch] = onUpdateView.mock.calls[0];
@@ -276,8 +276,8 @@ describe("DashboardView", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.click(screen.getByRole("button", { name: "Add widget to row-1" }));
     const options = screen.getAllByRole("option").map((o) => o.textContent);
-    expect(options.some((t) => t?.includes("(dashboard)"))).toBe(false);
     expect(options.some((t) => t?.includes("Other Dashboard"))).toBe(false);
     expect(options.some((t) => t?.includes("My List"))).toBe(true);
   });
@@ -304,7 +304,8 @@ describe("DashboardView", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    await user.click(screen.getByRole("button", { name: "Remove widget Other" }));
+    await user.click(screen.getByRole("button", { name: "Widget options for Other" }));
+    await user.click(screen.getByText("Remove"));
     await user.click(screen.getByRole("button", { name: "Remove" }));
 
     expect(onUpdateView).toHaveBeenCalledWith("dash-1", { config: { rows: [{ id: "row-1", height: 300, widgets: [] }] } } );
@@ -520,8 +521,8 @@ describe("DashboardView", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    const picker = screen.getByLabelText("Add widget to row-1");
-    const optionLabels = Array.from(picker.querySelectorAll("option")).map((o) => o.textContent);
+    await user.click(screen.getByRole("button", { name: "Add widget to row-1" }));
+    const optionLabels = screen.getAllByRole("option").map((o) => o.textContent);
     expect(optionLabels.some((label) => label?.includes("Signup form"))).toBe(false);
     expect(optionLabels.some((label) => label?.includes("A table"))).toBe(true);
   });
