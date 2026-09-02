@@ -601,6 +601,29 @@ zero results" is in practice.
 
 ---
 
+## M12 — the other nine views
+
+| Milestone | State |
+|---|---|
+| M12 | **task breakdown written (2026-09-02), execution not started** |
+
+`docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
+a code-verified survey of what M1-M11 already ship for free across every view type (view
+tab bar, database header, toolbar, Filter/Sort panels — data effect included, not just UI —
+and cell editing, all confirmed working for Board/Gallery/etc. already, by reading the
+actual code rather than re-guessing the 2026-08-28 sizing table), what's partially wired
+(Property visibility's hide/reorder, Group panel's data effect), and what's genuinely
+Table-specific and still needs real per-view work (row hover affordances, row peek, the
+calculations footer, column resize). Decided order: List → Feed → Gallery → Chart → Form →
+Dashboard → Board → Calendar → Timeline (smallest-first, per the prompt's own instruction
+to prove the pattern transfers cheaply before the two L-sized views). **Nothing built yet**
+— no List-view spec capture, code, or tests exist. Resume point: start with List — its own
+row-affordances shape needs a fresh live-Notion capture first (`row-affordances.md`'s
+existing capture is table-grid-shaped, not yet confirmed to transfer to a List row), same
+"raw evidence before prose" discipline as every milestone before it.
+
+---
+
 ## Session artifacts
 
 | Artifact | Status |
@@ -716,6 +739,28 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M12 task breakdown, Part 2 of the same prompt)** — Wrote the task
+  breakdown the plan's own Phase 12 section had been missing since 2026-08-29. First
+  read the actual code (not the 2026-08-28 sizing table's own guesses) to establish
+  which M1-M11 surfaces are already view-type-agnostic: confirmed, by grepping every
+  file `DatabaseShell.tsx` renders ABOVE its `activeView.type` switch, that the view
+  tab bar, database header, toolbar, and — the one non-obvious finding — Filter and
+  Sort panels' actual DATA effect (`getQueryExtras`/`loadRows` apply `filter`/`sorts`
+  unconditionally for every view type, only `group_by`/`aggregations` branch on type)
+  and cell editing (every view already renders through the same `renderCellValue`
+  dispatcher Table uses) all already work for Board/Gallery/Calendar/etc. today, zero
+  further work needed. Also found two partially-wired gaps by grep (Property
+  visibility's hide toggle works for Gallery/Feed but not Board/Calendar/Timeline/
+  List; nothing but Table reads `property_order` for reorder) and confirmed which
+  surfaces are genuinely Table-rendering-specific (row hover affordances/M9, row
+  peek/M10, the calculations footer, column resize — none has any equivalent
+  anywhere else). Decided and wrote down the execution order: List → Feed → Gallery
+  → Chart → Form → Dashboard → Board → Calendar → Timeline (smallest-first). Full
+  write-up in the plan doc's own expanded Phase 12 section. **Findings-only, no code
+  changes** — the plan doc and this file are the only diffs. Resume point: start
+  List's own live-Notion capture for row hover affordances (its existing capture,
+  `row-affordances.md`, is table-grid-shaped — not yet confirmed to transfer to a
+  List row) before building anything.
 - **2026-09-02 (M7 create-flow rewrite: view create/edit/delete parity, Part 1 of the
   next prompt)** — The user reported real problems with view create/edit/delete; asked
   directly what they'd seen rather than assuming M7's own disclosed gap (the create-

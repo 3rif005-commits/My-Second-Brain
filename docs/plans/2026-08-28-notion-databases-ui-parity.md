@@ -193,12 +193,14 @@ In this order. A milestone is not done until step 4 passes.
 
 ---
 
-## Phase 12 — the other nine views (named, sized, not detailed)
+## Phase 12 — the other nine views
 
-Gets its own prompt once the pattern is proven on Table. Sized by how much of each view's
-surface is already-built mechanics versus net-new UI:
+Gets its own prompt once the pattern is proven on Table. The table below (2026-08-28) sized
+each view by guessing how much of its surface was already-built mechanics versus net-new
+UI, **before M1–M11 actually existed** — the task breakdown below (written 2026-09-02,
+after M1–M11 shipped) confirms that guess against the real code instead of re-guessing.
 
-| View | Size | Why |
+| View | Size (original guess) | Why |
 |---|---|---|
 | Board | L | Group headers, card layout options, drag between columns, per-group `+` and `···` |
 | Gallery | M | Card preview source, card size, fit-image; shares the property-visibility panel |
@@ -214,3 +216,110 @@ Also deferred here, and inventoried so they are not lost: `DatabaseSettingsMenu`
 `TemplateManager`/`TemplateEditor`, `AutomationManager`/`AutomationEditor` (10 native
 `<select>`), `ButtonActionChainEditor` (8), `RelationPicker`, `FormulaEditor`,
 `DatabaseBlock`'s inline header, `ButtonBlock`/`ButtonCell`.
+
+---
+
+### What M1–M11 already ship for every view type, confirmed by reading the actual code
+(2026-09-02) — not re-derived from the original sizing table's guesses
+
+`DatabaseShell.tsx`'s `renderActiveView` is the ONLY place that switches on `activeView.type`.
+Everything rendered ABOVE that switch — the view tab bar, the database header, the view
+toolbar, the settings sidebar shell and most of its panels — mounts once, unconditionally,
+regardless of which view is active. Confirmed by grepping every one of those files for
+`view.type`/`viewType`/`activeView.type`: only `ViewLayoutPanel.tsx`'s 3×3 card grid (which
+type is "selected") and the sidebar's own title string (`"${viewType} view"`) read it at
+all — nothing gates a whole row or panel on type.
+
+**Fully free, zero further work, for all nine remaining types, right now:**
+- View tab bar (M7): create/rename/duplicate/delete/display-as, the `+` card grid, `?view=`.
+- Database header (M8): title/icon/description, the page `⋯` menu.
+- View toolbar (M3) + `QueryBar.tsx` chips: Filter, Sort, Automations, AI Autofill, Search,
+  Settings — all six render and work identically.
+- **Filter panel (M4) and Sort panel (M5) — including the DATA effect, not just the UI.**
+  `useDatabaseView.loadRows` sends `filter`/`sorts` on `POST .../query` unconditionally for
+  every view type (`getQueryExtras`, `types.ts:301`, only branches on type for `group_by`/
+  `aggregations` — filter and sorts are outside that branch entirely). A user can already
+  filter and sort a Gallery, a Calendar, a Form-backed data source today.
+- Cell editing (M11): every view's own card/row renders values through the SAME
+  `renderCellValue` dispatcher `TableView.tsx` uses (confirmed in `BoardCard`/`GalleryView`'s
+  own code) — Select's create-on-type popover, Status's grouped editor, every M11 cell fix,
+  are already live in Board and Gallery, not just Table.
+- "Edit properties" (property CRUD: create/edit/change-type/delete) — per data source, not
+  per view; already reachable from the settings sidebar and `DatabaseSettingsMenu` regardless
+  of the active view's type.
+
+**Partially wired — confirmed by grep, not assumed:**
+- Property visibility's **hide** toggle (M3 §B): `GalleryView.tsx`/`FeedView.tsx` already
+  read `config.hidden_properties`. `BoardView.tsx`/`CalendarView.tsx`/`TimelineView.tsx`/
+  `ListView.tsx` do not — the panel's toggle is a silent no-op for those four today.
+- Property visibility's **reorder** (drag, M3 §B): only `TableView.tsx` reads
+  `config.property_order` (the M1-class dead-control bug M3 itself closed for Table) — every
+  other view still ignores it, silent no-op.
+- Group panel (M6): `getQueryExtras` only forwards `group_by` for `board`/`table`/`chart` —
+  the panel renders for every type, but writing a group-by for Gallery/List/Feed/Calendar/
+  Timeline/Form/Dashboard has no query-time effect yet (matches this table's own original
+  per-view "Why" column — none of those six ever named grouping as their own scope, so this
+  is a known limit, not a newly-discovered regression).
+
+**Genuinely Table-rendering-specific, confirmed absent elsewhere:**
+- Row hover affordances (M9 — `RowGutter`/`RowMenu`: `+`/drag-handle/checkbox gutter, bulk
+  select bar, Favorites/Open in/Copy link/Move to Trash menu). Every other view still only
+  renders a bare `OpenNoteButton` icon (`grep OpenNoteButton` across the view files — Board
+  and Gallery have it, List/Feed/Calendar/Timeline effectively the same via their own row/
+  card markup); none has the gutter, bulk bar, or row menu at all.
+- Row peek internals (M10 — `?p=`/`?pm=` deep link, Alt+Click, the forced-side-peek row
+  menu entry, the `»/⤢/★/⋯` header bar). Only `TableView.tsx` imports `RowPeek` — every
+  other view opens a row via full navigation (`OpenNoteButton`) only, never the peek.
+- Calculations footer (M11): a literal `<tfoot>` row over `TableView`'s own `<table>` — no
+  natural equivalent in a card/board/calendar layout, and no other view was ever named in
+  `calculations-row.md`'s own scope.
+- Column resize/drag-reorder (M11): TanStack-table-specific; Board's own "drag between
+  columns" (its L-sizing's own words) is a DIFFERENT drag (cards between kanban columns,
+  already built) from this.
+- The column header menu itself (M1): inherently a table-grid concept — Board/Gallery/
+  Calendar/etc. have no per-column header at all to hang it from. What that menu offers
+  PER PROPERTY (rename, change type, hide, delete) already has a type-agnostic home in
+  "Edit properties" (see above), so nothing here is actually lost, just not reachable via a
+  column header that doesn't exist in these layouts.
+
+### Order (smallest-first, decided 2026-09-02) — prove the pattern transfers before the two L's
+
+1. **List (S)** — nearly all shared surface per the original sizing; the real gap, per the
+   code survey above, is row hover affordances + row peek (M9/M10's own scope, adapted to a
+   List row) and wiring `hidden_properties`/`property_order` the same way Table already does.
+2. **Feed (S)** — same shape as List; `hidden_properties` already wired, `property_order`
+   is not, plus the same M9/M10 row-affordances gap.
+3. **Gallery (M)** — List/Feed's own gaps (row affordances, peek, `property_order`) PLUS its
+   own named net-new UI: card preview source, card size, fit-image (captured nowhere yet —
+   needs its own live-Notion pass, `property-create-edit.md`-style, before building).
+4. **Chart (M)** — the one already explicitly de-scoped by the M7 create-flow rewrite
+   (`view-tab-bar.md`'s own new section): still needs a real POST-creation config surface
+   (currently only reachable at creation time via `ChartCreateFields`) — "mostly a `<select>`
+   → `MenuList` migration" per the original sizing, now a confirmed, scoped, concrete task
+   rather than a guess.
+5. **Form (M)** — field editor, logic, the public page; least overlap with anything M1-M11
+   already built (Form has no `rows`/`properties` grid at all, per M12's own earlier "read
+   only for row data" DatabaseShell comment) — expect this to need its own capture pass from
+   scratch, closer to a new surface than a retrofit.
+6. **Dashboard (M)** — widget grid, per-widget config; same "least overlap" reasoning as Form.
+7. **Board (L)** — already has more built than the others (M6's grouped rendering, drag
+   between columns, per-group `+`/`···`) — what's left, per the survey above: row hover
+   affordances/peek (cards, not rows — needs its own capture of what a Notion Board card's
+   own hover state shows, almost certainly different from a Table row's left-gutter shape),
+   card layout options (cover/properties-shown, likely close to Gallery's own once that
+   ships), `hidden_properties` wiring.
+8. **Calendar (L)** — date-range bars (multi-day events), drag-to-reschedule refinement
+   beyond the single-day drop `CalendarView.tsx` already has, event peek, row peek/hidden_
+   properties wiring.
+9. **Timeline (L)** — zoom-level refinement beyond what exists, dependency arrows, drag-to-
+   reschedule, the table/timeline split view, row peek/hidden_properties wiring.
+
+Each still follows this workstream's own established loop (`README.md`'s "Review loop"):
+capture from live Notion where the existing raw-dom/screenshots don't already answer the
+question (List/Feed's row-affordances shape almost certainly needs its own quick capture —
+`row-affordances.md`'s own capture is table-shaped, with px-offsets tied to a table grid, not
+yet confirmed to transfer to a List row), build, live-checklist, review checkpoint, write up
+in `PROGRESS.md`/`REVIEW-LOG.md`, same discipline as every milestone before it.
+
+**Not started** as of 2026-09-02 — this breakdown is the resume point. No List-view spec
+capture, code, or tests exist yet for Phase 12.
