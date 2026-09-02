@@ -176,13 +176,30 @@ needed to change from the stored literal to a genuinely empty string.
 
 Chart's card does not create immediately — it opens a second step in the SAME popover
 (`ChartCreateFields`, the same x/y/stack-axis picker this flow used to show before every
-type, per-type, gated on `canSubmit`). Reason: unlike Board (Group panel) and Calendar/
-Timeline (their own placeholder's picker, above), there is still no surface anywhere that
-can set a Chart's axes after creation — only this form can. Removing the gate without
-building that surface first would create permanently-stuck Chart views. Matches the M12
-plan's own sizing note ("Chart config panel already dense — mostly a `<select>` → MenuList
-migration") — building a real post-creation Chart config panel is that future work, not
-this session's.
+type, per-type, gated on `canSubmit`). Reason (true at the time this session was written):
+unlike Board (Group panel) and Calendar/Timeline (their own placeholder's picker, above),
+there was no surface anywhere that could set a Chart's axes after creation — only this
+form could. Removing the gate without building that surface first would have created
+permanently-stuck Chart views.
+
+**The post-creation surface this section named as missing was built 2026-09-02**
+(M12 — Chart's own dedicated work, per the plan's own sizing note "mostly a `<select>` →
+MenuList migration"): `ViewLayoutPanel.tsx`'s Layout sub-panel now carries a "CHART"
+section, visible only for `viewType === "chart"`, reusing `ChartCreateFields` itself
+(not a second copy of its 5 selects) — seeded from the view's CURRENT config
+(`chartDraftFromConfig`) and writing edits back through a new `buildChartConfigPatch`
+(NOT `buildChartViewConfig` — that function OMITS inapplicable fields, correct only at
+creation time when config starts empty; an edit must actively NULL them, or switching
+chart_type to "number" would leave a stale `x_axis` behind). **The creation-time gate
+above (Chart doesn't create until `canSubmit`) was deliberately left in place** — this
+session only added the missing SECOND entry point, matching every other view's
+create-then-configure-via-settings pattern; it did not revisit whether Chart still needs
+its own gate now that axes are editable afterward (a real question, not addressed here).
+The control style itself (native `<select>`s, not `MenuList` rows) was also left as-is,
+matching the create-time form's own look — the plan's own "mostly a `<select>` -> MenuList
+migration" phrasing names that conversion as its own future polish, distinct from the
+missing capability (a post-creation surface existing at all) this session closed. Full
+account: `PROGRESS.md`'s Log, "M12 — Chart's own dedicated work" entry.
 
 ---
 

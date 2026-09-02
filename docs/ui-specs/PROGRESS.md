@@ -8,14 +8,12 @@ Statuses: `not-started` → `dom-captured` → `screenshots-read` → `written` 
 
 **Branch:** `feat/notion-databases-ui-parity` (from `feat/workspaces-compact-redesign` @ 25a08b4)
 
-**OPEN ISSUE (reported 2026-09-02, not yet resolved):** the user reports Table's row
-gutter (`+` / drag-handle `⠿` / checkbox `☐`, built in M9 from a live-Notion capture) does
-not match what they see hovering a row in their own real Notion. This may be a stale
-capture, a condition the spec never recorded (full-page vs. embedded database?), or a real
-rendering bug — not yet determined. See `docs/ui-specs/ISSUE-row-gutter-mismatch.md` for
-the full writeup and the investigation plan. Treat this as higher priority than continuing
-the M12 view-by-view work below, since M9's row gutter is reused by every view already
-built (Table, List, and — via `RowMenuTrigger` — Feed).
+**RESOLVED (2026-09-02):** the row-gutter mismatch the user reported — see this entry's
+own Log record below and `docs/ui-specs/ISSUE-row-gutter-mismatch.md` (now carries its own
+"Resolution" section) — turned out to be case 1 of that doc's own three possibilities:
+the 2026-08-29 capture was accurate then and still is. No code change was needed. Resume
+point reverts to M12's own decided order: **Gallery's own dedicated per-view work** (card
+preview source, card size/fit).
 
 ---
 
@@ -618,7 +616,8 @@ zero results" is in practice.
 | M12 — row peek (Feed, Board, Gallery, Calendar, Timeline) | **wired to every remaining view, unit-tested, and live-verified against all five (2026-09-02)** |
 | M12 — Feed | **DONE (2026-09-02): row hover affordances (top-right "···" menu) and center-peek default built, unit-tested, and live-verified; byline/comments deliberately deferred (missing prerequisites, user's own call)** |
 | M12 — Open pages in defaults (Gallery, Calendar) | **DONE (2026-09-02): both now default to Center peek at creation, matching real Notion, live-verified; checked systematically across every view type, not just Feed** |
-| M12 — Gallery's own dedicated work (card preview source, card size/fit — beyond the peek-default fix above), Chart/Form/Dashboard/Board/Calendar/Timeline's own dedicated per-view work | not started |
+| M12 — Gallery's own dedicated work | **DONE (2026-09-02): Card preview source (None/Page cover/a `files` property) built, unit-tested; row hover affordances (OPEN + new "···" menu, hover-gated) built — a real gap the code survey named, closed; a real OPEN/CLOSE-toggle bug (same class M10 fixed once for Table) found and fixed. Card size/fit-image were already built pre-session. Live-verified partially — see `row-affordances.md`'s "Gallery view" section for the environment-exhaustion gap.** |
+| M12 — Chart's own dedicated work | **DONE (2026-09-02): the real post-creation config surface `view-tab-bar.md`'s own "Chart is a disclosed exception" section named as missing — built, unit-tested, live-verified (persisted through a hard reload). Form/Dashboard/Board/Calendar/Timeline's own dedicated per-view work not started** |
 
 `docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
 a code-verified survey of what M1-M11 already ship for free across every view type (view
@@ -807,6 +806,107 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M12 — Chart's own dedicated work: a real post-creation config surface)** —
+  Picked up the decided M12 order's next item after Gallery, below. Read the code first
+  (same discipline as every milestone): two of the plan's own named Chart gaps
+  (`group_style`, `reference_lines`) turned out to have NO UI anywhere at all — not even
+  at creation time — so building post-creation controls for them would be inventing a
+  first entry point rather than adding a second one; left alone, unlike the real gap.
+  **The real, concretely-scoped gap** (`view-tab-bar.md`'s own "Chart is a disclosed
+  exception" section, and the plan's own M12 sizing note): only the CREATE-time popover
+  (`ChartCreateFields`) could ever set a chart's `chart_type`/axes/`stack_by`/
+  `hide_empty_groups` — getting it wrong at creation meant a permanently-stuck view, no
+  way to fix it afterward. Built: `ViewLayoutPanel.tsx`'s Layout sub-panel gained a
+  "CHART" section (visible only for `viewType === "chart"`) that reuses
+  `ChartCreateFields` verbatim — not a second copy of its 5 selects — via two new
+  functions in `ChartView.tsx`: `chartDraftFromConfig` (the reverse of
+  `buildChartViewConfig`, seeding the form from the view's CURRENT config) and
+  `buildChartConfigPatch` (writes edits back, explicitly NULLing `x_axis`/`stack_by`/
+  `hide_empty_groups` when they no longer apply — `buildChartViewConfig` itself only
+  OMITS them, correct at creation time when config starts empty, but would leave a STALE
+  value behind on an edit, since `onPatchConfig` only merges keys present in the patch).
+  `properties` threaded one more layer down (`ViewSettingsSidebar` → `ViewLayoutPanel`,
+  a prop it didn't need before). Deliberately left alone: the creation-time gate itself
+  (Chart still doesn't create until `canSubmit` — this session added a second entry
+  point, didn't revisit whether the first one's gate is still needed now that axes are
+  editable afterward) and the control style (native `<select>`s, matching the create-time
+  form — the plan's own "mostly a `<select>` -> MenuList migration" phrasing names that
+  conversion as its own future polish, not the missing capability this session closed).
+  14 new tests (`ChartView.test.tsx` 34→44, `ViewLayoutPanel.test.tsx` 5→10). Frontend 61
+  files / 947 tests green (was 935 — and the one flaky `DatabaseShell.test.tsx` timeout
+  from the previous entry passed clean this run, confirming it really was transient
+  load, not a regression), `tsc` clean. **Live-verified in full** (no environment
+  trouble this time): created a real Chart view, opened Layout → CHART, confirmed it
+  seeded from the actual current config, switched chart_type to Donut, confirmed the
+  Stack-by picker correctly disappeared (donut has no stacking) and the chart itself
+  re-rendered, then hard-reloaded the page and confirmed "Donut" was still there — a
+  real backend PATCH round-trip, not just local state. Full write-up:
+  `view-tab-bar.md`'s "Chart is a disclosed, deliberate exception" section.
+  **Resume point: Form's own dedicated per-view work** (next in M12's decided order —
+  the plan's own words: "least overlap with anything M1-M11 already built... expect this
+  to need its own capture pass from scratch, closer to a new surface than a retrofit").
+- **2026-09-02 (M12 — Gallery's own dedicated work: Card preview source, row hover
+  affordances, an OPEN/CLOSE-toggle bug fix)** — Picked up the decided M12 order's next
+  item after the row-gutter issue below was resolved. Checked the code before building
+  (same discipline as every milestone): two of the plan's own three named gaps ("card
+  size, fit-image") were ALREADY built pre-session (`coverSize`/`coverAspect`); only "card
+  preview source" was real. Live-captured Gallery's Layout panel against the fixture
+  database's own Gallery view (real Notion, `app.notion.com`) and found a SECOND,
+  undocumented gap the capture itself turned up: real Notion's card hover reveals a
+  pencil ("open") icon AND a separate "···" row-menu trigger, both hover-gated — our own
+  `OpenNoteButton` was always-visible (never hover-gated) and no row menu existed on
+  Gallery cards at all, matching the M12 code survey's own "Board and Gallery... none has
+  the gutter, bulk bar, or row menu at all." Built: a "Card preview" select (None / Page
+  cover / a picked `files`-typed property, via a new `extractFileUrl` that parses the
+  wire shape defensively — no dedicated `FilesValue` type or editor exists anywhere in
+  this app); moved the OPEN icon off the cover and onto the whole card, wrapped in
+  `HoverAffordance` (genuinely hover-gated now); added a `RowMenuTrigger` "···" beside it,
+  the same shared component RowGutter/Feed already use. **A real, novel bug found and
+  fixed along the way:** Gallery had the identical OPEN/CLOSE-doesn't-actually-toggle bug
+  M10 already fixed once for Table — `onOpenRow={openRow}` re-opened instead of closing;
+  fixed via `useRowPeek`'s existing `toggleRow`. Board has the same bug, confirmed by
+  reading its code, deliberately left for Board's own upcoming milestone. Deliberately
+  NOT built: two Gallery-specific row-menu shortcuts ("Layout"/"Property visibility") and
+  Compact card layout's own deeper "Compact card settings" sub-panel — both real,
+  captured, but disproportionate to this session's named scope; tracked in
+  `row-affordances.md`'s new "Gallery view" section, not silently dropped. Frontend 61
+  files / 935 tests green (was 928), `tsc` clean. **Live verification partial** — hover
+  icons and the row menu were screenshot-confirmed live; "Card preview: None", a
+  files-property image, and the toggle-close fix were NOT re-confirmed live (the browser
+  tab froze on `Page.captureScreenshot` on both the original tab and a fresh replacement,
+  the same memory-exhaustion class this workstream has repeatedly hit — not forced
+  further; all three are covered by regression tests asserting actual DOM output, not a
+  hypothetical). Full write-up: `row-affordances.md`'s new "Gallery view" section.
+  **Resume point: Chart's own dedicated per-view work** (next in M12's decided order —
+  the M7 create-flow rewrite already scoped this as "mostly a `<select>` → `MenuList`
+  migration" for its post-creation config surface).
+- **2026-09-02 (row-gutter mismatch — investigated and resolved, no code bug)** — The user
+  reported (screenshot) that Table's row gutter (`+`/drag-handle `⠿`/checkbox `☐`, built in
+  M9 from a 2026-08-29 live-Notion capture) didn't match what they saw hovering a row in
+  their own real Notion. Followed `ISSUE-row-gutter-mismatch.md`'s own investigation plan
+  rather than guessing: asked the user directly (via `AskUserQuestion`) which kind of
+  database they'd compared against, whether they'd deliberately hovered and waited, which
+  platform, and for fresh evidence. Confirmed: **full-page database, hovered and waited,
+  browser.** The user then supplied two fresh screenshots side by side — their own real
+  Notion (a full-page database, row "Presidential Decree 21-285", colored Module pills) and
+  our app (the "Untitled Database" fixture, row "Untitled") — both in the bulk-selected "1
+  selected" state. **Both show the identical `+`/`⠿`/`☑` gutter and `OPEN` button.** The
+  user's own words: "the same, only the notion are well render so i did not notice them all
+  this time" — i.e. real Notion does show this; it had simply rendered subtly enough that
+  they hadn't consciously registered it before. This is case 1 of the issue doc's own three
+  possibilities: **the 2026-08-29 capture was accurate then, and still is.** No `RowGutter.tsx`
+  change was needed. Attempted a live sanity check of our app's resting-vs-hover states
+  anyway (the user's own screenshot only showed the bulk-selected state) — blocked by this
+  session's Chrome tab freezing under the same memory exhaustion this workstream has hit
+  repeatedly (`free -h`: 447Mi free, 3.2Gi/3.7Gi swap, confirmed not guessed); not forced,
+  since this was a documentation-only resolution with no code to verify. Updated
+  `row-affordances.md`'s Trigger section to record the condition explicitly (full-page
+  database, confirmed twice now) so a future report against an embedded/linked database
+  isn't assumed to be the same case. `ISSUE-row-gutter-mismatch.md` gained its own
+  "Resolution" section rather than being deleted, matching how this workstream keeps its
+  other investigation write-ups (e.g. `M1-VISUAL-DIFF.md`) as historical record. Also logged
+  in `REVIEW-LOG.md`. **No test changes** — nothing in `RowGutter.test.tsx` asserted
+  anything false; the tests already matched the (correct) implementation.
 - **2026-09-02 (M12 — "Open pages in" defaults checked across every view type; Gallery
   and Calendar fixed)** — After Feed's own capture turned up a real default (Center peek,
   not Side), checked every OTHER creatable view type's own fresh "Open pages in" setting

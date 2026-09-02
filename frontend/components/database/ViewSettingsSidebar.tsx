@@ -284,7 +284,19 @@ export function ViewSettingsSidebar({
             value: view.type.charAt(0).toUpperCase() + view.type.slice(1),
             submenu: () => ({
               title: "Layout",
-              sections: [{ rows: [], content: <ViewLayoutPanel viewType={view.type} config={config} onPatchConfig={onPatchConfig} /> }],
+              sections: [
+                {
+                  rows: [],
+                  content: (
+                    <ViewLayoutPanel
+                      viewType={view.type}
+                      config={config}
+                      onPatchConfig={onPatchConfig}
+                      properties={properties}
+                    />
+                  ),
+                },
+              ],
             }),
           },
           {

@@ -38,6 +38,8 @@ import {
   patchWrapAllContent,
 } from "@/lib/database/viewConfig";
 import type { OpenPagesInMode } from "@/lib/database/viewConfig";
+import type { PropertyResponse } from "@/lib/database/types";
+import { buildChartConfigPatch, chartDraftFromConfig, ChartCreateFields } from "./views/ChartView";
 
 // Notion's own grid here is Table/Board/Timeline/Calendar/List/Gallery/
 // Chart/Feed/Map (layout-and-open-pages-in.txt) — 9 cards. We cut Map
@@ -110,6 +112,11 @@ export interface ViewLayoutPanelProps {
   viewType: string;
   config: Record<string, unknown>;
   onPatchConfig: (patch: Record<string, unknown>) => void;
+  /** M12 (Chart's own dedicated work) — only used when `viewType === "chart"`,
+   * to populate the x-axis/y-axis/stack-by property pickers the same way
+   * `ChartCreateFields` already does at creation time. Every other view type
+   * ignores it. */
+  properties?: PropertyResponse[];
 }
 
 function ToggleRow({
@@ -138,7 +145,7 @@ function ToggleRow({
   );
 }
 
-export function ViewLayoutPanel({ viewType, config, onPatchConfig }: ViewLayoutPanelProps) {
+export function ViewLayoutPanel({ viewType, config, onPatchConfig, properties = [] }: ViewLayoutPanelProps) {
   const [openPagesInOpen, setOpenPagesInOpen] = useState(false);
   const showVerticalLines = getShowVerticalLines(config);
   const showPageIcon = getShowPageIcon(config);
@@ -224,6 +231,34 @@ export function ViewLayoutPanel({ viewType, config, onPatchConfig }: ViewLayoutP
           label="Open pages in"
         />
       </Popover>
+
+      {/* M12 (Chart's own dedicated work, 2026-09-02) — the real
+        * post-creation config surface `view-tab-bar.md`'s own "Chart is a
+        * disclosed exception" section named as missing: before this, only
+        * the create-time popover (`ChartCreateFields`, ViewTabs.tsx) could
+        * ever set a chart's axes — getting it wrong at creation meant a
+        * permanently-stuck view. Reuses `ChartCreateFields` verbatim rather
+        * than a second copy of its 5 selects; only the value source
+        * (`chartDraftFromConfig`, reading the view's CURRENT config) and the
+        * write path (`buildChartConfigPatch`, which explicitly clears
+        * inapplicable fields — see its own doc comment for why
+        * `buildChartViewConfig` alone isn't safe to reuse for an edit) are
+        * new. Left as native `<select>`s matching the create-time form's own
+        * look, not converted to `MenuList` rows — the plan's own "mostly a
+        * `<select>` -> MenuList migration" phrasing names that as future
+        * polish, not the missing capability itself. */}
+      {viewType === "chart" && (
+        <div className="mt-1 border-t border-menu-divider pt-2 px-2 flex flex-col gap-2">
+          <div className="text-[11px] font-medium uppercase text-menu-disabled">Chart</div>
+          <div className="flex flex-wrap gap-1.5">
+            <ChartCreateFields
+              properties={properties}
+              value={chartDraftFromConfig(config)}
+              onChange={(next) => onPatchConfig(buildChartConfigPatch(next, properties))}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

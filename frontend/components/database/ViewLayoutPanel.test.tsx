@@ -2,6 +2,30 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ViewLayoutPanel } from "./ViewLayoutPanel";
+import type { PropertyResponse } from "@/lib/database/types";
+
+function prop(overrides: Partial<PropertyResponse>): PropertyResponse {
+  return {
+    id: overrides.key ?? "id",
+    data_source_id: "ds-1",
+    user_id: "user-1",
+    key: "key",
+    name: "Name",
+    type: "select",
+    config: {},
+    description: null,
+    storage: "jsonb",
+    column_name: null,
+    result_type: null,
+    is_volatile: false,
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+const STATUS_PROP = prop({ key: "status", name: "Status", type: "select", position: 0 });
+const NUMBER_PROP = prop({ key: "score", name: "Score", type: "number", position: 1 });
 
 describe("ViewLayoutPanel", () => {
   it("renders a 3x3 grid of view-type cards with the current type selected", () => {
@@ -55,5 +79,116 @@ describe("ViewLayoutPanel", () => {
 
     expect(onPatchConfig).toHaveBeenCalledWith({ open_pages_in: "center" });
     expect(screen.queryByText("Full page")).not.toBeInTheDocument();
+  });
+
+  // M12 (Chart's own dedicated work, 2026-09-02) — view-tab-bar.md's own
+  // "Chart is a disclosed exception" section named this as missing: before
+  // this, only the create-time popover could ever set a chart's axes.
+  describe("Chart section (M12)", () => {
+    it("does not render for a non-chart view type", () => {
+      render(<ViewLayoutPanel viewType="table" config={{}} onPatchConfig={vi.fn()} />);
+      expect(screen.queryByLabelText("Chart type")).not.toBeInTheDocument();
+    });
+
+    it("renders for a chart view, seeded from the CURRENT config, not the creation-time default", () => {
+      render(
+        <ViewLayoutPanel
+          viewType="chart"
+          config={{
+            chart_type: "donut",
+            y_axis: { aggregator: "sum", property_id: "score" },
+            x_axis: { property_id: "status" },
+          }}
+          onPatchConfig={vi.fn()}
+          properties={[STATUS_PROP, NUMBER_PROP]}
+        />
+      );
+
+      expect(screen.getByLabelText("Chart type")).toHaveValue("donut");
+      expect(screen.getByLabelText("Y-axis aggregator")).toHaveValue("sum");
+      expect(screen.getByLabelText("Y-axis property")).toHaveValue("score");
+      expect(screen.getByLabelText("X-axis property")).toHaveValue("status");
+      // donut has no stacking concept — no picker at all.
+      expect(screen.queryByLabelText("Stack by")).not.toBeInTheDocument();
+    });
+
+    it("changing the y-axis aggregator patches the full chart config, not just the changed field", async () => {
+      const user = userEvent.setup();
+      const onPatchConfig = vi.fn();
+      render(
+        <ViewLayoutPanel
+          viewType="chart"
+          config={{
+            chart_type: "column",
+            y_axis: { aggregator: "sum", property_id: "score" },
+            x_axis: { property_id: "status" },
+          }}
+          onPatchConfig={onPatchConfig}
+          properties={[STATUS_PROP, NUMBER_PROP]}
+        />
+      );
+
+      await user.selectOptions(screen.getByLabelText("Y-axis aggregator"), "average");
+
+      const lastPatch = onPatchConfig.mock.calls[onPatchConfig.mock.calls.length - 1][0];
+      expect(lastPatch.y_axis).toEqual({ aggregator: "average", property_id: "score" });
+      expect(lastPatch.x_axis).toEqual({ property_id: "status" });
+    });
+
+    // buildChartConfigPatch's own reason for existing rather than reusing
+    // buildChartViewConfig verbatim: an EDIT must actively clear fields that
+    // no longer apply, not just omit them from the patch (onPatchConfig only
+    // merges keys present in the patch — an omitted key leaves the OLD
+    // value in place).
+    it("switching chart_type to 'number' clears x_axis and stack_by, not just leaves them stale", async () => {
+      const user = userEvent.setup();
+      const onPatchConfig = vi.fn();
+      render(
+        <ViewLayoutPanel
+          viewType="chart"
+          config={{
+            chart_type: "column",
+            y_axis: { aggregator: "count" },
+            x_axis: { property_id: "status" },
+            stack_by: { property_id: "status" },
+          }}
+          onPatchConfig={onPatchConfig}
+          properties={[STATUS_PROP, NUMBER_PROP]}
+        />
+      );
+
+      await user.selectOptions(screen.getByLabelText("Chart type"), "number");
+
+      expect(onPatchConfig).toHaveBeenCalledWith({
+        chart_type: "number",
+        y_axis: { aggregator: "count" },
+        x_axis: null,
+        hide_empty_groups: false,
+        stack_by: null,
+      });
+    });
+
+    it("clearing 'Stack by' back to 'No stacking' patches stack_by: null, not an omitted key", async () => {
+      const user = userEvent.setup();
+      const onPatchConfig = vi.fn();
+      render(
+        <ViewLayoutPanel
+          viewType="chart"
+          config={{
+            chart_type: "column",
+            y_axis: { aggregator: "count" },
+            x_axis: { property_id: "status" },
+            stack_by: { property_id: "status" },
+          }}
+          onPatchConfig={onPatchConfig}
+          properties={[STATUS_PROP, NUMBER_PROP]}
+        />
+      );
+
+      await user.selectOptions(screen.getByLabelText("Stack by"), "");
+
+      const lastPatch = onPatchConfig.mock.calls[onPatchConfig.mock.calls.length - 1][0];
+      expect(lastPatch.stack_by).toBeNull();
+    });
   });
 });

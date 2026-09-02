@@ -221,6 +221,77 @@ export const DEFAULT_CHART_DRAFT: ChartDraftConfig = {
   hide_empty_groups: false,
 };
 
+/** M12 (Chart's own dedicated work) — the reverse of `buildChartViewConfig`,
+ * needed once a chart's axes became editable AFTER creation, not just at
+ * creation time: `ViewLayoutPanel`'s new "Chart" section seeds
+ * `ChartCreateFields`'s `value` from the view's CURRENT config, the same way
+ * `chart_type`'s own `getChartType` etc. already read it for rendering. */
+export function chartDraftFromConfig(config: Record<string, unknown>): ChartDraftConfig {
+  const yAxis = getChartYAxis(config);
+  const xAxis = getChartXAxis(config);
+  const stackBy = getChartStackBy(config);
+  return {
+    chart_type: getChartType(config),
+    x_axis_property_key: xAxis?.property_id ?? "",
+    y_axis_aggregator: yAxis?.aggregator ?? "count",
+    y_axis_property_key: yAxis?.property_id ?? "",
+    stack_by_property_key: stackBy?.property_id ?? "",
+    hide_empty_groups: getChartHideEmptyGroups(config),
+  };
+}
+
+/** M12 (Chart's own dedicated work) — `buildChartViewConfig`'s sibling for
+ * EDITING an existing chart rather than creating one. `onPatchConfig`
+ * (`ViewSettingsSidebar.tsx`'s own doc comment) merges only the keys this
+ * returns on top of the view's current config — `buildChartViewConfig`
+ * itself simply OMITS `x_axis`/`stack_by`/`hide_empty_groups` when they
+ * don't apply (fine at creation time, config starts empty), which would
+ * leave a STALE value behind on an edit (switching to "number" wouldn't
+ * clear a previously-set `x_axis`; clearing "Stack by" back to "No
+ * stacking" wouldn't remove the old `stack_by`). This explicitly nulls out
+ * every inapplicable field instead — `getChartXAxis`/`getChartStackBy`
+ * already treat `null` the same as absent, and `ViewUpdate`'s own docstring
+ * confirms `config` has no shape validation, so a stray `null` key is inert
+ * everywhere it's read, never a 400. */
+export function buildChartConfigPatch(
+  draft: ChartDraftConfig,
+  properties: PropertyResponse[] = []
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {
+    chart_type: draft.chart_type,
+    y_axis:
+      draft.y_axis_aggregator === "count"
+        ? { aggregator: "count" }
+        : { aggregator: draft.y_axis_aggregator, property_id: draft.y_axis_property_key },
+  };
+  if (draft.chart_type === "number") {
+    patch.x_axis = null;
+    patch.hide_empty_groups = false;
+    patch.stack_by = null;
+    return patch;
+  }
+  if (draft.x_axis_property_key) {
+    const xAxis: Record<string, unknown> = { property_id: draft.x_axis_property_key };
+    const xMode = defaultGroupMode(properties.find((p) => p.key === draft.x_axis_property_key)?.type ?? "");
+    if (xMode) xAxis.mode = xMode;
+    patch.x_axis = xAxis;
+  } else {
+    patch.x_axis = null;
+  }
+  patch.hide_empty_groups = draft.hide_empty_groups;
+  if (draft.chart_type !== "donut" && draft.stack_by_property_key) {
+    const stackBy: Record<string, unknown> = { property_id: draft.stack_by_property_key };
+    const stackMode = defaultGroupMode(
+      properties.find((p) => p.key === draft.stack_by_property_key)?.type ?? ""
+    );
+    if (stackMode) stackBy.mode = stackMode;
+    patch.stack_by = stackBy;
+  } else {
+    patch.stack_by = null;
+  }
+  return patch;
+}
+
 /** Board's `canSubmit`-gated pattern (ViewTabs.tsx): don't let a chart be
  * created that would render nothing. `chart_type` always has a default so
  * it's never the blocker in practice; the real gates are y_axis (a

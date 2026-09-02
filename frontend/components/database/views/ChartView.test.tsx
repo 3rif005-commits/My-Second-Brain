@@ -5,7 +5,9 @@ import {
   ChartCreateFields,
   ChartView,
   DEFAULT_CHART_DRAFT,
+  buildChartConfigPatch,
   buildChartViewConfig,
+  chartDraftFromConfig,
   computeDonutSlices,
   computeStackLayout,
   computeYScale,
@@ -238,6 +240,90 @@ describe("isChartConfigComplete / buildChartViewConfig", () => {
       x_axis_property_key: "status",
     });
     expect(config.x_axis).toEqual({ property_id: "status" });
+  });
+});
+
+// M12 (Chart's own dedicated work, 2026-09-02) — the post-creation edit
+// path: `ViewLayoutPanel`'s new "Chart" section seeds `ChartCreateFields`
+// from the view's CURRENT config (`chartDraftFromConfig`) and writes edits
+// back through `buildChartConfigPatch`, not `buildChartViewConfig` (which
+// is creation-only — see its own doc comment for why reusing it for an edit
+// would leave stale fields behind).
+describe("chartDraftFromConfig / buildChartConfigPatch (M12 — Chart's post-creation edit path)", () => {
+  it("chartDraftFromConfig reads every field back out of a real config, the reverse of buildChartViewConfig", () => {
+    const config = buildChartViewConfig({
+      chart_type: "line",
+      x_axis_property_key: "status",
+      y_axis_aggregator: "sum",
+      y_axis_property_key: "amount",
+      stack_by_property_key: "priority",
+      hide_empty_groups: true,
+    });
+
+    expect(chartDraftFromConfig(config)).toEqual({
+      chart_type: "line",
+      x_axis_property_key: "status",
+      y_axis_aggregator: "sum",
+      y_axis_property_key: "amount",
+      stack_by_property_key: "priority",
+      hide_empty_groups: true,
+    });
+  });
+
+  it("chartDraftFromConfig falls back to DEFAULT_CHART_DRAFT's own values for an empty/fresh config", () => {
+    expect(chartDraftFromConfig({})).toEqual(DEFAULT_CHART_DRAFT);
+  });
+
+  it("buildChartConfigPatch matches buildChartViewConfig's shape for a fully-specified draft", () => {
+    const draft: ChartDraftConfig = {
+      chart_type: "column",
+      x_axis_property_key: "status",
+      y_axis_aggregator: "sum",
+      y_axis_property_key: "amount",
+      stack_by_property_key: "priority",
+      hide_empty_groups: true,
+    };
+    expect(buildChartConfigPatch(draft, [STATUS_PROP, PRIORITY_PROP, AMOUNT_PROP])).toEqual(
+      buildChartViewConfig(draft, [STATUS_PROP, PRIORITY_PROP, AMOUNT_PROP])
+    );
+  });
+
+  it("switching to chart_type 'number' explicitly NULLS x_axis/stack_by rather than omitting them — buildChartViewConfig omits them instead, which is only safe at creation time", () => {
+    const draft: ChartDraftConfig = { ...DEFAULT_CHART_DRAFT, chart_type: "number" };
+    expect(buildChartConfigPatch(draft)).toEqual({
+      chart_type: "number",
+      y_axis: { aggregator: "count" },
+      x_axis: null,
+      hide_empty_groups: false,
+      stack_by: null,
+    });
+    // buildChartViewConfig's own (correct, for creation) omitting behavior:
+    expect(buildChartViewConfig(draft)).toEqual({ chart_type: "number", y_axis: { aggregator: "count" } });
+  });
+
+  it("clearing stack_by (back to 'No stacking') patches stack_by: null, not an omitted key", () => {
+    const draft: ChartDraftConfig = {
+      ...DEFAULT_CHART_DRAFT,
+      chart_type: "column",
+      x_axis_property_key: "status",
+      stack_by_property_key: "",
+    };
+    expect(buildChartConfigPatch(draft, [STATUS_PROP]).stack_by).toBeNull();
+  });
+
+  it("clearing x_axis (no property selected) patches x_axis: null for a non-number chart", () => {
+    const draft: ChartDraftConfig = { ...DEFAULT_CHART_DRAFT, chart_type: "column", x_axis_property_key: "" };
+    expect(buildChartConfigPatch(draft).x_axis).toBeNull();
+  });
+
+  it("donut never sets stack_by, same as buildChartViewConfig — explicitly null, not omitted", () => {
+    const draft: ChartDraftConfig = {
+      ...DEFAULT_CHART_DRAFT,
+      chart_type: "donut",
+      x_axis_property_key: "status",
+      stack_by_property_key: "priority",
+    };
+    expect(buildChartConfigPatch(draft, [STATUS_PROP, PRIORITY_PROP]).stack_by).toBeNull();
   });
 });
 
