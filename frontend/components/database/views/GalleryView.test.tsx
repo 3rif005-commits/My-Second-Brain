@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -54,6 +54,7 @@ function prop(overrides: Partial<PropertyResponse>): PropertyResponse {
 const TITLE_PROP = prop({ key: "title", name: "Title", type: "title", position: 0 });
 const STATUS_PROP = prop({ key: "status", name: "Status", type: "status", position: 1 });
 const NUMBER_PROP = prop({ key: "number", name: "Number", type: "number", position: 2 });
+const FILES_PROP = prop({ key: "attachments", name: "Attachments", type: "files", position: 3 });
 
 function row(id: string, title: string, extra: Partial<DatabaseRow> = {}): DatabaseRow {
   return { id, properties: { title: { type: "title", title } }, ...extra };
@@ -246,5 +247,154 @@ describe("GalleryView", () => {
     const [url] = routerReplace.mock.calls[routerReplace.mock.calls.length - 1];
     expect(url).toContain("p=row-1");
     expect(url).toContain("pm=s");
+  });
+
+  // M12 (Gallery's own dedicated work, 2026-09-02): found and fixed the
+  // same OPEN/CLOSE-doesn't-actually-toggle bug M10 already fixed once for
+  // Table (row-peek.md) — Gallery/Board had never gotten that fix, both
+  // still wired `onOpenRow={openRow}` (always re-opens) instead of
+  // `toggleRow`. Reuses the SAME button element across both clicks (rather
+  // than re-querying by accessible name) since RowPeek's own close control
+  // also reads "Close" once the peek is open, the identical disambiguation
+  // TableView.test.tsx's own "the Close button closes the peek" already
+  // documents.
+  it("OPEN/CLOSE actually toggles — a second click on the same button closes the peek, not re-opens it", async () => {
+    const user = userEvent.setup();
+    render(
+      <GalleryView
+        properties={[TITLE_PROP]}
+        rows={[row("row-1", "First")]}
+        editable={false}
+        onCellChange={vi.fn()}
+        config={{}}
+        onConfigChange={vi.fn()}
+      />
+    );
+
+    const openBtn = screen.getByRole("button", { name: "Open" });
+    await user.click(openBtn);
+    expect(routerReplace).toHaveBeenLastCalledWith("/brain/db/ds-1?p=row-1&pm=s", { scroll: false });
+    expect(openBtn).toHaveAccessibleName("Close");
+
+    await user.click(openBtn);
+    expect(routerReplace).toHaveBeenLastCalledWith("/brain/db/ds-1", { scroll: false });
+  });
+
+  // M12 (Gallery's own dedicated work, 2026-09-02, live capture — real
+  // Notion's card hover reveals a "···" row-menu trigger alongside the
+  // pencil/Open icon, byte-identical in content to every other view's own
+  // row menu. Previously ABSENT entirely — the M12 code survey named Board
+  // and Gallery as the two views with no row menu at all.
+  it("hovering a card reveals a row-options menu trigger with the shared row menu", async () => {
+    const user = userEvent.setup();
+    render(
+      <GalleryView
+        properties={[TITLE_PROP]}
+        rows={[row("row-1", "First")]}
+        editable={false}
+        onCellChange={vi.fn()}
+        config={{}}
+        onConfigChange={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Row options" }));
+    expect(screen.getByText("Move to Trash")).toBeInTheDocument();
+    expect(screen.getByText("Add to Favorites")).toBeInTheDocument();
+  });
+
+  // M12 (Gallery's own dedicated work) — real Notion's Layout panel "Card
+  // preview" setting, live-captured 2026-09-02: None / Page cover / a
+  // picked `files`-type property / Page content (not offered — see
+  // GalleryView.tsx's own top comment).
+  describe("Card preview (M12)", () => {
+    it("'None' renders no cover slot at all, even when cover_image_url is present", () => {
+      render(
+        <GalleryView
+          properties={[TITLE_PROP]}
+          rows={[row("row-1", "First", { cover_image_url: "https://example.com/cover.png" })]}
+          editable={false}
+          onCellChange={vi.fn()}
+          config={{ card_preview: "none" }}
+          onConfigChange={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByRole("img")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("cover-placeholder")).not.toBeInTheDocument();
+    });
+
+    it("a picked files-property source renders that property's file URL as the card image", () => {
+      render(
+        <GalleryView
+          properties={[TITLE_PROP, FILES_PROP]}
+          rows={[
+            row("row-1", "First", {
+              properties: {
+                title: { type: "title", title: "First" },
+                attachments: { type: "files", files: [{ url: "https://example.com/a.png", name: "a.png" }] },
+              },
+            }),
+          ]}
+          editable={false}
+          onCellChange={vi.fn()}
+          config={{ card_preview: "attachments" }}
+          onConfigChange={vi.fn()}
+        />
+      );
+
+      expect(screen.getByRole("img")).toHaveAttribute("src", "https://example.com/a.png");
+    });
+
+    it("a files-property source with no value falls back to the neutral placeholder, not a broken image", () => {
+      render(
+        <GalleryView
+          properties={[TITLE_PROP, FILES_PROP]}
+          rows={[row("row-1", "First")]}
+          editable={false}
+          onCellChange={vi.fn()}
+          config={{ card_preview: "attachments" }}
+          onConfigChange={vi.fn()}
+        />
+      );
+
+      expect(screen.getByTestId("cover-placeholder")).toBeInTheDocument();
+      expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    });
+
+    it("an invalid/stale card_preview value falls back to 'cover'", () => {
+      render(
+        <GalleryView
+          properties={[TITLE_PROP]}
+          rows={[row("row-1", "First", { cover_image_url: "https://example.com/cover.png" })]}
+          editable={false}
+          onCellChange={vi.fn()}
+          config={{ card_preview: "a-deleted-property-key" }}
+          onConfigChange={vi.fn()}
+        />
+      );
+
+      expect(screen.getByRole("img")).toHaveAttribute("src", "https://example.com/cover.png");
+    });
+
+    it("card_preview round-trips through onConfigChange, offering each files-typed property by name", async () => {
+      const user = userEvent.setup();
+      const onConfigChange = vi.fn();
+      render(
+        <GalleryView
+          properties={[TITLE_PROP, FILES_PROP]}
+          rows={[row("row-1", "First")]}
+          editable={false}
+          onCellChange={vi.fn()}
+          config={{}}
+          onConfigChange={onConfigChange}
+        />
+      );
+
+      const select = screen.getByLabelText("Card preview");
+      expect(within(select).getByText("Attachments")).toBeInTheDocument();
+      await user.selectOptions(select, "none");
+      expect(onConfigChange).toHaveBeenCalledWith({ card_preview: "none" });
+    });
   });
 });

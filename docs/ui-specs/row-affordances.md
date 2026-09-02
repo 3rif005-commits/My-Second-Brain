@@ -11,7 +11,16 @@
 
 ## Trigger
 
-Hovering **anywhere on the row**. Five affordances appear, in two groups.
+Hovering **anywhere on the row**, in a **full-page database** (its own page in the
+sidebar/workspace, not a database block embedded/linked inside another page — unverified
+for that case). Five affordances appear, in two groups.
+
+**Confirmed twice now**, not just at capture time: a 2026-09-02 user report ("these three
+icons... which i never seen in Notion") turned out to be the user not having consciously
+registered this gutter in their own real Notion before, not an app bug or a stale capture —
+settled by the user's own fresh side-by-side screenshots of a real full-page database and
+our app in the same bulk-selected state, showing the identical `+`/`⠿`/`☑` shape in both.
+Full account: `PROGRESS.md`'s Log, `ISSUE-row-gutter-mismatch.md`'s "Resolution" section.
 
 ```
  ┌─ left gutter, OUTSIDE the table ─┐ ┌────────── title cell ──────────┐
@@ -522,3 +531,132 @@ Unit tests: three new `DatabaseShell.test.tsx` tests — Gallery's own `open_pag
 write, Calendar's merged single-call write (asserting `updateView` fires exactly once,
 not twice), and a Timeline regression proving its own branch stayed untouched rather than
 silently inheriting Calendar's change. Frontend 928/928 tests green, `tsc` clean.
+
+## Gallery view — real Notion capture, build, and live verification (2026-09-02)
+
+> Ground truth: live capture against the fixture database's own Gallery view
+> (`app.notion.com`, the same "New database" every prior M12 capture in this file used),
+> `computer` tool, real hover/click. No new raw-dom/screenshot files this session — the
+> capture was read directly off the live DOM via `computer`/`zoom`, not saved to disk.
+
+M12's own decided order named Gallery's per-view gap as "card preview source, card size,
+fit-image" (`docs/plans/2026-08-28-notion-databases-ui-parity.md`). Checking the actual
+code first (same discipline as every milestone in this file) found two of those three
+**already built and working** before this session: `coverSize`/`COVER_SIZE_CLASSES`
+("Card size") and `coverAspect` ("Fit media" — modelled as a 2-option `contain`/`cover`
+select rather than Notion's own on/off toggle, a cosmetic difference left alone, not
+rebuilt, since the underlying capability already works end to end). Only **card preview
+source** was a real gap: `GalleryCard` only ever read `row.cover_image_url`, with no way
+to pick "None" or a property-sourced image, unlike every other Layout setting on this
+surface.
+
+### Row hover affordances — a second, undocumented gap found by capturing
+
+Hovering a card in real Notion reveals **two icons, top-right of the card** — a pencil
+("open") icon and a separate "···" row-menu trigger — confirmed by zooming the hover
+screenshot. Both are hover-only (nothing shows at rest) and both appear **regardless of
+whether the card has a cover image at all** (confirmed by later setting Card preview to
+"None" — the icons stayed in the same position, now floating over the property text
+instead of an image). Clicking either the pencil OR the card body itself opens the same
+row peek — the pencil is not a distinct "edit" action, just an iconified Open control
+sized for a narrow card, the same role Table's labelled `OPEN` button plays.
+
+This matches the M12 code survey's own finding almost exactly: "Board and Gallery have
+[OpenNoteButton]... none has the gutter, bulk bar, or row menu at all." Gallery's
+`OpenNoteButton` existed (task-17), but as an **always-visible** icon over the cover only
+(not hover-gated, and gone entirely when Card preview is "None") — and the "···" row menu
+did not exist at all. Clicking "···" opens the exact same menu row-affordances.md already
+documents for Table/List/Feed (Add to Favorites / Edit icon / Edit property / Open in /
+Comment / Copy link / Duplicate / Move to / Move to Trash) — confirmed byte-identical by
+reading the live DOM, same as Feed's own capture already established.
+
+**Two Gallery-specific rows exist in real Notion's card menu that Table/List/Feed's don't:**
+a "Layout" row (opens the same Layout flyout described below) and a "Property visibility"
+row, inserted between "Edit property" and "Open in". **Deliberately not built** — both are
+shortcuts to a panel already reachable from the toolbar/settings sidebar, and wiring a
+second entry point into the shared `MenuList` push-stack is new plumbing disproportionate
+to what this session's own scope named. Tracked here as a real, captured-but-deferred
+delta, not silently dropped.
+
+### Layout panel — "Card preview" (the real gap), "Card size", "Fit media", "Card layout"
+
+Captured via the card's own "···" → "Layout" row (identical panel to the toolbar
+Settings icon → Layout, confirmed by opening both):
+
+| Setting | Options | Notes |
+|---|---|---|
+| Card preview | None / Page cover / Page properties (a `files`-typed property, picked via its own flyout) / Page content | Page content is annotated "Uses first block on the page" and is the real Notion default |
+| Card size | Small / Medium / Large | Matches this app's existing `coverSize` values exactly |
+| Fit media | on/off toggle | Matches this app's existing `coverAspect` (`contain`/`cover`), packaged as a 2-option select instead of a toggle |
+| Card layout | Compact / List | Matches this app's existing `cardLayout` values exactly. Selecting Compact reveals a **"Compact card settings"** sub-panel (per-property "full line display" toggles, a `TASK-123456`-style preview) — a real, deeper capability with no equivalent anywhere in this app. **Deliberately not built** — no per-property "full line" concept exists in this schema yet, and this wasn't named in M12's own scope for Gallery; tracked as a real, captured-but-deferred gap, same as the row-menu shortcuts above |
+
+"Page properties" only lists `files`-typed properties (plus a "+ New file & media
+property" row) — matches this app's own `files` property type. **Page content is NOT
+offered** in our build: no block-content-first-image parsing exists anywhere in this app
+(the exact same real build cost `states.md`/multiple other specs in this file have already
+flagged and skipped), and it is real Notion's own DEFAULT — silently defaulting our own
+`card_preview` to an unbuilt source would blank every existing Gallery card, so our default
+stays "Page cover" (`row.cover_image_url`, the one real image source this schema has).
+Disclosed in `GalleryView.tsx`'s own top comment, not silently diverged.
+
+### Built (2026-09-02)
+
+`GalleryView.tsx` / `GalleryCard`:
+- **"Card preview" select** added to the existing inline toolbar (alongside the
+  pre-existing Cover size / Cover fit / Layout / Hide title controls — kept as native
+  `<select>`s, matching this file's own established pattern, not migrated to the
+  `MenuList`-based Layout panel other views use; that migration was not named in this
+  session's scope). Options: Page cover, None, one per `files`-typed property (by name).
+  Persisted as `config.card_preview` — `"cover"` (default) | `"none"` | a property key.
+  An invalid/stale value (a deleted property, or one no longer `files`-typed) falls back
+  to `"cover"`, the same defensive pattern `readCoverSize`/`readCoverAspect` already use.
+- **`extractFileUrl`** — a `files` value has no dedicated frontend type anywhere in this
+  app (no `FilesValue`, no `FilesCell` editor; `renderCellValue` falls through to
+  `GenericCell`), so this parses the wire shape defensively per
+  `services/db/recompute.py`'s own documented words ("a files entry may be a bare string
+  or an object with a url/name field") rather than assuming a shape. A property with no
+  value (the overwhelmingly common case today — there is no UI anywhere in this app to
+  populate a `files` property with a real URL) falls back to the same neutral placeholder
+  an absent cover already showed, never a broken image.
+- **Hover affordances moved off the cover, onto the whole card**, and made genuinely
+  hover-gated (`HoverAffordance`, requiring the outer card to carry `group`/`relative`,
+  neither of which it had before). `OpenNoteButton` stayed; a new `RowMenuTrigger`
+  (`MoreHorizontal` "···", the same shared component RowGutter/FeedView already use) was
+  added beside it. Real Notion's row-menu shortcuts ("Layout", "Property visibility") were
+  NOT added — see above.
+- **A real, novel bug found and fixed, unrelated to the capture itself:** Gallery
+  (`onOpenRow={openRow}`) had the identical OPEN/CLOSE-doesn't-actually-toggle bug M10
+  already found and fixed once for Table (this file's own M10 section: "clicking CLOSE...
+  fired the identical onOpen handler as OPEN — re-opening the same row instead of closing
+  it"). That fix was never applied to Gallery (or Board, which shares the same bug —
+  confirmed by reading `BoardView.tsx`, deliberately NOT fixed this session, out of scope
+  for Gallery's own milestone, tracked for Board's own upcoming milestone instead). Fixed
+  by threading `useRowPeek`'s existing `toggleRow` into `onOpenRow` instead of bare
+  `openRow`, the same fix shape M10 already established.
+
+Tests: `GalleryView.test.tsx` grew from 10 to 17 — Card preview's None/files-source/
+empty-files-fallback/invalid-config-fallback/config-round-trip cases, the row-menu hover
+trigger (mirrors `FeedView.test.tsx`'s own test), and the OPEN/CLOSE toggle-close
+regression (reuses the same button element across both clicks to sidestep the
+RowPeek-close-button-also-reads-"Close" disambiguation `TableView.test.tsx` already
+documents). Frontend 61 files / 935 tests green (was 928 — one file grew, no new file),
+`tsc` clean. Full suite run, not just the affected file — one unrelated pre-existing test
+(`DatabaseShell.test.tsx`'s Board auto-select test) timed out under full-suite load and
+passed cleanly in isolation, the same jsdom-under-load flakiness class this workstream has
+hit before (M6's grouped-`<table>` hang, M5's `DndContext`+`Popover` hang) — not a
+regression from this change.
+
+**Live verification: partial.** Confirmed live before the environment hit trouble: hover
+reveals both the OPEN icon and the new "···" trigger (previously ABSENT), clicking "···"
+opens the byte-identical shared row menu, and the "Card preview" select renders correctly
+in the toolbar with "Page cover" as the default. **Not re-verified live:** "Card preview:
+None" actually hiding the cover, a `files`-property source rendering a real image, and the
+OPEN/CLOSE toggle-close fix — the browser tab froze on `Page.captureScreenshot` (30s CDP
+timeout) immediately after setting the "Card preview" select, on BOTH the original tab and
+a freshly-created replacement tab, ruling out one specific stuck native `<select>` popup as
+the cause. Same class of environment exhaustion this workstream has repeatedly documented
+(memory pressure from multiple concurrent Claude Code sessions + accumulated Chrome
+renderer processes on a 3.7GB-RAM machine), not a code concern — all three unverified
+scenarios are covered by the new regression tests above, which assert the actual DOM output
+(image `src`, absence of `img`/placeholder, exact `router.replace` URL per click), not a
+hypothetical "should work."
