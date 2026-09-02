@@ -605,8 +605,8 @@ zero results" is in practice.
 
 | Milestone | State |
 |---|---|
-| M12 — List | **row hover affordances built and unit-tested (2026-09-02); live-verified pre-fix, not yet re-verified post-fix (environment down, see Log)** |
-| M12 — row peek (Feed, Board, Gallery, Calendar, Timeline) | **wired to every remaining view (2026-09-02), unit-tested, not live-verified (environment down)** |
+| M12 — List | **row hover affordances built, unit-tested, and fully live-verified incl. the blur-race fix (2026-09-02)** |
+| M12 — row peek (Feed, Board, Gallery, Calendar, Timeline) | **wired to every remaining view, unit-tested, and live-verified against all five (2026-09-02)** |
 | M12 — Feed's own row-affordances (beyond the peek), Gallery/Chart/Form/Dashboard/Board/Calendar/Timeline's own dedicated per-view work | not started |
 
 `docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
@@ -657,8 +657,25 @@ through re-verifying the blur-race FIX; freeing several stale Chrome renderer pr
 didn't reconnect the extension, and a full Chrome restart (the known fix) was left for the
 user rather than done unilaterally, since it closes their open tabs. The fix itself has two
 new jsdom regression tests reproducing the exact blur/`relatedTarget` sequence, not just an
-assertion it "should" work. **Resume point for List: re-verify the post-fix behavior live
-once the browser environment recovers** — everything else about List is done.
+assertion it "should" work.
+
+**Live verification completed (2026-09-02), after the user approved a Chrome restart.**
+Killing stale renderer processes freed memory but didn't reconnect the extension; the user
+was asked directly and approved a full restart, which did. Re-verified live: List's
+blur-race fix (clicking "Status: —" right after Edit opens the dropdown without the row
+collapsing). Then, since the fixture had no date property, added a "Due Date" property and
+set it on the fixture's one row, and live-verified the row-peek wiring on all five remaining
+views: Board and Gallery (created via the AddViewGrid, clicked each card's OPEN button),
+Calendar and Timeline (clicked OPEN on the Sep 2 event bar), and Feed (clicked the card
+title). All six views write the identical `&p=<rowId>&pm=s` URL and open the same non-modal
+side peek. Full write-up: `row-affordances.md`'s "Row peek rolled out to every remaining
+view" section. The browser environment kept hitting intermittent memory-pressure freezes
+throughout (many background renderer processes survived from the restored session); routed
+around each one with reload/retry rather than restarting again, per the user's explicit
+choice when asked. **List and the cross-cutting row-peek wiring are now fully done, live
+and unit-tested. Resume point: Feed's own dedicated row-hover-affordance capture** (next in
+the decided build order — needs its own live Notion capture, since Feed's card shape
+differs from List's row shape).
 
 ---
 
@@ -779,6 +796,29 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M12 — List's post-fix behavior and all five remaining views' row peek,
+  live-verified)** — Picked up the two "not yet live-verified" resume points below after
+  the user approved a full Chrome restart (killing stale renderer processes alone hadn't
+  reconnected the extension). Re-verified List's blur-race fix live: clicking "Status: —"
+  right after clicking Edit now opens the dropdown without the row collapsing, confirming
+  the fix from the entry below. Then, since the "Untitled Database" fixture had no date
+  property (blocking Calendar/Timeline), added a "Due Date" property and set it on the
+  fixture's one row. With that, live-verified the row-peek wiring on all five remaining
+  views from the entry below: Board and Gallery (created via the AddViewGrid, clicked
+  each card's OPEN button), Calendar and Timeline (created a dedicated view for each,
+  clicked OPEN on the Sep 2 event bar — Timeline's own view also confirmed the M7
+  create-flow's date-property auto-select works end to end), and Feed (created a
+  dedicated view, clicked the card title, since Feed has no separate Open button). All six
+  write the identical `&p=<rowId>&pm=s` URL, open the same non-modal side peek, and flip
+  their trigger to "CLOSE" while open. The browser environment kept hitting intermittent
+  memory-pressure freezes throughout the session (many renderer processes survived from
+  the restored Chrome session) — routed around each with reload/retry rather than
+  restarting Chrome again, per the user's explicit choice when asked mid-session. No code
+  changes this pass — verification only. Full write-up: `row-affordances.md`'s "Row peek
+  rolled out to every remaining view" section. **Resume point: Feed's own dedicated
+  row-hover-affordance capture** (next in the decided build order — Feed's card shape
+  differs from List's row shape, so this needs its own live Notion capture before any
+  code, per this workstream's "no invented numbers" rule).
 - **2026-09-02 (M12 — List built)** — Built List's row hover affordances from the
   session's own live capture (below): `RowGutter` gained a `showCheckbox` prop (List's
   own gutter has no checkbox), the row peek's `?p=`/`?pm=` URL-sync logic was pulled out

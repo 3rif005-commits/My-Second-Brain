@@ -350,10 +350,28 @@ rather than each card re-deriving its own order. Gallery's own DELIBERATE differ
 `hidden_properties` may include the title key there, hiding it — was left untouched;
 only its missing `property_order` support was added.
 
-**Not live-verified** — same environment-exhaustion reason as List's own post-fix
-re-check above. Every one of these changes is covered by a new jsdom test per view
+Every one of these changes is covered by a new jsdom test per view
 (`BoardView.test.tsx`, `GalleryView.test.tsx`, `CalendarView.test.tsx`,
 `TimelineView.test.tsx`, `FeedView.test.tsx`) asserting the `?p=<rowId>&pm=s` URL a real
 click writes, replacing each file's own now-obsolete "navigates to the workspace route"
-assertion, plus one hidden/ordered-properties test each for Board and Gallery — not just
-a hope it behaves the same as List's already-live-verified version of the identical hook.
+assertion, plus one hidden/ordered-properties test each for Board and Gallery.
+
+**Live-verified (2026-09-02, after Chrome recovered from the environment exhaustion
+noted above)** — against the local app's "Untitled Database" fixture
+(`d2437abd-03e8-4165-bf6f-edaea5abe736`), a "Due Date" property was added and set on the
+fixture's one row so Calendar/Timeline would have something to render (the fixture
+previously had no date property, so Calendar only showed its own empty-state
+placeholder). With that in place, all six views were spot-checked directly in the
+browser, each confirmed to write the identical `&p=<rowId>&pm=s` URL, open the same
+non-modal side peek, and flip the trigger control to "CLOSE" while open:
+
+- **List** — the blur-race fix itself (clicking "Status: —" right after Edit opens the
+  dropdown without the row collapsing).
+- **Board** / **Gallery** — created via the AddViewGrid, clicked each card's "OPEN"
+  button.
+- **Calendar** — clicked "OPEN" on the Sep 2 event bar.
+- **Timeline** — clicked "OPEN" on the Sep 2 event bar (own dedicated Timeline view,
+  auto-selected the Due Date property per the M7 create-flow fix).
+- **Feed** — clicked the card's title (Feed has no separate Open button; the whole title
+  is the click target, matching its own already-live-verified task-17 navigation
+  affordance).
