@@ -608,7 +608,8 @@ zero results" is in practice.
 | M12 — List | **row hover affordances built, unit-tested, and fully live-verified incl. the blur-race fix (2026-09-02)** |
 | M12 — row peek (Feed, Board, Gallery, Calendar, Timeline) | **wired to every remaining view, unit-tested, and live-verified against all five (2026-09-02)** |
 | M12 — Feed | **DONE (2026-09-02): row hover affordances (top-right "···" menu) and center-peek default built, unit-tested, and live-verified; byline/comments deliberately deferred (missing prerequisites, user's own call)** |
-| M12 — Gallery/Chart/Form/Dashboard/Board/Calendar/Timeline's own dedicated per-view work | not started |
+| M12 — Open pages in defaults (Gallery, Calendar) | **DONE (2026-09-02): both now default to Center peek at creation, matching real Notion, live-verified; checked systematically across every view type, not just Feed** |
+| M12 — Gallery's own dedicated work (card preview source, card size/fit — beyond the peek-default fix above), Chart/Form/Dashboard/Board/Calendar/Timeline's own dedicated per-view work | not started |
 
 `docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
 a code-verified survey of what M1-M11 already ship for free across every view type (view
@@ -797,6 +798,30 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M12 — "Open pages in" defaults checked across every view type; Gallery
+  and Calendar fixed)** — After Feed's own capture turned up a real default (Center peek,
+  not Side), checked every OTHER creatable view type's own fresh "Open pages in" setting
+  live rather than assuming Feed was a one-off: Table/Board/List/Timeline all read Side
+  peek (matching this app's existing global fallback already); Gallery and Calendar BOTH
+  also read Center peek, the same as Feed. Genuinely per-type — not a "date views default
+  center" pattern (Calendar and Timeline diverge from each other) or a "card-grid views
+  default center" pattern (Board and Gallery diverge from each other). Fixed the same way
+  as Feed: `DatabaseShell.tsx`'s `handleCreateView` now sets `open_pages_in: "center"` for
+  fresh Gallery and Calendar views too; Calendar's branch merges this into the SAME
+  `updateView` call as its existing date-property auto-select (one write, not two).
+  Live-verified: a fresh Gallery view's OPEN button writes `&pm=c`; a fresh Calendar view
+  (auto-date-select still working) does too. Three new `DatabaseShell.test.tsx` tests
+  (Gallery's write, Calendar's single merged write, a Timeline regression proving its own
+  branch stayed untouched). Frontend 928 tests green (was 925), `tsc` clean. Full write-up:
+  `row-affordances.md`'s "Open pages in defaults" section (has the full per-type table).
+  Environment note: mid-session the whole dev stack (not just Chrome) hit severe memory
+  exhaustion — the frontend dev server itself crashed and needed `./app.sh start` to
+  recover, and the backend's own `/api/db/databases` route intermittently 401'd under load
+  (confirmed in backend logs, not guessed). Flagged to the user, who chose to keep
+  retrying rather than pause; verification completed successfully once memory pressure
+  eased. **Resume point: Gallery's own dedicated per-view work** (card preview source —
+  real Notion lets you pick a property as the cover image, this app only ever uses the
+  row's fixed `cover_image_url` — plus card size/fit, both need their own live capture).
 - **2026-09-02 (M12 — Feed's own real-Notion capture, build, and live verification)** —
   Live Notion has a genuine, distinct native "Feed" view type (resolving the plan's own
   open question — "if Notion's real Feed even has one"), but its actual shape is a

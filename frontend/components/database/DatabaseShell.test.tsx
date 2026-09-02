@@ -803,11 +803,13 @@ describe("DatabaseShell", () => {
     expect(await screen.findByText("Layout")).toBeInTheDocument();
   });
 
-  // Live Notion capture (row-affordances.md's "Feed view — real Notion
-  // capture"): a fresh Feed view's own Layout settings read "Open pages in:
-  // Center peek" — the only view type observed defaulting to center rather
-  // than side. Set the same way Board/Calendar/Timeline's own type-specific
-  // defaults are: written into the fresh view's config at creation time.
+  // Live Notion capture (row-affordances.md's "Open pages in defaults"
+  // note): checked systematically across every view type after Feed's own
+  // capture turned up one real default difference. Table/Board/List/
+  // Timeline all read "Side peek"; Gallery/Calendar/Feed all read "Center
+  // peek" — genuinely per-type, not a Feed peculiarity. Set the same way
+  // Board's auto-group-by is: written into the fresh view's config at
+  // creation time, not by teaching the shared hook about view types.
   it("creating a Feed view sets open_pages_in='center', matching real Notion's own default", async () => {
     const user = userEvent.setup();
     const createdView = { id: "v14", data_source_id: "ds-1", user_id: "user-1", name: "", icon: null, type: "feed", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
@@ -823,6 +825,69 @@ describe("DatabaseShell", () => {
     expect(mockHook.createView).toHaveBeenCalledWith("", "feed");
     expect(mockHook.updateView).toHaveBeenCalledWith("v14", { config: { open_pages_in: "center" } });
     expect(mockHook.setActiveViewId).toHaveBeenCalledWith("v14");
+  });
+
+  it("creating a Gallery view ALSO sets open_pages_in='center', matching real Notion's own default", async () => {
+    const user = userEvent.setup();
+    const createdView = { id: "v15", data_source_id: "ds-1", user_id: "user-1", name: "", icon: null, type: "gallery", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
+    mockHook.createView.mockResolvedValue(createdView);
+    mockHook.updateView.mockResolvedValue({ ...createdView, config: { open_pages_in: "center" } });
+
+    render(<DatabaseShell databaseId="db-1" />);
+
+    await user.click(screen.getByRole("button", { name: "Add a new view" }));
+    const dialog = screen.getByRole("dialog", { name: "Add a new view" });
+    await user.click(within(dialog).getByRole("button", { name: "Gallery" }));
+
+    expect(mockHook.createView).toHaveBeenCalledWith("", "gallery");
+    expect(mockHook.updateView).toHaveBeenCalledWith("v15", { config: { open_pages_in: "center" } });
+    expect(mockHook.setActiveViewId).toHaveBeenCalledWith("v15");
+  });
+
+  it("creating a Calendar view sets BOTH date_property_id and open_pages_in='center' in one merged config write", async () => {
+    mockHook.properties = [
+      mockHook.properties[0],
+      mockHook.properties[1],
+      { id: "p3", data_source_id: "ds-1", user_id: "user-1", key: "due", name: "Due", type: "date", config: {}, description: null, storage: "jsonb", column_name: null, result_type: null, is_volatile: false, position: 2, created_at: "2026-01-01T00:00:00Z" },
+    ];
+    const user = userEvent.setup();
+    const createdView = { id: "v16", data_source_id: "ds-1", user_id: "user-1", name: "", icon: null, type: "calendar", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
+    mockHook.createView.mockResolvedValue(createdView);
+    mockHook.updateView.mockResolvedValue({ ...createdView, config: { date_property_id: "due", open_pages_in: "center" } });
+
+    render(<DatabaseShell databaseId="db-1" />);
+
+    await user.click(screen.getByRole("button", { name: "Add a new view" }));
+    const dialog = screen.getByRole("dialog", { name: "Add a new view" });
+    await user.click(within(dialog).getByRole("button", { name: "Calendar" }));
+
+    expect(mockHook.createView).toHaveBeenCalledWith("", "calendar");
+    expect(mockHook.updateView).toHaveBeenCalledTimes(1);
+    expect(mockHook.updateView).toHaveBeenCalledWith("v16", { config: { date_property_id: "due", open_pages_in: "center" } });
+  });
+
+  // Timeline is date-based like Calendar but reads "Side peek" in real
+  // Notion, not "Center peek" — confirmed live, not assumed from the
+  // Calendar pattern. Regression: proves the two branches genuinely
+  // diverged rather than both silently picking up Calendar's own change.
+  it("creating a Timeline view does NOT set open_pages_in — Timeline's own default stays Side peek", async () => {
+    mockHook.properties = [
+      mockHook.properties[0],
+      mockHook.properties[1],
+      { id: "p3", data_source_id: "ds-1", user_id: "user-1", key: "due", name: "Due", type: "date", config: {}, description: null, storage: "jsonb", column_name: null, result_type: null, is_volatile: false, position: 2, created_at: "2026-01-01T00:00:00Z" },
+    ];
+    const user = userEvent.setup();
+    const createdView = { id: "v17", data_source_id: "ds-1", user_id: "user-1", name: "", icon: null, type: "timeline", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
+    mockHook.createView.mockResolvedValue(createdView);
+    mockHook.updateView.mockResolvedValue({ ...createdView, config: { date_property_id: "due" } });
+
+    render(<DatabaseShell databaseId="db-1" />);
+
+    await user.click(screen.getByRole("button", { name: "Add a new view" }));
+    const dialog = screen.getByRole("dialog", { name: "Add a new view" });
+    await user.click(within(dialog).getByRole("button", { name: "Timeline" }));
+
+    expect(mockHook.updateView).toHaveBeenCalledWith("v17", { config: { date_property_id: "due" } });
   });
 
   it("threads dataSource.id and refetchRows down to TableView's Add row control (task-18)", async () => {

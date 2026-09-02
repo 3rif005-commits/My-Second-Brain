@@ -376,18 +376,26 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
         .slice()
         .sort((a, b) => a.position - b.position)
         .find((p) => p.type === "date");
-      if (dateProperty) {
-        await updateView(created.id, { config: { date_property_id: dateProperty.key } });
+      const config: Record<string, unknown> = {};
+      if (dateProperty) config.date_property_id = dateProperty.key;
+      // Live Notion capture, checked systematically across every view type
+      // (not just Feed) after Feed's own capture turned up a real default
+      // difference: a fresh Calendar's own Layout settings also read "Open
+      // pages in: Center peek", but Timeline's own reads "Side peek" despite
+      // both being date-based views — genuinely per-type, not a Feed
+      // peculiarity or a date-view pattern. See the shared "Open pages in
+      // defaults" note (row-affordances.md).
+      if (input.type === "calendar") config.open_pages_in = "center";
+      if (Object.keys(config).length > 0) {
+        await updateView(created.id, { config });
       }
     } else if (input.type === "chart" && input.chartConfig) {
       await updateView(created.id, { config: input.chartConfig });
-    } else if (input.type === "feed") {
-      // Live Notion capture (row-affordances.md, "Feed view — real Notion
-      // capture"): a fresh Feed view's own Layout settings read "Open pages
-      // in: Center peek" — the only view type observed defaulting to center
-      // rather than side. `getOpenPagesInMode`'s own fallback is "side"
-      // globally (it has no per-view-type awareness), so this is set the
-      // same way Board/Calendar/Timeline's own type-specific defaults are:
+    } else if (input.type === "feed" || input.type === "gallery") {
+      // Same capture as above: fresh Feed AND Gallery views both read
+      // "Open pages in: Center peek" in real Notion — `getOpenPagesInMode`'s
+      // own fallback is "side" globally (it has no per-view-type
+      // awareness), so this is set the same way Board's auto-group-by is:
       // written into the fresh view's config at creation time, not by
       // teaching the shared hook about view types.
       await updateView(created.id, { config: { open_pages_in: "center" } });

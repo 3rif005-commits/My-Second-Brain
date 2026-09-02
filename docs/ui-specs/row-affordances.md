@@ -475,3 +475,50 @@ Feed's own creation-time config write. Frontend 922/922 tests green, `tsc` clean
 unrelated to this build — a test was spreading `status`/`number` as top-level `DatabaseRow`
 fields instead of nesting them under `properties`, caught by `tsc`, not by the test itself
 silently passing on meaningless data).
+
+## Open pages in defaults — checked systematically across every view type (2026-09-02)
+
+Feed's own capture turned up one real default difference (Center peek, not Side). Rather
+than assume that was a Feed peculiarity, every other creatable view type's own fresh
+"Open pages in" setting was checked live, one at a time, via the same "Add a new view"
+picker panel (its settings pane shows each type's own defaults immediately on selecting
+it, no need to fully create each one to see them) — reading the value straight off Layout
+rather than inferring it from a single click:
+
+| View type | Open pages in (fresh view) |
+|---|---|
+| Table | Side peek |
+| Board | Side peek |
+| List | Side peek |
+| Timeline | Side peek |
+| Gallery | **Center peek** |
+| Calendar | **Center peek** |
+| Feed | **Center peek** |
+| Chart / Dashboard / Form | *(no such setting — none of these show individual rows)* |
+
+Genuinely per-type, not a "Feed is the odd one out" or a "date-based views default to
+center" pattern — Calendar and Timeline are both date-based and diverge from each other;
+Board and Gallery are both card-grid-shaped views and also diverge from each other. Map
+wasn't checked (already cut from this app, per `FeedView.tsx`'s own earlier comment on
+why Map was dropped).
+
+**Built (2026-09-02):** `DatabaseShell.tsx`'s `handleCreateView` now sets
+`open_pages_in: "center"` for fresh Gallery and Calendar views too, the identical pattern
+already established for Feed — written into the fresh view's config at creation time,
+`getOpenPagesInMode`'s own fallback left at "side" globally (no per-view-type awareness
+added to the shared hook). Calendar's branch merges `date_property_id` and
+`open_pages_in` into a single `updateView` call rather than two separate writes.
+Timeline's own branch is deliberately unchanged — confirmed live to still read Side peek,
+not assumed safe from the Calendar pattern.
+
+**Live-verified (2026-09-02):** a freshly-created Gallery view's OPEN button writes
+`&pm=c`; a freshly-created Calendar view (which also correctly auto-selected the Due Date
+property, confirming the merged config write didn't regress the pre-existing auto-select)
+opens its event bar's OPEN button into `&pm=c` too. Board and List were NOT changed —
+their own fresh-view defaults were confirmed to already read Side peek in real Notion,
+matching this app's existing global fallback with no per-type override needed.
+
+Unit tests: three new `DatabaseShell.test.tsx` tests — Gallery's own `open_pages_in`
+write, Calendar's merged single-call write (asserting `updateView` fires exactly once,
+not twice), and a Timeline regression proving its own branch stayed untouched rather than
+silently inheriting Calendar's change. Frontend 928/928 tests green, `tsc` clean.
