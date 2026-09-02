@@ -525,6 +525,88 @@ describe("DatabaseShell", () => {
     ]);
   });
 
+  it("live-discovered fix (M6 group-order checklist): two group_by writes fired before the first's response lands do not clobber each other (queueGroupByUpdate's stale-merge race)", async () => {
+    // `group_by` lives inside `config` (mergeable at the top level, unlike
+    // `sorts`/`filter`) but `GroupStageTwo.patchGroupBy` (GroupBuilder.tsx)
+    // builds its own next `group_by` SUB-object by spreading whatever it
+    // closed over at render time — two of its own writers ("Hide all", the
+    // "Hide empty groups" toggle) fired close together both spread the SAME
+    // stale snapshot, so the second one's spread silently dropped whatever
+    // the first had just set. Live-verified reachable: "Hide all" (sets
+    // hidden_groups) immediately followed by toggling "Hide empty groups"
+    // persisted only the toggle, with hidden_groups gone entirely.
+    const user = userEvent.setup();
+    mockHook.views = [
+      {
+        id: "v1",
+        data_source_id: "ds-1",
+        user_id: "user-1",
+        name: "Table view",
+        icon: null,
+        type: "table",
+        config: { group_by: { property_key: "status", hide_empty_groups: true } },
+        filter: null,
+        sorts: [],
+        is_locked: false,
+        position: 0,
+      },
+    ];
+    mockHook.groups = [
+      { key: "todo", label: "To do", row_count: 1, rows: [{ id: "row-1", properties: {} }], subgroups: null },
+      { key: "done", label: "Done", row_count: 0, rows: [], subgroups: null },
+    ];
+
+    let resolveFirst: (v: ViewResponse) => void = () => {};
+    mockHook.updateView.mockImplementationOnce(
+      () => new Promise<ViewResponse>((resolve) => { resolveFirst = resolve; })
+    );
+
+    render(<DatabaseShell databaseId="db-1" />);
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const sidebar = await screen.findByRole("dialog", { name: "View settings" });
+    await user.click(within(sidebar).getByText("Group"));
+
+    // First write: "Hide all" — sets hidden_groups to every visible group's key.
+    await user.click(within(sidebar).getByText("Hide all"));
+    expect(mockHook.updateView).toHaveBeenCalledTimes(1);
+    // Still unresolved — deliberately, so the second write races it.
+
+    // Second write: toggling "Hide empty groups" — its own updater closes
+    // over the render-time `groupBy` (the client hasn't heard back from the
+    // first write yet), exactly the stale input the old code would have sent.
+    await user.click(within(sidebar).getByRole("switch", { name: "Hide empty groups" }));
+    // Queued, not fired yet — chained behind the still-pending first write.
+    expect(mockHook.updateView).toHaveBeenCalledTimes(1);
+
+    resolveFirst({
+      id: "v1",
+      data_source_id: "ds-1",
+      user_id: "user-1",
+      name: "Table view",
+      icon: null,
+      type: "table",
+      config: { group_by: { property_key: "status", hide_empty_groups: true, hidden_groups: ["todo", "done"] } },
+      filter: null,
+      sorts: [],
+      is_locked: false,
+      position: 0,
+    });
+
+    await vi.waitFor(() => expect(mockHook.updateView).toHaveBeenCalledTimes(2));
+
+    // The bug: the second call's group_by would be just
+    // { property_key: "status", hide_empty_groups: false } — hidden_groups
+    // gone entirely — if it had merged onto the stale render-time `groupBy`
+    // instead of the first write's resolved result.
+    const [, secondBody] = mockHook.updateView.mock.calls[1];
+    expect(secondBody.config.group_by).toEqual({
+      property_key: "status",
+      hide_empty_groups: false,
+      hidden_groups: ["todo", "done"],
+    });
+  });
+
   it("renders DashboardView (not some other component, not a blank fallback) for a dashboard-typed active view", () => {
     // Empty config.rows -- no widgets to mount, so no per-widget fetch is
     // needed for this render-dispatch check (DashboardView.test.tsx owns

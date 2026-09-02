@@ -99,14 +99,19 @@ describe("groupPanel — stage 1, the property picker", () => {
 
   it("picking a property patches group_by with the type's default mode", async () => {
     const user = userEvent.setup();
-    const onPatchConfig = vi.fn();
+    const onSetGroupBy = vi.fn();
     render(
-      <MenuList root={groupPanel(PROPERTIES, undefined, null, onPatchConfig)} nav="flyout" onClose={() => {}} label="Group" />
+      <MenuList root={groupPanel(PROPERTIES, undefined, null, onSetGroupBy)} nav="flyout" onClose={() => {}} label="Group" />
     );
     await user.click(screen.getByText("Kind"));
     // group-panel.md's own capture: "Hide empty groups" is ON by default.
-    expect(onPatchConfig).toHaveBeenCalledWith({
-      group_by: { property_key: "kind", hide_empty_groups: true },
+    // `onSetGroupBy` is the updater-based write (see GroupByUpdater's own
+    // doc comment, GroupBuilder.tsx, for why a plain patch object would
+    // race two rapid group_by edits against each other).
+    expect(onSetGroupBy).toHaveBeenCalledTimes(1);
+    expect(onSetGroupBy.mock.calls[0][0](undefined)).toEqual({
+      property_key: "kind",
+      hide_empty_groups: true,
     });
   });
 });
@@ -116,9 +121,9 @@ describe("groupPanel — stage 2, grouped", () => {
   const groups: Group[] = [group("article", "article"), group("__no_value__", "No value")];
 
   it("renders Group by / Sort / Hide empty groups rows, plus Remove grouping and Learn about grouping", () => {
-    const onPatchConfig = vi.fn();
+    const onSetGroupBy = vi.fn();
     render(
-      <MenuList root={groupPanel(PROPERTIES, groupBy, groups, onPatchConfig)} nav="flyout" onClose={() => {}} label="Group" />
+      <MenuList root={groupPanel(PROPERTIES, groupBy, groups, onSetGroupBy)} nav="flyout" onClose={() => {}} label="Group" />
     );
     expect(screen.getByText("Group by")).toBeInTheDocument();
     expect(screen.getByText("Sort")).toBeInTheDocument();
@@ -133,41 +138,54 @@ describe("groupPanel — stage 2, grouped", () => {
 
   it("Remove grouping clears group_by", async () => {
     const user = userEvent.setup();
-    const onPatchConfig = vi.fn();
+    const onSetGroupBy = vi.fn();
     render(
-      <MenuList root={groupPanel(PROPERTIES, groupBy, groups, onPatchConfig)} nav="flyout" onClose={() => {}} label="Group" />
+      <MenuList root={groupPanel(PROPERTIES, groupBy, groups, onSetGroupBy)} nav="flyout" onClose={() => {}} label="Group" />
     );
     await user.click(screen.getByText("Remove grouping"));
-    expect(onPatchConfig).toHaveBeenCalledWith({ group_by: null });
+    expect(onSetGroupBy).toHaveBeenCalledTimes(1);
+    expect(onSetGroupBy.mock.calls[0][0](groupBy)).toBeNull();
   });
 
-  it("toggling Hide empty groups patches hide_empty_groups", async () => {
+  it("toggling Hide empty groups patches hide_empty_groups, merged onto the LATEST group_by", async () => {
     const user = userEvent.setup();
-    const onPatchConfig = vi.fn();
+    const onSetGroupBy = vi.fn();
     render(
-      <MenuList root={groupPanel(PROPERTIES, groupBy, groups, onPatchConfig)} nav="flyout" onClose={() => {}} label="Group" />
+      <MenuList root={groupPanel(PROPERTIES, groupBy, groups, onSetGroupBy)} nav="flyout" onClose={() => {}} label="Group" />
     );
     await user.click(screen.getByRole("switch", { name: "Hide empty groups" }));
-    expect(onPatchConfig).toHaveBeenCalledWith({ group_by: { ...groupBy, hide_empty_groups: true } });
+    expect(onSetGroupBy).toHaveBeenCalledTimes(1);
+    // The updater merges onto whatever it's called with — asserting against
+    // a DIFFERENT "latest" than the render-time `groupBy` (e.g. one a
+    // concurrent write had already set `hidden_groups` on) is exactly the
+    // race this fix closes: the merge must happen INSIDE the updater, not
+    // against a stale closure.
+    const latest = { ...groupBy, hidden_groups: ["article"] };
+    expect(onSetGroupBy.mock.calls[0][0](latest)).toEqual({ ...latest, hide_empty_groups: true });
   });
 
   it("Hide all patches hidden_groups with every visible group's key", async () => {
     const user = userEvent.setup();
-    const onPatchConfig = vi.fn();
+    const onSetGroupBy = vi.fn();
     render(
-      <MenuList root={groupPanel(PROPERTIES, groupBy, groups, onPatchConfig)} nav="flyout" onClose={() => {}} label="Group" />
+      <MenuList root={groupPanel(PROPERTIES, groupBy, groups, onSetGroupBy)} nav="flyout" onClose={() => {}} label="Group" />
     );
     await user.click(screen.getByText("Hide all"));
-    expect(onPatchConfig).toHaveBeenCalledWith({ group_by: { ...groupBy, hidden_groups: ["article", "__no_value__"] } });
+    expect(onSetGroupBy).toHaveBeenCalledTimes(1);
+    expect(onSetGroupBy.mock.calls[0][0](groupBy)).toEqual({
+      ...groupBy,
+      hidden_groups: ["article", "__no_value__"],
+    });
   });
 
   it("toggling one group's eye patches hidden_groups with just that key", async () => {
     const user = userEvent.setup();
-    const onPatchConfig = vi.fn();
+    const onSetGroupBy = vi.fn();
     render(
-      <MenuList root={groupPanel(PROPERTIES, groupBy, groups, onPatchConfig)} nav="flyout" onClose={() => {}} label="Group" />
+      <MenuList root={groupPanel(PROPERTIES, groupBy, groups, onSetGroupBy)} nav="flyout" onClose={() => {}} label="Group" />
     );
     await user.click(screen.getByRole("button", { name: "Hide article" }));
-    expect(onPatchConfig).toHaveBeenCalledWith({ group_by: { ...groupBy, hidden_groups: ["article"] } });
+    expect(onSetGroupBy).toHaveBeenCalledTimes(1);
+    expect(onSetGroupBy.mock.calls[0][0](groupBy)).toEqual({ ...groupBy, hidden_groups: ["article"] });
   });
 });

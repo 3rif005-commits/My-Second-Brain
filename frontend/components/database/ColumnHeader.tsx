@@ -18,6 +18,7 @@ import {
   buildColumnHeaderMenu,
   propertyTypeIcon,
 } from "./ColumnHeaderMenu";
+import type { GroupByUpdater } from "./GroupBuilder";
 
 async function errorMessage(res: Response): Promise<string> {
   const body = await res.json().catch(() => null);
@@ -36,6 +37,11 @@ export interface ColumnHeaderProps {
   onPropertiesChanged: () => void | Promise<void>;
   /** M4 supplies this; until then the Filter row is disabled with a reason. */
   onFilter?: () => void;
+  /** The "Group" row's own updater-based write — see `GroupByUpdater`'s own
+   * doc comment (GroupBuilder.tsx). Optional on the same "degrade gracefully"
+   * convention as `onFilter`: omitted, the row still fires (it was always a
+   * plain replace, not a merge) but falls back to `onPatchConfig` instead. */
+  onSetGroupBy?: (updater: GroupByUpdater) => void;
 }
 
 export function ColumnHeader({
@@ -47,6 +53,7 @@ export function ColumnHeader({
   onSetSorts,
   onPropertiesChanged,
   onFilter,
+  onSetGroupBy,
 }: ColumnHeaderProps) {
   const { showToast } = useToast();
   const [open, setOpen] = useState(false);
@@ -135,6 +142,7 @@ export function ColumnHeader({
     onDuplicate: duplicateProperty,
     onDelete: () => setConfirmingDelete(true),
     onFilter,
+    onSetGroupBy,
     renameHeader: (
       <ColumnRenameHeader
         property={property}

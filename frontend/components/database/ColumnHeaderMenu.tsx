@@ -65,6 +65,7 @@ import {
   patchWrapped,
 } from "@/lib/database/viewConfig";
 import type { SortsUpdater } from "@/lib/database/viewConfig";
+import type { GroupByUpdater } from "./GroupBuilder";
 import type { MenuPanel, MenuRow } from "@/components/ui/primitives";
 import { editPropertyPanel, hasEditableConfig } from "./EditPropertyPanel";
 
@@ -182,6 +183,12 @@ export interface ColumnHeaderMenuArgs {
    * rather than omitted — the row exists in Notion, and a silently missing
    * row is harder to notice than a disabled one. */
   onFilter?: () => void;
+  /** The "Group" row's own updater-based write — see `GroupByUpdater`'s own
+   * doc comment (GroupBuilder.tsx) for the race it avoids. Optional: falls
+   * back to `onPatchConfig`'s plain replace (still correct here, since
+   * picking a NEW property is a full replace, not a merge onto the
+   * current spec) for a caller that hasn't been threaded through yet. */
+  onSetGroupBy?: (updater: GroupByUpdater) => void;
   renameHeader: React.ReactNode;
 }
 
@@ -248,6 +255,7 @@ export function buildColumnHeaderMenu(args: ColumnHeaderMenuArgs): MenuPanel {
     onDuplicate,
     onDelete,
     onFilter,
+    onSetGroupBy,
     renameHeader,
   } = args;
 
@@ -364,7 +372,10 @@ export function buildColumnHeaderMenu(args: ColumnHeaderMenuArgs): MenuPanel {
       // capability — the handful of truly ungroupable types (Files, Rollup,
       // Formula, …) still fall back to disabled-with-a-reason.
       disabledReason: "This property type cannot be grouped by yet",
-      onSelect: () => onPatchConfig({ group_by: defaultGroupBySpec(property) }),
+      onSelect: () =>
+        onSetGroupBy
+          ? onSetGroupBy(() => defaultGroupBySpec(property))
+          : onPatchConfig({ group_by: defaultGroupBySpec(property) }),
     },
     {
       id: "calculate",

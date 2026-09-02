@@ -86,6 +86,7 @@ function setup(overrides: Partial<Parameters<typeof ViewSettingsSidebar>[0]> = {
   const onDatabaseChanged = vi.fn();
   const onSetSorts = vi.fn();
   const onSetFilter = vi.fn();
+  const onSetGroupBy = vi.fn();
   const onClose = vi.fn();
   render(
     <ViewSettingsSidebar
@@ -102,6 +103,7 @@ function setup(overrides: Partial<Parameters<typeof ViewSettingsSidebar>[0]> = {
       onDatabaseChanged={onDatabaseChanged}
       onSetSorts={onSetSorts}
       onSetFilter={onSetFilter}
+      onSetGroupBy={onSetGroupBy}
       automations={[]}
       onCreateAutomation={vi.fn()}
       onUpdateAutomation={vi.fn()}
@@ -109,7 +111,7 @@ function setup(overrides: Partial<Parameters<typeof ViewSettingsSidebar>[0]> = {
       {...overrides}
     />
   );
-  return { onPatchConfig, onUpdateView, onPropertiesChanged, onDatabaseChanged, onSetSorts, onSetFilter, onClose };
+  return { onPatchConfig, onUpdateView, onPropertiesChanged, onDatabaseChanged, onSetSorts, onSetFilter, onSetGroupBy, onClose };
 }
 
 beforeEach(() => {
@@ -241,7 +243,7 @@ describe("ViewSettingsSidebar", () => {
     // groupPropertyPicker, matching group-panel.md's "Files is absent
     // here" capture — contrast Filter/Sort, which include it disabled);
     // `formula` stays present but disabled (deferred to Milestone 8).
-    const { onPatchConfig } = setup({
+    const { onSetGroupBy } = setup({
       properties: [
         ...PROPERTIES,
         prop({ key: "attachments", name: "Attachments", type: "files", position: 3 }),
@@ -265,9 +267,13 @@ describe("ViewSettingsSidebar", () => {
 
     await user.click(screen.getByText("Kind"));
     // group-panel.md's own capture: "Hide empty groups" is ON by default.
-    expect(onPatchConfig).toHaveBeenCalledWith({
-      group_by: { property_key: "kind", hide_empty_groups: true },
-    });
+    // `onSetGroupBy` is the updater-based write (see GroupByUpdater's own
+    // doc comment for why a plain patch object would race) — assert what
+    // it produces, the same pattern FilterBuilder/SortRowsList's own tests
+    // already use for their updater props.
+    expect(onSetGroupBy).toHaveBeenCalledTimes(1);
+    const updater = onSetGroupBy.mock.calls[0][0];
+    expect(updater(undefined)).toEqual({ property_key: "kind", hide_empty_groups: true });
   });
 
   it("Sort with no existing sort shows 'New sort' and selecting a property sets a single ascending sort", async () => {
@@ -350,6 +356,7 @@ describe("ViewSettingsSidebar", () => {
         onDatabaseChanged={vi.fn()}
         onSetSorts={vi.fn()}
         onSetFilter={vi.fn()}
+        onSetGroupBy={vi.fn()}
         automations={[]}
         onCreateAutomation={vi.fn()}
         onUpdateAutomation={vi.fn()}
@@ -373,6 +380,7 @@ describe("ViewSettingsSidebar", () => {
         onDatabaseChanged={vi.fn()}
         onSetSorts={vi.fn()}
         onSetFilter={vi.fn()}
+        onSetGroupBy={vi.fn()}
         automations={[]}
         onCreateAutomation={vi.fn()}
         onUpdateAutomation={vi.fn()}

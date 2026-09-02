@@ -718,6 +718,28 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M6 checklist steps 16/17/19)** — Closed out `group-panel.md`'s last
+  three unverified checklist steps. Step 17 (Status grouping, mode='option')
+  confirmed working. Step 16 (`+ New group`) has a real, disclosed-not-fixed gap:
+  the new option IS created on the property, but doesn't appear in the panel's
+  Groups list, because the grouping engine's own bucketing (`grouping.py`) only
+  ever groups by values ACTUALLY PRESENT on a row, with no concept of a property's
+  configured-but-unused options — fixing this would mean changing the grouping
+  engine's own data model, out of scope for this UI-wiring workstream (the same
+  boundary Phase 0c already drew once). Step 19 (two rapid group changes both
+  persisting) exposed and fixed a real, confirmed bug: `GroupStageTwo.patchGroupBy`
+  built its next `group_by` by spreading the render-time `groupBy` PROP, so two
+  writes fired close together (`Hide all` then toggling `Hide empty groups`)
+  silently dropped whichever one's PATCH resolved first — the exact "second write
+  clobbers the first" class Checkpoint 1 already fixed once for `sorts`, now
+  recurring for `group_by`'s own sub-fields. Fixed with a new `GroupByUpdater`
+  type and `queueGroupByUpdate` (mirroring `SortsUpdater`/`queueSortsUpdate`,
+  sharing `patchViewConfig`'s own refs so it stays serialized against other config
+  writes too), threaded through every `group_by` writer. Re-verified live: the
+  identical repro now persists both fields correctly. Full write-up:
+  `REVIEW-LOG.md`'s new "group-panel.md, M6 steps 16/17/19" section. Frontend 61
+  files / 893 tests green (was 892), `tsc` clean. This closes out every item this
+  workstream's own M4/M5/M6 checklist review has ever flagged as unverified.
 - **2026-09-02 (M6 group-order checklist steps)** — Closed out `group-panel.md`'s
   last unverified checklist steps (11-13: the group-order popover, `Alphabetical`
   re-sort, manual drag-reorder's persistence), against the same fixture database.

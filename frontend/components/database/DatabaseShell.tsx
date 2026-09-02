@@ -9,9 +9,11 @@ import { useToast } from "@/app/providers";
 import { useDatabaseView } from "@/lib/database/useDatabaseView";
 import type { ViewResponse } from "@/lib/database/types";
 import { defaultGroupBySpec, getGroupBySpec, getSubGroupBySpec, getSubtaskDisplayMode } from "@/lib/database/types";
+import type { GroupBySpec } from "@/lib/database/types";
 import type { Sort, SortsUpdater } from "@/lib/database/viewConfig";
 import { asFilterNode } from "@/lib/database/filterAst";
 import type { FilterUpdater } from "./FilterBuilder";
+import type { GroupByUpdater } from "./GroupBuilder";
 import { TableView } from "./views/TableView";
 import { BoardView } from "./views/BoardView";
 import { GalleryView } from "./views/GalleryView";
@@ -217,6 +219,47 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     [updateView, showToast]
   );
 
+  // `group_by` lives INSIDE `config` (unlike `sorts`/`filter`, their own top-
+  // level `ViewPatch` fields) but has the identical "whole-value REPLACE,
+  // needs the queue's own latest, not a stale render-time closure" hazard —
+  // see `GroupByUpdater`'s own doc comment (GroupBuilder.tsx) for the exact
+  // live-verified bug this fixes (`Hide all` + `Hide empty groups` fired
+  // close together silently dropped the first). Shares `pendingPatchByViewRef`
+  // AND `latestConfigByViewRef` with `patchViewConfig` above, not separate
+  // refs — a group_by write and any OTHER config write (a layout toggle, the
+  // column header menu's own `group_by` replace) for the SAME view stay
+  // serialized against each other too, and both read/write the one true
+  // latest `config`, not two divergent copies of it.
+  const queueGroupByUpdate = useCallback(
+    (viewId: string, renderTimeConfig: Record<string, unknown>, updater: GroupByUpdater) => {
+      const prevQueue = pendingPatchByViewRef.current.get(viewId) ?? Promise.resolve();
+      const nextQueue = prevQueue
+        .catch(() => undefined)
+        .then(async () => {
+          const base = latestConfigByViewRef.current.get(viewId) ?? renderTimeConfig;
+          const next = updater(base.group_by as GroupBySpec | undefined);
+          const merged = { ...base, group_by: next };
+          let updated: ViewResponse;
+          try {
+            updated = await updateView(viewId, { config: merged });
+          } catch (err) {
+            showToast(err instanceof Error ? err.message : "Could not group", "error");
+            return undefined;
+          }
+          latestConfigByViewRef.current.set(viewId, updated.config);
+          return updated;
+        })
+        .finally(() => {
+          if (pendingPatchByViewRef.current.get(viewId) === nextQueue) {
+            pendingPatchByViewRef.current.delete(viewId);
+          }
+        });
+      pendingPatchByViewRef.current.set(viewId, nextQueue);
+      return nextQueue;
+    },
+    [updateView, showToast]
+  );
+
   if (loading && !database) {
     return (
       <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-500">
@@ -337,6 +380,10 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             onSetSorts={(updater) => queueSortsUpdate(activeView.id, activeView.sorts, updater)}
             // M4: routed through queueFilterUpdate for the identical reason.
             onSetFilter={(updater) => queueFilterUpdate(activeView.id, activeView.filter, updater)}
+            // Routed through queueGroupByUpdate for the identical reason —
+            // the column header menu's own "Group" row and the settings
+            // sidebar's Group panel can both be reached in the same session.
+            onSetGroupBy={(updater) => queueGroupByUpdate(activeView.id, activeView.config, updater)}
             // M6: populated (and `rows` emptied) by useDatabaseView.loadRows
             // whenever config.group_by is set — see getQueryExtras' new
             // "table" branch.
@@ -610,6 +657,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
           onDatabaseChanged={refetch}
           onSetSorts={(updater) => queueSortsUpdate(activeView.id, activeView.sorts, updater)}
           onSetFilter={(updater) => queueFilterUpdate(activeView.id, activeView.filter, updater)}
+          onSetGroupBy={(updater) => queueGroupByUpdate(activeView.id, activeView.config, updater)}
           groups={groups}
           automations={automations}
           onCreateAutomation={createAutomation}

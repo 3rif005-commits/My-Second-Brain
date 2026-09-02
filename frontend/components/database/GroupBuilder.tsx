@@ -21,6 +21,22 @@ import { configuredOptions } from "@/lib/database/filterOperators";
 import { pillStyleForOption } from "./cells/CellProps";
 import { propertyTypeIcon } from "./ColumnHeaderMenu";
 
+/** `group_by`'s own updater form — same "whole-value REPLACE, compute the
+ * next value against whatever's latest, never a stale render-time prop"
+ * contract `SortsUpdater`/`FilterUpdater` already document, and for the
+ * identical reason: `group_by` lives inside `config` (mergeable at the
+ * top level) but `GroupStageTwo`'s own writers (`Hide all`, the per-group
+ * eye toggle, `Hide empty groups`, group order) each PATCH `group_by` as
+ * one whole sub-object, built by spreading the CURRENT `group_by` — two
+ * of those fired close together (before a re-render) both spread the SAME
+ * stale snapshot, so the second one's spread silently drops whatever
+ * sub-field the first one had just set. Live-verified reachable: `Hide
+ * all` followed immediately by toggling `Hide empty groups` persisted
+ * only the toggle, with `hidden_groups` gone entirely — the exact "second
+ * write clobbers the first" bug class the M1-M3 review checkpoint already
+ * fixed once for `sorts`, recurring here for `group_by`'s own sub-fields. */
+export type GroupByUpdater = (current: GroupBySpec | undefined) => GroupBySpec | null;
+
 /** `group.key` this module reserves for the implicit "no value" bucket —
  * mirrors `grouping._NO_VALUE_KEY` on the backend (`"__no_value__"`), not
  * re-derived from the label since `_NO_VALUE_LABEL` ("No value") is exactly
@@ -290,15 +306,20 @@ export interface GroupBuilderProps {
   properties: PropertyResponse[];
   groupBy: GroupBySpec;
   groups: Group[] | null;
-  onPatchConfig: (patch: Record<string, unknown>) => void;
+  onSetGroupBy: (updater: GroupByUpdater) => void;
   onSelectProperty: (property: PropertyResponse | null) => void;
 }
 
-function GroupStageTwo({ properties, groupBy, groups, onPatchConfig, onSelectProperty }: GroupBuilderProps) {
+function GroupStageTwo({ properties, groupBy, groups, onSetGroupBy, onSelectProperty }: GroupBuilderProps) {
   const property = properties.find((p) => p.key === groupBy.property_key);
 
+  // Merges onto whatever `onSetGroupBy`'s queue knows is LATEST when this
+  // runs, not this render's `groupBy` closure — see `GroupByUpdater`'s own
+  // doc comment for the bug this avoids. `latest ?? groupBy` only ever
+  // falls back to the render-time value the very first time (before any
+  // write has landed); every write after that reads the queue's own truth.
   function patchGroupBy(patch: Partial<GroupBySpec>) {
-    onPatchConfig({ group_by: { ...groupBy, ...patch } });
+    onSetGroupBy((latest) => ({ ...(latest ?? groupBy), ...patch }));
   }
 
   return (
@@ -347,10 +368,10 @@ export function groupPanel(
   properties: PropertyResponse[],
   groupBy: GroupBySpec | undefined,
   groups: Group[] | null,
-  onPatchConfig: (patch: Record<string, unknown>) => void
+  onSetGroupBy: (updater: GroupByUpdater) => void
 ): MenuPanel {
   function onSelectProperty(property: PropertyResponse | null) {
-    onPatchConfig({ group_by: property ? defaultGroupBySpec(property) : null });
+    onSetGroupBy(() => (property ? defaultGroupBySpec(property) : null));
   }
 
   if (!groupBy) {
@@ -367,7 +388,7 @@ export function groupPanel(
             properties={properties}
             groupBy={groupBy}
             groups={groups}
-            onPatchConfig={onPatchConfig}
+            onSetGroupBy={onSetGroupBy}
             onSelectProperty={onSelectProperty}
           />
         ),

@@ -480,3 +480,106 @@ which of the two Notion actually does, and no raw-DOM/screenshot evidence in
 this workstream's `raw-dom/`/`screenshots/` settles it either way — matching
 `group-panel.md`'s and this whole workstream's own "no invented numbers, TBD
 until captured" rule. Left as a named, disclosed gap rather than guessed at.
+
+---
+
+## Live Chrome checklist run — group-panel.md, M6 steps 16/17/19 (2026-09-02, continued)
+
+Closing out the last three unverified `group-panel.md` checklist steps. Same
+fixture, same `javascript_tool` DOM-interaction fallback (`computer` clicks
+remained unreliable this session too — `free -h` stayed under ~450MB free
+throughout).
+
+### Confirmed working
+
+- **Step 17**: grouping by the `Status` property (`mode: "option"`) returns
+  200, not a 400 — confirmed at both the raw `POST .../query` level (buckets:
+  `In progress`/`To do`/`No value`, matching the fixture's actual data) and
+  in the rendered table (`Collapse In progress`, `Collapse To do`,
+  `Collapse No Status` — the M6 rename convention holding for a second
+  property, not just `Kind`).
+
+### A real, confirmed gap — disclosed, not fixed (architecture boundary, not a wiring bug)
+
+**Step 16 doesn't fully hold**: clicking `+ New group` DOES create a new
+option on the grouped property (confirmed: `Kind`'s `config.options` gained
+`"Option 3"`) but that option does **not** appear in the panel's Groups list
+afterward, contradicting the checklist's own "and appears in the panel's
+Groups list" clause. Root-caused, not assumed: `GroupsSection`'s Groups list
+is driven entirely by the `groups` prop (`useDatabaseView`'s live query
+result), and the grouping engine's own `_group_by_values`
+(`grouping.py`) only ever buckets by VALUES ACTUALLY PRESENT on a row — it
+has no concept of a property's *configured* options, unlike the implicit
+`__no_value__` bucket (which the engine always appends regardless of data).
+A brand-new option with zero rows using it therefore produces no bucket at
+all, by design of the engine as it exists today. Making the panel eagerly
+show an empty group for it would need either a backend change to
+`grouping.group_rows` (widen select/status bucketing to include every
+*configured* option, similar to checkbox's fixed two-group set — a change to
+the grouping engine's own data model) or client-side synthesis of a fake
+zero-row group from `configuredOptions(property)`, neither of which is a
+"wire the UI to the already-built engine" fix in the sense every other M6
+gap in this file has been. This workstream's own Phase 0c discovery already
+drew this exact boundary once (the engine's bucketing behavior itself was
+explicitly out of scope; only its UI wiring was the plan's job) — so this is
+recorded as a genuine, real gap rather than fixed unilaterally, consistent
+with that established boundary.
+
+### Fixed
+
+4. **Two `group_by` sub-field writes fired close together silently clobber
+   each other — the same "second write wins outright, first is lost" class
+   Checkpoint 1 already fixed once for `sorts`, now recurring for
+   `group_by`'s own internal fields.** Reproduced live for step 19 (`Make two
+   group changes within ~200ms → assert both persist`): clicking `Hide all`
+   (sets `hidden_groups`) then immediately toggling `Hide empty groups`
+   (sets `hide_empty_groups`) left `hidden_groups` **entirely absent** from
+   the persisted `group_by` — only the toggle survived. Root cause, verified
+   in code: `GroupStageTwo.patchGroupBy` (`GroupBuilder.tsx`) built its next
+   `group_by` object by spreading the CURRENT `groupBy` **prop** —
+   `{ ...groupBy, ...patch }` — a value closed over at render time. Two
+   calls fired before React re-renders (the two clicks landed in the same
+   tick) both spread the identical stale snapshot; `patchViewConfig`'s own
+   queue correctly serialized the OUTER `config` merge, but each caller's
+   own `group_by` sub-object had already been computed wrong before it ever
+   reached that queue, so the queue had no way to catch it — the whole
+   `group_by` key was replaced wholesale by whichever call's PATCH resolved
+   last, dropping the other's field outright.
+
+   Fixed with a new `GroupByUpdater` type (`GroupBuilder.tsx`,
+   `(current: GroupBySpec | undefined) => GroupBySpec | null`) — the same
+   "defer computing the next value until the write's own turn in the queue,
+   against the queue's own latest, never a stale prop" contract
+   `SortsUpdater`/`FilterUpdater` already established for their own
+   whole-value-replace fields. `patchGroupBy` now merges INSIDE the updater
+   (`onSetGroupBy((latest) => ({ ...(latest ?? groupBy), ...patch }))`), and
+   a new `queueGroupByUpdate` (`DatabaseShell.tsx`) resolves that updater
+   against `patchViewConfig`'s own `latestConfigByViewRef` — sharing that
+   ref (and `pendingPatchByViewRef`) rather than a separate one, so a
+   `group_by` write and any OTHER config write for the same view (a layout
+   toggle, the column header menu's own `group_by` replace) stay correctly
+   serialized against each other too, not just against their own kind.
+   Threaded `onSetGroupBy` through every `group_by` writer: `groupPanel`'s
+   own property-pick/clear, `ViewSettingsSidebar`'s Group row, and the
+   column header menu's "Group" row (`ColumnHeader.tsx`/
+   `ColumnHeaderMenu.tsx`, optional there with a fallback to the old
+   `onPatchConfig` replace — still correct for a full-value replace, just not
+   race-protected, since no caller of that particular optional path exercises
+   the merge-onto-current pattern this bug was about).
+
+   Re-verified live after the fix, the identical `Hide all` + toggle
+   sequence: both `hidden_groups: ["Article", "Note"]` and
+   `hide_empty_groups: false` now persist together. Regression tests: five
+   in `GroupBuilder.test.tsx` (each `patchGroupBy`-driven writer's updater
+   asserted against an explicit "latest" argument, not the render-time prop,
+   including one that merges onto a DIFFERENT latest than what was rendered
+   — the exact scenario the bug required), plus a new
+   `DatabaseShell.test.tsx` test mirroring the existing `sorts`-race
+   regression test's own structure: a held-pending first `updateView` call,
+   a second write queued behind it, and an assertion that the second
+   PATCH's body contains BOTH fields once the first resolves.
+
+Frontend 61 files / 893 tests green (was 892 before this run's fix; the 5
+`GroupBuilder.test.tsx` tests affected were corrected in place, not counted
+as new; +1 new race regression test in `DatabaseShell.test.tsx`), `tsc`
+clean.

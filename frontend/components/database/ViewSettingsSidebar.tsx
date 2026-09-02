@@ -50,6 +50,7 @@ import { SortRowsList } from "./SortRowsList";
 import { filterPanel } from "./FilterBuilder";
 import type { FilterUpdater } from "./FilterBuilder";
 import { groupPanel } from "./GroupBuilder";
+import type { GroupByUpdater } from "./GroupBuilder";
 import { ViewLayoutPanel } from "./ViewLayoutPanel";
 import { AutomationManager } from "./AutomationManager";
 
@@ -166,6 +167,11 @@ export interface ViewSettingsSidebarProps {
   onDatabaseChanged: () => void | Promise<void>;
   onSetSorts: (updater: SortsUpdater) => void;
   onSetFilter: (updater: FilterUpdater) => void;
+  /** `group_by`'s own updater form, same reason `onSetSorts`/`onSetFilter`
+   * aren't plain patches — see `GroupByUpdater`'s own doc comment
+   * (GroupBuilder.tsx) for the "second write clobbers the first" bug this
+   * avoids. */
+  onSetGroupBy: (updater: GroupByUpdater) => void;
   /** M6's Groups section needs the ACTUAL group results (labels, which
    * option/bucket a row landed in) to render — not derivable from `config`
    * alone. `null`/omitted when the active view isn't grouped or this host
@@ -192,6 +198,7 @@ export function ViewSettingsSidebar({
   onDatabaseChanged,
   onSetSorts,
   onSetFilter,
+  onSetGroupBy,
   groups,
   automations,
   onCreateAutomation,
@@ -323,7 +330,7 @@ export function ViewSettingsSidebar({
             id: "group",
             icon: <Users size={14} />,
             label: "Group",
-            submenu: () => groupPanel(properties, getGroupBySpec(config), groups ?? null, onPatchConfig),
+            submenu: () => groupPanel(properties, getGroupBySpec(config), groups ?? null, onSetGroupBy),
           },
           {
             id: "conditional-color",

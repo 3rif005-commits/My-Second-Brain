@@ -62,6 +62,7 @@ import type { SortsUpdater } from "@/lib/database/viewConfig";
 import { asFilterNode, countConditions, defaultConditionFor } from "@/lib/database/filterAst";
 import { filterPanel, type FilterUpdater } from "../FilterBuilder";
 import { groupDisplayLabel, orderedGroups } from "../GroupBuilder";
+import type { GroupByUpdater } from "../GroupBuilder";
 import type { SelectOption } from "../EditPropertyPanel";
 import { pillStyleForOption } from "../cells/CellProps";
 import { configuredOptions } from "@/lib/database/filterOperators";
@@ -161,6 +162,11 @@ interface TableViewProps {
   /** M4: the query bar (sort/filter chips) and each column header's
    * "Filter" row both write here. */
   onSetFilter?: (updater: FilterUpdater) => void;
+  /** The column header menu's own "Group" row writes here — same
+   * updater-based queue as `onSetSorts`/`onSetFilter`, see `GroupByUpdater`'s
+   * own doc comment (GroupBuilder.tsx) for the "second write clobbers the
+   * first" bug this avoids. */
+  onSetGroupBy?: (updater: GroupByUpdater) => void;
   /** M6: `useDatabaseView`'s grouped-query result — populated (with `rows`
    * emptied) whenever `view.config.group_by` is set. `null`/`undefined`
    * renders the ordinary flat table, unchanged. */
@@ -262,6 +268,7 @@ export function TableView({
   onPatchConfig,
   onSetSorts,
   onSetFilter,
+  onSetGroupBy,
   groups,
   aggregates,
 }: TableViewProps) {
@@ -593,6 +600,7 @@ export function TableView({
                       onFilter={
                         onSetFilter ? () => onSetFilter(() => defaultConditionFor(property)) : undefined
                       }
+                      onSetGroupBy={onSetGroupBy}
                     />
                   )
                 : property.name,
@@ -635,6 +643,7 @@ export function TableView({
       onPatchConfig,
       onSetSorts,
       onSetFilter,
+      onSetGroupBy,
     ]
   );
 
