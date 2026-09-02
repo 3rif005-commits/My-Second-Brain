@@ -803,6 +803,28 @@ describe("DatabaseShell", () => {
     expect(await screen.findByText("Layout")).toBeInTheDocument();
   });
 
+  // Live Notion capture (row-affordances.md's "Feed view — real Notion
+  // capture"): a fresh Feed view's own Layout settings read "Open pages in:
+  // Center peek" — the only view type observed defaulting to center rather
+  // than side. Set the same way Board/Calendar/Timeline's own type-specific
+  // defaults are: written into the fresh view's config at creation time.
+  it("creating a Feed view sets open_pages_in='center', matching real Notion's own default", async () => {
+    const user = userEvent.setup();
+    const createdView = { id: "v14", data_source_id: "ds-1", user_id: "user-1", name: "", icon: null, type: "feed", config: {}, filter: null, sorts: [], is_locked: false, position: 1 };
+    mockHook.createView.mockResolvedValue(createdView);
+    mockHook.updateView.mockResolvedValue({ ...createdView, config: { open_pages_in: "center" } });
+
+    render(<DatabaseShell databaseId="db-1" />);
+
+    await user.click(screen.getByRole("button", { name: "Add a new view" }));
+    const dialog = screen.getByRole("dialog", { name: "Add a new view" });
+    await user.click(within(dialog).getByRole("button", { name: "Feed" }));
+
+    expect(mockHook.createView).toHaveBeenCalledWith("", "feed");
+    expect(mockHook.updateView).toHaveBeenCalledWith("v14", { config: { open_pages_in: "center" } });
+    expect(mockHook.setActiveViewId).toHaveBeenCalledWith("v14");
+  });
+
   it("threads dataSource.id and refetchRows down to TableView's Add row control (task-18)", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn().mockResolvedValue(

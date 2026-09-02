@@ -381,6 +381,16 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
       }
     } else if (input.type === "chart" && input.chartConfig) {
       await updateView(created.id, { config: input.chartConfig });
+    } else if (input.type === "feed") {
+      // Live Notion capture (row-affordances.md, "Feed view — real Notion
+      // capture"): a fresh Feed view's own Layout settings read "Open pages
+      // in: Center peek" — the only view type observed defaulting to center
+      // rather than side. `getOpenPagesInMode`'s own fallback is "side"
+      // globally (it has no per-view-type awareness), so this is set the
+      // same way Board/Calendar/Timeline's own type-specific defaults are:
+      // written into the fresh view's config at creation time, not by
+      // teaching the shared hook about view types.
+      await updateView(created.id, { config: { open_pages_in: "center" } });
     }
     selectView(created.id);
     // Deferred one tick, same fix and same reason as ViewTabs.tsx's
@@ -520,6 +530,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
             dataSourceId={dataSourceId}
             refetch={refetch}
+            refetchRows={refetchRows}
           />
         );
       case "calendar":

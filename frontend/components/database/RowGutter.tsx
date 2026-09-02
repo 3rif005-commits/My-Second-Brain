@@ -15,17 +15,9 @@
 // (view.config has no such field, unlike sorts/filter/group_by). So the
 // handle here is a plain button carrying only the click gesture — opening
 // the menu and selecting — not a dnd-kit `useSortable` handle.
-import { useState } from "react";
 import { GripVertical, Plus } from "lucide-react";
-import { useToast } from "@/app/providers";
-import { HoverAffordance, Popover, MenuList } from "@/components/ui/primitives";
-import { noteWorkspacePath } from "@/lib/database/useOpenNote";
-import { buildRowMenu } from "./RowMenu";
-
-async function errorMessage(res: Response): Promise<string> {
-  const body = await res.json().catch(() => null);
-  return body?.detail || body?.error || `Request failed (${res.status})`;
-}
+import { HoverAffordance } from "@/components/ui/primitives";
+import { RowMenuTrigger } from "./RowMenuTrigger";
 
 export interface RowGutterProps {
   rowId: string;
@@ -53,42 +45,6 @@ export function RowGutter({
   onTrashed,
   showCheckbox = true,
 }: RowGutterProps) {
-  const { showToast } = useToast();
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  async function favorite() {
-    try {
-      const res = await fetch(`/api/notes/${rowId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_favorited: true }),
-      });
-      if (!res.ok) throw new Error(await errorMessage(res));
-      showToast("Added to Favorites", "info");
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Could not favorite this row", "error");
-    }
-  }
-
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?p=${rowId}&pm=s`);
-      showToast("Link copied to clipboard", "info");
-    } catch {
-      showToast("Could not copy the link", "error");
-    }
-  }
-
-  async function moveToTrash() {
-    try {
-      const res = await fetch(`/api/notes/${rowId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await errorMessage(res));
-      await onTrashed();
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : "Could not move this row to Trash", "error");
-    }
-  }
-
   return (
     <div className="flex items-center gap-0.5">
       <HoverAffordance className="flex items-center gap-0.5">
@@ -102,10 +58,10 @@ export function RowGutter({
           <Plus size={12} />
         </button>
 
-        <Popover
-          open={menuOpen}
-          onOpenChange={setMenuOpen}
-          label="Row options"
+        <RowMenuTrigger
+          rowId={rowId}
+          onOpenSidePeek={onOpenSidePeek}
+          onTrashed={onTrashed}
           trigger={
             <button
               type="button"
@@ -117,35 +73,7 @@ export function RowGutter({
               <GripVertical size={12} />
             </button>
           }
-        >
-          <MenuList
-            root={buildRowMenu({
-              onFavorite: () => {
-                setMenuOpen(false);
-                favorite();
-              },
-              onOpenNewTab: () => {
-                setMenuOpen(false);
-                window.open(noteWorkspacePath(rowId), "_blank");
-              },
-              onOpenSidePeek: () => {
-                setMenuOpen(false);
-                onOpenSidePeek(rowId);
-              },
-              onCopyLink: () => {
-                setMenuOpen(false);
-                copyLink();
-              },
-              onMoveToTrash: () => {
-                setMenuOpen(false);
-                moveToTrash();
-              },
-            })}
-            nav="flyout"
-            onClose={() => setMenuOpen(false)}
-            label="Row options"
-          />
-        </Popover>
+        />
       </HoverAffordance>
 
       {/* The checkbox itself stays hover-revealed UNLESS the row is already

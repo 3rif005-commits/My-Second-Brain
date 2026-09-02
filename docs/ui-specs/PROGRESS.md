@@ -607,7 +607,8 @@ zero results" is in practice.
 |---|---|
 | M12 — List | **row hover affordances built, unit-tested, and fully live-verified incl. the blur-race fix (2026-09-02)** |
 | M12 — row peek (Feed, Board, Gallery, Calendar, Timeline) | **wired to every remaining view, unit-tested, and live-verified against all five (2026-09-02)** |
-| M12 — Feed's own row-affordances (beyond the peek), Gallery/Chart/Form/Dashboard/Board/Calendar/Timeline's own dedicated per-view work | not started |
+| M12 — Feed | **DONE (2026-09-02): row hover affordances (top-right "···" menu) and center-peek default built, unit-tested, and live-verified; byline/comments deliberately deferred (missing prerequisites, user's own call)** |
+| M12 — Gallery/Chart/Form/Dashboard/Board/Calendar/Timeline's own dedicated per-view work | not started |
 
 `docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
 a code-verified survey of what M1-M11 already ship for free across every view type (view
@@ -796,6 +797,35 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M12 — Feed's own real-Notion capture, build, and live verification)** —
+  Live Notion has a genuine, distinct native "Feed" view type (resolving the plan's own
+  open question — "if Notion's real Feed even has one"), but its actual shape is a
+  social/activity-feed post (avatar + editor name + relative timestamp, title, an
+  always-visible "Add a comment…" box, 0 visible properties by default, hover reveals only
+  a reaction icon + "···" row-menu top-right, no left gutter/checkbox, and — the one
+  genuinely load-bearing default difference from every other view built so far — a plain
+  title click opens a CENTER peek, not side), not the Gallery-card-shaped grid our own
+  `FeedView.tsx` had. Two real prerequisite gaps block full parity: the author byline needs
+  `last_edited_by`/`people`, already deliberately held back elsewhere pending a user-name
+  lookup (`AddPropertyPopover.tsx`'s own comment, not a new discovery); the comment
+  composer needs a comments feature that doesn't exist anywhere in this app's backend
+  (checked this session). Put to the user rather than guessed: **build the rest of Feed's
+  real shape, skip the byline and comments.** Built: `RowMenuTrigger.tsx` (new — the
+  favorite/copyLink/moveToTrash handlers + Popover/MenuList wiring pulled out of
+  `RowGutter.tsx`, which now delegates to it, so Feed's differently-positioned trigger
+  reuses the same menu instead of a second copy); `FeedView.tsx`'s card gained a
+  hover-revealed top-right "···" trigger (no left gutter, no checkbox); `DatabaseShell.tsx`
+  writes `open_pages_in: "center"` into a fresh Feed view's config at creation time, the
+  same pattern as Board's auto-group-by/Calendar's auto-date-property, rather than teaching
+  the shared `useRowPeek` hook about view types. Live-verified: hovering reveals only the
+  "···" trigger, clicking it opens the identical row menu, and a fresh Feed view's title
+  click writes `&pm=c` (confirmed against the real Notion default). Also fixed a pre-existing
+  `tsc` error in `GalleryView.test.tsx` (unrelated to this build — a `status`/`number` pair
+  spread onto the wrong level of a test fixture) while getting back to a clean baseline.
+  Frontend 925 tests green (was 922), `tsc` clean. Full write-up:
+  `row-affordances.md`'s "Feed view — real Notion capture" and "Feed built" sections.
+  **Resume point: Gallery's own dedicated per-view work** (card preview source, card size,
+  fit-image — next in the decided build order, needs its own live-Notion capture first).
 - **2026-09-02 (M12 — List's post-fix behavior and all five remaining views' row peek,
   live-verified)** — Picked up the two "not yet live-verified" resume points below after
   the user approved a full Chrome restart (killing stale renderer processes alone hadn't

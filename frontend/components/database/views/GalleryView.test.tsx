@@ -190,8 +190,11 @@ describe("GalleryView", () => {
         properties={[TITLE_PROP, STATUS_PROP, NUMBER_PROP]}
         rows={[
           row("row-1", "First", {
-            status: { type: "status", status: "todo" },
-            number: { type: "number", number: 42 },
+            properties: {
+              title: { type: "title", title: "First" },
+              status: { type: "status", status: "todo" },
+              number: { type: "number", number: 42 },
+            },
           }),
         ]}
         editable={false}

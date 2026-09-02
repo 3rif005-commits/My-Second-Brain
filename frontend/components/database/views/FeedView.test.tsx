@@ -175,6 +175,53 @@ describe("FeedView", () => {
     expect(url).toContain("pm=s");
   });
 
+  // M12 (real Notion capture): a title click respects config.open_pages_in
+  // the same way `useRowPeek` already does everywhere else — this exercises
+  // the "center" branch specifically, since DatabaseShell now sets that as
+  // Feed's own creation-time default (row-affordances.md's Feed capture).
+  it("respects config.open_pages_in='center' — a title click writes ?p=&pm=c", async () => {
+    const user = userEvent.setup();
+    render(
+      <FeedView
+        properties={[TITLE_PROP]}
+        rows={[row("row-1", "First")]}
+        editable={false}
+        onCellChange={vi.fn()}
+        config={{ open_pages_in: "center" }}
+        onConfigChange={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByText("First"));
+
+    const [url] = routerReplace.mock.calls[routerReplace.mock.calls.length - 1];
+    expect(url).toContain("p=row-1");
+    expect(url).toContain("pm=c");
+  });
+
+  // M12 (real Notion capture — row-affordances.md's "Feed view" section):
+  // hover reveals a top-right "···" row-menu trigger, byte-identical in
+  // content to every other view's own row menu — no left gutter, no
+  // checkbox, confirmed live. `RowMenuTrigger` is the same shared component
+  // RowGutter.tsx now also uses, just on a differently-positioned trigger.
+  it("hovering a card reveals a row-options menu trigger with the shared row menu", async () => {
+    const user = userEvent.setup();
+    render(
+      <FeedView
+        properties={[TITLE_PROP]}
+        rows={[row("row-1", "First")]}
+        editable={false}
+        onCellChange={vi.fn()}
+        config={{}}
+        onConfigChange={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Row options" }));
+    expect(screen.getByText("Move to Trash")).toBeInTheDocument();
+    expect(screen.getByText("Add to Favorites")).toBeInTheDocument();
+  });
+
   it("property_order (config) reorders which property renders first in a card", () => {
     render(
       <FeedView

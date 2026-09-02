@@ -41,26 +41,40 @@
 // the same shared hook List's own row-hover build extracted out of
 // TableView.tsx) instead of a bare `useOpenNote` navigation — it respects
 // the view's "Open pages in" default the same way Table/List already do,
-// rather than always hard-navigating regardless of that setting. This is
-// the one piece of Feed's own row-affordances this session could build
-// with confidence and NO live capture: `useRowPeek`'s own behavior is
-// already proven correct (M10, extended to List), and threading it through
-// is a pure navigation-behavior change, not a guess about Feed's visual
-// hover shape. Feed's card is Gallery-shaped, not List-row-shaped (checked
-// before assuming otherwise — this file already shows every visible
-// property inline, always, unlike List's now-built Edit-toggle-to-reveal
-// pattern) — a real per-card hover gutter (if Notion's own Feed even has
-// one) is UNCAPTURED and deliberately not invented here. `hidden_properties`/
-// `property_order` also now route through the shared `viewConfig.ts`
-// helpers Table/List already use, replacing this file's own local
-// `readHiddenProperties` copy and the hardcoded schema-position sort —
-// dedup only, no behavior change (title was already exempt from hiding
-// here, matching `getHiddenKeys`'s own callers elsewhere).
+// rather than always hard-navigating regardless of that setting.
+// `hidden_properties`/`property_order` also route through the shared
+// `viewConfig.ts` helpers Table/List already use, replacing this file's own
+// local `readHiddenProperties` copy and the hardcoded schema-position sort.
+//
+// M12 (2026-09-02, real Notion capture — row-affordances.md's "Feed view —
+// real Notion capture" section): Feed's own hover shape is now known, not
+// guessed. Real Notion Feed hover reveals exactly two icons top-right of
+// the card — a reaction-add icon (skipped: no reactions feature anywhere in
+// this app) and a "···" row-menu trigger, byte-identical in content to
+// every other view's own row menu. No left gutter, no drag handle, no
+// checkbox — confirmed live. `RowMenuTrigger` (pulled out of RowGutter.tsx
+// the same session, same reasoning as `useRowPeek`'s own extraction) is
+// reused here instead of a second copy of the favorite/copyLink/
+// moveToTrash handlers. A fresh Feed view's own "Open pages in" also reads
+// "Center peek" by default in real Notion (every other view we've built
+// defaults to side) — set at creation time in DatabaseShell's
+// `handleCreateView`, not hardcoded here, so it still round-trips through
+// the same `open_pages_in` config Layout's own picker already writes.
+//
+// Deliberately NOT built, same "flag rather than invent" instruction as
+// before: the author avatar/name/"2h (edited)" byline row (needs
+// `last_edited_by`/`people`, already held back elsewhere pending a
+// user-name lookup — AddPropertyPopover.tsx's own comment) and the
+// always-visible "Add a comment…" composer (no comments feature exists
+// anywhere in this app's backend — checked this session, not assumed).
+import { MoreHorizontal } from "lucide-react";
+import { HoverAffordance } from "@/components/ui/primitives";
 import { getHiddenKeys, orderProperties } from "@/lib/database/viewConfig";
 import { useRowPeek } from "@/lib/database/useRowPeek";
 import type { DatabaseRow, PropertyResponse, PropertyValue, TitleValue } from "@/lib/database/types";
 import { renderCellValue } from "../cells/renderCellValue";
 import { RowPeek } from "../RowPeek";
+import { RowMenuTrigger } from "../RowMenuTrigger";
 
 /** Pure, unit-testable in isolation from rendering — mirrors BoardView's
  * `resolveDropValue` pattern of separating data-shaping logic from the
@@ -96,6 +110,7 @@ export interface FeedViewProps {
   onConfigChange: (patch: Record<string, unknown>) => void;
   dataSourceId?: string;
   refetch?: () => void | Promise<void>;
+  refetchRows?: () => void | Promise<void>;
 }
 
 export function FeedView({
@@ -107,6 +122,7 @@ export function FeedView({
   onConfigChange,
   dataSourceId,
   refetch,
+  refetchRows,
 }: FeedViewProps) {
   const { peekRowId, peekMode, openRow, closePeek, handleRowAltClick } = useRowPeek(config);
   const hiddenProperties = getHiddenKeys(config);
@@ -161,12 +177,30 @@ export function FeedView({
             <div
               key={row.id}
               onClick={handleRowAltClick(row.id)}
-              className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-3"
+              className="group relative rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-3"
             >
+              <HoverAffordance className="absolute right-2 top-2">
+                <RowMenuTrigger
+                  rowId={row.id}
+                  onOpenSidePeek={(id) => openRow(id, "side")}
+                  onTrashed={() => refetchRows?.()}
+                  trigger={
+                    <button
+                      type="button"
+                      aria-label="Row options"
+                      aria-haspopup="menu"
+                      className="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                    >
+                      <MoreHorizontal size={14} />
+                    </button>
+                  }
+                />
+              </HoverAffordance>
+
               <button
                 type="button"
                 onClick={() => openRow(row.id)}
-                className="block w-full text-left text-sm font-medium mb-1.5 text-gray-900 dark:text-gray-100 hover:underline"
+                className="block w-full pr-6 text-left text-sm font-medium mb-1.5 text-gray-900 dark:text-gray-100 hover:underline"
               >
                 {titleValue || <span className="font-normal text-gray-400">Untitled</span>}
               </button>

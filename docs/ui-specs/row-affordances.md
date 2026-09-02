@@ -375,3 +375,103 @@ non-modal side peek, and flip the trigger control to "CLOSE" while open:
 - **Feed** — clicked the card's title (Feed has no separate Open button; the whole title
   is the click target, matching its own already-live-verified task-17 navigation
   affordance).
+
+## Feed view — real Notion capture (2026-09-02)
+
+> The plan doc's own M12 order flagged this as uncaptured: "Feed's own hover treatment
+> (if Notion's real Feed even has one) is uncaptured." Resolved by live capture rather
+> than guessed — and the answer changes the shape of the work, not just fills in a blank.
+
+**Notion's Feed IS a real, distinct native view type** (`Table`/`Board`/`Gallery`/`List`/
+`Chart`/`Dashboard`/`Timeline`/`Feed`/`Map`/`Calendar`/`Form` all appear in the live
+"Add a new view" grid) — the plan's uncertainty is resolved. But its actual shape is
+**not** a Gallery-style property-card grid, which is what our own `FeedView.tsx` currently
+renders (Status/Due Date chips under a bold title, per `screenshots/feed-view-*.jpg` from
+the local-app spot-check above). Real Notion Feed is a **social/activity-feed post**:
+
+- Each card: a small circular avatar, the editor's name, a relative-or-dated last-edited
+  timestamp ("2h (edited)" / "Aug 29 (edited)"), the row's title as a bold heading below
+  that byline, an emoji-reaction-add icon, and a full "Add a comment…" input inline at the
+  bottom of every card — always rendered, not hover-revealed.
+- **Property visibility defaults to 0** — no properties show on a card unless explicitly
+  turned on per-property in the view's own Property Visibility panel. This is the opposite
+  default from Gallery/Board (which show every non-hidden property by default).
+- **Hover reveals two icons top-right of the card only** — the same reaction-add icon and
+  a "···" menu trigger. No left-gutter, no drag handle, no checkbox anywhere — confirmed
+  by zooming the hover screenshot (`screenshots/feed-view-notion-hover.jpg`).
+- The "···" menu's contents are byte-identical to Table/List's own row menu (Add to
+  Favorites, Edit icon, Edit property, Open in, Comment, Copy link, Duplicate, Move to,
+  Move to Trash) — confirms the existing `buildRowMenu` content transfers as-is; only the
+  trigger's position (top-right icon vs. left-gutter "···") is Feed-specific.
+- **"Open in" only offers "New tab" / "Side peek"** as explicit overrides (no "Center
+  peek" option in that submenu) — yet a **plain click on the title opens a CENTER peek by
+  default** (confirmed live: `&p=<id>&pm=c`, a full-width modal, not the `pm=s` side panel
+  every other view we've built defaults to). This is set by the view's own Layout →
+  "Open pages in" setting, which reads **"Center peek"** for a freshly-created Feed view —
+  a real, load-bearing default difference from Board/Gallery/Calendar/Timeline/List (all
+  of which default to side peek), not an inconsistency to "fix" toward matching them.
+- **Feed-only layout settings**, found under Layout → Feed (none of these exist for any
+  other view type we've built): `Show page icon` (on by default), `Wrap properties` (off
+  by default — only matters once Property Visibility turns properties on), `Show author
+  byline` (**on** by default — this is what renders the avatar/name/timestamp row; turning
+  it off would leave just the title + comment box), `Open pages in` (Center peek, see
+  above), `Load limit` (10 — a pagination/infinite-scroll cap Table/Board/etc. don't have
+  as a per-view setting).
+
+**Scope implication, not yet acted on.** Our row data model already has `created_by`/
+`last_edited_by`/`created_time`/`last_edited_time` as recognized property TYPES
+(`frontend/lib/database/types.ts`'s `GROUPABLE_PROPERTY_TYPES`), but it's unconfirmed
+whether they're currently exposed as *creatable* properties via the "+" add-property menu
+(the type list observed while adding this session's "Due Date" property did not show
+"Created by"/"Last edited by" among the options) or whether row/note metadata even carries
+a real "last edited by" concept in a single-user app. Building Feed's real shape — the
+author byline in particular — depends on resolving that first, which is a bigger question
+than the "mostly a `<select>` → `MenuList` migration"-sized work the M7 create-flow
+already closed out for Chart. Not decided here; see PROGRESS.md's Log for how this was
+surfaced.
+
+## Feed built (2026-09-02)
+
+The user's own decision (asked live rather than guessed, since two real prerequisite gaps
+— `last_edited_by`/`people` and a comments feature — block full parity): **build the rest
+of Feed's real shape, skip the author byline and the comment composer.**
+
+- `RowMenuTrigger.tsx` (new) — the favorite/copyLink/moveToTrash handlers and
+  `Popover`+`MenuList` wiring pulled out of `RowGutter.tsx`, which now delegates to it for
+  its own drag-handle trigger. Same extraction reasoning as `useRowPeek.ts`: two call
+  sites needing the byte-identical menu on a differently-positioned trigger (RowGutter's
+  left-gutter drag handle vs. Feed's top-right icon), not two copies of the same fetch
+  calls.
+- `FeedView.tsx` — each card is now `relative`/`group`; a `HoverAffordance`-wrapped
+  `RowMenuTrigger` sits absolutely positioned top-right (`MoreHorizontal` icon,
+  `aria-label="Row options"`), matching the real capture above exactly (reaction-add icon
+  itself skipped — no reactions feature anywhere in this app, same "flag don't invent"
+  call as comments). No left gutter, no drag handle, no checkbox — none of RowGutter's own
+  shape applies here, confirmed by the live capture rather than assumed absent.
+- `DatabaseShell.tsx`'s `handleCreateView` — a new `else if (input.type === "feed")`
+  branch, alongside Board/Calendar/Timeline's own type-specific auto-config, writes
+  `{ open_pages_in: "center" }` into a fresh Feed view's config immediately after
+  creation. `useRowPeek`'s own `getOpenPagesInMode` fallback stays "side" globally (it has
+  no per-view-type awareness) — Feed's different DEFAULT is set the same way Board's
+  auto-group-by is, not by teaching the shared hook about view types.
+- Property-visibility default (0 visible by default in real Notion, vs. this app's
+  existing all-visible-unless-hidden denylist every other view shares) was deliberately
+  **not** changed — inverting it for Feed alone would mean the same `hidden_properties`
+  config key means opposite things depending on view type, a real inconsistency risk for
+  one cosmetic default, not blocked by any prerequisite. Documented, not silently dropped.
+
+**Live-verified (2026-09-02):** hovering a card reveals only the top-right "···" trigger
+(no layout shift); clicking it opens the identical row menu (Favorite/Move to Trash
+present, contents matching the live-Notion capture); creating a brand-new Feed view and
+clicking a card's title opens the row peek with `&pm=c` (center), confirmed against the
+real Notion default, not the `pm=s` every other view we've built defaults to.
+
+Unit tests: `RowMenuTrigger`'s behavior is exercised through both its callers
+(`RowGutter.test.tsx`, unchanged assertions, now proving the extraction didn't change
+behavior; two new `FeedView.test.tsx` tests for the hover-menu trigger and the
+`open_pages_in: "center"` respect) plus a new `DatabaseShell.test.tsx` test asserting
+Feed's own creation-time config write. Frontend 922/922 tests green, `tsc` clean
+(also fixed a pre-existing type error in `GalleryView.test.tsx`'s own `row()` helper call,
+unrelated to this build — a test was spreading `status`/`number` as top-level `DatabaseRow`
+fields instead of nesting them under `properties`, caught by `tsc`, not by the test itself
+silently passing on meaningless data).
