@@ -49,8 +49,10 @@ import type {
   RelatedRow,
 } from "@/lib/database/types";
 import { findSystemRelationProperty } from "@/lib/database/types";
+import { useRowPeek } from "@/lib/database/useRowPeek";
 import { renderCellValue } from "../cells/renderCellValue";
 import { OpenNoteButton } from "../OpenNoteButton";
+import { RowPeek } from "../RowPeek";
 
 // ── Zoom levels (research §5.3's exact 8-value enumeration) ───────────────
 
@@ -378,6 +380,11 @@ export interface TimelineViewProps {
    * for callers that omit `ensureRelationLinksBulk`, since arrows are a
    * new feature with no pre-existing per-row fetch path to preserve. */
   ensureRelationLinksBulk?: (rowIds: string[], propertyKey: string) => void;
+  dataSourceId?: string;
+  /** RowPeek's own "+ Add a property" writes SCHEMA — needs a full
+   * refetch (properties included), same convention as every other M12
+   * view's own `refetch`. */
+  refetch?: () => void | Promise<void>;
 }
 
 export function TimelineView({
@@ -389,8 +396,14 @@ export function TimelineView({
   onConfigChange,
   relationLinks,
   ensureRelationLinksBulk,
+  dataSourceId,
+  refetch,
 }: TimelineViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // M12: `useRowPeek` — a card's Open button now respects the view's "Open
+  // pages in" default the same way Table/List/Feed/Board/Gallery/Calendar
+  // already do, instead of always hard-navigating.
+  const { peekRowId, peekMode, openRow, closePeek } = useRowPeek(config);
 
   const datePropertyId = readDatePropertyId(config);
   const dateProperty = properties.find((p) => p.key === datePropertyId && p.type === "date");
@@ -597,7 +610,12 @@ export function TimelineView({
                   style={{ height: ROW_HEIGHT }}
                   className="flex items-center gap-1 px-2 text-xs"
                 >
-                  <OpenNoteButton noteId={event.rowId} className="!p-0.5 shrink-0 scale-75" />
+                  <OpenNoteButton
+                    noteId={event.rowId}
+                    className="!p-0.5 shrink-0 scale-75"
+                    onOpen={openRow}
+                    isOpen={peekRowId === event.rowId}
+                  />
                   <span className="truncate min-w-0 flex-1">
                     {titleProp ? (
                       renderCellValue(titleProp, row.properties[titleProp.key], editable, (value) =>
@@ -692,6 +710,19 @@ export function TimelineView({
           </div>
         </div>
       </div>
+
+      {peekRowId && rowsById[peekRowId] && (
+        <RowPeek
+          row={rowsById[peekRowId]}
+          properties={properties}
+          editable={editable}
+          onCellChange={onCellChange}
+          onClose={closePeek}
+          mode={peekMode === "center" ? "center" : "side"}
+          dataSourceId={dataSourceId}
+          onPropertyCreated={refetch}
+        />
+      )}
     </div>
   );
 }

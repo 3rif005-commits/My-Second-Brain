@@ -287,8 +287,14 @@ all — nothing gates a whole row or panel on type.
 1. **List (S)** — nearly all shared surface per the original sizing; the real gap, per the
    code survey above, is row hover affordances + row peek (M9/M10's own scope, adapted to a
    List row) and wiring `hidden_properties`/`property_order` the same way Table already does.
-2. **Feed (S)** — same shape as List; `hidden_properties` already wired, `property_order`
-   is not, plus the same M9/M10 row-affordances gap.
+2. **Feed (S)** — **correction (2026-09-02, reading the actual code before building
+   List/Feed): Feed's card is Gallery-shaped, not List-row-shaped.** `FeedView.tsx`
+   already shows every visible property inline, always (no List-style reveal-on-Edit),
+   closer to `GalleryView.tsx`'s own card than to a List row. The row PEEK is now wired
+   (capture-independent, see M12's own PROGRESS.md log) but List's OWN row-hover-
+   affordance shape (the gutter, the Edit toggle) does NOT simply transfer here — Feed's
+   own hover treatment (if Notion's real Feed even has one) is uncaptured and still needs
+   its own live-Notion pass before building anything beyond the peek.
 3. **Gallery (M)** — List/Feed's own gaps (row affordances, peek, `property_order`) PLUS its
    own named net-new UI: card preview source, card size, fit-image (captured nowhere yet —
    needs its own live-Notion pass, `property-create-edit.md`-style, before building).

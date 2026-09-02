@@ -1,17 +1,37 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // BoardCard renders an OpenNoteButton (task-17 fix round, finding 1), which
 // navigates via next/navigation's useRouter — outside a real Next.js app
 // router tree (as here, a plain RTL render) that throws "invariant expected
-// app router to be mounted" unless mocked, same as ListView.test.tsx.
+// app router to be mounted" unless mocked, same as ListView.test.tsx. M12:
+// BoardView also reads/writes the row peek's `?p=&pm=` via `useRowPeek`
+// now (usePathname/useSearchParams/router.replace) — mocked the same way.
 const push = vi.fn();
+const routerReplace = vi.fn();
+let mockSearch = "";
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace: routerReplace }),
+  usePathname: () => "/brain/db/ds-1",
+  useSearchParams: () => new URLSearchParams(mockSearch),
+}));
+
+// RowPeek mounts a real BlockEditor for the row's own body — heavy
+// (BlockNote), not what BoardView-level tests exercise. Stubbed the same
+// way TableView.test.tsx/ListView.test.tsx already do for the identical
+// reason.
+vi.mock("@/components/editor/BlockEditor", () => ({
+  BlockEditor: () => <div data-testid="block-editor-stub" />,
 }));
 
 import { BoardView, cardDraggableId, computeDragEndWrite, resolveDropValue } from "./BoardView";
+
+beforeEach(() => {
+  mockSearch = "";
+  push.mockClear();
+  routerReplace.mockClear();
+});
 import type { DatabaseRow, Group, PropertyResponse } from "@/lib/database/types";
 
 function prop(overrides: Partial<PropertyResponse>): PropertyResponse {
@@ -243,7 +263,14 @@ describe("BoardView", () => {
     expect(onToggle).toHaveBeenCalledWith(true);
   });
 
-  it("clicking a card's Open note button navigates to the note's workspace route (task-17 fix round, finding 1)", async () => {
+  // M12: a card's Open button now opens the row's side peek (the same
+  // `?p=&pm=s` URL shape Table/List/Feed already write) instead of always
+  // hard-navigating — it respects the view's "Open pages in" default the
+  // same way, replacing the old task-17 bare-navigation fix. `isOpen` being
+  // set now also gives Board the same labelled OPEN/CLOSE toggle Table's
+  // own row already has (previously icon-only, per this file's own prior
+  // comment — no longer, now that a real peek-open state exists to reflect).
+  it("clicking a card's Open button opens the row's side peek (writes ?p=&pm=s), not a bare navigation", async () => {
     const user = userEvent.setup();
     render(
       <BoardView
@@ -257,8 +284,13 @@ describe("BoardView", () => {
       />
     );
 
-    await user.click(screen.getAllByRole("button", { name: /open note/i })[0]);
-    expect(push).toHaveBeenCalledWith("/brain/workspace/row-1");
+    await user.click(screen.getAllByRole("button", { name: "Open" })[0]);
+
+    expect(push).not.toHaveBeenCalled();
+    expect(routerReplace).toHaveBeenCalled();
+    const [url] = routerReplace.mock.calls[routerReplace.mock.calls.length - 1];
+    expect(url).toContain("p=row-1");
+    expect(url).toContain("pm=s");
   });
 });
 

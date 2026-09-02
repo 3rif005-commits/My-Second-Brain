@@ -54,8 +54,10 @@ import {
 } from "@dnd-kit/core";
 import { useToast } from "@/app/providers";
 import type { DatabaseRow, DateValue, PropertyResponse, PropertyValue } from "@/lib/database/types";
+import { useRowPeek } from "@/lib/database/useRowPeek";
 import { renderCellValue } from "../cells/renderCellValue";
 import { OpenNoteButton } from "../OpenNoteButton";
+import { RowPeek } from "../RowPeek";
 
 /** Matches TableView.tsx's own local copy — FastAPI's HTTPException body is
  * `{"detail": "..."}`, this app's proxy error shapes are `{"error": "..."}`. */
@@ -428,6 +430,8 @@ function CalendarEventBar({
   onCellChange,
   weekStartDayKey,
   style,
+  onOpenRow,
+  isPeekOpen,
 }: {
   row: DatabaseRow;
   properties: PropertyResponse[];
@@ -435,6 +439,10 @@ function CalendarEventBar({
   onCellChange: (rowId: string, propertyKey: string, value: PropertyValue | null) => void;
   weekStartDayKey: string;
   style: React.CSSProperties;
+  /** M12: `useRowPeek`'s own `openRow`/`peekRowId`, threaded down instead
+   * of a bare `useOpenNote` navigation. */
+  onOpenRow?: (noteId: string) => void;
+  isPeekOpen?: boolean;
 }) {
   // Disabled (not just unwired) when read-only — task-33-brief.md's test
   // requirement: "a read-only (All Notes) render never wires a working drag
@@ -459,7 +467,12 @@ function CalendarEventBar({
         editable ? "cursor-grab active:cursor-grabbing touch-none" : ""
       } ${isDragging ? "opacity-40" : ""}`}
     >
-      <OpenNoteButton noteId={row.id} className="!p-0.5 shrink-0 scale-75" />
+      <OpenNoteButton
+        noteId={row.id}
+        className="!p-0.5 shrink-0 scale-75"
+        onOpen={onOpenRow}
+        isOpen={onOpenRow ? isPeekOpen : undefined}
+      />
       <span className="truncate min-w-0 flex-1">
         {titleProp ? (
           renderCellValue(titleProp, row.properties[titleProp.key], editable, (value) =>
@@ -481,6 +494,8 @@ function CalendarWeekRow({
   editable,
   onCellChange,
   onCreateOnDay,
+  onOpenRow,
+  peekRowId,
 }: {
   weekDays: CalendarGridDay[];
   events: CalendarEvent[];
@@ -489,6 +504,8 @@ function CalendarWeekRow({
   editable: boolean;
   onCellChange: (rowId: string, propertyKey: string, value: PropertyValue | null) => void;
   onCreateOnDay: (dayKey: string) => void;
+  onOpenRow?: (noteId: string) => void;
+  peekRowId?: string | null;
 }) {
   const weekDayKeys = weekDays.map((d) => d.dayKey);
   const { spans, overflowByCol } = layoutWeekRow(weekDayKeys, events);
@@ -529,6 +546,8 @@ function CalendarWeekRow({
             onCellChange={onCellChange}
             weekStartDayKey={weekStartDayKey}
             style={{ gridColumn: `${span.startCol + 1} / span ${span.colSpan}`, gridRow: span.lane + 2 }}
+            onOpenRow={onOpenRow}
+            isPeekOpen={peekRowId === span.rowId}
           />
         );
       })}
@@ -562,6 +581,10 @@ export interface CalendarViewProps {
    * it appears without a full reload, same contract as TableView's
    * `refetchRows`. */
   refetchRows?: () => void | Promise<void>;
+  /** RowPeek's own "+ Add a property" writes SCHEMA — needs a full refetch
+   * (properties included), not just `refetchRows`. Threaded through
+   * exactly like TableView's own `refetch`. */
+  refetch?: () => void | Promise<void>;
 }
 
 export function CalendarView({
@@ -573,10 +596,14 @@ export function CalendarView({
   onConfigChange,
   dataSourceId,
   refetchRows,
+  refetch,
 }: CalendarViewProps) {
   const { showToast } = useToast();
   const [anchorDayKey, setAnchorDayKey] = useState(() => toDayKey(new Date().toISOString()));
   const [rowCreating, setRowCreating] = useState(false);
+  // M12: called unconditionally, before the "no date property" early return
+  // below (hooks can't follow a conditional return).
+  const { peekRowId, peekMode, openRow, closePeek } = useRowPeek(config);
 
   const datePropertyId = readDatePropertyId(config);
   const viewRange = readViewRange(config);
@@ -723,10 +750,25 @@ export function CalendarView({
               editable={editable}
               onCellChange={onCellChange}
               onCreateOnDay={handleCreateOnDay}
+              onOpenRow={openRow}
+              peekRowId={peekRowId}
             />
           ))}
         </div>
       </DndContext>
+
+      {peekRowId && rowsById[peekRowId] && (
+        <RowPeek
+          row={rowsById[peekRowId]}
+          properties={properties}
+          editable={editable}
+          onCellChange={onCellChange}
+          onClose={closePeek}
+          mode={peekMode === "center" ? "center" : "side"}
+          dataSourceId={dataSourceId}
+          onPropertyCreated={refetch}
+        />
+      )}
     </div>
   );
 }

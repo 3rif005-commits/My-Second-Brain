@@ -477,6 +477,9 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             }
             editable={editable}
             onCellChange={updateCell}
+            config={activeView.config}
+            dataSourceId={dataSourceId}
+            refetch={refetch}
           />
         );
       }
@@ -489,6 +492,8 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             onCellChange={updateCell}
             config={activeView.config}
             onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
+            dataSourceId={dataSourceId}
+            refetch={refetch}
           />
         );
       case "list":
@@ -513,6 +518,8 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             onCellChange={updateCell}
             config={activeView.config}
             onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
+            dataSourceId={dataSourceId}
+            refetch={refetch}
           />
         );
       case "calendar":
@@ -526,6 +533,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
             dataSourceId={dataSourceId}
             refetchRows={refetchRows}
+            refetch={refetch}
           />
         );
       case "timeline":
@@ -539,6 +547,8 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
             onConfigChange={(patch) => patchViewConfig(activeView.id, activeView.config, patch)}
             relationLinks={relationLinks}
             ensureRelationLinksBulk={ensureRelationLinksBulk}
+            dataSourceId={dataSourceId}
+            refetch={refetch}
           />
         );
       case "chart":

@@ -23,8 +23,10 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import type { DatabaseRow, Group, MultiSelectValue, PropertyResponse, PropertyValue } from "@/lib/database/types";
+import { useRowPeek } from "@/lib/database/useRowPeek";
 import { renderCellValue } from "../cells/renderCellValue";
 import { OpenNoteButton } from "../OpenNoteButton";
+import { RowPeek } from "../RowPeek";
 
 // Mirrors services.db.query.grouping._NO_VALUE_KEY exactly — the implicit
 // bucket every grouped type gets for rows with no value on the grouped
@@ -49,6 +51,12 @@ interface BoardViewProps {
   onToggleHideEmptyGroups: (value: boolean) => void;
   editable: boolean;
   onCellChange: (rowId: string, propertyKey: string, value: PropertyValue | null) => void;
+  /** M12: `useRowPeek`'s own read of the view's "Open pages in" default —
+   * previously only `TableView`/`ListView`/`FeedView` respected this;
+   * Board's `OpenNoteButton` always hard-navigated regardless of it. */
+  config?: Record<string, unknown>;
+  dataSourceId?: string;
+  refetch?: () => void | Promise<void>;
 }
 
 interface DragData {
@@ -126,6 +134,8 @@ function BoardCard({
   onCellChange,
   sourceGroupKey,
   subgroupKey,
+  onOpenRow,
+  isPeekOpen,
 }: {
   row: DatabaseRow;
   properties: PropertyResponse[];
@@ -137,6 +147,11 @@ function BoardCard({
    * `sourceGroupKey`-only, matching what `resolveDropValue`/`handleDragEnd`
    * expect), only the draggable *id*. */
   subgroupKey?: string;
+  /** M12: `useRowPeek`'s own `openRow`/`peekRowId` — threaded down instead
+   * of a bare `useOpenNote` navigation, so a Board card respects the
+   * view's "Open pages in" default the same way Table/List/Feed already do. */
+  onOpenRow?: (noteId: string) => void;
+  isPeekOpen?: boolean;
 }) {
   // id must be unique per (row, column[, sub-bucket]) instance, not just
   // per row — a multi_select-grouped card can appear in more than one
@@ -167,7 +182,12 @@ function BoardCard({
         isDragging ? "opacity-40" : ""
       }`}
     >
-      <OpenNoteButton noteId={row.id} className="absolute top-1 right-1" />
+      <OpenNoteButton
+        noteId={row.id}
+        className="absolute top-1 right-1"
+        onOpen={onOpenRow}
+        isOpen={onOpenRow ? isPeekOpen : undefined}
+      />
       {titleProp && (
         <div className="text-sm font-medium mb-1 pr-5 text-gray-900 dark:text-gray-100">
           {renderCellValue(titleProp, row.properties[titleProp.key], editable, (value) =>
@@ -239,11 +259,15 @@ function BoardColumn({
   properties,
   editable,
   onCellChange,
+  onOpenRow,
+  peekRowId,
 }: {
   group: Group;
   properties: PropertyResponse[];
   editable: boolean;
   onCellChange: BoardViewProps["onCellChange"];
+  onOpenRow?: (noteId: string) => void;
+  peekRowId?: string | null;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `${COLUMN_DROPPABLE_PREFIX}${group.key}` });
 
@@ -279,6 +303,8 @@ function BoardColumn({
                 onCellChange={onCellChange}
                 sourceGroupKey={group.key}
                 subgroupKey={sub.key}
+                onOpenRow={onOpenRow}
+                isPeekOpen={peekRowId === row.id}
               />
             ))}
           </div>
@@ -292,6 +318,8 @@ function BoardColumn({
             editable={editable}
             onCellChange={onCellChange}
             sourceGroupKey={group.key}
+            onOpenRow={onOpenRow}
+            isPeekOpen={peekRowId === row.id}
           />
         ))
       )}
@@ -307,6 +335,9 @@ export function BoardView({
   onToggleHideEmptyGroups,
   editable,
   onCellChange,
+  config = {},
+  dataSourceId,
+  refetch,
 }: BoardViewProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -316,6 +347,11 @@ export function BoardView({
       activationConstraint: { distance: 5 },
     })
   );
+  // M12: called unconditionally, before the `!groupPropertyKey` early
+  // return below (hooks can't follow a conditional return) — an ungrouped
+  // Board still needs `openRow` to work once a card exists via some other
+  // path, and the rule against conditional hooks applies regardless.
+  const { peekRowId, peekMode, openRow, closePeek } = useRowPeek(config);
 
   // task-16-brief.md's deliberate deviation from Notion (which
   // auto-mutates the schema to invent a status property): this app
@@ -344,6 +380,14 @@ export function BoardView({
     onCellChange(result.rowId, resolvedGroupPropertyKey, result.value);
   }
 
+  // Board has no flat `rows` prop — `groups`/`subgroups` are the only place
+  // a row lives, so the peek's own row lookup has to walk both levels.
+  const peekRow = peekRowId
+    ? (groups ?? [])
+        .flatMap((g) => g.subgroups?.flatMap((sg) => sg.rows) ?? g.rows)
+        .find((r) => r.id === peekRowId)
+    : undefined;
+
   return (
     <div className="h-full flex flex-col">
       <div className="px-3 py-2 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 shrink-0">
@@ -371,10 +415,25 @@ export function BoardView({
                 properties={properties}
                 editable={editable}
                 onCellChange={onCellChange}
+                onOpenRow={openRow}
+                peekRowId={peekRowId}
               />
             ))}
           </div>
         </DndContext>
+      )}
+
+      {peekRow && (
+        <RowPeek
+          row={peekRow}
+          properties={properties}
+          editable={editable}
+          onCellChange={onCellChange}
+          onClose={closePeek}
+          mode={peekMode === "center" ? "center" : "side"}
+          dataSourceId={dataSourceId}
+          onPropertyCreated={refetch}
+        />
       )}
     </div>
   );

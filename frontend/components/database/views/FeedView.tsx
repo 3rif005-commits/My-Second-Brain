@@ -37,14 +37,30 @@
 //    (unlike Gallery, which has an explicit `cover_size`/`cover_aspect`
 //    spec to build against).
 //
-// Click-to-open (task-17 fix round, finding 1): a card's title navigates to
-// the note, same as ListView.tsx (`lib/database/useOpenNote.ts`). Feed's
-// title is already plain read-only text, not TitleCell, so — unlike
-// Board/Gallery — there's no competing inline-edit click to collide with;
-// making the title itself the click target is unambiguous here.
-import { useOpenNote } from "@/lib/database/useOpenNote";
+// M12 (2026-09-02): a card's title now opens the row PEEK (`useRowPeek`,
+// the same shared hook List's own row-hover build extracted out of
+// TableView.tsx) instead of a bare `useOpenNote` navigation — it respects
+// the view's "Open pages in" default the same way Table/List already do,
+// rather than always hard-navigating regardless of that setting. This is
+// the one piece of Feed's own row-affordances this session could build
+// with confidence and NO live capture: `useRowPeek`'s own behavior is
+// already proven correct (M10, extended to List), and threading it through
+// is a pure navigation-behavior change, not a guess about Feed's visual
+// hover shape. Feed's card is Gallery-shaped, not List-row-shaped (checked
+// before assuming otherwise — this file already shows every visible
+// property inline, always, unlike List's now-built Edit-toggle-to-reveal
+// pattern) — a real per-card hover gutter (if Notion's own Feed even has
+// one) is UNCAPTURED and deliberately not invented here. `hidden_properties`/
+// `property_order` also now route through the shared `viewConfig.ts`
+// helpers Table/List already use, replacing this file's own local
+// `readHiddenProperties` copy and the hardcoded schema-position sort —
+// dedup only, no behavior change (title was already exempt from hiding
+// here, matching `getHiddenKeys`'s own callers elsewhere).
+import { getHiddenKeys, orderProperties } from "@/lib/database/viewConfig";
+import { useRowPeek } from "@/lib/database/useRowPeek";
 import type { DatabaseRow, PropertyResponse, PropertyValue, TitleValue } from "@/lib/database/types";
 import { renderCellValue } from "../cells/renderCellValue";
+import { RowPeek } from "../RowPeek";
 
 /** Pure, unit-testable in isolation from rendering — mirrors BoardView's
  * `resolveDropValue` pattern of separating data-shaping logic from the
@@ -71,12 +87,6 @@ export function sortFeedRows(rows: DatabaseRow[], properties: PropertyResponse[]
   return [...rows].sort((a, b) => timestamp(b) - timestamp(a));
 }
 
-function readHiddenProperties(config: Record<string, unknown>): string[] {
-  return Array.isArray(config.hidden_properties)
-    ? (config.hidden_properties as unknown[]).filter((v): v is string => typeof v === "string")
-    : [];
-}
-
 export interface FeedViewProps {
   properties: PropertyResponse[];
   rows: DatabaseRow[];
@@ -84,17 +94,28 @@ export interface FeedViewProps {
   onCellChange: (rowId: string, propertyKey: string, value: PropertyValue | null) => void;
   config: Record<string, unknown>;
   onConfigChange: (patch: Record<string, unknown>) => void;
+  dataSourceId?: string;
+  refetch?: () => void | Promise<void>;
 }
 
-export function FeedView({ properties, rows, editable, onCellChange, config, onConfigChange }: FeedViewProps) {
-  const openNote = useOpenNote();
-  const hiddenProperties = readHiddenProperties(config);
+export function FeedView({
+  properties,
+  rows,
+  editable,
+  onCellChange,
+  config,
+  onConfigChange,
+  dataSourceId,
+  refetch,
+}: FeedViewProps) {
+  const { peekRowId, peekMode, openRow, closePeek, handleRowAltClick } = useRowPeek(config);
+  const hiddenProperties = getHiddenKeys(config);
   const titleProp = properties.find((p) => p.type === "title");
-  const visibleOtherProps = properties
-    .filter((p) => p.type !== "title" && !hiddenProperties.includes(p.key))
-    .slice()
-    .sort((a, b) => a.position - b.position);
+  const visibleOtherProps = orderProperties(properties, config).filter(
+    (p) => p.type !== "title" && !hiddenProperties.includes(p.key)
+  );
   const sortedRows = sortFeedRows(rows, properties);
+  const peekRow = peekRowId ? rows.find((r) => r.id === peekRowId) : undefined;
 
   function toggleHidden(key: string) {
     const next = hiddenProperties.includes(key)
@@ -139,11 +160,12 @@ export function FeedView({ properties, rows, editable, onCellChange, config, onC
           return (
             <div
               key={row.id}
+              onClick={handleRowAltClick(row.id)}
               className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm p-3"
             >
               <button
                 type="button"
-                onClick={() => openNote(row.id)}
+                onClick={() => openRow(row.id)}
                 className="block w-full text-left text-sm font-medium mb-1.5 text-gray-900 dark:text-gray-100 hover:underline"
               >
                 {titleValue || <span className="font-normal text-gray-400">Untitled</span>}
@@ -166,6 +188,19 @@ export function FeedView({ properties, rows, editable, onCellChange, config, onC
           );
         })}
       </div>
+
+      {peekRow && (
+        <RowPeek
+          row={peekRow}
+          properties={properties}
+          editable={editable}
+          onCellChange={onCellChange}
+          onClose={closePeek}
+          mode={peekMode === "center" ? "center" : "side"}
+          dataSourceId={dataSourceId}
+          onPropertyCreated={refetch}
+        />
+      )}
     </div>
   );
 }

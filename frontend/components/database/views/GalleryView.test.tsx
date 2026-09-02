@@ -1,17 +1,35 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // GalleryCard renders an OpenNoteButton (task-17 fix round, finding 1),
 // which navigates via next/navigation's useRouter — outside a real Next.js
-// app router tree that throws unless mocked, same as ListView.test.tsx.
+// app router tree that throws unless mocked, same as ListView.test.tsx. M12:
+// GalleryView also reads/writes the row peek's `?p=&pm=` via `useRowPeek`
+// now — mocked the same way.
 const push = vi.fn();
+const routerReplace = vi.fn();
+let mockSearch = "";
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace: routerReplace }),
+  usePathname: () => "/brain/db/ds-1",
+  useSearchParams: () => new URLSearchParams(mockSearch),
+}));
+
+// RowPeek mounts a real BlockEditor — heavy (BlockNote), stubbed the same
+// way TableView.test.tsx/ListView.test.tsx already do.
+vi.mock("@/components/editor/BlockEditor", () => ({
+  BlockEditor: () => <div data-testid="block-editor-stub" />,
 }));
 
 import { GalleryView } from "./GalleryView";
 import type { DatabaseRow, PropertyResponse } from "@/lib/database/types";
+
+beforeEach(() => {
+  mockSearch = "";
+  push.mockClear();
+  routerReplace.mockClear();
+});
 
 function prop(overrides: Partial<PropertyResponse>): PropertyResponse {
   return {
@@ -176,7 +194,10 @@ describe("GalleryView", () => {
     expect(screen.getByText(/no rows yet/i)).toBeInTheDocument();
   });
 
-  it("clicking a card's Open note button navigates to the note's workspace route (task-17 fix round, finding 1)", async () => {
+  // M12: a card's Open button now opens the row's side peek (the same
+  // `?p=&pm=s` URL Table/List/Feed/Board already write) instead of always
+  // hard-navigating, replacing the old task-17 bare-navigation fix.
+  it("clicking a card's Open button opens the row's side peek (writes ?p=&pm=s), not a bare navigation", async () => {
     const user = userEvent.setup();
     render(
       <GalleryView
@@ -189,7 +210,12 @@ describe("GalleryView", () => {
       />
     );
 
-    await user.click(screen.getByRole("button", { name: /open note/i }));
-    expect(push).toHaveBeenCalledWith("/brain/workspace/row-1");
+    await user.click(screen.getByRole("button", { name: "Open" }));
+
+    expect(push).not.toHaveBeenCalled();
+    expect(routerReplace).toHaveBeenCalled();
+    const [url] = routerReplace.mock.calls[routerReplace.mock.calls.length - 1];
+    expect(url).toContain("p=row-1");
+    expect(url).toContain("pm=s");
   });
 });

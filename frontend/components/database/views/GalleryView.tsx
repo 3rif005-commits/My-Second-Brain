@@ -38,8 +38,10 @@
 // making the whole card navigate would fire both on a title click. See
 // `OpenNoteButton.tsx` for the full reasoning (same call as BoardView).
 import type { DatabaseRow, PropertyResponse, PropertyValue } from "@/lib/database/types";
+import { useRowPeek } from "@/lib/database/useRowPeek";
 import { renderCellValue } from "../cells/renderCellValue";
 import { OpenNoteButton } from "../OpenNoteButton";
+import { RowPeek } from "../RowPeek";
 
 const COVER_SIZES = ["small", "medium", "large"] as const;
 type CoverSize = (typeof COVER_SIZES)[number];
@@ -104,6 +106,8 @@ function GalleryCard({
   coverAspect,
   cardLayout,
   hiddenProperties,
+  onOpenRow,
+  isPeekOpen,
 }: {
   row: DatabaseRow;
   properties: PropertyResponse[];
@@ -113,6 +117,11 @@ function GalleryCard({
   coverAspect: CoverAspect;
   cardLayout: CardLayout;
   hiddenProperties: string[];
+  /** M12: `useRowPeek`'s own `openRow`/`peekRowId` — threaded down instead
+   * of a bare `useOpenNote` navigation, so a Gallery card respects the
+   * view's "Open pages in" default the same way Table/List/Feed/Board do. */
+  onOpenRow?: (noteId: string) => void;
+  isPeekOpen?: boolean;
 }) {
   const titleProp = properties.find((p) => p.type === "title");
   const titleHidden = titleProp ? hiddenProperties.includes(titleProp.key) : false;
@@ -138,7 +147,12 @@ function GalleryCard({
         ) : (
           <CoverPlaceholder />
         )}
-        <OpenNoteButton noteId={row.id} className="absolute top-1 right-1" />
+        <OpenNoteButton
+          noteId={row.id}
+          className="absolute top-1 right-1"
+          onOpen={onOpenRow}
+          isOpen={onOpenRow ? isPeekOpen : undefined}
+        />
       </div>
       <div className={cardLayout === "compact" ? "p-1.5" : "p-2.5"}>
         {!titleHidden && titleProp && (
@@ -190,6 +204,8 @@ export interface GalleryViewProps {
   onCellChange: (rowId: string, propertyKey: string, value: PropertyValue | null) => void;
   config: Record<string, unknown>;
   onConfigChange: (patch: Record<string, unknown>) => void;
+  dataSourceId?: string;
+  refetch?: () => void | Promise<void>;
 }
 
 export function GalleryView({
@@ -199,13 +215,17 @@ export function GalleryView({
   onCellChange,
   config,
   onConfigChange,
+  dataSourceId,
+  refetch,
 }: GalleryViewProps) {
+  const { peekRowId, peekMode, openRow, closePeek } = useRowPeek(config);
   const coverSize = readCoverSize(config);
   const coverAspect = readCoverAspect(config);
   const cardLayout = readCardLayout(config);
   const hiddenProperties = readHiddenProperties(config);
   const titleProp = properties.find((p) => p.type === "title");
   const titleHidden = titleProp ? hiddenProperties.includes(titleProp.key) : false;
+  const peekRow = peekRowId ? rows.find((r) => r.id === peekRowId) : undefined;
 
   function toggleHideTitle() {
     if (!titleProp) return;
@@ -288,9 +308,24 @@ export function GalleryView({
               coverAspect={coverAspect}
               cardLayout={cardLayout}
               hiddenProperties={hiddenProperties}
+              onOpenRow={openRow}
+              isPeekOpen={peekRowId === row.id}
             />
           ))}
         </div>
+      )}
+
+      {peekRow && (
+        <RowPeek
+          row={peekRow}
+          properties={properties}
+          editable={editable}
+          onCellChange={onCellChange}
+          onClose={closePeek}
+          mode={peekMode === "center" ? "center" : "side"}
+          dataSourceId={dataSourceId}
+          onPropertyCreated={refetch}
+        />
       )}
     </div>
   );

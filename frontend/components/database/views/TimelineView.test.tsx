@@ -1,15 +1,27 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // TimelineBar renders an OpenNoteButton (same as every other view's card/
 // row/event), which navigates via next/navigation's useRouter — outside a
 // real Next.js app router tree (as here, a plain RTL render) that throws
 // "invariant expected app router to be mounted" unless mocked, same as
-// CalendarView.test.tsx/BoardView.test.tsx do.
+// CalendarView.test.tsx/BoardView.test.tsx do. M12: TimelineView also
+// reads/writes the row peek's `?p=&pm=` via `useRowPeek` now — mocked the
+// same way.
 const push = vi.fn();
+const routerReplace = vi.fn();
+let mockSearch = "";
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace: routerReplace }),
+  usePathname: () => "/brain/db/ds-1",
+  useSearchParams: () => new URLSearchParams(mockSearch),
+}));
+
+// RowPeek mounts a real BlockEditor — heavy (BlockNote), stubbed the same
+// way TableView.test.tsx/ListView.test.tsx already do.
+vi.mock("@/components/editor/BlockEditor", () => ({
+  BlockEditor: () => <div data-testid="block-editor-stub" />,
 }));
 
 import {
@@ -24,6 +36,12 @@ import {
   type ZoomLevel,
 } from "./TimelineView";
 import type { DatabaseRow, DateValue, PropertyResponse, RelatedRow } from "@/lib/database/types";
+
+beforeEach(() => {
+  mockSearch = "";
+  push.mockClear();
+  routerReplace.mockClear();
+});
 
 function prop(overrides: Partial<PropertyResponse>): PropertyResponse {
   return {
@@ -241,6 +259,22 @@ describe("TimelineView", () => {
     renderTimeline({ config: {}, onConfigChange });
     await user.selectOptions(screen.getByLabelText(/date property/i), "due");
     expect(onConfigChange).toHaveBeenCalledWith({ date_property_id: "due" });
+  });
+
+  // M12: a row's Open button now opens the side peek (the same `?p=&pm=s`
+  // URL every other M12 view now writes) instead of always hard-navigating.
+  it("clicking a row's Open button opens the row's side peek (writes ?p=&pm=s), not a bare navigation", async () => {
+    const user = userEvent.setup();
+    const rows = [row("row-1", "Task A", { start: "2026-01-01T00:00:00.000Z", end: "2026-01-11T00:00:00.000Z", time_zone: null })];
+    renderTimeline({ rows, config: { date_property_id: "due", preference: { zoom_level: "month" } } });
+
+    await user.click(screen.getByRole("button", { name: "Open" }));
+
+    expect(push).not.toHaveBeenCalled();
+    expect(routerReplace).toHaveBeenCalled();
+    const [url] = routerReplace.mock.calls[routerReplace.mock.calls.length - 1];
+    expect(url).toContain("p=row-1");
+    expect(url).toContain("pm=s");
   });
 
   it("all 8 zoom levels render distinguishably different bar widths for the same fixed date range", () => {

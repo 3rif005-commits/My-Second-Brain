@@ -306,3 +306,45 @@ navigates, no-checkbox, read-only suppression, the two blur-race tests, add-row 
 the gutter and the bottom "+ New page"). `RowGutter.test.tsx` gained one test for
 `showCheckbox={false}`. `DashboardView.test.tsx`'s own `next/navigation` mock extended
 (it embeds List as a widget type, which now needs `usePathname`/`useSearchParams` too).
+
+---
+
+## Row peek rolled out to every remaining view (2026-09-02)
+
+> Not part of List's own capture above — a separate, capture-independent fix applied the
+> same session, closing a gap the M12 code survey (`PROGRESS.md`) itself flagged: "Row
+> peek internals (M10)... only `TableView.tsx` imports `RowPeek` — every other view opens
+> a row via full navigation (`OpenNoteButton`) only, never the peek."
+
+M10's row peek (`?p=`/`?pm=` URL sync, non-modal side/center panel, "Open pages in"
+respect) was always view-agnostic INTERNALLY — nothing about `RowPeek.tsx` itself is
+Table-specific. The gap was purely that no other view's own row/card ever called it.
+Closed for Feed, Board, Gallery, Calendar, and Timeline the same session List's own
+`useRowPeek` hook was extracted, reusing that exact hook rather than five more copies of
+Table's own ~60 lines:
+
+- **Feed** — the card title's click now calls `openRow` instead of a bare `useOpenNote`
+  navigation.
+- **Board** / **Gallery** — `OpenNoteButton` already had an `onOpen`/`isOpen` prop pair
+  built for exactly this (M9's own doc comment: "every other caller omits this and keeps
+  today's exact navigate-to-Workspace behavior unchanged" — no longer true). Both now pass
+  `onOpen={openRow}` and a real `isOpen`, which also means Board/Gallery cards get the
+  labelled `OPEN`/`CLOSE` toggle Table's own row already had, not just an icon.
+- **Calendar** / **Timeline** — same `OpenNoteButton` wiring on their own event bars/rows.
+
+**No new UI shape was invented anywhere** — every one of these already had the exact
+`OpenNoteButton` control M9 built; this only changed what clicking it DOES (peek vs. bare
+navigation), matching each view's own "Open pages in" config the same way Table/List
+already did. `hidden_properties`/`property_order` were NOT touched on Gallery (it already
+allows hiding the title itself, a deliberate difference from List/Table/Feed — out of
+scope for a peek-only pass) or on Board/Calendar/Timeline (no live capture confirms
+whether those views even read Property Visibility at all yet — left for their own,
+in-order M12 passes, not guessed at here).
+
+**Not live-verified** — same environment-exhaustion reason as List's own post-fix
+re-check above. Every one of these changes is covered by a new jsdom test per view
+(`BoardView.test.tsx`, `GalleryView.test.tsx`, `CalendarView.test.tsx`,
+`TimelineView.test.tsx`, `FeedView.test.tsx`) asserting the `?p=<rowId>&pm=s` URL a real
+click writes, replacing each file's own now-obsolete "navigates to the workspace route"
+assertion — not just a hope it behaves the same as List's already-live-verified version of
+the identical hook.

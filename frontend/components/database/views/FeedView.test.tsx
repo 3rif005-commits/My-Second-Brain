@@ -1,14 +1,30 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
-// FeedView's card title navigates via next/navigation's useRouter (task-17
-// fix round, finding 1) — outside a real Next.js app router tree that
-// throws unless mocked, same as ListView.test.tsx.
-const push = vi.fn();
+// M12: FeedView's card title now opens the row peek via `useRowPeek`
+// (useSearchParams/usePathname/router.replace), the same shared hook List's
+// own build already established — mocked the same way TableView.test.tsx's
+// own `?p=`/`?pm=` mock does.
+const routerReplace = vi.fn();
+let mockSearch = "";
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push: vi.fn(), replace: routerReplace }),
+  usePathname: () => "/brain/db/ds-1",
+  useSearchParams: () => new URLSearchParams(mockSearch),
 }));
+
+// RowPeek mounts a real BlockEditor for the row's own body — heavy
+// (BlockNote), not what FeedView-level tests exercise. Stubbed the same way
+// TableView.test.tsx/ListView.test.tsx already do for the identical reason.
+vi.mock("@/components/editor/BlockEditor", () => ({
+  BlockEditor: () => <div data-testid="block-editor-stub" />,
+}));
+
+beforeEach(() => {
+  mockSearch = "";
+  routerReplace.mockClear();
+});
 
 import { FeedView, sortFeedRows } from "./FeedView";
 import type { DatabaseRow, PropertyResponse } from "@/lib/database/types";
@@ -134,7 +150,11 @@ describe("FeedView", () => {
     expect(screen.getByText(/no rows yet/i)).toBeInTheDocument();
   });
 
-  it("clicking a card's title navigates to the note's workspace route (task-17 fix round, finding 1)", async () => {
+  // M12: clicking a card's title now opens the row's side peek (the same
+  // ?p=/?pm=s URL shape Table/List already write), replacing the old
+  // task-17 bare-navigation fix — it respects the view's "Open pages in"
+  // default the same way, rather than always hard-navigating.
+  it("clicking a card's title opens the row's side peek (writes ?p=&pm=s)", async () => {
     const user = userEvent.setup();
     render(
       <FeedView
@@ -148,6 +168,32 @@ describe("FeedView", () => {
     );
 
     await user.click(screen.getByText("First"));
-    expect(push).toHaveBeenCalledWith("/brain/workspace/row-1");
+
+    expect(routerReplace).toHaveBeenCalled();
+    const [url] = routerReplace.mock.calls[routerReplace.mock.calls.length - 1];
+    expect(url).toContain("p=row-1");
+    expect(url).toContain("pm=s");
+  });
+
+  it("property_order (config) reorders which property renders first in a card", () => {
+    render(
+      <FeedView
+        properties={[TITLE_PROP, STATUS_PROP, UPDATED_PROP]}
+        rows={[
+          row("row-1", "First", {
+            status: { type: "status", status: "todo" },
+            updated_at: { type: "last_edited_time", last_edited_time: "2026-01-01T00:00:00Z" },
+          }),
+        ]}
+        editable={false}
+        onCellChange={vi.fn()}
+        config={{ property_order: ["title", "updated_at", "status"] }}
+        onConfigChange={vi.fn()}
+      />
+    );
+
+    const labels = [screen.getByText("Updated:"), screen.getByText("Status:")];
+    // DOM order, not array-literal order: Updated must precede Status.
+    expect(labels[0].compareDocumentPosition(labels[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

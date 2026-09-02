@@ -606,7 +606,8 @@ zero results" is in practice.
 | Milestone | State |
 |---|---|
 | M12 — List | **row hover affordances built and unit-tested (2026-09-02); live-verified pre-fix, not yet re-verified post-fix (environment down, see Log)** |
-| M12 — Feed…Timeline | not started |
+| M12 — row peek (Feed, Board, Gallery, Calendar, Timeline) | **wired to every remaining view (2026-09-02), unit-tested, not live-verified (environment down)** |
+| M12 — Feed's own row-affordances (beyond the peek), Gallery/Chart/Form/Dashboard/Board/Calendar/Timeline's own dedicated per-view work | not started |
 
 `docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
 a code-verified survey of what M1-M11 already ship for free across every view type (view
@@ -805,6 +806,33 @@ Built by me, with the user's authorisation, 2026-08-29:
   tabs. Full write-up: `row-affordances.md`'s new "Built" subsection. Frontend 61 files
   / 916 tests green (was 905), `tsc` clean. Resume point: re-verify the post-fix
   behavior live once the browser environment recovers, then move to Feed.
+- **2026-09-02 (M12 — row peek wired to every remaining view)** — Continued past List
+  while the browser environment stayed down (see above): Feed's card title now opens the
+  peek instead of a bare `useOpenNote` navigation, and Board/Gallery/Calendar/Timeline's
+  own existing `OpenNoteButton` controls (M9's own `onOpen`/`isOpen` props, built for
+  exactly this and never used by any caller but Table until now) all now pass
+  `onOpen={openRow}` from the same shared `useRowPeek` hook List's own build extracted.
+  This closes a gap the M12 code survey itself flagged ("only TableView.tsx imports
+  RowPeek... every other view opens a row via full navigation only") across every
+  remaining view type in one pass — deliberately scoped to ONLY the peek trigger
+  (something already fully specified by M10, capture-independent): no new hover-affordance
+  UI was invented for Feed/Board/Gallery/Calendar/Timeline, since none of that has a live
+  capture yet and this workstream doesn't guess shapes. `hidden_properties`/
+  `property_order` were left untouched on Gallery (its own deliberate title-hiding
+  difference) and on Board/Calendar/Timeline (unconfirmed whether they read Property
+  Visibility at all — a question for their own in-order M12 passes, not this one). Five
+  view test files updated (each view's own "navigates to workspace" test replaced with a
+  "writes `?p=&pm=s`" one, matching List/Table's own pattern) plus two new tests
+  (Calendar/Timeline's own Open-button peek assertions — Board/Gallery/Feed's existing
+  navigation tests were adapted in place, not additionally covered). Full write-up:
+  `row-affordances.md`'s new "Row peek rolled out to every remaining view" section.
+  **Not live-verified** — same environment-exhaustion reason as List's own fix above; the
+  Chrome extension never reconnected this session despite repeated attempts. Frontend 61
+  files / 919 tests green (was 916), `tsc` clean. Resume point: live-verify all of this
+  (List's post-fix behavior AND the new peek wiring) once the browser recovers, then
+  proceed with Feed's own dedicated row-hover-affordance capture (its card shape turned
+  out to be Gallery-like, not List-like, contradicting the original plan's "Same [as
+  List]" sizing note — confirm live before building anything there).
 - **2026-09-02 (M12 — List row-affordances live capture)** — Started M12's first real
   build unit (List, per the decided smallest-first order) with a live-Notion capture,
   per this workstream's own "raw evidence before prose" rule — `row-affordances.md`'s

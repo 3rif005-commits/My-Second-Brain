@@ -6,10 +6,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // which navigates via next/navigation's useRouter — outside a real Next.js
 // app router tree (as here, a plain RTL render) that throws "invariant
 // expected app router to be mounted" unless mocked, same as
-// BoardView.test.tsx does.
+// BoardView.test.tsx does. M12: CalendarView also reads/writes the row
+// peek's `?p=&pm=` via `useRowPeek` now — mocked the same way.
 const push = vi.fn();
+const routerReplace = vi.fn();
+let mockSearch = "";
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace: routerReplace }),
+  usePathname: () => "/brain/db/ds-1",
+  useSearchParams: () => new URLSearchParams(mockSearch),
+}));
+
+// RowPeek mounts a real BlockEditor — heavy (BlockNote), stubbed the same
+// way TableView.test.tsx/ListView.test.tsx already do.
+vi.mock("@/components/editor/BlockEditor", () => ({
+  BlockEditor: () => <div data-testid="block-editor-stub" />,
 }));
 
 import {
@@ -22,6 +33,12 @@ import {
   resolveDropDate,
 } from "./CalendarView";
 import type { DatabaseRow, DateValue, PropertyResponse } from "@/lib/database/types";
+
+beforeEach(() => {
+  mockSearch = "";
+  push.mockClear();
+  routerReplace.mockClear();
+});
 
 function prop(overrides: Partial<PropertyResponse>): PropertyResponse {
   return {
@@ -355,6 +372,32 @@ describe("CalendarView", () => {
     );
     await user.selectOptions(screen.getByLabelText(/date property/i), "due");
     expect(onConfigChange).toHaveBeenCalledWith({ date_property_id: "due" });
+  });
+
+  // M12: an event bar's Open button now opens the row's side peek (the
+  // same `?p=&pm=s` URL Table/List/Feed/Board/Gallery already write)
+  // instead of always hard-navigating.
+  it("clicking an event's Open button opens the row's side peek (writes ?p=&pm=s), not a bare navigation", async () => {
+    const user = userEvent.setup();
+    renderAt(
+      "2026-08-18T00:00:00.000Z",
+      <CalendarView
+        properties={[TITLE_PROP, DUE_PROP]}
+        rows={[row("row-1", "Task A", { start: "2026-08-18", end: null, time_zone: null })]}
+        editable={true}
+        onCellChange={vi.fn()}
+        config={{ date_property_id: "due" }}
+        onConfigChange={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open" }));
+
+    expect(push).not.toHaveBeenCalled();
+    expect(routerReplace).toHaveBeenCalled();
+    const [url] = routerReplace.mock.calls[routerReplace.mock.calls.length - 1];
+    expect(url).toContain("p=row-1");
+    expect(url).toContain("pm=s");
   });
 
   it("month view renders an event on its correct day cell", () => {
