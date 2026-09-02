@@ -221,3 +221,43 @@ globally when a row is merely *hovered* versus *selected* is unverified.
 18. → assert the header checkbox is present and selects all.
 19. Click `Move to Trash` on one row. → assert the row disappears and appears in Trash.
 20. Drag a row by its handle to a new position. → assert the order persists across a reload.
+
+---
+
+## List view (M12) — confirmed deltas vs Table, captured live 2026-09-02
+
+> Ground truth: `raw-dom/row-affordances-list-view.txt` ·
+> `screenshots/list-row-{rest,hover,menu,peek,edit-toggle}.jpg`
+
+The plan's M12 task breakdown (`docs/plans/2026-08-28-notion-databases-ui-parity.md`)
+named List's own row-affordances shape as needing its own capture rather than assuming
+this file's Table-shaped one transfers verbatim. It mostly does — with four confirmed
+differences:
+
+1. **No checkbox in the gutter.** List's left gutter has only `+` and the drag handle
+   (⠿), not Table's three. Right-click and the drag handle's own click still visibly
+   select the row (tinted), so bulk selection may still exist via some other gesture —
+   `TBD`, not found this session.
+2. **No separate `OPEN`/`CLOSE` button.** The entire row is itself a real `<a>` — a
+   plain click anywhere on the icon/title opens the side peek directly (confirmed via
+   the URL gaining the identical `p=<noteId>&pm=s` row-peek.md already established for
+   Table), respecting the view's "Open pages in" default the same way. There's just no
+   separate labelled control for it; the row itself is that control.
+3. **A new "Edit" button, no Table equivalent.** A small pencil icon appears inside the
+   hovered row, after the title. Clicking it turns the title into an inline-editable
+   field AND reveals the row's other Property-Visibility-visible properties as
+   right-aligned "Add `<Name>`" quick-fill prompts on the same line — Table never needs
+   this (every cell is already independently click-to-edit); List's one-line layout has
+   nowhere to put untitled properties at rest, so this is the on-demand reveal for them.
+   Unclicked-through: which editor opens from one of those prompts (very likely the same
+   `renderCellValue` dispatcher every other view already shares — see `PROGRESS.md`'s M12
+   survey — but not confirmed live).
+4. **The row menu itself is identical** to Table's, row for row, including the `Open in`
+   flyout (`New tab` / `Side peek`, same shortcuts). One addition spotted in the footer —
+   a `<N> words, <N> characters` line below the timestamp — possibly present on Table too
+   and simply not recorded there; low priority to re-check.
+
+**Not verified, same reasons as Table's own checklist:** drag-to-reorder (this
+environment's own established drag-simulation limitation), and which two properties this
+session's fixture had set visible (the settings sidebar's Property visibility submenu
+kept dismissing on click — a repro not chased down, out of scope for this capture).

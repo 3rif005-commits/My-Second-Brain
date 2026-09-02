@@ -605,7 +605,7 @@ zero results" is in practice.
 
 | Milestone | State |
 |---|---|
-| M12 | **task breakdown written (2026-09-02), execution not started** |
+| M12 | task breakdown written (2026-09-02) · **List's row-affordances live capture done (2026-09-02), build not started** |
 
 `docs/plans/2026-08-28-notion-databases-ui-parity.md`'s own "Phase 12" section now carries:
 a code-verified survey of what M1-M11 already ship for free across every view type (view
@@ -616,11 +616,23 @@ actual code rather than re-guessing the 2026-08-28 sizing table), what's partial
 Table-specific and still needs real per-view work (row hover affordances, row peek, the
 calculations footer, column resize). Decided order: List → Feed → Gallery → Chart → Form →
 Dashboard → Board → Calendar → Timeline (smallest-first, per the prompt's own instruction
-to prove the pattern transfers cheaply before the two L-sized views). **Nothing built yet**
-— no List-view spec capture, code, or tests exist. Resume point: start with List — its own
-row-affordances shape needs a fresh live-Notion capture first (`row-affordances.md`'s
-existing capture is table-grid-shaped, not yet confirmed to transfer to a List row), same
-"raw evidence before prose" discipline as every milestone before it.
+to prove the pattern transfers cheaply before the two L-sized views).
+
+**List's row-affordances live capture done (2026-09-02).** Confirmed against a real List
+view added to the fixture database: the left gutter's `+`/drag-handle transfer unchanged,
+but List has no checkbox (bulk-select mechanism `TBD`), no separate `OPEN` button (the
+whole row is itself the open-trigger — a plain click opens the side peek via the same
+`p=`/`pm=s` URL shape Table already uses), and one genuinely new per-row affordance with
+no Table equivalent: an "Edit" pencil button that turns the title inline-editable and
+reveals the row's other visible properties as quick-fill prompts. The row menu itself
+(triggered by the drag handle or right-click) is byte-identical to Table's. Full capture:
+`row-affordances.md`'s new "List view (M12)" section, `raw-dom/row-affordances-list-view.txt`,
+5 screenshots in `screenshots/list-row-*.jpg`. Fixture grew by one row and one view (see
+"Fixture state" above). **No code changes yet** — this was capture only. Resume point:
+build List's row hover affordances (RowGutter without a checkbox, no OPEN button since the
+row link already handles it, the new Edit-toggle inline-property affordance) against
+`ListView.tsx`, wire `hidden_properties`/`property_order` the same way Table already reads
+them, then live-checklist and write up, same discipline as every milestone before it.
 
 ---
 
@@ -726,8 +738,10 @@ Everything below is marked `TBD` inside a written spec. None blocks starting Pha
 Built by me, with the user's authorisation, 2026-08-29:
 - **11 properties**: Name (title), Text, Number, Select, Multi-select, Status, Date,
   Person, Checkbox, URL, Files
-- **1 row**: "Row one", all values empty
-- **2 views**: `Table` and `Board` (Board auto-grouped by Status)
+- **2 rows**: "Row one" (all values empty), "Row two" (added 2026-09-02 for M12's List
+  capture — also all values empty)
+- **3 views**: `Table`, `Board` (Board auto-grouped by Status), `List` (added 2026-09-02
+  for M12's row-affordances capture, `row-affordances.md`'s new "List view" section)
 - **1 Select option**: `Alpha`, created via create-on-type, applied to Row one
 - **1 calculation**: `Sum` on the Number column, so the footer row renders
 - **TYPES CORRECTED 2026-08-31.** Four properties had been created with the wrong type
@@ -739,6 +753,27 @@ Built by me, with the user's authorisation, 2026-08-29:
 
 ## Log
 
+- **2026-09-02 (M12 — List row-affordances live capture)** — Started M12's first real
+  build unit (List, per the decided smallest-first order) with a live-Notion capture,
+  per this workstream's own "raw evidence before prose" rule — `row-affordances.md`'s
+  existing capture is Table-grid-shaped and had never been confirmed to transfer. Added
+  a throwaway List view to the fixture database (plus a second row, "Row two", to have
+  something to hover/select) and captured its row-hover behaviour directly: opened the
+  accessibility tree and cross-checked with `javascript_tool` DOM queries rather than
+  trusting screenshots alone, since this row's hover-tied controls didn't reliably
+  survive a `zoom` capture (mouse-position state, not a real bug). Four confirmed deltas
+  vs Table: no checkbox in the gutter (bulk-select mechanism unconfirmed), no separate
+  `OPEN` button (the whole row is itself a real `<a>` — a plain click opens the side peek
+  via the identical `p=`/`pm=s` URL shape Table already uses, confirmed by inspecting the
+  URL before/after), a new "Edit" pencil affordance with no Table equivalent (turns the
+  title inline-editable and reveals other visible properties as quick-fill prompts — List's
+  one-line layout has nowhere to show untitled properties at rest the way a Table cell
+  can), and a byte-identical row menu (confirmed row-for-row against the drag handle
+  click AND right-click, including the `Open in` flyout). Full write-up:
+  `row-affordances.md`'s new "List view (M12)" section, `raw-dom/row-affordances-list-view.txt`,
+  5 screenshots (`screenshots/list-row-*.jpg`). **Findings and fixture growth only — no
+  application code changed.** Resume point: build List's own row hover affordances against
+  `ListView.tsx` from this capture, then live-checklist.
 - **2026-09-02 (M12 task breakdown, Part 2 of the same prompt)** — Wrote the task
   breakdown the plan's own Phase 12 section had been missing since 2026-08-29. First
   read the actual code (not the 2026-08-28 sizing table's own guesses) to establish

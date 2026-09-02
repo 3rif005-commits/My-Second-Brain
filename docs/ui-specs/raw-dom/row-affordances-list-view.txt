@@ -1,0 +1,93 @@
+SURFACE: Row hover affordances + row menu + row-open, LIST VIEW (M12 — delta vs row-affordances.md's Table capture)
+CHECKLIST SHOTS: list-row-rest.jpg, list-row-hover.jpg, list-row-menu.jpg, list-row-peek.jpg, list-row-edit-toggle.jpg
+CAPTURED: 2026-09-02, dark mode, fixture database "New database" (docs/ui-specs/PROGRESS.md's own fixture),
+  a throwaway List view added to it, 2 rows ("Row two", "Row one"), 11 properties, Property visibility = 2 shown
+METHOD: real hover/click/right-click via `computer`, cross-checked against the live DOM via `javascript_tool`
+  (querySelectorAll on the row links + their child `[role="button"]`s, aria-label read directly — not guessed
+  from screenshots alone, since the row's own hover-tied controls don't reliably survive a `zoom` capture,
+  see note below)
+
+================= RESTING STATE =================
+Confirmed via full-page reload (no prior interaction this session): a List row shows NOTHING but its page
+icon and title text. No gutter, no Edit button, no peek control. Same "nothing visible" rule row-affordances.md
+already established for Table §States row 1.
+
+================= ROW HOVER — same two gutter affordances as Table, in the SAME positions =================
+Hovering a row reveals, OUTSIDE the row's own link element, in the left gutter:
+    +      (x≈342 at 1300px, this fixture's own width)   add a row below
+    ⠿      (x≈363)                                       drag handle — same 3-gesture control as Table
+        (click → opens the row menu AND selects the row; drag → reorders, unverified this session,
+         see "Not verified" below)
+
+*** DELTA #1 — NO checkbox in the gutter. *** Table has three gutter icons (+, drag handle, checkbox);
+List has only two. Confirmed by DOM query: no element with `role="checkbox"` (or any checkbox-shaped control)
+exists anywhere in a List row, hovered or not. This is either "List doesn't support the bulk-select
+CHECKBOX affordance" or "List selects the same way Table does, just without a dedicated checkbox control" —
+right-click and the drag-handle click BOTH still visibly select the row (tinted background), so multi-row
+bulk selection itself may still exist via some other gesture (shift-click? cmd-click?) — NOT tested this
+session. `TBD`.
+
+*** DELTA #2 — NO "OPEN"/"CLOSE" labelled button anywhere in the row. *** Table's title cell carries a
+separate right-aligned "▣ OPEN" button distinct from the row's own click target. List has no such button —
+INSTEAD:
+
+*** DELTA #3 — the entire row IS the open-trigger. *** The row is a real `<a>` (confirmed: `href` present,
+navigates to the row's own note page) wrapping the icon + title. A plain click ANYWHERE on the row's icon/
+title (not the gutter, not the Edit button below) opens the side peek directly — confirmed via URL:
+clicking the row changed the URL from bare `?v=<viewId>` to `?v=<viewId>&p=<noteId>&pm=s`, the IDENTICAL
+`p=`/`pm=s` param shape our own app's row-peek.md capture already established for Table's OPEN button. So
+the row's own click target already respects the view's "Open pages in" default the same way Table's OPEN
+button does — there's just no separate labelled control for it, the row itself IS that control.
+
+*** DELTA #4 — a new "Edit" button, no Table equivalent at all. *** Confirmed via DOM: a
+`div[role="button"][aria-label="Edit"]` (rendered as a small pencil-in-a-box icon) appears INSIDE the
+hovered row, positioned immediately after the title text. Clicking it (verified via a direct `.click()` on
+the located element, not a coordinate click — coordinate clicks on this element were unreliable once the
+"Add Multi-select" chip below appeared and reflowed the row, see METHOD note) does TWO things at once:
+  1. Turns the row's OWN title text into an inline-editable field (confirmed: a caret/cursor appears at
+     the end of "Row two" — same content-editable behavior Table's own title CELL already has natively,
+     which List's title, being inside an `<a>`, does not have by default).
+  2. Reveals the row's remaining VISIBLE-per-Property-Visibility-config properties as inline "Add <Name>"
+     quick-fill prompts, right-aligned on the same row line (this fixture's Property visibility panel was
+     set to 2 properties; only one, "Add Multi-select", rendered — the other of the 2 is presumably the
+     title itself, which needs no separate "Add" prompt since it's always shown).
+This is a genuinely new per-row affordance with NO Table equivalent — Table never needs it, since every
+cell in a Table row is already independently click-to-edit. List's own compact one-line-per-row layout has
+nowhere to put untitled property cells at rest, so "Edit" is the affordance that reveals them on demand.
+`TBD`: whether clicking one of the revealed "Add <Name>" prompts opens the SAME per-type cell editor
+renderCellValue's dispatcher already provides (highly likely, since it's the same properties/values under
+the hood) — not clicked through this session, budget-scoped to the row-hover affordances themselves.
+
+================= ROW MENU (clicking ⠿, or right-click anywhere on the row) =================
+IDENTICAL to Table's row-affordances-and-menu.txt capture, row for row:
+  [ Search actions… ]                              ← autofocused
+  Page
+  ⭐  Add to Favorites
+  ☺   Edit icon
+  ☰   Edit property            >
+  ↗   Open in                  >
+  💬  Comment          Ctrl+⇧+M
+  🔗  Copy link
+  ⧉   Duplicate        Ctrl+D
+  ↱   Move to          Ctrl+⇧+P
+  🗑  Move to Trash     Del
+  ── footer ──
+  Last edited by <user>
+  <timestamp>
+  <N> words, <N> characters        ← ADDITIONAL LINE not called out in Table's own capture (may simply
+                                      not have been recorded there — re-check Table's own footer for this
+                                      exact line before treating it as List-specific; low priority)
+
+"Open in" flyout — IDENTICAL to Table's: New tab (Ctrl+⇧+↵), Side peek (Alt+Click).
+
+Right-click anywhere on the row opens the SAME menu, anchored at the pointer, and also selects the row —
+confirmed, matches Table exactly.
+
+================= NOT VERIFIED THIS SESSION =================
+- Drag-to-reorder (the handle's 2nd gesture) — this environment's own established limitation, drag gestures
+  aren't reliably simulable here (same class of gap every prior M1-M11 live-checklist session has recorded).
+- Whether List supports multi-row bulk selection at all, and if so by what gesture, given no checkbox exists.
+- Which 2 properties this fixture's List view had set to "visible" in Property visibility (the settings
+  sidebar's own submenu kept dismissing on click this session — a repro not chased down, low priority; the
+  "Edit" toggle's own behavior is what mattered for this capture, not the exact property list).
+- Clicking through one of Edit's revealed "Add <Name>" prompts to see which editor opens.
