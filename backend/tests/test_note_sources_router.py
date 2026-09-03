@@ -367,3 +367,163 @@ def test_create_ai_provider_validates(client):
         assert client.post("/ai-providers",
                            json={"provider": "openai_compatible", "api_key": "k"},
                            headers=AUTH).status_code == 400   # base_url required
+
+
+# ── paste-image (Notion paste re-hosting) ────────────────────────────────────
+
+class _FakeResponse:
+    def __init__(self, status_code, headers=None, content=b"",
+                url="https://files.example.com/img.png"):
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.content = content
+        self.url = url
+
+
+class _FakeAsyncClient:
+    """Stands in for httpx.AsyncClient — `responses` is popped in order, one
+    per `.get()` call, so a redirect-then-final sequence is just a 2-item list."""
+    def __init__(self, responses):
+        self._responses = list(responses)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_a):
+        return False
+
+    async def get(self, _url):
+        return self._responses.pop(0)
+
+
+def _patch_httpx(responses):
+    return patch("routers.note_sources.httpx.AsyncClient",
+                return_value=_FakeAsyncClient(responses))
+
+
+_PUBLIC_ADDRINFO = [(2, 1, 6, "", ("93.184.216.34", 0))]
+
+
+def _patch_public_dns():
+    return patch("routers.note_sources.socket.getaddrinfo", return_value=_PUBLIC_ADDRINFO)
+
+
+def test_paste_image_happy_path_uploads_and_returns_signed_url(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    resp = _FakeResponse(200, {"content-type": "image/png"}, b"\x89PNG...")
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         _patch_public_dns(), \
+         _patch_httpx([resp]), \
+         patch("routers.note_sources.storage.upload") as upload, \
+         patch("routers.note_sources.storage.signed_url",
+              return_value="https://storage.example/signed") as signed:
+        res = client.post("/notes/n1/paste-image",
+                          json={"url": "https://files.example.com/img.png"}, headers=AUTH)
+    assert res.status_code == 200
+    assert res.json() == {"url": "https://storage.example/signed"}
+    upload.assert_called_once()
+    path, data, content_type = upload.call_args[0]
+    assert path.startswith("user-1/n1/pasted/") and path.endswith(".png")
+    assert data == b"\x89PNG..."
+    assert content_type == "image/png"
+    signed.assert_called_once()
+
+
+def test_paste_image_rejects_non_https_url(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    with patch("routers.note_sources.get_supabase", return_value=db):
+        res = client.post("/notes/n1/paste-image",
+                          json={"url": "http://files.example.com/img.png"}, headers=AUTH)
+    assert res.status_code == 400
+
+
+def test_paste_image_rejects_private_ip_host(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("routers.note_sources.socket.getaddrinfo",
+              return_value=[(2, 1, 6, "", ("127.0.0.1", 0))]):
+        res = client.post("/notes/n1/paste-image",
+                          json={"url": "https://internal.example/img.png"}, headers=AUTH)
+    assert res.status_code == 400
+
+
+def test_paste_image_rejects_non_image_content_type(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    resp = _FakeResponse(200, {"content-type": "text/html"}, b"<html></html>")
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         _patch_public_dns(), \
+         _patch_httpx([resp]):
+        res = client.post("/notes/n1/paste-image",
+                          json={"url": "https://files.example.com/page.html"}, headers=AUTH)
+    assert res.status_code == 415
+
+
+def test_paste_image_rejects_oversized_image(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    resp = _FakeResponse(200, {"content-type": "image/png"}, b"x" * 100)
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("routers.note_sources._PASTE_IMAGE_MAX_BYTES", 10), \
+         _patch_public_dns(), \
+         _patch_httpx([resp]):
+        res = client.post("/notes/n1/paste-image",
+                          json={"url": "https://files.example.com/img.png"}, headers=AUTH)
+    assert res.status_code == 413
+
+
+def test_paste_image_handles_unreachable_url(client):
+    import httpx as httpx_mod
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+
+    class _RaisingClient(_FakeAsyncClient):
+        async def get(self, _url):
+            raise httpx_mod.ConnectError("connection refused")
+
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         _patch_public_dns(), \
+         patch("routers.note_sources.httpx.AsyncClient", return_value=_RaisingClient([])):
+        res = client.post("/notes/n1/paste-image",
+                          json={"url": "https://files.example.com/img.png"}, headers=AUTH)
+    assert res.status_code == 502
+
+
+def test_paste_image_follows_one_redirect_with_revalidation(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    redirect = _FakeResponse(302, {"location": "https://cdn.example.com/final.png"},
+                             url="https://files.example.com/img.png")
+    final = _FakeResponse(200, {"content-type": "image/jpeg"}, b"\xff\xd8...",
+                          url="https://cdn.example.com/final.png")
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         _patch_public_dns(), \
+         _patch_httpx([redirect, final]), \
+         patch("routers.note_sources.storage.upload") as upload, \
+         patch("routers.note_sources.storage.signed_url", return_value="https://x/signed"):
+        res = client.post("/notes/n1/paste-image",
+                          json={"url": "https://files.example.com/img.png"}, headers=AUTH)
+    assert res.status_code == 200
+    upload.assert_called_once()
+    assert upload.call_args[0][0].endswith(".jpg")
+
+
+def test_paste_image_requires_note_ownership(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    notes = tables.setdefault("notes", MagicMock())
+    notes.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
+    with patch("routers.note_sources.get_supabase", return_value=db):
+        res = client.post("/notes/not-mine/paste-image",
+                          json={"url": "https://files.example.com/img.png"}, headers=AUTH)
+    assert res.status_code == 404

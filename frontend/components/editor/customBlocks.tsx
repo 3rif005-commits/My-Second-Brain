@@ -6,8 +6,13 @@
 //                (timestamp for video, page for documents, section for websites)
 import { useState } from "react";
 import { createReactBlockSpec } from "@blocknote/react";
+// @ts-ignore — @blocknote/core@0.48.0 ships an empty index.d.ts (upstream bug); runtime exports are fine
+import { createInlineContentSpec } from "@blocknote/core";
 import katex from "katex";
 import "katex/dist/katex.min.css";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyBlock = any;
 
 function MathRenderer({ latex }: { latex: string }) {
   let html = "";
@@ -103,6 +108,141 @@ export const MathBlockSpec = createReactBlockSpec(
   }
 );
 
+/** Inserts a blank math block right after `afterBlockId` — same
+ *  insert-after-cursor, else append-at-the-document's-end pattern as
+ *  `insertDatabaseBlock`/`insertButtonBlock` (DatabaseBlock.tsx /
+ *  ButtonBlock.tsx). Used by the "/" slash menu, so a formula can be added
+ *  the same way any other block is, not just via paste. */
+export function insertMathBlock(editor: AnyBlock, afterBlockId: string | undefined) {
+  const newBlock = { type: "math", props: { latex: "" } };
+  const target = afterBlockId ?? (editor.document as AnyBlock[]).at(-1)?.id;
+  if (target) editor.insertBlocks([newBlock], target, "after");
+  else editor.replaceBlocks(editor.document, [newBlock]);
+}
+
+/** Inline (mid-sentence) math — the counterpart to the block-level `math`
+ *  spec above. A Notion paste carries formulas as literal `$…$` text inside a
+ *  paragraph's prose, so they can't become their own block without tearing the
+ *  sentence in half; they need a genuine INLINE content type. Same
+ *  `createInlineContentSpec` pattern as BlockEditor's `mention` spec.
+ *
+ *  `content: "none"` makes it an atom: the LaTeX lives in the `latex` prop,
+ *  not as editable child text, so the rendered formula behaves as one unit.
+ *  BlockNote registers a parse rule for `[data-inline-content-type="inlineMath"]`
+ *  automatically and maps `data-latex` onto the prop, which is exactly the
+ *  markup notionPaste.ts emits — no custom parse function needed. */
+export const InlineMathSpec = createInlineContentSpec(
+  {
+    type: "inlineMath" as const,
+    propSchema: {
+      latex: { default: "" },
+    },
+    content: "none",
+  },
+  {
+    // BlockNote calls this as `render(inlineContent, updateInlineContent,
+    // editor)`. The second argument replaces THIS node with whatever inline
+    // content it's given — used below to write an edited formula back, still
+    // as a formula.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    render: (inlineContent: any, updateInlineContent?: (content: AnyBlock) => void) => {
+      const latex = (inlineContent.props?.latex as string) ?? "";
+      const el = document.createElement("span");
+      el.className = "inline-math";
+
+      /** Draws the rendered formula. Also the "cancel" path out of editing. */
+      const showFormula = () => {
+        el.textContent = "";
+        try {
+          // displayMode false — must sit on the text baseline, not break the line.
+          el.innerHTML = katex.renderToString(latex, {
+            displayMode: false,
+            throwOnError: false,
+          });
+        } catch {
+          // Unparseable LaTeX shows its source rather than vanishing.
+          el.textContent = `$${latex}$`;
+        }
+      };
+
+      // A formula is an atom (`content: "none"`), so it needs its own way in
+      // to fix a typo. Clicking opens a small input holding the LaTeX SOURCE,
+      // committed with Enter or blur and abandoned with Escape — the block
+      // level MathBlockView's click-to-edit, sized for one line of prose.
+      //
+      // Deliberately NOT "turn the node back into `$…$` text": that looked
+      // like editing but was really destruction. One stray click left raw
+      // `$x^2$` sitting in the note with nothing marking it as a formula any
+      // more, and re-applying the toolbar's ∑ button to it folded the `$`
+      // delimiters into the LaTeX itself. The node stays an inlineMath node
+      // the whole way through here.
+      const openEditor = () => {
+        if (!updateInlineContent) return;
+        let settled = false;
+        el.textContent = "";
+
+        const input = document.createElement("input");
+        input.className = "inline-math-input";
+        input.value = latex;
+        input.setAttribute("aria-label", "LaTeX source");
+        // Roughly track the content's width so the line doesn't jump.
+        input.size = Math.max(latex.length, 4);
+        input.style.font = "inherit";
+        input.style.fontFamily = "monospace";
+        input.style.color = "inherit";
+        input.style.background = "transparent";
+        input.style.border = "1px solid currentColor";
+        input.style.borderRadius = "3px";
+        input.style.padding = "0 2px";
+
+        const commit = () => {
+          if (settled) return;
+          settled = true;
+          const next = input.value.trim();
+          // An empty formula would render as nothing and so could never be
+          // clicked again — treat clearing the box as "leave it alone".
+          if (!next || next === latex) return showFormula();
+          updateInlineContent({ type: "inlineMath", props: { latex: next } });
+        };
+
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            settled = true;
+            showFormula();
+          }
+        });
+        input.addEventListener("blur", commit);
+
+        el.appendChild(input);
+        input.focus();
+        input.select();
+      };
+
+      if (updateInlineContent) {
+        el.setAttribute("title", "Click to edit LaTeX");
+        el.style.cursor = "pointer";
+        // The input is a real focusable control inside an atom — keep
+        // ProseMirror from treating typing in it as editing the document.
+        el.contentEditable = "false";
+        el.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (!el.querySelector("input")) openEditor();
+        });
+      } else {
+        el.setAttribute("title", latex);
+      }
+
+      showFormula();
+      return { dom: el };
+    },
+  }
+);
+
 function checkpointHref(p: {
   noteId: string; resourceId: string; anchorType: string; value: string;
 }): string {
@@ -187,32 +327,24 @@ export const CALLOUT_PALETTE: Record<CalloutType, { color: string; icon: string;
   EXAM:      { color: "pink",   icon: "🎯", label: "Exam" },
 };
 
-const CALLOUT_COLOR_CLASSES: Record<string, string> = {
-  blue:   "bg-blue-50 border-blue-300 dark:bg-blue-900/20 dark:border-blue-700",
-  gray:   "bg-gray-50 border-gray-300 dark:bg-gray-800/40 dark:border-gray-600",
-  green:  "bg-green-50 border-green-300 dark:bg-green-900/20 dark:border-green-700",
-  yellow: "bg-yellow-50 border-yellow-300 dark:bg-yellow-900/20 dark:border-yellow-700",
-  orange: "bg-orange-50 border-orange-300 dark:bg-orange-900/20 dark:border-orange-700",
-  red:    "bg-red-50 border-red-300 dark:bg-red-900/20 dark:border-red-700",
-  purple: "bg-purple-50 border-purple-300 dark:bg-purple-900/20 dark:border-purple-700",
-  brown:  "bg-[#f5efe8] border-[#c9a876] dark:bg-[#3a2f22]/40 dark:border-[#7a6142]",
-  pink:   "bg-pink-50 border-pink-300 dark:bg-pink-900/20 dark:border-pink-700",
-};
-
 function CalloutBlockView({ block }: { block: any }) {
   const rawType = block.props.calloutType as string;
   const type: CalloutType = rawType in CALLOUT_PALETTE ? (rawType as CalloutType) : "NOTE";
-  const { color, icon, label } = CALLOUT_PALETTE[type];
+  const { icon, label } = CALLOUT_PALETTE[type];
+  // A callout pasted from Notion can carry ANY emoji, not just this app's
+  // nine, so the source emoji wins when there is one (see notionPaste.ts).
+  const sourceIcon = (block.props.calloutIcon as string) || "";
+  // Notion's callout is ONE coloured box with the emoji beside the text and no
+  // caption, so that's what this renders: just the icon. The box itself, its
+  // colour, and putting the body alongside the icon rather than underneath all
+  // live in CSS (app/globals.css), because BlockNote renders a block's children
+  // into a SIBLING `.bn-block-group` div that React has no access to from here
+  // — the two are joined into one card by a grid on their shared `.bn-block`.
+  // `label` stays as the accessible name; it is deliberately not drawn.
   return (
-    <div
-      className={`w-full my-1 px-3 py-2 rounded-lg border ${CALLOUT_COLOR_CLASSES[color]}`}
-      contentEditable={false}
-    >
-      <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 dark:text-gray-200">
-        <span>{icon}</span>
-        <span>{label}</span>
-      </div>
-    </div>
+    <span className="callout-icon" contentEditable={false} title={label} aria-label={label}>
+      {sourceIcon || icon}
+    </span>
   );
 }
 
@@ -221,6 +353,9 @@ export const CalloutBlockSpec = createReactBlockSpec(
     type: "callout",
     propSchema: {
       calloutType: { default: "NOTE" as CalloutType },
+      // The source emoji, when a pasted callout used one this app's palette
+      // doesn't have. Empty for callouts created in-app — see CalloutBlockView.
+      calloutIcon: { default: "" },
     },
     content: "none",
   },
@@ -229,6 +364,7 @@ export const CalloutBlockSpec = createReactBlockSpec(
     parse: (element: HTMLElement) => {
       if (element.getAttribute("data-type") !== "callout") return undefined;
       const raw = element.getAttribute("data-callout-type");
+      const rawIcon = element.getAttribute("data-callout-icon") || "";
       // BlockNote auto-maps `data-<kebab-prop>` attributes matching the
       // propSchema (here, `data-callout-type` -> `calloutType`) onto the
       // block's props AFTER this parse() function runs. If left in place,
@@ -237,11 +373,38 @@ export const CalloutBlockSpec = createReactBlockSpec(
       // unknown-calloutType-falls-back-to-NOTE behavior a few lines down.
       // Removing it here makes our validated return value the final answer.
       element.removeAttribute("data-callout-type");
+      element.removeAttribute("data-callout-icon");
       element.removeAttribute("data-type");
       if (!raw || !(raw in CALLOUT_PALETTE)) {
-        return { calloutType: "NOTE" };
+        return { calloutType: "NOTE", calloutIcon: rawIcon };
       }
-      return { calloutType: raw as CalloutType };
+      return { calloutType: raw as CalloutType, calloutIcon: rawIcon };
     },
   }
 );
+
+/** Inserts a blank NOTE-type callout, with one empty paragraph child, right
+ *  after `afterBlockId` — same pattern as `insertMathBlock` above. The child
+ *  paragraph isn't optional: the callout's own `content` is "none" (see
+ *  CalloutBlockView's comment — its box and body live in its children, not
+ *  its own content), so without one there'd be nowhere for the user to type
+ *  a first line. */
+export function insertCalloutBlock(editor: AnyBlock, afterBlockId: string | undefined) {
+  const newBlock = {
+    type: "callout",
+    props: { calloutType: "NOTE", calloutIcon: "" },
+    children: [{ type: "paragraph", content: [] }],
+  };
+  const target = afterBlockId ?? (editor.document as AnyBlock[]).at(-1)?.id;
+  const [inserted] = target
+    ? editor.insertBlocks([newBlock], target, "after")
+    : editor.replaceBlocks(editor.document, [newBlock]).insertedBlocks ?? [];
+  // Land the caret in the callout's body so it can be typed into straight
+  // away, rather than leaving it behind in the block the "/" was typed in.
+  // Same insert-then-position pattern BlockNote's own keyboard shortcuts use
+  // (its `let [a] = editor.insertBlocks(…); editor.setTextCursorPosition(a)`).
+  // Guarded: the callout's own content is "none", so the caret belongs on its
+  // first child, and none of this is worth throwing over if it isn't there.
+  const body = inserted?.children?.[0];
+  if (body) editor.setTextCursorPosition(body, "start");
+}

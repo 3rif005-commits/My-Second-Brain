@@ -8,12 +8,16 @@ summaries — are gone.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
+import socket
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
+import httpx
 from fastapi import (APIRouter, BackgroundTasks, File, Form, Header,
                      HTTPException, UploadFile)
 from fastapi.responses import StreamingResponse
@@ -64,6 +68,10 @@ class AnchorRow(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[dict]
+
+
+class PasteImageRequest(BaseModel):
+    url: str
 
 
 class ProviderCreate(BaseModel):
@@ -149,6 +157,79 @@ def _classify(file: UploadFile | None, url: str | None) -> tuple[str, str, str]:
                         detail={"error": "Provide a file or a url."})
 
 
+_PASTE_IMAGE_MAX_BYTES = 15 * 1024 * 1024
+_PASTE_IMAGE_CONTENT_TYPES = {
+    "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif",
+    "image/webp": ".webp", "image/svg+xml": ".svg", "image/avif": ".avif",
+}
+# ~10 years — Supabase signed URLs take an arbitrary expiry and there's no
+# "resolve at read time" mechanism for a plain image block's url prop (unlike
+# note_resources rows, whose signed thumbnail/file URLs are regenerated on
+# every read via _source_public/source_file_url above) — long-lived is the
+# pragmatic stand-in for permanent here.
+_PASTE_IMAGE_SIGNED_URL_TTL = 10 * 365 * 24 * 3600
+
+
+def _assert_public_https_url(url: str) -> None:
+    """Guards the one HTTP fetch below against SSRF: this endpoint fetches a
+    URL the client supplies, so scheme + resolved-IP checks are mandatory, not
+    optional. Known limitation: this is a check-then-fetch, not a fetch bound
+    to the exact IP it validated, so a DNS answer that changes between the two
+    (DNS rebinding) isn't caught — acceptable here given the endpoint is
+    auth-gated, restricted to image content-types, and size-capped, but a
+    stronger fix would resolve once and connect to that literal IP."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise HTTPException(status_code=400,
+                            detail={"error": "Only https URLs are allowed"})
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, None)
+    except socket.gaierror:
+        raise HTTPException(status_code=400,
+                            detail={"error": "Could not resolve image host"})
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+            raise HTTPException(status_code=400,
+                                detail={"error": "Image host is not allowed"})
+
+
+async def _fetch_external_image(url: str) -> tuple[bytes, str]:
+    """Fetches `url` server-side (so the browser never needs CORS access to a
+    Notion-signed S3 link) and returns (bytes, content_type). Manually follows
+    redirects (rather than httpx's follow_redirects=True) so every hop gets
+    the same SSRF check as the original URL."""
+    _assert_public_https_url(url)
+    hops = 0
+    try:
+        async with httpx.AsyncClient(follow_redirects=False, timeout=10.0) as client:
+            resp = await client.get(url)
+            while resp.status_code in (301, 302, 303, 307, 308) and hops < 3:
+                location = resp.headers.get("location")
+                if not location:
+                    break
+                next_url = str(httpx.URL(str(resp.url)).join(location))
+                _assert_public_https_url(next_url)
+                resp = await client.get(next_url)
+                hops += 1
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail={"error": f"Could not fetch image: {e}"})
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail={
+            "error": f"Image fetch failed with status {resp.status_code}"})
+
+    content_type = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+    if content_type not in _PASTE_IMAGE_CONTENT_TYPES:
+        raise HTTPException(status_code=415,
+                            detail={"error": f"Unsupported content type '{content_type}'"})
+    if len(resp.content) > _PASTE_IMAGE_MAX_BYTES:
+        raise HTTPException(status_code=413,
+                            detail={"error": "Image exceeds the 15MB limit"})
+    return resp.content, content_type
+
+
 # ── attach / list / detach ───────────────────────────────────────────────────
 
 @router.post("/sources")
@@ -220,6 +301,31 @@ async def attach_source(
     if not defer:
         background.add_task(process_resource, row["id"])
     return {"note_id": note_id, "source": _source_public(row), "deferred": defer}
+
+
+@router.post("/notes/{note_id}/paste-image")
+async def paste_image(note_id: str, body: PasteImageRequest,
+                      authorization: str = Header()):
+    """Re-host an externally hosted image pasted into a note (e.g. a
+    signed, time-limited Notion S3 URL copied via paste-from-Notion) so the
+    note doesn't end up pointing at a link that 404s once that signature
+    expires. Returns a long-lived signed URL to use as the image block's own
+    url prop; on any failure the frontend falls back to the original URL
+    rather than dropping the image block."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+
+    data, content_type = await _fetch_external_image(body.url.strip())
+    ext = _PASTE_IMAGE_CONTENT_TYPES[content_type]
+    path = f"{user_id}/{note_id}/pasted/{uuid.uuid4()}{ext}"
+    try:
+        storage.upload(path, data, content_type)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail={"error": f"Upload failed: {e}"})
+    try:
+        return {"url": storage.signed_url(path, _PASTE_IMAGE_SIGNED_URL_TTL)}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail={"error": f"Could not sign URL: {e}"})
 
 
 @router.get("/notes/{note_id}/sources")

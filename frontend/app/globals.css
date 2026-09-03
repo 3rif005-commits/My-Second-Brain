@@ -95,111 +95,132 @@
   text-decoration: underline;
 }
 
-/* Callout blocks — visually merge the colored box with its children.
+/* Callout blocks — one Notion-style card: coloured box, emoji in a left
+ * gutter, body text beside it, no caption.
  *
- * BlockNote renders a block's children inside a sibling `.bn-block-group`
- * div (see .bn-block's `content: "blockContent blockGroup?"` in
- * @blocknote/core's BlockContainer node), NOT nested inside the block's own
- * `.bn-block-content`. So a callout's body (paragraphs, lists, the math
- * block, etc — attached via calloutChildren.ts) renders as a plain sibling
- * div below the colored box instead of visually "inside" it.
+ * The DOM these selectors target, read off a live editor rather than assumed:
  *
- * CalloutBlockSpec (customBlocks.tsx) doesn't set these attributes itself —
- * BlockNote sets them automatically from the block's props: every block's
- * `.bn-block-content` gets `data-content-type="<blockType>"`, and
- * `data-<kebab-prop>="<value>"` for every non-default prop (so
- * `data-callout-type` is present for every type except the default, "NOTE").
- * Confirmed against node_modules/@blocknote/react/src/schema/ReactBlockSpec.tsx
- * (BlockContentWrapper) and node_modules/@blocknote/core/src/schema/blocks/internal.ts
- * (propsToAttributes).
+ *   .bn-block
+ *     |-- div.react-renderer.node-callout      <- the React node view wrapper
+ *     |     `-- .bn-block-content[data-content-type="callout"][data-callout-type]
+ *     `-- div.bn-block-group                   <- the callout's children
+ *
+ * Two things follow from that. First, a block's children live in a SIBLING
+ * `.bn-block-group` (see .bn-block's `content: "blockContent blockGroup?"` in
+ * @blocknote/core's BlockContainer node), so CalloutBlockView cannot wrap the
+ * icon and the body in one box from inside React — a grid on their shared
+ * `.bn-block` does it here instead. Second, `createReactBlockSpec` inserts the
+ * `.react-renderer.node-<type>` wrapper between `.bn-block` and
+ * `.bn-block-content`, so the content div is a GRANDCHILD of `.bn-block`, not
+ * a child, and is never the block group's sibling. (An earlier version of this
+ * file used `.bn-block-content[data-content-type="callout"] + .bn-block-group`
+ * and silently matched nothing at all — verified with a live probe.)
+ *
+ * BlockNote sets the attributes automatically from the block's props:
+ * `.bn-block-content` gets `data-content-type="<blockType>"` plus
+ * `data-<kebab-prop>="<value>"` for every NON-DEFAULT prop. `calloutType`'s
+ * default is "NOTE", so a NOTE callout carries no `data-callout-type` at all —
+ * hence the `:not([data-callout-type])` fallback. Confirmed against
+ * @blocknote/react's ReactBlockSpec.tsx and @blocknote/core's
+ * schema/blocks/internal.ts (propsToAttributes).
  */
-
-/* Square off the callout box's bottom edge when it has children below it,
- * so the box and the extended .bn-block-group below read as one card. */
-.bn-block-content[data-content-type="callout"]:has(+ .bn-block-group) > div {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 10px;
+.bn-block:has(> .react-renderer.node-callout) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  margin: 0.25rem 0;
+  border: 1px solid;
+  border-radius: 0.5rem;
 }
 
-/* Extend the callout's background/border down into its children. */
-.bn-block-content[data-content-type="callout"] + .bn-block-group {
-  padding: 2px 12px 10px;
-  border-left-width: 1px;
-  border-right-width: 1px;
-  border-bottom-width: 1px;
-  border-style: solid;
-  border-bottom-left-radius: 0.5rem;
-  border-bottom-right-radius: 0.5rem;
-  margin-top: -1px;
+/* The icon sits in column one, on the body's first line. */
+.bn-block > .react-renderer.node-callout {
+  grid-column: 1;
+}
+.callout-icon {
+  display: inline-block;
+  line-height: 1.5rem;
+  font-size: 1.05rem;
+  user-select: none;
 }
 
-/* One rule pair per callout type/color (CALLOUT_PALETTE in customBlocks.tsx).
- * NOTE has no `data-callout-type` attribute because it's the prop's default
- * value — BlockNote omits data attributes for default prop values — hence
- * the `:not([data-callout-type])` fallback selector for it specifically. */
-.bn-block-content[data-content-type="callout"]:not([data-callout-type]) + .bn-block-group {
+/* The body sits in column two and draws no box of its own — the card is the
+ * parent — and needs no extra left indent, since the grid already provides it. */
+.bn-block:has(> .react-renderer.node-callout) > .bn-block-group {
+  grid-column: 2;
+}
+.bn-block:has(> .react-renderer.node-callout) > .bn-block-group .bn-block-outer {
+  padding-left: 0;
+}
+
+/* A callout with no children must not reserve an empty second column. */
+.bn-block:has(> .react-renderer.node-callout):not(:has(> .bn-block-group)) {
+  grid-template-columns: auto;
+}
+
+/* One rule pair per callout type (CALLOUT_PALETTE in customBlocks.tsx). */
+.bn-block:has(> .react-renderer.node-callout > .bn-block-content:not([data-callout-type])) {
   background-color: #f9fafb; border-color: #d1d5db; /* NOTE — gray */
 }
-.dark .bn-block-content[data-content-type="callout"]:not([data-callout-type]) + .bn-block-group {
+.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content:not([data-callout-type])) {
   background-color: rgba(31, 41, 55, 0.4); border-color: #4b5563;
 }
 
-.bn-block-content[data-callout-type="OVERVIEW"] + .bn-block-group {
+.bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="OVERVIEW"]) {
   background-color: #eff6ff; border-color: #93c5fd; /* blue */
 }
-.dark .bn-block-content[data-callout-type="OVERVIEW"] + .bn-block-group {
+.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="OVERVIEW"]) {
   background-color: rgba(30, 58, 138, 0.2); border-color: #1d4ed8;
 }
 
-.bn-block-content[data-callout-type="TIP"] + .bn-block-group {
+.bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="TIP"]) {
   background-color: #f0fdf4; border-color: #86efac; /* green */
 }
-.dark .bn-block-content[data-callout-type="TIP"] + .bn-block-group {
+.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="TIP"]) {
   background-color: rgba(20, 83, 45, 0.2); border-color: #15803d;
 }
 
-.bn-block-content[data-callout-type="IMPORTANT"] + .bn-block-group {
+.bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="IMPORTANT"]) {
   background-color: #fefce8; border-color: #fde047; /* yellow */
 }
-.dark .bn-block-content[data-callout-type="IMPORTANT"] + .bn-block-group {
+.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="IMPORTANT"]) {
   background-color: rgba(113, 63, 18, 0.2); border-color: #a16207;
 }
 
-.bn-block-content[data-callout-type="WARNING"] + .bn-block-group {
+.bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="WARNING"]) {
   background-color: #fff7ed; border-color: #fdba74; /* orange */
 }
-.dark .bn-block-content[data-callout-type="WARNING"] + .bn-block-group {
+.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="WARNING"]) {
   background-color: rgba(124, 45, 18, 0.2); border-color: #c2410c;
 }
 
-.bn-block-content[data-callout-type="CAUTION"] + .bn-block-group {
+.bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="CAUTION"]) {
   background-color: #fef2f2; border-color: #fca5a5; /* red */
 }
-.dark .bn-block-content[data-callout-type="CAUTION"] + .bn-block-group {
+.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="CAUTION"]) {
   background-color: rgba(127, 29, 29, 0.2); border-color: #b91c1c;
 }
 
-.bn-block-content[data-callout-type="FORMULA"] + .bn-block-group {
+.bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="FORMULA"]) {
   background-color: #faf5ff; border-color: #d8b4fe; /* purple */
 }
-.dark .bn-block-content[data-callout-type="FORMULA"] + .bn-block-group {
+.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="FORMULA"]) {
   background-color: rgba(88, 28, 135, 0.2); border-color: #7e22ce;
 }
 
-.bn-block-content[data-callout-type="ANALOGY"] + .bn-block-group {
+.bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="ANALOGY"]) {
   background-color: #f5efe8; border-color: #c9a876; /* brown */
 }
-.dark .bn-block-content[data-callout-type="ANALOGY"] + .bn-block-group {
+.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="ANALOGY"]) {
   background-color: rgba(58, 47, 34, 0.4); border-color: #7a6142;
 }
 
-.bn-block-content[data-callout-type="EXAM"] + .bn-block-group {
+.bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="EXAM"]) {
   background-color: #fdf2f8; border-color: #f9a8d4; /* pink */
 }
-.dark .bn-block-content[data-callout-type="EXAM"] + .bn-block-group {
+.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="EXAM"]) {
   background-color: rgba(131, 24, 67, 0.2); border-color: #be185d;
 }
 

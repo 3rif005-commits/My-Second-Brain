@@ -14,10 +14,13 @@ import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs, createIn
 import { en as coreEn } from "@blocknote/core/locales";
 // @ts-ignore — locales subpath export
 import { en as aiEn } from "@blocknote/xl-ai/locales";
-import { withMultiColumn, multiColumnDropCursor } from "@blocknote/xl-multi-column";
+import { withMultiColumn, multiColumnDropCursor, getMultiColumnSlashMenuItems, locales as multiColumnLocales } from "@blocknote/xl-multi-column";
 import { useTheme } from "@/app/providers";
-import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec } from "./customBlocks";
+import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec, InlineMathSpec, insertMathBlock, insertCalloutBlock } from "./customBlocks";
 import { extractCalloutChildren, attachCalloutChildren } from "./calloutChildren";
+import { NoteFormattingToolbar } from "./inlineToolbar";
+import { transformNotionHtml } from "./notionPaste";
+import { readNotionJson, notionJsonToBlocks } from "./notionBlocks";
 import { NoteIdContext } from "./noteIdContext";
 import { DatabaseBlockSpec, insertDatabaseBlock } from "../database/DatabaseBlock";
 import { ButtonBlockSpec, insertButtonBlock } from "../database/ButtonBlock";
@@ -62,7 +65,12 @@ const multiColSchema = withMultiColumn(
       database: DatabaseBlockSpec(),
       button: ButtonBlockSpec(),
     },
-    inlineContentSpecs: { ...defaultInlineContentSpecs, mention: MentionSpec },
+    inlineContentSpecs: {
+      ...defaultInlineContentSpecs,
+      mention: MentionSpec,
+      // Mid-sentence `$…$` formulas from a Notion paste — see customBlocks.tsx
+      inlineMath: InlineMathSpec,
+    },
   })
 );
 
@@ -74,6 +82,32 @@ function sanitizeBlocks(blocks: AnyBlock[]): AnyBlock[] {
   return blocks
     .filter((b) => b != null && VALID_BLOCK_TYPES.has(b?.type))
     .map((b) => ({ ...b, children: Array.isArray(b.children) ? sanitizeBlocks(b.children) : [] }));
+}
+
+/** Reorders slash-menu items so every group's items sit in one contiguous
+ *  run, keeping first-appearance order of the groups and of the items inside
+ *  each. BlockNote's SuggestionMenu (its own SuggestionMenu.tsx) walks the
+ *  flat item list and pushes a group LABEL whenever an item's `group` differs
+ *  from the previous item's, keyed on the group name itself — so a group that
+ *  appears in two non-adjacent runs renders that label twice under one React
+ *  key ("Encountered two children with the same key, `Basic blocks`"), and
+ *  React then drops the colliding children, leaving a header with no items
+ *  beneath it. Live-reproduced here the moment the multi-column items (whose
+ *  own locale files put them in "Basic blocks" — the same group BlockNote's
+ *  defaults use at the head of the list) were appended at the end. Doing this
+ *  generically means no caller has to hand-order its array to stay safe,
+ *  which is the same failure mode the "Databases"/"Buttons" group comments
+ *  further down describe from the item-title side. */
+function withContiguousGroups<T extends { group?: string }>(items: T[]): T[] {
+  const byGroup = new Map<string, T[]>();
+  for (const item of items) {
+    const key = item.group ?? "";
+    const bucket = byGroup.get(key);
+    if (bucket) bucket.push(item);
+    else byGroup.set(key, [item]);
+  }
+  // Map preserves insertion order, so groups keep first-appearance order.
+  return [...byGroup.values()].flat();
 }
 
 // Custom dark theme: editor background matches app's gray-900 (#111827)
@@ -238,8 +272,86 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         })(),
         extensions: [AIExtension({ transport: inlineTransport })],
         dropCursor: multiColumnDropCursor,
-        // Merge the xl-ai locale under the `ai` key so getAIDictionary(editor) works
-        dictionary: { ...coreEn, ai: aiEn },
+        // Merge the xl-ai locale under the `ai` key so getAIDictionary(editor)
+        // works, and the multi-column one under `multi_column` — its
+        // getMultiColumnSlashMenuItems (wired into the slash menu below)
+        // throws a literal "Multi-column dictionary not found" without it.
+        dictionary: { ...coreEn, ai: aiEn, multi_column: multiColumnLocales.en },
+        // Paste-from-Notion (and, incidentally, from any other rich source):
+        // rewrite the clipboard HTML through notionPaste.ts before handing it
+        // to BlockNote's own HTML→block parser, then reattach callout
+        // children the same way insertHtmlAtEnd already does (BlockNote's
+        // parser can't reconstruct a callout's children from nested markup —
+        // see calloutChildren.ts — and that gap applies to live clipboard
+        // paste too, not just the ingest/synthesis paths). Any failure here
+        // falls back to defaultPasteHandler so a bug in this path degrades to
+        // today's paste behavior rather than eating the paste entirely.
+        pasteHandler: ({ event, editor, defaultPasteHandler }: AnyBlock) => {
+          const html = event.clipboardData?.getData("text/html");
+          // Notion's own block tree, when the clipboard carries it. It must be
+          // read here, synchronously, while the paste event is still being
+          // dispatched — clipboardData is not guaranteed valid afterwards.
+          const notionJson = readNotionJson(event.clipboardData);
+          if (!html && !notionJson) return defaultPasteHandler();
+          (async () => {
+            try {
+              // Preferred path: Notion's JSON says outright whether a block is
+              // a toggle or a bullet, whether a heading is toggleable, and what
+              // colour and emoji a callout has — none of which survive into the
+              // `text/html` the fallback below has to parse. See notionBlocks.ts.
+              if (notionJson) {
+                const fromJson = notionJsonToBlocks(notionJson);
+                if (fromJson && fromJson.length > 0) {
+                  const pos = editor.getTextCursorPosition();
+                  if (pos?.block) editor.insertBlocks(fromJson, pos.block.id, "after");
+                  else editor.replaceBlocks(editor.document, fromJson);
+                  return;
+                }
+              }
+              const transformed = await transformNotionHtml(html ?? "", _noteId);
+              // Deliberately not editor.pasteHTML() here — live-tested against
+              // the real BlockNoteView (not just jsdom) during this feature's
+              // build and found to duplicate content for a `<details>` toggle
+              // (both a correct toggleListItem AND a separate flattened-text
+              // paragraph came out of one paste). tryParseHTMLToBlocks +
+              // manual insertion is the same path insertHtmlAtEnd already uses
+              // and doesn't have this bug. Runs extractCalloutChildren
+              // unconditionally — it's a no-op when there's no callout div.
+              const { strippedHtml, calloutChildren } = await extractCalloutChildren(
+                transformed,
+                async (h: string) => (await editor.tryParseHTMLToBlocks(h)) as AnyBlock[]
+              );
+              const rawParsed = await editor.tryParseHTMLToBlocks(strippedHtml);
+              const parsed = attachCalloutChildren(rawParsed as AnyBlock[], calloutChildren);
+              const pos = editor.getTextCursorPosition();
+              if (pos?.block) editor.insertBlocks(parsed, pos.block.id, "after");
+              else editor.replaceBlocks(editor.document, parsed);
+            } catch (e) {
+              // eslint-disable-next-line no-console
+              console.warn("[notionPaste] paste handling failed, falling back:", e);
+              // Falls back through the same tryParseHTMLToBlocks + manual
+              // insertion path (not editor.pasteHTML(html) or
+              // defaultPasteHandler()) for two reasons: (1) pasteHTML is the
+              // thing just proven unreliable above, and (2)
+              // defaultPasteHandler would re-read event.clipboardData from
+              // inside this async callback, after the synchronous paste event
+              // has already finished dispatching — browsers don't guarantee
+              // that stays valid. `html` (the original, untransformed
+              // clipboard HTML) was already captured synchronously above.
+              if (!html) return;
+              try {
+                const rawParsed = await editor.tryParseHTMLToBlocks(html);
+                const pos = editor.getTextCursorPosition();
+                if (pos?.block) editor.insertBlocks(rawParsed, pos.block.id, "after");
+                else editor.replaceBlocks(editor.document, rawParsed);
+              } catch (e2) {
+                // eslint-disable-next-line no-console
+                console.warn("[notionPaste] fallback paste also failed:", e2);
+              }
+            }
+          })();
+          return true;
+        },
       } as Parameters<typeof useCreateBlockNote>[0]
     );
 
@@ -359,9 +471,17 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           // SuggestionMenuController below. Without this, both menus are active
           // and a mouse-click on our menu's item fails to apply the conversion.
           slashMenu={false}
+          // Same arrangement for the inline toolbar: ours (inlineToolbar.tsx)
+          // adds the inline `code` style and inline math on top of BlockNote's
+          // own items, and replaces the built-in one rather than sitting
+          // alongside it.
+          formattingToolbar={false}
         >
           {/* Intercepts Cmd/Ctrl+J to open the inline AI menu */}
           <AIKeyboardHandler />
+
+          {/* Inline toolbar — BlockNote's items + inline code + inline math */}
+          <NoteFormattingToolbar />
 
           {/* Slash menu — default items + Knowledge Check */}
           <SuggestionMenuController
@@ -431,7 +551,55 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                   insertButtonBlock(editor, pos?.block?.id);
                 },
               }];
-              const all = [...defaults, ...aiItems, ...custom, ...databaseItems, ...buttonItems];
+              // Callout and math are two more custom block types with no
+              // slash item of their own — reachable only via paste until
+              // now. Sharing one "More blocks" group (rather than each
+              // getting its own, as Database/Button do above) is fine here
+              // because neither item's title equals that group name, so it
+              // doesn't hit the title-equals-group-name key collision the
+              // comment above describes. Checkpoint, this app's other custom
+              // block type, deliberately has NO item here — it anchors to a
+              // specific spot in a specific workspace resource (a video
+              // timestamp, a PDF page…), so one inserted blank would have
+              // nothing to point at and render as a dead pill (see
+              // CheckpointBlockSpec's own "old canvas model" comment in
+              // customBlocks.tsx); it's only ever created from a workspace
+              // viewer's own "add checkpoint" action.
+              const moreBlockItems = [
+                {
+                  title: "Callout",
+                  group: "More blocks",
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  icon: <span style={{ fontSize: 18 }}>💡</span> as any,
+                  subtext: "Highlighted block for an aside or a note",
+                  aliases: ["note", "aside", "box", "tip", "warning"],
+                  onItemClick: () => {
+                    const pos = editor.getTextCursorPosition();
+                    insertCalloutBlock(editor, pos?.block?.id);
+                  },
+                },
+                {
+                  title: "Math Formula",
+                  group: "More blocks",
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  icon: <span style={{ fontSize: 18 }}>∑</span> as any,
+                  subtext: "Block-level LaTeX, rendered with KaTeX",
+                  aliases: ["math", "equation", "latex", "formula"],
+                  onItemClick: () => {
+                    const pos = editor.getTextCursorPosition();
+                    insertMathBlock(editor, pos?.block?.id);
+                  },
+                },
+              ];
+              // Column blocks are in the schema (withMultiColumn above) but
+              // their own slash items ship separately — without these, "Two
+              // columns"/"Three columns" are unreachable from the menu even
+              // though the block types exist and paste/drag can produce them.
+              const columnItems = getMultiColumnSlashMenuItems(editor);
+              const all = withContiguousGroups([
+                ...defaults, ...aiItems, ...custom,
+                ...databaseItems, ...buttonItems, ...moreBlockItems, ...columnItems,
+              ]);
               if (!query) return all;
               const q = query.toLowerCase();
               return all.filter((item) =>

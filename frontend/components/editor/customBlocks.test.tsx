@@ -2,7 +2,10 @@
 import { describe, it, expect } from "vitest";
 // @ts-ignore — @blocknote/core@0.48.0 ships an empty index.d.ts (upstream bug); runtime exports are fine
 import { BlockNoteSchema, defaultBlockSpecs, BlockNoteEditor } from "@blocknote/core";
-import { CalloutBlockSpec, CALLOUT_PALETTE, MathBlockSpec } from "./customBlocks";
+import { CalloutBlockSpec, CALLOUT_PALETTE, MathBlockSpec, insertCalloutBlock, insertMathBlock } from "./customBlocks";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyBlock = any;
 
 function makeEditor() {
   const schema = BlockNoteSchema.create({
@@ -79,5 +82,72 @@ describe("math HTML parsing", () => {
     expect(blocks).toHaveLength(1);
     expect(blocks[0].type).toBe("math");
     expect((blocks[0].props as any).latex).toBe("E = mc^2");
+  });
+});
+
+// Both slash-menu insert helpers below — the fix for "callout doesn't appear
+// when I press /": these two custom block types were only ever reachable via
+// paste, never via manual insertion. Mirrors insertDatabaseBlock's own test
+// in DatabaseBlock.test.tsx.
+describe("insertCalloutBlock", () => {
+  it("inserts a NOTE callout with one empty paragraph child, right after the given block id", () => {
+    const editor = makeEditor();
+    editor.replaceBlocks(editor.document, [
+      { type: "paragraph", content: "First" },
+      { type: "paragraph", content: "Second" },
+    ]);
+    const [first] = editor.document as AnyBlock[];
+
+    insertCalloutBlock(editor, first.id);
+
+    const doc = editor.document as AnyBlock[];
+    const callout = doc.find((b) => b.type === "callout");
+    expect(callout).toBeTruthy();
+    expect(callout.props).toEqual({ calloutType: "NOTE", calloutIcon: "" });
+    expect(callout.children).toHaveLength(1);
+    expect(callout.children[0].type).toBe("paragraph");
+  });
+
+  it("replaces an empty document rather than leaving it untouched", () => {
+    const editor = makeEditor();
+    insertCalloutBlock(editor, undefined);
+    const doc = editor.document as AnyBlock[];
+    expect(doc.some((b) => b.type === "callout")).toBe(true);
+  });
+
+  it("leaves the caret inside the callout's body, not in the block it was triggered from", () => {
+    const editor = makeEditor();
+    editor.replaceBlocks(editor.document, [{ type: "paragraph", content: "First" }]);
+    const [first] = editor.document as AnyBlock[];
+
+    insertCalloutBlock(editor, first.id);
+
+    const callout = (editor.document as AnyBlock[]).find((b) => b.type === "callout");
+    expect(editor.getTextCursorPosition().block.id).toBe(callout.children[0].id);
+  });
+});
+
+describe("insertMathBlock", () => {
+  it("inserts a blank math block right after the given block id", () => {
+    const editor = makeEditor();
+    editor.replaceBlocks(editor.document, [
+      { type: "paragraph", content: "First" },
+      { type: "paragraph", content: "Second" },
+    ]);
+    const [first] = editor.document as AnyBlock[];
+
+    insertMathBlock(editor, first.id);
+
+    const doc = editor.document as AnyBlock[];
+    const math = doc.find((b) => b.type === "math");
+    expect(math).toBeTruthy();
+    expect(math.props).toEqual({ latex: "" });
+  });
+
+  it("replaces an empty document rather than leaving it untouched", () => {
+    const editor = makeEditor();
+    insertMathBlock(editor, undefined);
+    const doc = editor.document as AnyBlock[];
+    expect(doc.some((b) => b.type === "math")).toBe(true);
   });
 });
