@@ -9,6 +9,7 @@ import { SidePanel, SidePanelToggleButton } from "@/components/ai/SidePanel";
 import { CommandK, CommandKFAB, type CommandKStage } from "@/components/ai/CommandK";
 import { AIThreadProvider } from "@/context/AIThreadContext";
 import { IngestStreamDialog } from "@/components/ingestion/IngestStreamDialog";
+import { INGEST_FILE_EVENT } from "@/components/ingestion/ImportFileButton";
 import type { IngestSource } from "@/components/ingestion/IngestDropzone";
 
 const AI_PANEL_DEFAULT_WIDTH = 360;
@@ -73,6 +74,18 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // The empty state's Import button lives several levels below this layout and
+  // cannot reach `setIngestSource` directly, so it announces its file the same
+  // way a drop does — see ImportFileButton for why an event and not a prop.
+  useEffect(() => {
+    function onIngestFile(e: Event) {
+      const file = (e as CustomEvent<File>).detail;
+      if (file) setIngestSource({ type: "file", file });
+    }
+    window.addEventListener(INGEST_FILE_EVENT, onIngestFile);
+    return () => window.removeEventListener(INGEST_FILE_EVENT, onIngestFile);
   }, []);
 
   useEffect(() => {
