@@ -22,7 +22,7 @@ test.describe("note CRUD", () => {
   test("brain page shows sidebar and empty state", async ({ page }) => {
     await page.goto("/brain");
     // Use exact/role selectors to avoid matching text in the welcome paragraph
-    await expect(page.getByText("Second Brain", { exact: true })).toBeVisible();
+    await expect(page.getByText("My Second Brain", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "+ New Note" })).toBeVisible();
   });
 

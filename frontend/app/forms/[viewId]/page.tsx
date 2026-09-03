@@ -1,3 +1,4 @@
+import { Logo } from "@/components/brand/Logo";
 import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import type { PropertyResponse } from "@/lib/database/types";
@@ -51,10 +52,8 @@ export default async function FormPage({ params }: Props) {
           minimal-header convention; this app's public-facing pages are
           intentionally plain, not the full app chrome. */}
       <header className="border-b border-gray-100 px-6 py-3 flex items-center gap-2.5">
-        <div className="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center text-sm leading-none">
-          🧠
-        </div>
-        <span className="text-sm font-semibold text-gray-700">Second Brain</span>
+        <Logo size={24} className="rounded-md shrink-0" />
+        <span className="text-sm font-semibold text-gray-700">My Second Brain</span>
       </header>
 
       <main className="max-w-xl mx-auto px-6 py-10">
@@ -91,7 +90,7 @@ export default async function FormPage({ params }: Props) {
       <footer className="mt-12 py-6 border-t border-gray-100 text-center text-xs text-gray-400">
         Powered by{" "}
         <a href="/" className="text-indigo-500 hover:underline">
-          Second Brain
+          My Second Brain
         </a>
       </footer>
     </div>

@@ -6,13 +6,13 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "Second Brain",
+  title: "My Second Brain",
   description: "Your AI-powered personal knowledge OS",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Second Brain",
+    title: "My Second Brain",
   },
 };
 

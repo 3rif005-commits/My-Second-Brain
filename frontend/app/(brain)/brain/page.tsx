@@ -1,14 +1,13 @@
 import Link from "next/link";
+import { Logo } from "@/components/brand/Logo";
 
 export default function BrainIndexPage() {
   return (
     <div className="flex-1 flex items-center justify-center px-8 bg-gray-50/30">
       <div className="text-center max-w-sm">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto mb-5 shadow-lg">
-          <span className="text-3xl" aria-hidden="true">🧠</span>
-        </div>
+        <Logo size={64} className="mx-auto mb-5 rounded-2xl shadow-lg" />
         <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-          Your Second Brain
+          My Second Brain
         </h2>
         <p className="text-sm text-gray-500 mb-7 leading-relaxed">
           Capture ideas, import documents, and let AI help you understand

@@ -27,6 +27,7 @@ import { useTrash } from "@/lib/hooks/useTrash";
 import { NoteTree } from "./NoteTree";
 import { NotificationsBell } from "./NotificationsBell";
 import { CsvImport, type CsvImportHandle } from "./CsvImport";
+import { Logo } from "@/components/brand/Logo";
 
 /** A top-level row in the nav (Search, Notifications, Workspace, …). Notion keeps
  * these visually quieter than page titles: 13px, medium weight, a soft hover wash
@@ -277,11 +278,9 @@ export function Sidebar({
           and the collapse control only appears once you are pointing at it. */}
       <div className="px-2 pt-2.5 pb-1.5 shrink-0">
         <div className="group flex items-center gap-2 px-1.5 py-1.5 rounded-md hover:bg-white/[0.055] transition-colors">
-          <div className="w-[22px] h-[22px] rounded-[6px] bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-[12px] leading-none shrink-0 shadow-sm">
-            🧠
-          </div>
+          <Logo size={22} className="shrink-0 rounded-[6px] shadow-sm" />
           <span className="font-semibold text-slate-100 text-[13px] tracking-tight flex-1 truncate">
-            Second Brain
+            My Second Brain
           </span>
           {onToggle && (
             <button

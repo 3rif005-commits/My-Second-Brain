@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Menu, PanelLeftOpen } from "lucide-react";
 import { Sidebar } from "./Sidebar";
+import { Logo } from "@/components/brand/Logo";
 import { SearchModal } from "@/components/search/SearchModal";
 import { SidePanel, SidePanelToggleButton } from "@/components/ai/SidePanel";
 import { CommandK, CommandKFAB, type CommandKStage } from "@/components/ai/CommandK";
@@ -172,7 +173,8 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
             >
               <Menu size={20} />
             </button>
-            <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">Second Brain</span>
+            <Logo size={20} className="rounded-[5px] shrink-0" />
+            <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">My Second Brain</span>
           </div>
 
           {children}

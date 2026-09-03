@@ -1,3 +1,4 @@
+import { Logo } from "@/components/brand/Logo";
 import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { PublicNoteView } from "@/components/editor/PublicNoteView";
@@ -33,10 +34,8 @@ export default async function SharePage({ params }: Props) {
     <div className="min-h-screen bg-white">
       {/* Minimal header */}
       <header className="border-b border-gray-100 px-6 py-3 flex items-center gap-2.5">
-        <div className="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center text-sm leading-none">
-          🧠
-        </div>
-        <span className="text-sm font-semibold text-gray-700">Second Brain</span>
+        <Logo size={24} className="rounded-md shrink-0" />
+        <span className="text-sm font-semibold text-gray-700">My Second Brain</span>
         <div className="flex-1" />
         <a
           href="/signup"
@@ -75,7 +74,7 @@ export default async function SharePage({ params }: Props) {
       <footer className="mt-12 py-6 border-t border-gray-100 text-center text-xs text-gray-400">
         Shared via{" "}
         <a href="/" className="text-indigo-500 hover:underline">
-          Second Brain
+          My Second Brain
         </a>{" "}
         — your AI-powered knowledge OS
       </footer>

@@ -1,6 +1,6 @@
 {
-  "name": "Second Brain",
-  "short_name": "Brain",
+  "name": "My Second Brain",
+  "short_name": "My Brain",
   "description": "Your AI-powered personal knowledge OS",
   "start_url": "/brain",
   "display": "standalone",

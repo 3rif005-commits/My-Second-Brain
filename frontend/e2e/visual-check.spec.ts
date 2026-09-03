@@ -16,7 +16,7 @@ test("login page renders correctly", async ({ page }) => {
   await page.goto("/login");
   await page.waitForLoadState("networkidle");
   await page.screenshot({ path: `${OUT}/02-login-page.png` });
-  await expect(page.getByText("Second Brain")).toBeVisible();
+  await expect(page.getByText("My Second Brain")).toBeVisible();
   await expect(page.getByPlaceholder("you@example.com")).toBeVisible();
   await expect(page.getByPlaceholder("••••••••")).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
