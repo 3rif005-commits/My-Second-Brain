@@ -103,10 +103,10 @@ export function NotificationsBell() {
         type="button"
         aria-label="Notifications"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-white/5 transition-all"
+        className="group w-full flex items-center gap-2.5 px-2 py-[5px] rounded-md text-[13px] font-medium text-slate-400 hover:text-slate-100 hover:bg-white/[0.055] transition-colors"
       >
         <span className="relative">
-          <Bell size={15} strokeWidth={2} />
+          <Bell size={15} strokeWidth={2} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
           {unreadCount > 0 && (
             <span
               aria-label={`${unreadCount} unread notifications`}
@@ -116,7 +116,7 @@ export function NotificationsBell() {
             </span>
           )}
         </span>
-        <span className="flex-1 text-left">Notifications</span>
+        <span className="flex-1 text-left truncate">Notifications</span>
       </button>
 
       {open && (

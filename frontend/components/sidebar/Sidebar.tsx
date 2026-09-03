@@ -1,8 +1,24 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { MessageSquare, Upload, Plus, LogOut, PanelLeftClose, Trash2, RotateCcw, ChevronDown, ChevronRight, Search, Star, Clock, Sun, Moon, LayoutGrid, Table2, DatabaseIcon } from "lucide-react";
+import {
+  Plus,
+  LogOut,
+  PanelLeftClose,
+  Trash2,
+  RotateCcw,
+  ChevronRight,
+  Search,
+  Star,
+  Clock,
+  Sun,
+  Moon,
+  LayoutGrid,
+  DatabaseIcon,
+  FileUp,
+  Table2,
+} from "lucide-react";
 import { useTheme, useToast } from "@/app/providers";
 import { createClient } from "@/lib/supabase/client";
 import { useNotes } from "@/lib/hooks/useNotes";
@@ -10,31 +26,110 @@ import { useCollections } from "@/lib/hooks/useCollections";
 import { useTrash } from "@/lib/hooks/useTrash";
 import { NoteTree } from "./NoteTree";
 import { NotificationsBell } from "./NotificationsBell";
-import { CsvImportButton } from "./CsvImportButton";
+import { CsvImport, type CsvImportHandle } from "./CsvImport";
 
+/** A top-level row in the nav (Search, Notifications, Workspace, …). Notion keeps
+ * these visually quieter than page titles: 13px, medium weight, a soft hover wash
+ * rather than a filled pill, and an accent tint only for the current page. */
 function NavItem({
   label,
   icon: Icon,
   active,
   onClick,
+  trailing,
 }: {
   label: string;
   icon: React.ElementType;
-  active: boolean;
+  active?: boolean;
+  onClick: () => void;
+  trailing?: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={`group w-full flex items-center gap-2.5 px-2 py-[5px] rounded-md text-[13px] font-medium transition-colors ${
+        active
+          ? "bg-white/[0.08] text-white"
+          : "text-slate-400 hover:text-slate-100 hover:bg-white/[0.055]"
+      }`}
+    >
+      <Icon
+        size={15}
+        strokeWidth={2}
+        className={active ? "text-indigo-400 shrink-0" : "text-slate-500 group-hover:text-slate-300 shrink-0 transition-colors"}
+      />
+      <span className="flex-1 text-left truncate">{label}</span>
+      {trailing}
+    </button>
+  );
+}
+
+/** A collapsible sidebar section. The chevron sits where the icon does in Notion —
+ * left of the label, rotating in place — and any action button only fades in on
+ * hover so the resting sidebar stays quiet. */
+function Section({
+  label,
+  icon: Icon,
+  open,
+  onToggle,
+  action,
+  children,
+}: {
+  label: string;
+  icon?: React.ElementType;
+  open: boolean;
+  onToggle: () => void;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mb-2">
+      <div className="group/section flex items-center gap-1 pl-2 pr-1 h-[26px] rounded-md hover:bg-white/[0.03] transition-colors">
+        <button
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex items-center gap-1.5 flex-1 min-w-0 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 hover:text-slate-300 transition-colors"
+        >
+          <ChevronRight
+            size={11}
+            strokeWidth={2.5}
+            className={`shrink-0 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+          />
+          {Icon && <Icon size={10} className="shrink-0 opacity-70" />}
+          <span className="truncate">{label}</span>
+        </button>
+        {action}
+      </div>
+      {open && <div className="mt-0.5 space-y-px">{children}</div>}
+    </div>
+  );
+}
+
+/** A page-level row inside a section (a note, a database). */
+function PageRow({
+  emoji,
+  title,
+  active,
+  onClick,
+}: {
+  emoji: string;
+  title: string;
+  active?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+      className={`w-full flex items-center gap-2 pl-[26px] pr-2 py-[3px] rounded-md text-[13px] transition-colors text-left ${
         active
-          ? "bg-indigo-500/15 text-indigo-300"
-          : "text-slate-400 hover:text-slate-100 hover:bg-white/5"
+          ? "bg-white/[0.08] text-white font-medium"
+          : "text-slate-400 hover:text-slate-100 hover:bg-white/[0.055]"
       }`}
     >
-      <Icon size={15} strokeWidth={active ? 2.5 : 2} />
-      {label}
+      <span className="shrink-0 text-[13px] leading-none">{emoji}</span>
+      <span className="truncate">{title}</span>
     </button>
   );
 }
@@ -57,6 +152,14 @@ export function Sidebar({
   const { trashedNotes, restoreNote, permanentDelete } = useTrash();
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
+
+  // Section open/closed state — Notion remembers this per sidebar section, and so do
+  // we, but only in-memory: a collapsed "Recent" is a glance-level preference, not
+  // something worth a round trip to persist.
+  const [starredOpen, setStarredOpen] = useState(true);
+  const [recentOpen, setRecentOpen] = useState(true);
+  const [databasesOpen, setDatabasesOpen] = useState(true);
+  const [notesOpen, setNotesOpen] = useState(true);
 
   // task-31 follow-up: the databases a user owns, listed in the sidebar.
   // `GET /db/databases` only exists as of commit 397ba23 -- before it, a
@@ -90,6 +193,30 @@ export function Sidebar({
     loadDatabases();
   }, [loadDatabases]);
 
+  // "New database" and "Import CSV" used to be two separate top-level nav rows. They
+  // are one affordance now — the "+" on the Databases section opens a small menu —
+  // because both do exactly the same thing from the user's side: produce a new
+  // database. CSV import is just the variant that arrives pre-filled.
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const createMenuRef = useRef<HTMLDivElement>(null);
+  const csvRef = useRef<CsvImportHandle>(null);
+
+  useEffect(() => {
+    if (!createMenuOpen) return;
+    function onPointerDown(e: MouseEvent) {
+      if (!createMenuRef.current?.contains(e.target as Node)) setCreateMenuOpen(false);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setCreateMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [createMenuOpen]);
+
   const favoritedNotes = notes.filter((n) => n.is_favorited);
   const recentNotes = notes
     .filter((n) => n.last_viewed_at)
@@ -113,6 +240,7 @@ export function Sidebar({
   // "New Note" above, rather than a name-first dialog — a database can be renamed afterward
   // from its own page, matching how a new note starts "Untitled" too.
   async function handleNewDatabase() {
+    setCreateMenuOpen(false);
     try {
       const res = await fetch("/api/db/databases", {
         method: "POST",
@@ -142,226 +270,244 @@ export function Sidebar({
 
   return (
     <aside
-      className="flex flex-col h-screen bg-slate-900 border-r border-slate-800"
+      className="flex flex-col h-screen bg-[#0d1220] border-r border-white/[0.06]"
       style={{ width: "var(--sidebar-width, 260px)" }}
     >
-      {/* Brand */}
-      <div className="px-4 py-4 border-b border-slate-800 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-base leading-none shrink-0">
+      {/* Brand — a Notion-style workspace row: the whole thing is a hover target,
+          and the collapse control only appears once you are pointing at it. */}
+      <div className="px-2 pt-2.5 pb-1.5 shrink-0">
+        <div className="group flex items-center gap-2 px-1.5 py-1.5 rounded-md hover:bg-white/[0.055] transition-colors">
+          <div className="w-[22px] h-[22px] rounded-[6px] bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-[12px] leading-none shrink-0 shadow-sm">
             🧠
           </div>
-          <span className="font-semibold text-white text-sm tracking-tight flex-1">
+          <span className="font-semibold text-slate-100 text-[13px] tracking-tight flex-1 truncate">
             Second Brain
           </span>
           {onToggle && (
             <button
               onClick={onToggle}
               aria-label="Collapse sidebar"
-              className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              className="p-1 rounded text-slate-500 hover:text-slate-200 hover:bg-white/10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all"
             >
-              <PanelLeftClose size={16} />
+              <PanelLeftClose size={15} />
             </button>
           )}
         </div>
       </div>
 
-      {/* Primary CTA */}
-      <div className="px-3 pt-3 shrink-0">
-        <button
-          onClick={handleNewNote}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
-        >
-          <Plus size={15} strokeWidth={2.5} />
-          New Note
-        </button>
-      </div>
-
-      {/* Search shortcut */}
-      <div className="px-3 pt-2 shrink-0">
-        <button
-          onClick={onSearchOpen}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-slate-100 hover:bg-white/5 transition-colors"
-        >
-          <Search size={14} strokeWidth={2} />
-          <span className="flex-1 text-left">Search</span>
-          <kbd className="text-[10px] font-mono bg-white/10 text-slate-500 px-1.5 py-0.5 rounded">
-            ⌘K
-          </kbd>
-        </button>
-      </div>
-
-      {/* Navigation */}
-      <nav aria-label="Main navigation" className="px-3 pt-1 space-y-0.5 shrink-0">
+      {/* Quick actions — Search first, the way Notion opens its sidebar. */}
+      <nav aria-label="Main navigation" className="px-2 space-y-px shrink-0">
+        <NavItem
+          label="Search"
+          icon={Search}
+          onClick={() => onSearchOpen?.()}
+          trailing={
+            <kbd className="text-[10px] font-mono bg-white/[0.07] text-slate-500 px-1.5 py-px rounded border border-white/[0.05]">
+              ⌘K
+            </kbd>
+          }
+        />
         {/* Milestone 12 (task-41): notifications inbox — a top-level entry,
          * NOT scoped to any one database (task-41-brief.md decision 5). */}
         <NotificationsBell />
-        <NavItem
-          label="AI Tutor"
-          icon={MessageSquare}
-          active={pathname === "/brain/chat"}
-          onClick={() => navigate("/brain/chat")}
-        />
-        <NavItem
-          label="Import Knowledge"
-          icon={Upload}
-          active={pathname === "/brain/ingest"}
-          onClick={() => navigate("/brain/ingest")}
-        />
         <NavItem
           label="Workspace"
           icon={LayoutGrid}
           active={pathname?.startsWith("/brain/workspace") ?? false}
           onClick={() => navigate("/brain/workspace")}
         />
-        <NavItem
-          label="All Notes"
-          icon={Table2}
-          active={pathname?.startsWith("/brain/db/all-notes") ?? false}
-          onClick={() => navigate("/brain/db/all-notes")}
-        />
-        <button
-          onClick={handleNewDatabase}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-white/5 transition-all"
-        >
-          <DatabaseIcon size={15} strokeWidth={2} />
-          New Database
-          <Plus size={13} strokeWidth={2.5} className="ml-auto" />
-        </button>
-        {/* Milestone 14 (task-47): "Import → CSV" -- a sibling action to "New
-         * Database" (not inside DatabaseSettingsMenu, which is scoped to an
-         * already-open database), since CSV import also always creates a brand-new
-         * database. */}
-        <CsvImportButton onImported={loadDatabases} />
       </nav>
 
-      {/* Divider */}
-      <div className="mx-3 my-2.5 border-t border-slate-800 shrink-0" />
+      {/* Primary CTA */}
+      <div className="px-2 pt-2 pb-1 shrink-0">
+        <button
+          onClick={handleNewNote}
+          className="w-full flex items-center justify-center gap-2 px-3 py-[7px] text-[13px] font-semibold bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-600 text-white rounded-md shadow-sm shadow-indigo-950/40 transition-colors"
+        >
+          <Plus size={14} strokeWidth={2.75} />
+          New Note
+        </button>
+      </div>
 
-      {/* Scrollable area: Starred + Recent + Notes */}
+      <div className="mx-3 my-2 border-t border-white/[0.06] shrink-0" />
+
+      {/* Scrollable area: Starred + Recent + Databases + Notes */}
       <div className="flex-1 overflow-y-auto px-2 pb-3 min-h-0">
 
-        {/* Starred */}
         {favoritedNotes.length > 0 && (
-          <div className="mb-3">
-            <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
-              <Star size={9} fill="currentColor" />
-              Starred
-            </div>
+          <Section label="Starred" icon={Star} open={starredOpen} onToggle={() => setStarredOpen((v) => !v)}>
             {favoritedNotes.map((note) => (
-              <button
+              <PageRow
                 key={note.id}
+                emoji={note.icon || "📄"}
+                title={note.title || "Untitled"}
+                active={pathname === `/brain/${note.id}`}
                 onClick={() => navigate(`/brain/${note.id}`)}
-                className="w-full flex items-center gap-1.5 px-3 py-1 rounded-md text-xs text-slate-400 hover:text-slate-100 hover:bg-white/5 transition-colors text-left"
-              >
-                <span className="shrink-0 text-xs leading-none">{note.icon || "📄"}</span>
-                <span className="truncate">{note.title || "Untitled"}</span>
-              </button>
+              />
             ))}
-          </div>
+          </Section>
         )}
 
-        {/* Recent */}
         {recentNotes.length > 0 && (
-          <div className="mb-3">
-            <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
-              <Clock size={9} />
-              Recent
-            </div>
+          <Section label="Recent" icon={Clock} open={recentOpen} onToggle={() => setRecentOpen((v) => !v)}>
             {recentNotes.map((note) => (
-              <button
+              <PageRow
                 key={note.id}
+                emoji={note.icon || "📄"}
+                title={note.title || "Untitled"}
+                active={pathname === `/brain/${note.id}`}
                 onClick={() => navigate(`/brain/${note.id}`)}
-                className="w-full flex items-center gap-1.5 px-3 py-1 rounded-md text-xs text-slate-400 hover:text-slate-100 hover:bg-white/5 transition-colors text-left"
-              >
-                <span className="shrink-0 text-xs leading-none">{note.icon || "📄"}</span>
-                <span className="truncate">{note.title || "Untitled"}</span>
-              </button>
+              />
             ))}
-          </div>
+          </Section>
         )}
 
         {/* Databases — see `loadDatabases` above for why this list could not
-            exist until GET /db/databases shipped. */}
-        {databases.length > 0 && (
-          <div className="mb-3">
-            <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
-              <DatabaseIcon size={9} />
-              Databases
-            </div>
-            {databases.map((db) => (
+            exist until GET /db/databases shipped. The section header now carries
+            the only create affordance for databases (blank or from CSV). */}
+        <Section
+          label="Databases"
+          icon={DatabaseIcon}
+          open={databasesOpen}
+          onToggle={() => setDatabasesOpen((v) => !v)}
+          action={
+            <div ref={createMenuRef} className="relative shrink-0">
               <button
-                key={db.id}
-                onClick={() => navigate(`/brain/db/${db.id}`)}
-                aria-current={pathname === `/brain/db/${db.id}` ? "page" : undefined}
-                className={`w-full flex items-center gap-1.5 px-3 py-1 rounded-md text-xs transition-colors text-left ${
-                  pathname === `/brain/db/${db.id}`
-                    ? "bg-indigo-500/15 text-indigo-300"
-                    : "text-slate-400 hover:text-slate-100 hover:bg-white/5"
+                onClick={() => {
+                  setDatabasesOpen(true);
+                  setCreateMenuOpen((v) => !v);
+                }}
+                aria-label="New database"
+                aria-haspopup="menu"
+                aria-expanded={createMenuOpen}
+                className={`p-0.5 rounded text-slate-500 hover:text-slate-100 hover:bg-white/10 transition-all ${
+                  createMenuOpen ? "opacity-100 text-slate-100" : "opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100"
                 }`}
               >
-                <span className="shrink-0 text-xs leading-none">{db.icon || "🗄️"}</span>
-                <span className="truncate">{db.title || "Untitled Database"}</span>
+                <Plus size={14} strokeWidth={2.5} />
               </button>
-            ))}
-          </div>
-        )}
 
-        {/* Notes section header */}
-        <p className="px-3 mb-1 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
-          Notes
-        </p>
+              {createMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-1 z-50 w-52 rounded-lg border border-white/10 bg-slate-800 shadow-2xl shadow-black/50 p-1"
+                >
+                  <button
+                    role="menuitem"
+                    onClick={handleNewDatabase}
+                    className="w-full flex items-start gap-2.5 px-2 py-1.5 rounded-md text-left text-slate-300 hover:bg-white/[0.07] hover:text-white transition-colors"
+                  >
+                    <Table2 size={15} className="mt-px shrink-0 text-slate-500" />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">Blank database</span>
+                      <span className="block text-[11px] text-slate-500">Start from an empty table</span>
+                    </span>
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      csvRef.current?.openPicker();
+                    }}
+                    className="w-full flex items-start gap-2.5 px-2 py-1.5 rounded-md text-left text-slate-300 hover:bg-white/[0.07] hover:text-white transition-colors"
+                  >
+                    <FileUp size={15} className="mt-px shrink-0 text-slate-500" />
+                    <span className="min-w-0">
+                      <span className="block text-[13px] font-medium">Import CSV</span>
+                      <span className="block text-[11px] text-slate-500">Build one from a spreadsheet</span>
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          }
+        >
+          {databases.length === 0 ? (
+            <p className="pl-[26px] pr-2 py-[3px] text-[12px] text-slate-600 italic">No databases yet</p>
+          ) : (
+            databases.map((db) => (
+              <PageRow
+                key={db.id}
+                emoji={db.icon || "🗄️"}
+                title={db.title || "Untitled Database"}
+                active={pathname === `/brain/db/${db.id}`}
+                onClick={() => navigate(`/brain/db/${db.id}`)}
+              />
+            ))
+          )}
+        </Section>
 
-        {/* Note tree */}
-        {notesLoading || colsLoading ? (
-          <div className="space-y-1 px-3 pt-1">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-7 rounded-md bg-slate-800 animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <NoteTree
-            notes={notes}
-            collections={collections}
-            onDeleteNote={deleteNote}
-            onToggleFavorite={toggleFavorite}
-            onReorder={reorderNotes}
-          />
-        )}
+        {/* Notes */}
+        <Section
+          label="Notes"
+          open={notesOpen}
+          onToggle={() => setNotesOpen((v) => !v)}
+          action={
+            <button
+              onClick={handleNewNote}
+              aria-label="New note"
+              className="shrink-0 p-0.5 rounded text-slate-500 hover:text-slate-100 hover:bg-white/10 opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 transition-all"
+            >
+              <Plus size={14} strokeWidth={2.5} />
+            </button>
+          }
+        >
+          {notesLoading || colsLoading ? (
+            <div className="space-y-1 px-2 pt-1">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-6 rounded-md bg-white/[0.04] animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <NoteTree
+              notes={notes}
+              collections={collections}
+              onDeleteNote={deleteNote}
+              onToggleFavorite={toggleFavorite}
+              onReorder={reorderNotes}
+            />
+          )}
+        </Section>
       </div>
 
       {/* Trash */}
       {trashedNotes.length > 0 && (
-        <div className="px-3 pb-2 shrink-0 border-t border-slate-800 pt-2">
+        <div className="px-2 pb-1.5 shrink-0 border-t border-white/[0.06] pt-1.5">
           <button
             onClick={() => setTrashOpen((v) => !v)}
-            className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-slate-500 hover:text-slate-300 rounded-md hover:bg-white/5 transition-colors"
+            aria-expanded={trashOpen}
+            className="w-full flex items-center gap-2 px-2 py-1.5 text-[12px] text-slate-500 hover:text-slate-300 rounded-md hover:bg-white/[0.055] transition-colors"
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} className="shrink-0" />
             <span className="flex-1 text-left">Trash</span>
-            <span className="mr-1 text-[10px] tabular-nums">{trashedNotes.length}</span>
-            {trashOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            <span className="text-[10px] tabular-nums text-slate-600">{trashedNotes.length}</span>
+            <ChevronRight
+              size={11}
+              className={`shrink-0 transition-transform duration-150 ${trashOpen ? "rotate-90" : ""}`}
+            />
           </button>
 
           {trashOpen && (
-            <div className="mt-1 space-y-0.5">
+            <div className="mt-0.5 space-y-px max-h-48 overflow-y-auto">
               {trashedNotes.map((note) => (
                 <div
                   key={note.id}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-slate-500 hover:bg-white/5 group"
+                  className="flex items-center gap-1 pl-[26px] pr-1.5 py-1 rounded-md text-[12px] text-slate-500 hover:bg-white/[0.055] group"
                 >
                   <span className="flex-1 truncate min-w-0">{note.title || "Untitled"}</span>
                   <button
                     onClick={() => restoreNote(note.id)}
                     title="Restore"
-                    className="shrink-0 p-0.5 rounded text-slate-600 hover:text-indigo-400 opacity-0 group-hover:opacity-100 transition-all"
+                    aria-label={`Restore ${note.title || "Untitled"}`}
+                    className="shrink-0 p-0.5 rounded text-slate-600 hover:text-indigo-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all"
                   >
                     <RotateCcw size={11} />
                   </button>
                   <button
                     onClick={() => permanentDelete(note.id)}
                     title="Delete forever"
-                    className="shrink-0 p-0.5 rounded text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                    aria-label={`Delete ${note.title || "Untitled"} forever`}
+                    className="shrink-0 p-0.5 rounded text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all"
                   >
                     <Trash2 size={11} />
                   </button>
@@ -372,45 +518,50 @@ export function Sidebar({
         </div>
       )}
 
-      {/* Sign-out */}
-      <div className="px-3 pb-4 pt-3 border-t border-slate-800 shrink-0">
-        <div className="flex items-center gap-1 mb-1">
-          {confirmSignOut ? (
-            <div className="flex items-center gap-1.5 flex-1">
-              <span className="text-xs text-slate-400 flex-1">Sign out?</span>
-              <button
-                onClick={handleSignOut}
-                className="text-xs px-2.5 py-1 rounded-md bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors font-medium"
-              >
-                Yes
-              </button>
-              <button
-                onClick={() => setConfirmSignOut(false)}
-                className="text-xs px-2.5 py-1 rounded-md bg-slate-800 text-slate-400 hover:bg-slate-700 transition-colors"
-              >
-                No
-              </button>
-            </div>
-          ) : (
+      {/* Account row */}
+      <div className="px-2 py-2 border-t border-white/[0.06] shrink-0">
+        {confirmSignOut ? (
+          <div className="flex items-center gap-1.5 px-2 py-1">
+            <span className="text-[12px] text-slate-400 flex-1">Sign out?</span>
+            <button
+              onClick={handleSignOut}
+              className="text-[12px] px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors font-medium"
+            >
+              Yes
+            </button>
+            <button
+              onClick={() => setConfirmSignOut(false)}
+              className="text-[12px] px-2 py-0.5 rounded-md bg-white/[0.07] text-slate-400 hover:bg-white/[0.12] transition-colors"
+            >
+              No
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setConfirmSignOut(true)}
-              className="flex-1 flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
+              className="flex-1 flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] text-slate-500 hover:text-slate-200 hover:bg-white/[0.055] transition-colors"
             >
-              <LogOut size={14} />
+              <LogOut size={14} className="shrink-0" />
               Sign out
             </button>
-          )}
-          {mounted && (
-            <button
-              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-              aria-label="Toggle theme"
-              className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0"
-            >
-              {resolvedTheme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-            </button>
-          )}
-        </div>
+            {mounted && (
+              <button
+                onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+                aria-label="Toggle theme"
+                title={resolvedTheme === "dark" ? "Switch to light" : "Switch to dark"}
+                className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.055] transition-colors shrink-0"
+              >
+                {resolvedTheme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Headless: owns the file picker, the upload and the import report. Mounted here,
+          not inside the "+" menu, so its report survives that menu closing. */}
+      <CsvImport ref={csvRef} onImported={loadDatabases} />
     </aside>
   );
 }

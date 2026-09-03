@@ -72,14 +72,15 @@ describe("Sidebar — Databases section", () => {
     expect(navigateMock).toHaveBeenCalledWith("/brain/db/db-1");
   });
 
-  it("renders no Databases section at all when the user has none", async () => {
+  it("keeps the Databases section with an empty state when the user has none — it carries the only create affordance", async () => {
     global.fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ({ databases: [] }),
     })) as unknown as typeof fetch;
     render(<Sidebar />);
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
-    expect(screen.queryByText("Databases")).not.toBeInTheDocument();
+    expect(screen.getByText("Databases")).toBeInTheDocument();
+    expect(screen.getByText("No databases yet")).toBeInTheDocument();
   });
 
   it("stays rendered when the databases request fails — a sidebar list is not worth breaking the sidebar", async () => {
@@ -87,7 +88,62 @@ describe("Sidebar — Databases section", () => {
     render(<Sidebar />);
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     // The rest of the nav is still there.
-    expect(screen.getByText("All Notes")).toBeInTheDocument();
-    expect(screen.queryByText("Databases")).not.toBeInTheDocument();
+    expect(screen.getByText("Workspace")).toBeInTheDocument();
+    expect(screen.getByText("No databases yet")).toBeInTheDocument();
+  });
+
+  it("collapses and expands the Databases section", async () => {
+    const user = userEvent.setup();
+    render(<Sidebar />);
+    await user.click(await screen.findByRole("button", { name: /Databases/ }));
+    expect(screen.queryByText("Tasks")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Databases/ }));
+    expect(screen.getByText("Tasks")).toBeInTheDocument();
+  });
+});
+
+describe("Sidebar — database creation menu", () => {
+  it("offers both a blank database and CSV import behind one '+' — neither is a top-level nav row any more", async () => {
+    const user = userEvent.setup();
+    render(<Sidebar />);
+    await screen.findByText("Tasks");
+
+    // Removed entirely: their features are gone from the app.
+    expect(screen.queryByText("AI Tutor")).not.toBeInTheDocument();
+    expect(screen.queryByText("Import Knowledge")).not.toBeInTheDocument();
+    expect(screen.queryByText("All Notes")).not.toBeInTheDocument();
+    // Folded into the menu below rather than sitting in the nav.
+    expect(screen.queryByText("New Database")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "New database" }));
+    expect(screen.getByRole("menuitem", { name: /Blank database/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Import CSV/ })).toBeInTheDocument();
+  });
+
+  it("creates a blank database and navigates to it", async () => {
+    const user = userEvent.setup();
+    global.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url).includes("/api/db/databases") && init?.method === "POST") {
+        return { ok: true, json: async () => ({ database: { id: "db-new" } }) } as Response;
+      }
+      return { ok: true, json: async () => LIST } as Response;
+    }) as unknown as typeof fetch;
+
+    render(<Sidebar />);
+    await screen.findByText("Tasks");
+    await user.click(screen.getByRole("button", { name: "New database" }));
+    await user.click(screen.getByRole("menuitem", { name: /Blank database/ }));
+
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/brain/db/db-new"));
+  });
+
+  it("closes the menu on Escape", async () => {
+    const user = userEvent.setup();
+    render(<Sidebar />);
+    await screen.findByText("Tasks");
+    await user.click(screen.getByRole("button", { name: "New database" }));
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 });

@@ -1,23 +1,28 @@
 "use client";
 
-// Milestone 14 (task-47): "Import → CSV" — always creates a BRAND NEW database from the
-// uploaded file (research §7.1). Placed as a sibling action next to "New Database" in
-// Sidebar.tsx, NOT inside DatabaseSettingsMenu.tsx — that menu is scoped to an
-// ALREADY-OPEN database's own per-column settings, whereas this creates a brand-new one.
+// Milestone 14 (task-47): CSV import — always creates a BRAND NEW database from the
+// uploaded file (research §7.1).
+//
+// This used to be a top-level "Import CSV" row in the sidebar, next to "New Database".
+// It is now one of two items in the Databases section's "+" menu, because both items
+// produce the same thing — a new database — and only differ in whether it arrives empty
+// or pre-filled. That is why the component is headless: it owns the file picker, the
+// upload and the inference report, while the *trigger* lives wherever the menu puts it
+// and reaches this component through `openPicker()` on its ref.
+//
+// Keeping it mounted OUTSIDE the menu matters: the report dialog has to survive the menu
+// closing, which happens the moment the picker opens.
 //
 // "Merge with CSV" onto an EXISTING database's existing properties is explicitly out of
-// scope for this task (see routers/db_import.py's module docstring) — this button only
-// ever calls POST /api/db/import/csv, never anything data-source-scoped.
+// scope for this task (see routers/db_import.py's module docstring) — this only ever
+// calls POST /api/db/import/csv, never anything data-source-scoped.
 //
 // A plain native `<input type="file" accept=".csv">` (a real OS file picker, not a
 // window.confirm/alert-style native dialog) — same FormData-upload-via-fetch pattern as
-// components/ingestion/IngestStreamDialog.tsx. On success, the per-column inference
-// report is shown as a simple in-page list (no native dialog either) before routing to
-// the new database; on failure, `showToast` matches every other error-handling call site
-// in components/database/.
-import { useRef, useState, type ChangeEvent } from "react";
+// components/ingestion/IngestStreamDialog.tsx. On failure, `showToast` matches every
+// other error-handling call site in components/database/.
+import { useRef, useState, useImperativeHandle, forwardRef, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Upload } from "lucide-react";
 import { useToast } from "@/app/providers";
 
 interface ColumnImportReport {
@@ -33,19 +38,29 @@ interface CsvImportResponse {
   columns: ColumnImportReport[];
 }
 
-interface CsvImportButtonProps {
+export interface CsvImportHandle {
+  /** Opens the OS file picker. Called by whatever menu item is acting as the trigger. */
+  openPicker: () => void;
+}
+
+interface CsvImportProps {
   /** Called right after a successful import, e.g. Sidebar's `loadDatabases` — so the new
    * database appears in the sidebar list the moment its report is dismissed, matching
    * `handleNewDatabase`'s existing "refresh then navigate" convention. */
   onImported?: () => void;
 }
 
-export function CsvImportButton({ onImported }: CsvImportButtonProps) {
+export const CsvImport = forwardRef<CsvImportHandle, CsvImportProps>(function CsvImport(
+  { onImported },
+  ref
+) {
   const router = useRouter();
   const { showToast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [report, setReport] = useState<CsvImportResponse | null>(null);
+
+  useImperativeHandle(ref, () => ({ openPicker: () => inputRef.current?.click() }), []);
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -84,14 +99,6 @@ export function CsvImportButton({ onImported }: CsvImportButtonProps) {
 
   return (
     <>
-      <button
-        onClick={() => inputRef.current?.click()}
-        disabled={uploading}
-        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-100 hover:bg-white/5 transition-all disabled:opacity-50"
-      >
-        <Upload size={15} strokeWidth={2} />
-        {uploading ? "Importing CSV…" : "Import CSV"}
-      </button>
       <input
         ref={inputRef}
         type="file"
@@ -101,13 +108,25 @@ export function CsvImportButton({ onImported }: CsvImportButtonProps) {
         aria-label="Import CSV"
       />
 
+      {/* The trigger lives in a menu that closes on click, so progress needs its own
+          surface rather than an "Importing…" label on a button that is already gone. */}
+      {uploading && (
+        <div
+          role="status"
+          className="fixed bottom-5 left-5 z-50 flex items-center gap-2.5 rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-[13px] text-slate-200 shadow-2xl shadow-black/50"
+        >
+          <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-indigo-400 border-t-transparent" />
+          Importing CSV…
+        </div>
+      )}
+
       {report && (
         <div
           role="dialog"
           aria-label="CSV import summary"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4"
         >
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-sm max-h-[70vh] overflow-y-auto">
+          <div className="bg-slate-900 border border-white/10 rounded-xl p-4 w-full max-w-sm max-h-[70vh] overflow-y-auto shadow-2xl shadow-black/60">
             <h2 className="text-sm font-semibold text-white mb-1">
               Imported {report.row_count} row{report.row_count === 1 ? "" : "s"}
             </h2>
@@ -133,4 +152,4 @@ export function CsvImportButton({ onImported }: CsvImportButtonProps) {
       )}
     </>
   );
-}
+});

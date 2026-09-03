@@ -14,7 +14,7 @@ vi.mock("@/app/providers", () => ({
   useToast: () => ({ showToast }),
 }));
 
-import { CsvImportButton } from "./CsvImportButton";
+import { CsvImport } from "./CsvImport";
 
 const CSV_FILE = new File(["Name,Value\nA,1\n"], "contacts.csv", { type: "text/csv" });
 
@@ -33,7 +33,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe("CsvImportButton", () => {
+describe("CsvImport", () => {
   it("uploads the selected CSV as multipart/form-data to /api/db/import/csv", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
@@ -42,7 +42,7 @@ describe("CsvImportButton", () => {
     global.fetch = fetchMock;
 
     const user = userEvent.setup();
-    render(<CsvImportButton />);
+    render(<CsvImport />);
 
     const input = screen.getByLabelText("Import CSV") as HTMLInputElement;
     await user.upload(input, CSV_FILE);
@@ -63,7 +63,7 @@ describe("CsvImportButton", () => {
     })) as unknown as typeof fetch;
 
     const user = userEvent.setup();
-    render(<CsvImportButton />);
+    render(<CsvImport />);
 
     await user.upload(screen.getByLabelText("Import CSV"), CSV_FILE);
 
@@ -86,7 +86,7 @@ describe("CsvImportButton", () => {
     const onImported = vi.fn();
 
     const user = userEvent.setup();
-    render(<CsvImportButton onImported={onImported} />);
+    render(<CsvImport onImported={onImported} />);
     await user.upload(screen.getByLabelText("Import CSV"), CSV_FILE);
 
     await waitFor(() => expect(onImported).toHaveBeenCalled());
@@ -100,7 +100,7 @@ describe("CsvImportButton", () => {
     })) as unknown as typeof fetch;
 
     const user = userEvent.setup();
-    render(<CsvImportButton />);
+    render(<CsvImport />);
     await user.upload(screen.getByLabelText("Import CSV"), CSV_FILE);
 
     await waitFor(() =>
@@ -118,7 +118,7 @@ describe("CsvImportButton", () => {
     })) as unknown as typeof fetch;
 
     const user = userEvent.setup();
-    render(<CsvImportButton />);
+    render(<CsvImport />);
     await user.upload(screen.getByLabelText("Import CSV"), CSV_FILE);
 
     await waitFor(() =>
