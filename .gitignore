@@ -8,7 +8,10 @@ backend/.env
 .coverage
 
 # Node
-frontend/node_modules/
+# Unanchored, so it also catches the repo-root node_modules/ — the narrower
+# frontend/node_modules/ let node_modules/.vite/vitest/**/results.json (a
+# vitest run cache) get committed.
+node_modules/
 frontend/.next/
 frontend/.env.local
 
