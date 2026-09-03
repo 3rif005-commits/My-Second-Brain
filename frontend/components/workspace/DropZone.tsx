@@ -8,7 +8,7 @@ import {
   ArrowRight, FileText, FileUp, Globe, Link2, PlaySquare, Sparkles,
 } from "lucide-react";
 import { PromptDialog } from "@/components/ui/PromptDialog";
-import { wsApi, type RecentSession } from "@/lib/workspace";
+import { ACCEPTED_WORKSPACE_FILES, wsApi, type RecentSession } from "@/lib/workspace";
 
 interface DropZoneProps {
   onAddFiles: (files: File[]) => void;
@@ -123,7 +123,7 @@ export function DropZone({ onAddFiles, onAddUrl, busy }: DropZoneProps) {
         ref={fileInputRef}
         type="file"
         multiple
-        accept=".pdf,.md,.txt,.mp4,.webm,.mov,.mkv,.m4v"
+        accept={ACCEPTED_WORKSPACE_FILES}
         className="hidden"
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);

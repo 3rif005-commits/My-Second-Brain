@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
-import { ImportFileButton } from "@/components/ingestion/ImportFileButton";
+import { ImportFileButton } from "@/components/workspace/ImportFileButton";
 
 export default function BrainIndexPage() {
   return (

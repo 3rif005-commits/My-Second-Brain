@@ -167,6 +167,37 @@ export const wsApi = {
     fetch("/api/ws/sessions/recent").then((r) => j<RecentSession[]>(r)),
 };
 
+// ── bringing files in from outside the workspace ─────────────────────────────
+
+/** What the workspace can ingest. Shared so the workspace's own picker and the
+ * Import button on /brain cannot drift into offering different file types. */
+export const ACCEPTED_WORKSPACE_FILES = ".pdf,.md,.txt,.mp4,.webm,.mov,.mkv,.m4v";
+
+/** Files picked on another page, waiting for the shell to mount and attach them.
+ *
+ * A File cannot travel in a URL, so /brain's Import button leaves the picked
+ * files here and routes to /brain/workspace, where WorkspaceShell claims them on
+ * mount and runs its ordinary addFiles path — same busy state, same error
+ * toasts, same redirect into the new session as picking them inside the
+ * workspace would give.
+ *
+ * Module state, so it survives a client-side navigation and nothing else. A full
+ * reload loses the staged files and the workspace simply shows its normal empty
+ * state, which is the right outcome: the upload had not started yet.
+ */
+let stagedSources: File[] = [];
+
+export function stageSources(files: File[]): void {
+  stagedSources = files;
+}
+
+/** Returns the staged files and clears them, so a remount cannot re-upload. */
+export function takeStagedSources(): File[] {
+  const files = stagedSources;
+  stagedSources = [];
+  return files;
+}
+
 // ── display helpers ──────────────────────────────────────────────────────────
 
 /** Stable per-source accent, keyed off order_index. With 4 sources in play,

@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/app/providers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { sourceColor, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
+import { sourceColor, takeStagedSources, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
 import { DropZone } from "./DropZone";
 import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
 import { SourceRail } from "./SourceRail";
@@ -226,6 +226,14 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     addInputs(files.map((file) => ({ file }))), [addInputs]);
   const addUrl = useCallback((url: string) =>
     addInputs([{ url }]), [addInputs]);
+
+  // Files picked by /brain's Import button before this shell existed. Claimed
+  // once on mount — takeStagedSources() clears them, so React's double-invoked
+  // effects in development cannot upload the same file twice.
+  useEffect(() => {
+    const staged = takeStagedSources();
+    if (staged.length) addFiles(staged);
+  }, [addFiles]);
 
   const removeSource = useCallback(async (s: NoteSource) => {
     await wsApi.deleteSource(s.id).catch((e) =>

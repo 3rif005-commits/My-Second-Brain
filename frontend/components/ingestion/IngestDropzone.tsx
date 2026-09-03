@@ -11,9 +11,7 @@ interface IngestDropzoneProps {
   disabled?: boolean;
 }
 
-/** Shared with ImportFileButton so the empty state's picker and this dropzone
- * can never drift into accepting different things. */
-export const ACCEPTED_INGEST_TYPES = ".pdf,.txt,.md,.rst,.csv,.pptx,.docx";
+const ACCEPTED = ".pdf,.txt,.md,.rst,.csv,.pptx,.docx";
 
 export function IngestDropzone({ onSubmit, disabled }: IngestDropzoneProps) {
   const [url, setUrl] = useState("");
@@ -57,7 +55,7 @@ export function IngestDropzone({ onSubmit, disabled }: IngestDropzoneProps) {
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPTED_INGEST_TYPES}
+          accept={ACCEPTED}
           onChange={handleFileChange}
           className="hidden"
           disabled={disabled}
