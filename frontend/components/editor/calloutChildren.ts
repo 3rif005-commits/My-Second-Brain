@@ -54,3 +54,82 @@ export function attachCalloutChildren<T extends AnyBlockLike>(
   }
   return walk(blocks);
 }
+
+/** Flatten block-level math inside a table cell to its LaTeX text.
+ *
+ *  A BlockNote table cell holds INLINE content only, so a
+ *  `<div data-type="math">` inside a `<td>` is dropped outright — silently,
+ *  and the table still parses as a well-formed table with an empty column.
+ *  Observed live: a Step / Computation / Result table came back with all three
+ *  of its formulas gone and only the step names and the results left.
+ *
+ *  The note prompt asks for both of these things and they collide on every
+ *  worked example: steps go in a Step/Action/Result table, and formulas are
+ *  math blocks. Rather than forbid one of them, keep the content — an equation
+ *  written as LaTeX source in the cell is worse-looking than a rendered one and
+ *  infinitely better than a blank cell.
+ */
+export function inlineMathInTableCells(html: string): string {
+  const doc = new window.DOMParser().parseFromString(html, "text/html");
+  const stranded = [...doc.querySelectorAll('td [data-type="math"], th [data-type="math"]')];
+  for (const el of stranded) {
+    el.replaceWith(doc.createTextNode(el.textContent ?? ""));
+  }
+  if (stranded.length) {
+    console.warn(
+      `inlineMathInTableCells: flattened ${stranded.length} math block(s) ` +
+        `inside table cells — BlockNote cells cannot hold a block, and they ` +
+        `would otherwise have been dropped.`
+    );
+  }
+  return doc.body.innerHTML;
+}
+
+/** Collapse a standalone heading that its own toggle immediately repeats.
+ *
+ *  When a source section maps 1:1 onto a single concept, the model writes the
+ *  section heading and then a concept toggle with the *same* title:
+ *
+ *      <h3 data-anchor="1:s:0">The Update Rule</h3>
+ *      <details><summary><h5><span ...>The Update Rule</span></h5></summary>…
+ *
+ *  which renders as the title twice in a row — once plain, once as a
+ *  highlighted toggle. Measured on a real note: 5 of 5 sections did this.
+ *
+ *  The fix is a merge, not a deletion, because the two halves each carry
+ *  something the other needs. The standalone heading owns `data-anchor` and the
+ *  level the source-sync counts (`findLevelHeadings(blocks, 3)` zips level-3
+ *  headings against the draft's `<h3>`s positionally, so removing one would
+ *  shift every anchor after it). The summary owns the highlight span. So the
+ *  toggle's inner heading is rewritten to the standalone heading's tag and
+ *  attributes while keeping the summary's own inline markup, and the standalone
+ *  heading is dropped — leaving ONE collapsible, highlighted, anchored heading.
+ */
+export function mergeRedundantToggleHeadings(html: string): string {
+  const doc = new window.DOMParser().parseFromString(html, "text/html");
+  const norm = (s: string | null) => (s ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  let merged = 0;
+  for (const heading of [...doc.querySelectorAll("h1,h2,h3,h4,h5,h6")]) {
+    const details = heading.nextElementSibling;
+    if (!details || details.tagName !== "DETAILS") continue;
+    const inner = details.querySelector(":scope > summary")
+      ?.querySelector("h1,h2,h3,h4,h5,h6");
+    if (!inner || !norm(heading.textContent)) continue;
+    if (norm(heading.textContent) !== norm(inner.textContent)) continue;
+    const replacement = doc.createElement(heading.tagName);
+    for (const attr of [...heading.attributes]) {
+      replacement.setAttribute(attr.name, attr.value);
+    }
+    replacement.innerHTML = inner.innerHTML;   // keeps the highlight span
+    inner.replaceWith(replacement);
+    heading.remove();
+    merged++;
+  }
+  if (merged) {
+    console.warn(
+      `mergeRedundantToggleHeadings: folded ${merged} heading(s) into the ` +
+        `toggle that repeated them verbatim.`
+    );
+  }
+  return doc.body.innerHTML;
+}

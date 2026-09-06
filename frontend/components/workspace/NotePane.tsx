@@ -167,6 +167,52 @@ export function NotePane({
     wsApi.putAnchors(note.id, merged).catch(() => {});
   }, [note.id]);
 
+  // ── save ──────────────────────────────────────────────────────────────────
+  const handleSave = useCallback(async (blocks: AnyBlock[], plainText: string) => {
+    currentTextRef.current = plainText;
+    onSavingChange?.(true);
+    // Returns whether the note is durably stored — `persistApplied` below only
+    // marks a synthesis draft applied once this has actually succeeded.
+    const ok = await fetch(`/api/notes/${note.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: blocks, content_text: plainText }),
+    }).then((r) => r.ok).catch(() => false);
+    onSavingChange?.(false);
+    if (reindexDebounceRef.current) clearTimeout(reindexDebounceRef.current);
+    reindexDebounceRef.current = setTimeout(() => {
+      fetch("/api/internal/reindex-note", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note_id: note.id }),
+      }).catch(() => {});
+    }, 30_000);
+    return ok;
+  }, [note.id, onSavingChange]);
+
+  /** Save a freshly applied draft, and only then tell the caller it landed.
+   *
+   *  `onApplied` sets `applied_at` server-side, which is the permanent "this
+   *  draft is done" flag — the client never applies a draft again once it is
+   *  set. Firing it as soon as the blocks hit the EDITOR (which is what used to
+   *  happen) meant the flag could be recorded while the content was still
+   *  sitting in BlockNote's ~2s autosave debounce: navigate away inside that
+   *  window and the note was never PATCHed, yet the draft was marked applied and
+   *  became unreachable. Observed live — a re-synthesis was silently discarded
+   *  and the note kept the previous draft. Saving explicitly here, and marking
+   *  only on a confirmed write, closes that window. */
+  const persistApplied = useCallback(async () => {
+    // Always the editor's own document. The append path's callback resolves with
+    // only the appended slice, and this PATCHes whatever it is handed — writing
+    // that slice would replace the note with just the new tail.
+    const blocks = editorRef.current?.getDocument() ?? [];
+    // A draft never applies to nothing. An empty document here means the editor
+    // was not ready, and saving it would wipe the note.
+    if (blocks.length === 0) return;
+    const ok = await handleSave(blocks, getPlainText(blocks));
+    if (ok) onApplied();
+  }, [handleSave, onApplied]);
+
   // ── synthesis apply API (used by useSynthesis) ─────────────────────────────
   const collect = useCallback((html: string, sourceIds: string[]) => {
     // Read anchors in document order BEFORE BlockNote parsing strips unknown
@@ -198,7 +244,7 @@ export function NotePane({
           editorRef.current?.insertHtmlAtEnd(html).then((blocks) => {
             registerAnchors(blocks, "append");
             finishApply();
-            onApplied();
+            void persistApplied();
           }).catch(() => { applyingRef.current = false; });
         } else {
           setIngestHtml(html);   // BlockEditor's proven replace path
@@ -212,13 +258,13 @@ export function NotePane({
       },
     };
     return () => { applyRef.current = null; };
-  }, [applyRef, collect, registerAnchors, onApplied, finishApply]);
+  }, [applyRef, collect, registerAnchors, persistApplied, finishApply]);
 
   const handleBlocksApplied = useCallback((blocks: AnyBlock[]) => {
     registerAnchors(blocks, "replace");
     finishApply();
-    onApplied();
-  }, [registerAnchors, onApplied, finishApply]);
+    void persistApplied();
+  }, [registerAnchors, persistApplied, finishApply]);
 
   const markDirty = useCallback(() => {
     // BlockNote fires onChange for our own replaceBlocks/insertBlocks too, and
@@ -226,26 +272,6 @@ export function NotePane({
     // post-hoc reset, is what keeps a programmatic change from looking like typing.
     if (!applyingRef.current) userEditedRef.current = true;
   }, []);
-
-  // ── save ──────────────────────────────────────────────────────────────────
-  const handleSave = useCallback(async (blocks: AnyBlock[], plainText: string) => {
-    currentTextRef.current = plainText;
-    onSavingChange?.(true);
-    await fetch(`/api/notes/${note.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: blocks, content_text: plainText }),
-    }).catch(() => {});
-    onSavingChange?.(false);
-    if (reindexDebounceRef.current) clearTimeout(reindexDebounceRef.current);
-    reindexDebounceRef.current = setTimeout(() => {
-      fetch("/api/internal/reindex-note", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ note_id: note.id }),
-      }).catch(() => {});
-    }, 30_000);
-  }, [note.id, onSavingChange]);
 
   // ── forward sync: active source position → highlight the matching block ───
   const activeAnchors = useMemo(
@@ -311,7 +337,11 @@ export function NotePane({
     } else if (action.type === "audio") {
       blocks.push({ type: "audio", props: { url: action.url, caption: action.label ?? "" } });
     }
-    if (blocks.length) ed.insertBlocksAtEnd(blocks);
+    // Lands under the block the user last had their cursor in, not at the end
+    // of the note — sending a table from page 12 while reading section 3 should
+    // put it in section 3. Falls back to appending when the editor has never
+    // been focused.
+    if (blocks.length) ed.insertBlocksAtCursor(blocks);
   }, [note.id, activeSourceId]);
 
   useEffect(() => {

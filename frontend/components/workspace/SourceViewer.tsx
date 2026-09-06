@@ -105,8 +105,12 @@ export function SourceViewer({ source, onPosition, onAction, seekRef }: SourceVi
   }
 
   const common = { resource: detail, onPosition, onAction, seekRef };
-  if (detail.kind === "pdf" || detail.kind === "document") return <PdfViewer {...common} />;
+  if (detail.kind === "pdf") return <PdfViewer {...common} />;
   if (detail.kind === "youtube") return <YouTubePlayer {...common} />;
   if (detail.kind === "video") return <VideoPlayer {...common} />;
+  // `document` (.md/.txt) and `website` both arrive as a flat list of
+  // section-anchored elements, so one viewer renders both. `document` used to be
+  // routed to PdfViewer alongside `pdf`, which handed a markdown file to
+  // react-pdf — it cannot parse one, so those sources never rendered at all.
   return <WebsiteViewer {...common} />;
 }

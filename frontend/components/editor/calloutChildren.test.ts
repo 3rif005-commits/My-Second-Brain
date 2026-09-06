@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
-import { extractCalloutChildren, attachCalloutChildren } from "./calloutChildren";
+import {
+  extractCalloutChildren, attachCalloutChildren, inlineMathInTableCells,
+  mergeRedundantToggleHeadings,
+} from "./calloutChildren";
 // @ts-ignore — @blocknote/core@0.48.0 ships an empty index.d.ts (upstream bug); runtime exports are fine
 import { BlockNoteSchema, defaultBlockSpecs, BlockNoteEditor } from "@blocknote/core";
 import { CalloutBlockSpec, MathBlockSpec } from "./customBlocks";
@@ -155,5 +158,132 @@ describe("extractCalloutChildren + attachCalloutChildren (ingestHtml pipeline)",
     expect(blocks.some((b) => b.type === "heading")).toBe(true);
     expect(blocks.some((b) => b.type === "paragraph")).toBe(true);
     expect(strippedHtml).toContain("<p>after</p>");
+  });
+});
+
+describe("inlineMathInTableCells", () => {
+  const TABLE = `<table><tbody>
+    <tr><td>1. Bellman</td><td><div data-type="math">Q(s,a) = R + \\gamma m</div></td><td>-0.85</td></tr>
+  </tbody></table>`;
+
+  function cellTexts(block: any): string[][] {
+    return (block.content?.rows ?? []).map((r: any) =>
+      (r.cells ?? []).map((c: any) => {
+        const content = Array.isArray(c) ? c : c.content ?? [];
+        return content.map((x: any) => x?.text ?? "").join("");
+      })
+    );
+  }
+
+  it("BlockNote drops a math block inside a cell, leaving the column blank", async () => {
+    // The bug this exists to fix — asserted against the real parser so the day
+    // BlockNote starts supporting it, this test tells us.
+    const editor = makeEditor();
+    const blocks = await editor.tryParseHTMLToBlocks(TABLE);
+    const table = blocks.find((b: any) => b.type === "table");
+    expect(cellTexts(table)[0]).toEqual(["1. Bellman", "", "-0.85"]);
+  });
+
+  it("keeps the formula in the cell as LaTeX text", async () => {
+    const editor = makeEditor();
+    const blocks = await editor.tryParseHTMLToBlocks(inlineMathInTableCells(TABLE));
+    const table = blocks.find((b: any) => b.type === "table");
+    expect(cellTexts(table)[0]).toEqual(["1. Bellman", "Q(s,a) = R + \\gamma m", "-0.85"]);
+  });
+
+  it("leaves a math block outside a table completely alone", async () => {
+    const html = `<p>x</p><div data-type="math">E = mc^2</div>`;
+    const editor = makeEditor();
+    const blocks = await editor.tryParseHTMLToBlocks(inlineMathInTableCells(html));
+    expect(blocks.filter((b: any) => b.type === "math")).toHaveLength(1);
+  });
+
+  it("handles a header cell too, and a cell holding several formulas", () => {
+    const out = inlineMathInTableCells(
+      `<table><thead><tr><th><div data-type="math">a=b</div></th></tr></thead>` +
+        `<tbody><tr><td><div data-type="math">c=d</div> and <div data-type="math">e=f</div></td></tr></tbody></table>`
+    );
+    expect(out).not.toContain('data-type="math"');
+    expect(out).toContain("a=b");
+    expect(out).toContain("c=d");
+    expect(out).toContain("e=f");
+  });
+
+  it("is a no-op on html with no tables", () => {
+    const html = `<p>plain</p>`;
+    expect(inlineMathInTableCells(html)).toBe(html);
+  });
+});
+
+describe("mergeRedundantToggleHeadings", () => {
+  // The exact shape measured on a real note: 5 of 5 sections looked like this.
+  const REDUNDANT = `<h3 data-anchor="1:s:0">The Update Rule</h3>` +
+    `<details><summary><h5><span data-style-type="backgroundColor" data-value="orange">The Update Rule</span></h5></summary>` +
+    `<blockquote><p><strong>Update Rule:</strong> one sentence.</p></blockquote></details>`;
+
+  function summarise(blocks: any[]): any[] {
+    return blocks.map((b) => ({
+      type: b.type,
+      level: b.props?.level,
+      toggle: !!b.props?.isToggleable,
+      hl: (b.content ?? []).find((c: any) => c?.styles?.backgroundColor)?.styles?.backgroundColor,
+      text: (b.content ?? []).map((c: any) => c?.text ?? "").join(""),
+      children: (b.children ?? []).length,
+    }));
+  }
+
+  it("leaves one collapsible highlighted heading instead of two lines", async () => {
+    const editor = makeEditor();
+    const blocks = await editor.tryParseHTMLToBlocks(mergeRedundantToggleHeadings(REDUNDANT));
+    expect(summarise(blocks as any[])).toEqual([
+      { type: "heading", level: 3, toggle: true, hl: "orange", text: "The Update Rule", children: 1 },
+    ]);
+  });
+
+  it("without the merge the title renders twice — the bug", async () => {
+    const editor = makeEditor();
+    const blocks = await editor.tryParseHTMLToBlocks(REDUNDANT);
+    expect(summarise(blocks as any[]).map((b) => b.text)).toEqual([
+      "The Update Rule", "The Update Rule",
+    ]);
+  });
+
+  it("keeps the section level and its data-anchor, so the anchor zip still lines up", () => {
+    const out = mergeRedundantToggleHeadings(REDUNDANT);
+    const doc = new window.DOMParser().parseFromString(out, "text/html");
+    const h3s = [...doc.querySelectorAll("h3")];
+    expect(h3s).toHaveLength(1);                                   // collect() counts these
+    expect(h3s[0].getAttribute("data-anchor")).toBe("1:s:0");
+    expect(h3s[0].closest("summary")).not.toBeNull();              // now inside the toggle
+  });
+
+  it("leaves a toggle whose title differs from the heading alone", async () => {
+    const html = `<h3>Value Functions</h3>` +
+      `<details><summary><h5>The Bellman Equation</h5></summary><p>body</p></details>`;
+    const editor = makeEditor();
+    const blocks = await editor.tryParseHTMLToBlocks(mergeRedundantToggleHeadings(html));
+    expect(summarise(blocks as any[]).map((b) => b.text)).toEqual([
+      "Value Functions", "The Bellman Equation",
+    ]);
+  });
+
+  it("matches on visible text, ignoring case, spacing and the highlight markup", () => {
+    const html = `<h3>The   Update rule</h3>` +
+      `<details><summary><h5><span data-value="red">The Update Rule</span></h5></summary><p>b</p></details>`;
+    const doc = new window.DOMParser().parseFromString(
+      mergeRedundantToggleHeadings(html), "text/html");
+    expect(doc.querySelectorAll("h3")).toHaveLength(1);
+  });
+
+  it("ignores a heading not immediately followed by a toggle", () => {
+    const html = `<h3>The Update Rule</h3><p>prose</p>` +
+      `<details><summary><h5>The Update Rule</h5></summary><p>b</p></details>`;
+    const out = mergeRedundantToggleHeadings(html);
+    expect(out).toContain("<h3>The Update Rule</h3>");
+  });
+
+  it("is a no-op on html with no toggles", () => {
+    const html = `<h3>Only a heading</h3><p>body</p>`;
+    expect(mergeRedundantToggleHeadings(html)).toBe(html);
   });
 });

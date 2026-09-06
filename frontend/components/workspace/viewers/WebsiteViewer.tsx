@@ -65,18 +65,22 @@ export function WebsiteViewer({ resource, onPosition, onAction, seekRef }: Websi
       onScroll={handleScroll}
     >
       <div className="max-w-2xl mx-auto px-6 py-6">
-        <a
-          href={resource.source_url ?? "#"}
-          target="_blank"
-          rel="noreferrer"
-          title={resource.source_url ?? ""}
-          className="inline-flex max-w-full items-center gap-1.5 mb-5 px-2.5 py-1 rounded-full
-            bg-gray-100 dark:bg-gray-800/70 text-[11px] text-gray-500 dark:text-gray-400
-            hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors"
-        >
-          <ExternalLink size={11} className="shrink-0" />
-          <span className="truncate">{resource.source_url}</span>
-        </a>
+        {/* An uploaded .md/.txt renders through this viewer too and has no URL —
+            without this guard it got a chip linking to "#". */}
+        {resource.source_url && (
+          <a
+            href={resource.source_url}
+            target="_blank"
+            rel="noreferrer"
+            title={resource.source_url}
+            className="inline-flex max-w-full items-center gap-1.5 mb-5 px-2.5 py-1 rounded-full
+              bg-gray-100 dark:bg-gray-800/70 text-[11px] text-gray-500 dark:text-gray-400
+              hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors"
+          >
+            <ExternalLink size={11} className="shrink-0" />
+            <span className="truncate">{resource.source_url}</span>
+          </a>
+        )}
         {elements.map((el) => (
           <div
             key={el.id}

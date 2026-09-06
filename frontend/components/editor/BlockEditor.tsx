@@ -17,7 +17,11 @@ import { en as aiEn } from "@blocknote/xl-ai/locales";
 import { withMultiColumn, multiColumnDropCursor, getMultiColumnSlashMenuItems, locales as multiColumnLocales } from "@blocknote/xl-multi-column";
 import { useTheme } from "@/app/providers";
 import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec, InlineMathSpec, insertMathBlock, insertCalloutBlock } from "./customBlocks";
-import { extractCalloutChildren, attachCalloutChildren } from "./calloutChildren";
+import {
+  extractCalloutChildren, attachCalloutChildren, inlineMathInTableCells,
+  mergeRedundantToggleHeadings,
+} from "./calloutChildren";
+import { insertionTarget } from "./insertAtCursor";
 import { NoteFormattingToolbar } from "./inlineToolbar";
 import { transformNotionHtml } from "./notionPaste";
 import { readNotionJson, notionJsonToBlocks } from "./notionBlocks";
@@ -183,8 +187,12 @@ function AIKeyboardHandler() {
 
 export interface BlockEditorHandle {
   exportMarkdown: (title: string) => Promise<void>;
-  /** Append blocks at the end of the document (workspace "send to note"). */
+  /** Append blocks at the end of the document. */
   insertBlocksAtEnd: (blocks: AnyBlock[]) => void;
+  /** Insert blocks after the block the user last put their cursor in — the
+   *  workspace "send to note" target. Falls back to the end of the document
+   *  when the editor has never been focused. */
+  insertBlocksAtCursor: (blocks: AnyBlock[]) => void;
   /** Scroll a block into view and flash-highlight it (source→note sync). */
   scrollToBlock: (blockId: string) => void;
   /** Parse HTML and append it at the end; returns the blocks that landed.
@@ -194,6 +202,11 @@ export interface BlockEditorHandle {
   /** Ids of the top-level blocks currently in the document. Used to prune
    *  anchors whose block the user has since deleted. */
   blockIds: () => string[];
+  /** The WHOLE document. `insertHtmlAtEnd` resolves with only the blocks it
+   *  appended, so a caller that needs to persist the result must read the full
+   *  document from here — saving the returned slice would replace the note with
+   *  just the appended part. */
+  getDocument: () => AnyBlock[];
 }
 
 export interface InteractiveBlock { title: string; html: string }
@@ -245,6 +258,7 @@ function getPlainText(blocks: AnyBlock[]): string {
 export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
   function BlockEditorComponent({ noteId: _noteId, initialContent, onSave, ingestHtml, onInteractiveBlocks, onAddInteractiveBlock, onBlocksApplied, onDirty }, ref) {
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastUserBlockRef = useRef<string | null>(null);
     const { resolvedTheme } = useTheme();
     const onDirtyRef = useRef(onDirty);
     onDirtyRef.current = onDirty;
@@ -356,6 +370,9 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     );
 
     useImperativeHandle(ref, () => ({
+      getDocument() {
+        return editor.document as AnyBlock[];
+      },
       async exportMarkdown(title: string) {
         const md = await editor.blocksToMarkdownLossy(editor.document);
         const safeName = title.replace(/[^a-z0-9]/gi, "_").toLowerCase() || "note";
@@ -368,6 +385,21 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+      },
+      insertBlocksAtCursor(blocks: AnyBlock[]) {
+        const doc = editor.document as AnyBlock[];
+        const target = insertionTarget(doc, lastUserBlockRef.current);
+        let inserted: AnyBlock[] | undefined;
+        if (target) {
+          inserted = editor.insertBlocks(blocks, target, "after") as AnyBlock[];
+        } else {
+          editor.replaceBlocks(editor.document, blocks);
+        }
+        // Advance the remembered position to what we just inserted, so sending
+        // three things in a row stacks them in order instead of piling all
+        // three immediately after the same anchor in reverse.
+        const landed = inserted?.[inserted.length - 1];
+        if (landed?.id) lastUserBlockRef.current = landed.id;
       },
       insertBlocksAtEnd(blocks: AnyBlock[]) {
         const doc = editor.document as AnyBlock[];
@@ -389,7 +421,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       async insertHtmlAtEnd(html: string) {
         const doc = new window.DOMParser().parseFromString(html, "text/html");
         const { strippedHtml, calloutChildren } = await extractCalloutChildren(
-          doc.body.innerHTML,
+          mergeRedundantToggleHeadings(inlineMathInTableCells(doc.body.innerHTML)),
           async (h: string) => (await editor.tryParseHTMLToBlocks(h)) as AnyBlock[]
         );
         const rawParsed = await editor.tryParseHTMLToBlocks(strippedHtml);
@@ -408,6 +440,23 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         return (editor.document as AnyBlock[]).map((b) => b.id);
       },
     }));
+
+    // The block the user last put their cursor in. Tracked rather than read
+    // from `getTextCursorPosition()` at insert time for two reasons: on an
+    // editor the user has never focused that call reports the FIRST block (so a
+    // naive cursor insert would drop content at the top of the note, which is
+    // worse than appending), and by the time "send to note" fires the user is
+    // clicking in the SOURCE pane, so the editor is no longer focused. The
+    // ProseMirror selection survives that blur; this ref records only positions
+    // the user actually established.
+    useEffect(() => {
+      const unsubscribe = editor.onSelectionChange(() => {
+        if (!editor.isFocused()) return;
+        const block = editor.getTextCursorPosition()?.block;
+        if (block) lastUserBlockRef.current = block.id;
+      });
+      return unsubscribe;
+    }, [editor]);
 
     const save = useCallback(() => {
       if (!onSave) return;
@@ -446,7 +495,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         // (see insertHtmlAtEnd above for the same pattern), so without this every
         // callout ingested via PDF/URL would land as an empty shell.
         const { strippedHtml, calloutChildren } = await extractCalloutChildren(
-          doc.body.innerHTML,
+          mergeRedundantToggleHeadings(inlineMathInTableCells(doc.body.innerHTML)),
           async (h: string) => (await editor.tryParseHTMLToBlocks(h)) as AnyBlock[]
         );
         const rawBlocks = await editor.tryParseHTMLToBlocks(strippedHtml);

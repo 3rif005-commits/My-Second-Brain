@@ -224,6 +224,69 @@
   background-color: rgba(131, 24, 67, 0.2); border-color: #be185d;
 }
 
+/* A quote whose whole body is nested underneath it — Notion's `> ##### Overview`
+ * pattern, and what `notionBlocks.ts` faithfully imports as a tinted `quote`
+ * with EMPTY own text and one `toggleListItem` child.
+ *
+ *   .bn-block                      <- carries the tint (BlockNote's own
+ *     |                               `.bn-block:has(> …[data-background-color])`)
+ *     |-- .bn-block-content[data-content-type="quote"]
+ *     |     `-- blockquote.bn-inline-content   <- EMPTY: one trailing <br>
+ *     `-- .bn-block-group          <- the toggle actually holding the content
+ *
+ * BlockNote still lays out that empty own-line as a full 30px row, and draws the
+ * quote bar (`[data-content-type=quote] blockquote`) only beside it — so the box
+ * opens with a blank band and the toggle underneath sits outside the bar. Notion
+ * draws one box, bar running its full height, content flush at the top.
+ *
+ * Collapse the empty line and promote the bar onto the children instead. Gated on
+ * the quote having BOTH an empty own-line and children, so an ordinary quote with
+ * text is untouched, and so is a new empty one the user just made by typing `>`
+ * (no children yet — it keeps its clickable line). Bar colour and indent are
+ * copied from BlockNote's own quote rule so the two can't drift apart. */
+.bn-block:has(> .bn-block-group)
+  > .bn-block-content[data-content-type="quote"]:has(> blockquote > br.ProseMirror-trailingBreak:only-child) {
+  height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.bn-block:has(> .bn-block-group)
+  > .bn-block-content[data-content-type="quote"]:has(> blockquote > br.ProseMirror-trailingBreak:only-child)
+  + .bn-block-group {
+  border-left: 2px solid #7d797a;
+  padding-left: 1em;
+}
+
+/* A coloured HEADING must colour itself, not everything nested underneath it.
+ *
+ * BlockNote ships `.bn-block:has(> .bn-block-content[data-text-color=orange])
+ * { color: … }`, and `.bn-block` wraps BOTH the heading's own content AND its
+ * `.bn-block-group` of children. So an orange concept toggle turned its entire
+ * collapsed body orange — measured on a real generated note, 18 of 26 toggles
+ * were bleeding, and the 8 that weren't only escaped because a blockquote sets
+ * its own colour.
+ *
+ * Neutralise the block-level cascade for headings only. BlockNote's other rule
+ * — `[data-text-color=orange] { color: … }`, matching the heading's own
+ * `.bn-block-content` directly — still paints the heading itself, so nothing is
+ * lost. Non-heading blocks keep the inherited behaviour, which is what a
+ * coloured paragraph or list item actually wants.
+ *
+ * The attributes are emitted only when non-default, so `[data-text-color]`
+ * matches exactly the coloured headings. Specificity beats BlockNote's rule
+ * because the :has() argument carries one more attribute selector.
+ *
+ * The synthesis prompt now asks for an inline highlight span inside the heading
+ * rather than a block attribute, which cannot bleed at all — this stays as the
+ * safety net for notes written before that change and for colours applied by
+ * hand through the editor UI. */
+.bn-block:has(> .bn-block-content[data-content-type="heading"][data-text-color]) {
+  color: var(--bn-colors-editor-text);
+}
+.bn-block:has(> .bn-block-content[data-content-type="heading"][data-background-color]) {
+  background-color: transparent;
+}
+
 @media print {
   /* Hide all UI chrome */
   .no-print { display: none !important; }

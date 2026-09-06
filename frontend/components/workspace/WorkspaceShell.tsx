@@ -525,7 +525,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
             actionSinkRef={actionSinkRef}
             positionSinkRef={positionSinkRef}
             applyRef={applyRef}
-            onApplied={() => {}}
+            onApplied={syn.markApplied}
             onSavingChange={setSaving}
           />
           {chatOpen && (

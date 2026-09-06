@@ -23,6 +23,8 @@ export interface SynthesisController {
   /** The replace-vs-append dialog should be open. */
   askMode: boolean;
   requestSynthesis: () => void;
+  /** Call once the applied draft has been saved into the note. */
+  markApplied: () => void;
   chooseMode: (mode: "replace" | "append") => void;
   cancelMode: () => void;
   dismissError: () => void;
@@ -97,9 +99,18 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
       ?? (api.hasUserEdits() ? "append" : "replace");
     appliedRef.current = html;
     modeRef.current = null;
+    // NotePane calls back through `markApplied` once the note has actually been
+    // PATCHed. Marking here instead would record `applied_at` while the content
+    // was still in the autosave debounce, and a navigation in that window
+    // stranded the draft permanently.
     api.apply(html, synthesis.source_ids ?? [], mode);
+  }, [noteId, synthesis, applyRef]);
+
+  /** The draft is now durably in the note — record it server-side. */
+  const markApplied = useCallback(() => {
+    if (!noteId) return;
     wsApi.markSynthesisApplied(noteId).then(refresh).catch(() => {});
-  }, [noteId, synthesis, applyRef, refresh]);
+  }, [noteId, refresh]);
 
   const queue = useCallback((mode: "replace" | "append") => {
     if (!noteId) return;
@@ -131,6 +142,7 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
     readyCount: readyIds.length,
     askMode,
     requestSynthesis,
+    markApplied,
     chooseMode,
     cancelMode: () => setAskMode(false),
     dismissError: () => setErrorDismissed(true),
