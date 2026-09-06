@@ -9,6 +9,7 @@ Job types and their preference chains:
   chat              text (API first) > local
   formula_ocr       vision > None
   vision            vision > None
+  synthesize_vision vision > None  (note synthesis WITH the source's figures)
 """
 from __future__ import annotations
 
@@ -22,10 +23,11 @@ _JOB_CHAINS: dict[str, list[str]] = {
     "chat": ["text"],
     "formula_ocr": ["vision"],
     "vision": ["vision"],
+    "synthesize_vision": ["vision"],
 }
 
 # Jobs that may NOT fall back to the local model (quality/capability floor).
-_NO_LOCAL = {"formula_ocr", "vision"}
+_NO_LOCAL = {"formula_ocr", "vision", "synthesize_vision"}
 
 
 def candidates(job: str, user_id: str, providers: list[Provider] | None = None) -> list[Provider]:

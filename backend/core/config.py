@@ -37,8 +37,18 @@ class Settings(BaseSettings):
     default_mode: str = "api"               # default model mode for new threads
 
     api_model_openrouter: str = "nvidia/nemotron-3-super-120b-a12b:free"
-    api_model_anthropic: str = "claude-sonnet-4-6"
+    api_model_anthropic: str = "claude-haiku-4-5"
     api_model_openai: str = "gpt-4o-mini"
+
+    # Send the source's figure crops to the model alongside the text during
+    # workspace synthesis (services/workspace/figures.py).
+    # Default False on evidence, not on caution: measured over 5 runs each on
+    # the reference lecture, attaching figures produced no content the text-only
+    # runs missed, and dropped colour-budget compliance from 10/10 runs to 4/5 —
+    # the deck has exactly one informative diagram after deduplication, and its
+    # content is already in the text. Worth turning on for genuinely
+    # diagram-heavy sources; re-measure before making it the default.
+    workspace_synthesis_vision: bool = False
 
     # Inline editor AI uses forced tool-calling (xl-ai applyDocumentOperations).
     # Free models don't support tool_choice: required — use a model that does.

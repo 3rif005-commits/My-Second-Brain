@@ -147,3 +147,42 @@ def test_provider_model_override():
     assert p.model == "gemini-2.5-pro"
     p2 = Provider("gemini", api_key="k")
     assert p2.model  # default exists
+
+
+def _anthropic(api_key="k", label="anthropic"):
+    return Provider("anthropic", api_key=api_key, label=label,
+                    capabilities=set(CAPABILITIES["anthropic"]))
+
+
+def test_env_anthropic_outranks_a_saved_provider_row():
+    """A Gemini/OpenRouter key left behind in Settings → AI Providers must not
+    take the synthesis job back from Claude — the note prompts target this
+    app's BlockNote block structure and are written against Claude."""
+    from services.ai import providers as prov_mod
+    with patch.object(prov_mod, "_user_providers", return_value=[_gemini()]), \
+         patch.object(prov_mod, "_env_providers", return_value=[_anthropic("env-key")]):
+        ranked = prov_mod.list_providers("u")
+    assert [p.provider for p in ranked] == ["anthropic", "gemini", "local"]
+
+
+def test_a_saved_anthropic_key_still_beats_the_env_one():
+    """The Anthropic pin is a stable sort, so 'user-configured wins' still
+    holds within the Anthropic group."""
+    from services.ai import providers as prov_mod
+    with patch.object(prov_mod, "_user_providers",
+                      return_value=[_gemini(), _anthropic("user-key")]), \
+         patch.object(prov_mod, "_env_providers", return_value=[_anthropic("env-key")]):
+        ranked = prov_mod.list_providers("u")
+    assert [p.provider for p in ranked] == ["anthropic", "anthropic", "gemini", "local"]
+    assert ranked[0].api_key == "user-key"
+
+
+def test_anthropic_pin_does_not_steal_the_video_job():
+    """Claude has no video_native capability, so the capability chain — not the
+    provider order — still sends summarize_video to Gemini."""
+    from services.ai import providers as prov_mod
+    from services.ai.router import pick
+    with patch.object(prov_mod, "_user_providers", return_value=[_gemini()]), \
+         patch.object(prov_mod, "_env_providers", return_value=[_anthropic()]):
+        p = pick("summarize_video", "u")
+    assert p is not None and p.provider == "gemini"

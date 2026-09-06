@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 from core.config import settings
 
 DEFAULT_MODELS = {
-    "gemini": "gemini-2.0-flash",
-    "anthropic": "claude-sonnet-4-6",
+    "gemini": "gemini-flash-latest",
+    "anthropic": "claude-haiku-4-5",
     "openai": "gpt-4o-mini",
     "openai_compatible": settings.api_model_openrouter,
 }
@@ -49,15 +49,23 @@ class Provider:
 
 
 def _env_providers() -> list[Provider]:
-    """Providers derived from .env settings (server-level configuration)."""
+    """Providers derived from .env settings (server-level configuration).
+
+    Order is preference order — `router.candidates()` keeps it, and
+    `complete_with_fallback` walks it in order. Anthropic comes first because
+    it is the provider this app is tuned for: the note prompts target the app's
+    own BlockNote block structure, and Claude is what that structure is
+    validated against. Gemini stays ahead of the rest for the video-native jobs
+    only Gemini can do (the capability chain, not this list, decides that).
+    """
     out: list[Provider] = []
-    if settings.google_api_key:
-        out.append(Provider("gemini", api_key=settings.google_api_key,
-                            label="Gemini (.env)", capabilities=set(CAPABILITIES["gemini"])))
     if settings.anthropic_api_key:
         out.append(Provider("anthropic", api_key=settings.anthropic_api_key,
                             chat_model=settings.api_model_anthropic,
                             label="Anthropic (.env)", capabilities=set(CAPABILITIES["anthropic"])))
+    if settings.google_api_key:
+        out.append(Provider("gemini", api_key=settings.google_api_key,
+                            label="Gemini (.env)", capabilities=set(CAPABILITIES["gemini"])))
     if settings.openai_api_key:
         out.append(Provider("openai", api_key=settings.openai_api_key,
                             chat_model=settings.api_model_openai,
@@ -105,5 +113,23 @@ def local_provider() -> Provider:
 
 
 def list_providers(user_id: str) -> list[Provider]:
-    """All usable providers for a user: user-configured first, then env, then local."""
-    return _user_providers(user_id) + _env_providers() + [local_provider()]
+    """All usable providers for a user, in preference order.
+
+    The base order is the old one — the user's own saved rows, then .env, then
+    the local model as the last resort — with one rule laid over the top:
+    **Anthropic outranks everything, wherever it came from.** This app's note
+    prompts target the app's own BlockNote block structure (callouts, math
+    blocks, `<details>` toggles) and that markup is written against Claude, so
+    a Gemini or OpenRouter key left behind in Settings → AI Providers must not
+    quietly take the synthesis job back and produce a note the editor parses
+    into something else.
+
+    The sort is stable, so within the Anthropic group a user's own key still
+    beats the .env one, and every other provider keeps its previous relative
+    order. Capability routing is unaffected: `router.candidates()` walks the
+    job's capability chain first, so `summarize_video` still reaches Gemini —
+    Claude has no `video_native`, so it is not a candidate for that chain at
+    all.
+    """
+    ordered = _user_providers(user_id) + _env_providers() + [local_provider()]
+    return sorted(ordered, key=lambda p: 0 if p.provider == "anthropic" else 1)

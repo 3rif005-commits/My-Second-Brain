@@ -81,6 +81,48 @@ def _to_anthropic(messages: list[dict]) -> tuple[str, list[dict]]:
     return system.strip(), out
 
 
+_ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+_ANTHROPIC_VERSION = "2023-06-01"
+
+
+def _anthropic_headers(p: Provider) -> dict:
+    return {"x-api-key": p.api_key, "anthropic-version": _ANTHROPIC_VERSION,
+            "Content-Type": "application/json"}
+
+
+def _anthropic_payload(p: Provider, messages: list[dict], max_tokens: int,
+                       stream: bool) -> dict:
+    system, msgs = _to_anthropic(messages)
+    payload: dict = {"model": p.model, "messages": msgs, "max_tokens": max_tokens}
+    if system:                       # the API rejects an empty system string
+        payload["system"] = system
+    if stream:
+        payload["stream"] = True
+    return payload
+
+
+def _anthropic_error(status: int, body: bytes | str) -> RuntimeError:
+    """Anthropic puts the actual cause — unknown model, bad key, overloaded —
+    in the response body. `raise_for_status()` throws that away and leaves a
+    bare status code, which is the least useful thing to see right after
+    swapping providers."""
+    text = body.decode() if isinstance(body, bytes) else body
+    return RuntimeError(f"Anthropic API error {status}: {text[:300]}")
+
+
+def _anthropic_text_delta(data: dict) -> str | None:
+    """Text out of one SSE event, or None. Only `text_delta` payloads are
+    collected — a thinking block streams as `thinking_delta` with no `text`
+    key, so reasoning can never leak into the returned content the way it did
+    with OpenRouter's reasoning models."""
+    if data.get("type") == "error":
+        raise RuntimeError(
+            f"Anthropic stream error: {(data.get('error') or {}).get('message', '')}"[:300])
+    if data.get("type") != "content_block_delta":
+        return None
+    return (data.get("delta") or {}).get("text")
+
+
 def _gemini_contents(messages: list[dict]):
     """Flatten to google-genai contents; system messages prepended as text."""
     from google.genai import types as gt
@@ -125,18 +167,7 @@ def complete(p: Provider, messages: list[dict], max_tokens: int = 4096) -> str:
         return resp.text or ""
 
     if p.provider == "anthropic":
-        system, msgs = _to_anthropic(messages)
-        resp = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": p.api_key, "anthropic-version": "2023-06-01",
-                     "Content-Type": "application/json"},
-            json={"model": p.model, "system": system, "messages": msgs,
-                  "max_tokens": max_tokens},
-            timeout=_TIMEOUT,
-        )
-        resp.raise_for_status()
-        blocks = resp.json().get("content", [])
-        return "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+        return _anthropic_complete(p, messages, max_tokens)
 
     if p.provider in ("openai", "openai_compatible"):
         return _openai_compatible_complete(
@@ -150,6 +181,35 @@ def complete(p: Provider, messages: list[dict], max_tokens: int = 4096) -> str:
             ep["url"], ep["headers"], ep["model"], messages, max_tokens)
 
     raise RuntimeError(f"Unknown provider: {p.provider}")
+
+
+def _anthropic_complete(p: Provider, messages: list[dict], max_tokens: int) -> str:
+    """Goes over the wire streaming even though the caller wants one string.
+
+    Note synthesis asks for a whole mastery guide in one call, and a
+    non-streamed request that large can outrun the HTTP read timeout with
+    nothing to show for it. Same reason `_openai_compatible_complete` streams.
+    """
+    chunks: list[str] = []
+    with httpx.stream(
+        "POST", _ANTHROPIC_URL,
+        headers=_anthropic_headers(p),
+        json=_anthropic_payload(p, messages, max_tokens, stream=True),
+        timeout=_TIMEOUT,
+    ) as resp:
+        if resp.status_code != 200:
+            raise _anthropic_error(resp.status_code, resp.read())
+        for line in resp.iter_lines():
+            if not line.startswith("data: "):
+                continue
+            try:
+                data = json.loads(line[6:])
+            except json.JSONDecodeError:
+                continue
+            text = _anthropic_text_delta(data)
+            if text:
+                chunks.append(text)
+    return "".join(chunks)
 
 
 def _openai_compatible_complete(url: str, headers: dict, model: str,
@@ -213,16 +273,13 @@ async def stream(p: Provider, messages: list[dict],
 
     if p.provider == "anthropic":
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            system, msgs = _to_anthropic(messages)
             async with client.stream(
-                "POST", "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": p.api_key,
-                         "anthropic-version": "2023-06-01",
-                         "Content-Type": "application/json"},
-                json={"model": p.model, "system": system, "messages": msgs,
-                      "max_tokens": max_tokens, "stream": True},
+                "POST", _ANTHROPIC_URL,
+                headers=_anthropic_headers(p),
+                json=_anthropic_payload(p, messages, max_tokens, stream=True),
             ) as resp:
-                resp.raise_for_status()
+                if resp.status_code != 200:
+                    raise _anthropic_error(resp.status_code, await resp.aread())
                 async for line in resp.aiter_lines():
                     if not line.startswith("data: "):
                         continue
@@ -230,10 +287,9 @@ async def stream(p: Provider, messages: list[dict],
                         data = json.loads(line[6:])
                     except json.JSONDecodeError:
                         continue
-                    if data.get("type") == "content_block_delta":
-                        text = data.get("delta", {}).get("text")
-                        if text:
-                            yield text
+                    text = _anthropic_text_delta(data)
+                    if text:
+                        yield text
         return
 
     # OpenAI-compatible (openai / openai_compatible / local)

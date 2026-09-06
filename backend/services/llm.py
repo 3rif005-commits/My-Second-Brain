@@ -226,28 +226,28 @@ def _get_gemini():
 def _gemini_complete(prompt: str, request_id: str = "") -> str:
     from google.genai import errors as genai_errors
     rid = f"rid={request_id} | " if request_id else ""
-    logger.info(f"{rid}llm_attempt | model=gemini-2.0-flash")
+    logger.info(f"{rid}llm_attempt | model=gemini-flash-latest")
     t0 = time.perf_counter()
     client = _get_gemini()
     try:
-        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        response = client.models.generate_content(model="gemini-flash-latest", contents=prompt)
         ms = int((time.perf_counter() - t0) * 1000)
-        logger.info(f"{rid}llm_ok | model=gemini-2.0-flash | {ms}ms")
+        logger.info(f"{rid}llm_ok | model=gemini-flash-latest | {ms}ms")
         return response.text
     except genai_errors.ClientError as e:
         ms = int((time.perf_counter() - t0) * 1000)
-        logger.error(f"{rid}llm_error | model=gemini-2.0-flash | {ms}ms | {e}")
+        logger.error(f"{rid}llm_error | model=gemini-flash-latest | {ms}ms | {e}")
         if e.status_code == 429:
             raise HTTPException(status_code=503, detail={
                 "error": "Gemini quota exhausted.",
                 "error_code": "GEMINI_QUOTA",
-                "model": "gemini-2.0-flash",
+                "model": "gemini-flash-latest",
                 "suggestion": "Enable billing on Google AI Studio or switch LLM_PROVIDER.",
             })
         raise HTTPException(status_code=502, detail={
             "error": f"Gemini API error: {e}",
             "error_code": "GEMINI_ERROR",
-            "model": "gemini-2.0-flash",
+            "model": "gemini-flash-latest",
             "suggestion": "Check the backend logs for more detail.",
         })
 
