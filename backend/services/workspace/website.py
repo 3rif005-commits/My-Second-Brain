@@ -13,6 +13,11 @@ from __future__ import annotations
 
 import trafilatura
 
+# Re-exported: existing callers (and tests) import chunk_sections from here, and
+# websites are still the main producer of section-anchored sources.
+from services.workspace.sections import (chunk_sections, sections_as_elements,  # noqa: F401
+                                         tag_sections)
+
 
 def extract_website(url: str) -> dict:
     downloaded = trafilatura.fetch_url(url)
@@ -56,35 +61,5 @@ def extract_website(url: str) -> dict:
                          if kind == "heading" else para})
         idx += 1
 
-    tagged = "\n".join(
-        f"[section {s['index']}] {s['content']}"
-        for s in sections if s["kind"] != "image"
-    )
-    return {"title": title, "meta": meta, "sections": sections, "tagged_text": tagged}
-
-
-def chunk_sections(sections: list[dict], max_chars: int = 1500) -> list[dict]:
-    """Section-anchored chunks for grounded retrieval."""
-    chunks: list[dict] = []
-    idx = 0
-    buf = ""
-    start = 0
-    last = 0
-    for s in sections:
-        if s["kind"] == "image":
-            continue
-        if not buf:
-            start = s["index"]
-        buf += s["content"] + "\n"
-        last = s["index"]
-        if len(buf) >= max_chars:
-            chunks.append({"chunk_index": idx, "chunk_text": buf.strip(),
-                           "anchor_type": "section",
-                           "anchor_start": start, "anchor_end": last})
-            idx += 1
-            buf = ""
-    if buf.strip():
-        chunks.append({"chunk_index": idx, "chunk_text": buf.strip(),
-                       "anchor_type": "section",
-                       "anchor_start": start, "anchor_end": last})
-    return chunks
+    return {"title": title, "meta": meta, "sections": sections,
+            "tagged_text": tag_sections(sections)}

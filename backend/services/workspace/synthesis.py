@@ -17,11 +17,13 @@ import os
 import re
 from datetime import datetime, timezone
 
+from core.config import settings
 from prompts.note_synthesis import build_note_synthesis_prompt
 from services.ai.client import complete
 from services.ai.router import complete_with_fallback, pick
 from services.database import get_supabase
 from services.workspace.dbretry import with_retry
+from services.workspace.figures import figure_parts
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +163,7 @@ def _inherited_titles(note: dict, first_source: dict) -> set[str]:
 
 
 def _complete(prompt: str, video_urls: list[str], has_text: bool,
-              user_id: str) -> str:
+              user_id: str, figures: list[dict] | None = None) -> str:
     """Text path, or the Gemini-native video path when a source has no
     transcript (same capability routing the per-resource summary used)."""
     if video_urls:
@@ -175,9 +177,27 @@ def _complete(prompt: str, video_urls: list[str], has_text: bool,
             raise RuntimeError(
                 "No transcript for this source and no video-capable provider "
                 "configured — add a Gemini key in Settings → AI Providers.")
+    # A full mastery guide is a long document, and truncation right after the
+    # outline is the observed failure mode — so give it real room. Claude Haiku
+    # 4.5 allows far more than this, and `client._anthropic_complete` streams,
+    # so a budget this size cannot hit the HTTP read timeout.
+    if figures:
+        # `synthesize_vision` only ever ranks vision-capable providers, so the
+        # figures cannot be handed to a text-only model that would drop or choke
+        # on them. If every one of them fails, the note is still worth writing
+        # from the text alone — that is the pre-vision behaviour, not an error.
+        try:
+            content = [{"type": "text", "text": prompt}] + figures
+            return _strip_fences(complete_with_fallback(
+                "synthesize_vision", user_id,
+                [{"role": "user", "content": content}],
+                max_tokens=16000, validate=_looks_like_a_mastery_guide))
+        except Exception as e:
+            logger.warning(f"vision synthesis failed, retrying without the "
+                           f"{len(figures) // 2} figure(s): {e}")
     return _strip_fences(complete_with_fallback(
         "summarize_text", user_id, [{"role": "user", "content": prompt}],
-        max_tokens=8192, validate=_looks_like_a_mastery_guide))
+        max_tokens=16000, validate=_looks_like_a_mastery_guide))
 
 
 def run_synthesis(note_id: str, mode: str = "replace") -> None:
@@ -209,9 +229,12 @@ def run_synthesis(note_id: str, mode: str = "replace") -> None:
     try:
         blocks: list[dict] = []
         video_urls: list[str] = []
+        has_text = False
         for s in sources:
             text = source_text_from_chunks(s["id"])
-            if not text:
+            if text:
+                has_text = True
+            else:
                 if s["kind"] in ("youtube", "video") and s.get("source_url"):
                     video_urls.append(s["source_url"])
                 else:
@@ -221,10 +244,18 @@ def run_synthesis(note_id: str, mode: str = "replace") -> None:
                     text = ("(No text could be extracted from this source.)")
             blocks.append({"title": s["title"], "kind": s["kind"], "text": text,
                            "duration": (s.get("meta") or {}).get("duration")})
-
-        has_text = any(b["text"] for b in blocks)
-        prompt = build_note_synthesis_prompt(blocks)
-        html = _complete(prompt, video_urls, has_text, user_id)
+        # The figures are the second path to the model, beside `pages_text`: a
+        # diagram carries no text, so without them the deck's grid world and
+        # block diagrams are simply not in the input.
+        # The flag is off by default (see config.py), but a source with no
+        # extractable text at all — a scanned/image-only PDF — has nothing else
+        # to synthesize from, so vision is the only path that can produce
+        # anything regardless of the flag.
+        figures = (figure_parts(source_ids)
+                   if not video_urls and (settings.workspace_synthesis_vision or not has_text)
+                   else [])
+        prompt = build_note_synthesis_prompt(blocks, has_figures=bool(figures))
+        html = _complete(prompt, video_urls, has_text, user_id, figures)
         if not html.strip():
             raise RuntimeError("The model returned an empty draft.")
 

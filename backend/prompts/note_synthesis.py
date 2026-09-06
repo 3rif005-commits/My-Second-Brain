@@ -13,7 +13,15 @@ from __future__ import annotations
 
 from prompts.mastery_guide import SYSTEM_PROMPT as MASTERY_SYSTEM_PROMPT
 
-TOTAL_SOURCE_BUDGET = 24000
+# Characters of source text sent per synthesis, split across all sources.
+#
+# Was 24,000 — set when this ran on a free reasoning model that fell over on long
+# input. Claude Haiku 4.5 holds a 200K-token context (~800K characters), so that
+# cap was feeding it roughly 3% of what it can read and silently truncating a
+# 40-page PDF around page 10. 180K characters is ~45K tokens: the whole of almost
+# any lecture, still a fifth of the window, and about $0.05 of input per run.
+# This is the first number to turn down if cost matters more than completeness.
+TOTAL_SOURCE_BUDGET = 180_000
 
 SYNTHESIS_EXTENSION = """
 SYNTHESIZE ACROSS THE SOURCES — do not concatenate them:
@@ -38,19 +46,45 @@ This note is displayed beside its sources and kept in sync with them. Every
 
 - SOURCE is the 1-based index of the source the section is anchored to — the n
   from the "=== SOURCE n ===" block the material came from.
-- TYPE and VALUE depend on that source's tagging:
-    video / audio source (lines prefixed [mm:ss] or [h:mm:ss]) → t:SECONDS
+- TYPE and VALUE follow the TAG that source's own text actually carries — read
+  it off the text, do not infer it from the kind of source:
+    lines prefixed [mm:ss] or [h:mm:ss]  → t:SECONDS
       SECONDS is where the section's material begins, in seconds.
-    document / PDF source (text tagged [page N])               → p:PAGE
+    text tagged [page N]                 → p:PAGE
       PAGE is the 1-based page where the material begins.
-    website source (text tagged [section N])                   → s:INDEX
+    text tagged [section N]              → s:INDEX
       INDEX is the section number where the material begins.
 
 Worked examples: data-anchor="1:p:14"   data-anchor="2:t:754"   data-anchor="3:s:6"
 
 Anchors must be monotonically non-decreasing WITHIN one source; across sources
-they may jump freely (you are organizing by concept, not by source).
+they may jump freely (you are organizing by concept, not by source). Before you
+finish, read your <h3> anchors back in order and check that per source: if one
+goes backwards, the section is anchored to the wrong place — correct it to
+where that section's material actually begins.
 Do not put data-anchor on any element other than <h3>.
+"""
+
+FIGURE_EXTENSION = """
+THE SOURCE'S FIGURES ARE ATTACHED TO THIS REQUEST:
+Every diagram, chart and screenshot cropped out of the sources is included as an
+image, each preceded by a line naming its source and page:
+`[FIGURE — SOURCE 1, page 7]`. Look at them. They are not decoration — a slide
+deck routinely puts its whole mechanism in a picture (a grid world, a block
+diagram, a state machine, a labelled table) and says nothing about it in the
+text you were given, so anything you can read only from the figure is content
+that would otherwise be lost.
+
+- Write what the figure SHOWS, in the section covering that page: the states in
+  the grid and their rewards, the boxes in the diagram and the arrows between
+  them, the axes of the plot and what it demonstrates. A figure that encodes a
+  two-axis comparison is a <table> under SOURCE COVERAGE like any other.
+- Anchor the section that uses a figure to the page the figure came from.
+- Do not announce the figure ("as shown in the diagram on page 7", "the image
+  depicts"). The reader has your notes, not the slides. State what it shows as
+  fact.
+- Skip a figure that carries no teaching content — a logo, a decorative photo,
+  a portrait of the author. Not every crop is a figure.
 """
 
 _NO_TEXT_BODY = ("(No transcript could be extracted for this source. The video "
@@ -62,8 +96,15 @@ def _kind_framing(kind: str) -> str:
     if kind in ("youtube", "video"):
         return ("SOURCE TYPE: video transcript. Lines are prefixed with [mm:ss] "
                 "timestamps.")
-    if kind in ("pdf", "document"):
-        return "SOURCE TYPE: document. Text is tagged with [page N] markers."
+    if kind == "pdf":
+        return "SOURCE TYPE: PDF document. Text is tagged with [page N] markers."
+    if kind == "document":
+        # Not page-tagged: a .md/.txt file has no pages, so it is split into
+        # sections like a web article (services/workspace/sections.py). Saying
+        # "[page N]" here would make the model emit p: anchors pointing at
+        # nothing.
+        return ("SOURCE TYPE: text/markdown document. Text is tagged with "
+                "[section N] markers.")
     return "SOURCE TYPE: web article. Text is tagged with [section N] markers."
 
 
@@ -108,17 +149,19 @@ def _source_block(index: int, source: dict, budget: int) -> str:
 
 
 def build_note_synthesis_prompt(sources: list[dict],
-                                total_budget: int = TOTAL_SOURCE_BUDGET) -> str:
+                                total_budget: int = TOTAL_SOURCE_BUDGET,
+                                has_figures: bool = False) -> str:
     budgets = split_budget([len((s.get("text") or "").strip()) for s in sources],
                            total_budget)
     blocks = [_source_block(i, s, b)
               for i, (s, b) in enumerate(zip(sources, budgets), start=1)]
+    figures = FIGURE_EXTENSION if has_figures else ""
     return f"""{MASTERY_SYSTEM_PROMPT}
 
 {SYNTHESIS_EXTENSION}
 
 {ANCHOR_EXTENSION}
-
+{figures}
 ---
 SOURCE MATERIAL — {len(sources)} source(s) attached to this note:
 

@@ -122,9 +122,13 @@ def process_resource(resource_id: str) -> None:
     meta = dict(resource.get("meta") or {})
 
     try:
-        source_text = ""
-        video_url: str | None = None
-
+        # NOTE: nothing here keeps the extracted text in memory. Synthesis
+        # rebuilds each source from its `resource_chunks` rows
+        # (synthesis.source_text_from_chunks), because it runs long after every
+        # source has settled. `_insert_chunks` IS the handoff to the model —
+        # anything not in a chunk row is invisible to it. This used to assign
+        # `source_text`/`video_url` locals that nothing ever read, which made it
+        # look like there was a second path.
         if resource["kind"] in ("pdf", "document"):
             from services.workspace.pdf_elements import extract_pdf, chunk_pages
             suffix = os.path.splitext(resource.get("storage_path") or "")[1] or ".pdf"
@@ -149,13 +153,20 @@ def process_resource(resource_id: str) -> None:
                         pass
                     _insert_elements(resource, data["elements"])
                     _insert_chunks(resource, chunk_pages(data["pages_text"]))
-                    source_text = "\n\n".join(data["pages_text"])
                 else:
-                    # md/txt documents: single text, page = 1
+                    # md/txt: split into sections, exactly like a website. The
+                    # old path tagged the WHOLE file "[page 1]", so every chunk,
+                    # anchor and jump chip on a long markdown file pointed at
+                    # page 1 and note<->source sync did nothing at all. Elements
+                    # are inserted too, which is what lets the website viewer
+                    # render these (SourceViewer routes `document` to it).
+                    from services.workspace.sections import (
+                        chunk_sections, sections_as_elements, split_markdown_sections)
                     with open(tmp_path, encoding="utf-8", errors="replace") as f:
                         raw = f.read()
-                    source_text = f"[page 1]\n{raw}"
-                    _insert_chunks(resource, chunk_pages([source_text]))
+                    doc_sections = split_markdown_sections(raw)
+                    _insert_elements(resource, sections_as_elements(doc_sections))
+                    _insert_chunks(resource, chunk_sections(doc_sections))
             finally:
                 os.unlink(tmp_path)
 
@@ -172,12 +183,12 @@ def process_resource(resource_id: str) -> None:
                 resource["title"] = ometa["title"]
             try:
                 snippets = youtube.fetch_transcript(vid)
-                source_text = youtube.transcript_text(snippets)
                 meta["has_transcript"] = True
                 _insert_chunks(resource, youtube.chunk_transcript(snippets))
             except ValueError:
+                # No transcript: synthesis re-derives the video URL from the
+                # source row and takes the Gemini-native path (synthesis._complete).
                 meta["has_transcript"] = False
-                video_url = resource["source_url"]  # gemini-native path
 
         elif resource["kind"] == "video":
             from services.workspace import video as vsvc
@@ -190,7 +201,6 @@ def process_resource(resource_id: str) -> None:
                 try:
                     snippets = vsvc.transcribe(tmp_path)
                     from services.workspace import youtube as yts
-                    source_text = yts.transcript_text(snippets)
                     meta["has_transcript"] = True
                     _insert_chunks(resource, yts.chunk_transcript(snippets))
                 except RuntimeError as e:
@@ -216,7 +226,6 @@ def process_resource(resource_id: str) -> None:
             ]
             _insert_elements(resource, elements)
             _insert_chunks(resource, chunk_sections(data["sections"]))
-            source_text = data["tagged_text"]
 
         else:
             raise ValueError(f"Unknown resource kind: {resource['kind']}")

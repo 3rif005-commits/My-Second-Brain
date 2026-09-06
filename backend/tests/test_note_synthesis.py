@@ -82,7 +82,10 @@ def test_source_text_is_capped_by_the_total_budget():
     # U+2588 appears in no template, so counting it measures exactly the source
     # text that reached the prompt — not an incidental property of other strings.
     prompt = build_note_synthesis_prompt([
-        {"title": f"Source {i}", "kind": "pdf", "text": "█" * 50_000,
+        # Sized FROM the budget, not a literal: each source alone must be able to
+        # exhaust it, or "the budget is actually spent" below silently stops
+        # testing anything the moment TOTAL_SOURCE_BUDGET is raised.
+        {"title": f"Source {i}", "kind": "pdf", "text": "█" * TOTAL_SOURCE_BUDGET,
          "duration": None}
         for i in range(3)
     ])
