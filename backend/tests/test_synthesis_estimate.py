@@ -46,7 +46,7 @@ def test_auto_policy_still_fires():
          patch.object(synthesis.settings, "workspace_on_drop", "auto"), \
          patch.object(synthesis, "run_synthesis") as run:
         assert synthesis.maybe_synthesize("n1") is True
-    run.assert_called_once_with("n1", "replace")
+    run.assert_called_once_with("n1", "replace", trigger="auto")
 
 
 # ── pricing ──────────────────────────────────────────────────────────────────

@@ -68,11 +68,15 @@ def complete_with_fallback(job: str, user_id: str, messages: list[dict],
     to treat a malformed response the same as a failure.
     """
     from services.ai.client import complete
+    from services.ai import usage as usage_log
 
     errors: list[str] = []
     for p in candidates(job, user_id):
         try:
-            result = complete(p, messages, max_tokens=max_tokens)
+            # Each attempt is its own run row: a fallback chain that burned two
+            # providers cost two calls, and the log should say so.
+            with usage_log.annotate(job=job, user_id=user_id):
+                result = complete(p, messages, max_tokens=max_tokens)
         except Exception as e:  # quota, network, bad key — try the next one
             errors.append(f"{p.label or p.provider}: {str(e)[:120]}")
             continue

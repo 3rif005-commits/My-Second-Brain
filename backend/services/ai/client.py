@@ -19,9 +19,60 @@ from typing import AsyncIterator
 
 import httpx
 
+from services.ai import usage as usage_log
 from services.ai.providers import Provider
 
 _TIMEOUT = 300
+
+
+def _anthropic_usage(data: dict) -> None:
+    """Report Anthropic's own token counts out of the SSE stream.
+
+    `message_start` carries the input side (including cache hits, which is how
+    E3's caching work will be proved); `message_delta` carries the running
+    output count. Anything missing is simply not reported — an absent number is
+    better than an invented one.
+    """
+    kind = data.get("type")
+    if kind == "message_start":
+        u = ((data.get("message") or {}).get("usage") or {})
+        usage_log.report(
+            input_tokens=u.get("input_tokens") or 0,
+            cache_read_tokens=u.get("cache_read_input_tokens") or 0,
+            cache_write_tokens=u.get("cache_creation_input_tokens") or 0,
+            output_tokens=u.get("output_tokens") or 0,
+        )
+    elif kind == "message_delta":
+        u = data.get("usage") or {}
+        usage_log.report(output_tokens=u.get("output_tokens") or 0)
+
+
+def _openai_usage(data: dict) -> None:
+    """OpenAI-compatible servers put usage on a final chunk (OpenRouter and
+    llama.cpp both do when asked); absent on gateways that don't."""
+    u = data.get("usage") or {}
+    if u:
+        details = u.get("prompt_tokens_details") or {}
+        usage_log.report(
+            input_tokens=u.get("prompt_tokens") or 0,
+            output_tokens=u.get("completion_tokens") or 0,
+            cache_read_tokens=details.get("cached_tokens") or 0,
+        )
+
+
+def _messages_chars(messages: list[dict]) -> int:
+    """Rough prompt size, for the estimate fallback when a provider reports no
+    usage at all."""
+    total = 0
+    for m in messages:
+        content = m.get("content")
+        if isinstance(content, str):
+            total += len(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and isinstance(part.get("text"), str):
+                    total += len(part["text"])
+    return total
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -160,10 +211,32 @@ def _local_endpoint() -> dict:
 # ── sync completion ──────────────────────────────────────────────────────────
 
 def complete(p: Provider, messages: list[dict], max_tokens: int = 4096) -> str:
+    """Every completion in the app comes through here, so this is where the run
+    log is written — one place, no call site to forget."""
+    # estimate_chars covers the failure path (a call that dies mid-stream still
+    # spent its input); on success the estimate is redone below with the real
+    # output length, unless the provider reported actual usage.
+    with usage_log.track(p.provider, p.model,
+                         estimate_chars=(_messages_chars(messages), 0)) as u:
+        text = _complete_inner(p, messages, max_tokens)
+        if not u.reported:
+            u.set_estimate(usage_log.tokens_from_chars(_messages_chars(messages)),
+                           usage_log.tokens_from_chars(len(text)))
+        return text
+
+
+def _complete_inner(p: Provider, messages: list[dict], max_tokens: int) -> str:
     if p.provider == "gemini":
         client = _gemini_client(p)
         resp = client.models.generate_content(
             model=p.model, contents=_gemini_contents(messages))
+        meta = getattr(resp, "usage_metadata", None)
+        if meta:
+            usage_log.report(
+                input_tokens=getattr(meta, "prompt_token_count", 0) or 0,
+                output_tokens=getattr(meta, "candidates_token_count", 0) or 0,
+                cache_read_tokens=getattr(meta, "cached_content_token_count", 0) or 0,
+            )
         return resp.text or ""
 
     if p.provider == "anthropic":
@@ -206,6 +279,7 @@ def _anthropic_complete(p: Provider, messages: list[dict], max_tokens: int) -> s
                 data = json.loads(line[6:])
             except json.JSONDecodeError:
                 continue
+            _anthropic_usage(data)
             text = _anthropic_text_delta(data)
             if text:
                 chunks.append(text)
@@ -234,6 +308,10 @@ def _openai_compatible_complete(url: str, headers: dict, model: str,
                "max_tokens": max_tokens, "stream": True}
     if "openrouter.ai" in url:
         payload["reasoning"] = {"exclude": True}
+    # Only ask gateways known to accept it: a strict server rejects unknown
+    # fields outright, and losing the call to get its token count is a bad deal.
+    if "openrouter.ai" in url or "api.openai.com" in url:
+        payload["stream_options"] = {"include_usage": True}
 
     chunks: list[str] = []
     with httpx.stream(
@@ -252,6 +330,7 @@ def _openai_compatible_complete(url: str, headers: dict, model: str,
                 data = json.loads(raw)
             except json.JSONDecodeError:
                 continue
+            _openai_usage(data)
             text = (data.get("choices") or [{}])[0].get("delta", {}).get("content")
             if text:
                 chunks.append(text)
@@ -262,6 +341,22 @@ def _openai_compatible_complete(url: str, headers: dict, model: str,
 
 async def stream(p: Provider, messages: list[dict],
                  max_tokens: int = 2048) -> AsyncIterator[str]:
+    """Same run-log contract as complete(): one row per call, whatever the
+    provider. The accumulator lives for the whole generator, so a chat turn is
+    one row rather than one per delta."""
+    out_chars = 0
+    with usage_log.track(p.provider, p.model,
+                         estimate_chars=(_messages_chars(messages), 0)) as u:
+        async for piece in _stream_inner(p, messages, max_tokens):
+            out_chars += len(piece)
+            yield piece
+        if not u.reported:
+            u.set_estimate(usage_log.tokens_from_chars(_messages_chars(messages)),
+                           usage_log.tokens_from_chars(out_chars))
+
+
+async def _stream_inner(p: Provider, messages: list[dict],
+                        max_tokens: int) -> AsyncIterator[str]:
     if p.provider == "gemini":
         client = _gemini_client(p)
         # google-genai streaming is sync-iterable; wrap it
@@ -287,6 +382,7 @@ async def stream(p: Provider, messages: list[dict],
                         data = json.loads(line[6:])
                     except json.JSONDecodeError:
                         continue
+                    _anthropic_usage(data)
                     text = _anthropic_text_delta(data)
                     if text:
                         yield text
@@ -306,7 +402,9 @@ async def stream(p: Provider, messages: list[dict],
         async with client.stream(
             "POST", url, headers=headers,
             json={"model": model, "messages": _to_openai_messages(messages),
-                  "max_tokens": max_tokens, "stream": True},
+                  "max_tokens": max_tokens, "stream": True,
+                  **({"stream_options": {"include_usage": True}}
+                     if ("openrouter.ai" in url or "api.openai.com" in url) else {})},
         ) as resp:
             if resp.status_code != 200:
                 body = await resp.aread()
@@ -321,6 +419,7 @@ async def stream(p: Provider, messages: list[dict],
                     data = json.loads(raw)
                 except json.JSONDecodeError:
                     continue
+                _openai_usage(data)
                 text = (data.get("choices") or [{}])[0].get("delta", {}).get("content")
                 if text:
                     yield text

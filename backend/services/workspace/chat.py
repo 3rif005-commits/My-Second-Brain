@@ -17,6 +17,7 @@ from typing import Any, AsyncIterator
 
 from services.database import get_supabase
 from services.embedder import embed
+from services.ai import usage as usage_log
 from services.ai.client import stream as ai_stream
 from services.ai.router import candidates
 
@@ -131,7 +132,7 @@ async def run_note_chat(
     for provider in providers:
         streamed_any = False
         try:
-            async for text in ai_stream(provider, payload, max_tokens=2048):
+            async for text in _annotated_stream(provider, payload, note_id, user_id):
                 streamed_any = True
                 yield {"type": "text", "content": text}
             break
@@ -146,3 +147,12 @@ async def run_note_chat(
 
     yield {"type": "citations", "citations": citations}
     yield {"type": "done"}
+
+
+async def _annotated_stream(provider, payload, note_id: str, user_id: str):
+    """Tag this turn's run row with the note it is grounded in, so per-note
+    spend is answerable without joining anything."""
+    with usage_log.annotate(surface="workspace", job="chat",
+                            trigger="user", note_id=note_id, user_id=user_id):
+        async for text in ai_stream(provider, payload, max_tokens=2048):
+            yield text

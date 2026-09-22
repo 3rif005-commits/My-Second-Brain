@@ -27,3 +27,7 @@ frontend/e2e/.auth/
 # Linked worktrees (managed via EnterWorktree/ExitWorktree)
 .claude/worktrees/
 .clone/
+
+# Eval reports are run artefacts, not source. The numbers that matter get
+# written into docs/superpowers/plans/2026-09-22-harness-experiment-plan.md.
+backend/evals/reports/

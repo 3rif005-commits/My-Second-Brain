@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from core.config import settings
 from prompts.note_synthesis import build_note_synthesis_prompt, split_budget
 from services.ai.client import complete
+from services.ai import usage as usage_log
 from services.ai.pricing import estimate_usd, tokens_from_chars
 from services.ai.router import complete_with_fallback, pick
 from services.database import get_supabase
@@ -138,7 +139,7 @@ def maybe_synthesize(note_id: str) -> bool:
         return False
     if not _claim(note_id, notes[0]["user_id"]):
         return False
-    run_synthesis(note_id, "replace")
+    run_synthesis(note_id, "replace", trigger="auto")
     return True
 
 
@@ -258,7 +259,10 @@ def _complete(prompt: str, video_urls: list[str], has_text: bool,
         max_tokens=16000, validate=_looks_like_a_mastery_guide))
 
 
-def run_synthesis(note_id: str, mode: str = "replace") -> None:
+def run_synthesis(note_id: str, mode: str = "replace",
+                  trigger: str = "user") -> None:
+    """`trigger` only reaches the run log: it is how "what did auto-generation
+    cost us?" stays answerable after the policy changes again."""
     db = get_supabase()
     notes = (db.table("notes").select("id,user_id,title,content,source_url,source_filename")
              .eq("id", note_id).execute().data or [])
@@ -313,7 +317,10 @@ def run_synthesis(note_id: str, mode: str = "replace") -> None:
                    if not video_urls and (settings.workspace_synthesis_vision or not has_text)
                    else [])
         prompt = build_note_synthesis_prompt(blocks, has_figures=bool(figures))
-        html = _complete(prompt, video_urls, has_text, user_id, figures)
+        with usage_log.annotate(surface="workspace", job="synthesis",
+                                trigger=trigger, note_id=note_id,
+                                user_id=user_id):
+            html = _complete(prompt, video_urls, has_text, user_id, figures)
         if not html.strip():
             raise RuntimeError("The model returned an empty draft.")
 

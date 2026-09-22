@@ -59,7 +59,7 @@ def test_fires_exactly_once_when_the_last_source_lands():
     with patch.object(synthesis, "get_supabase", return_value=db), \
          patch.object(synthesis, "run_synthesis") as run:
         assert synthesis.maybe_synthesize("n1") is True
-    run.assert_called_once_with("n1", "replace")
+    run.assert_called_once_with("n1", "replace", trigger="auto")
 
 
 def test_failed_sibling_does_not_block_the_settle_check():
@@ -104,7 +104,7 @@ def test_the_guard_claims_the_row_before_it_fires():
     claim = db.tables["note_synthesis"].insert.call_args[0][0]
     assert claim["note_id"] == "n1"
     assert claim["status"] == "running"
-    run.assert_called_once_with("n1", "replace")
+    run.assert_called_once_with("n1", "replace", trigger="auto")
 
 
 def test_losing_the_claim_race_does_not_fire_a_second_synthesis():

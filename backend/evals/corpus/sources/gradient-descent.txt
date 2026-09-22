@@ -1,0 +1,18 @@
+[section 1]
+Gradient descent: iterative optimisation. Start at theta_0, repeatedly step in
+the direction of steepest descent of the loss. The step size is the learning
+rate, eta.
+
+theta_{t+1} = theta_t - eta * grad L(theta_t)
+
+[section 2]
+A learning rate too large diverges; too small crawls. Common schedules: step
+decay, cosine annealing, and warmup followed by decay.
+
+Stochastic gradient descent uses a minibatch estimate of the gradient. The
+noise it introduces acts as a mild regulariser and helps escape saddle points.
+
+[section 3]
+Momentum accumulates an exponentially weighted average of past gradients, which
+damps oscillation across ravines. Adam combines momentum with per-parameter
+scaling by the second moment estimate.
