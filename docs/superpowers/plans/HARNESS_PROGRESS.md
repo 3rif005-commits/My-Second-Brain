@@ -1,0 +1,88 @@
+# HARNESS PROGRESS — single source of truth
+
+> Updated by Claude at the end of every session. Read this FIRST, work the next `[ ]` item,
+> update it BEFORE the session ends. Never start a task without marking it `[~]` here.
+> Plan: `2026-09-22-harness-experiment-plan.md` · Research: `../research/2026-09-22-agent-harness-state-of-the-art.md`
+> Spec: `../specs/2026-09-13-ai-harness-skills-proposal.md`
+
+**Status legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (say why + what's needed)
+
+**Branch:** `feat/ai-harness` (not created yet)
+**Last session:** — (none yet)
+**Next action:** Stage 1, task 1.1
+
+---
+
+## Decisions already made (do NOT re-ask the user)
+
+| Decision | Value |
+|---|---|
+| On source drop | `suggest` — never auto-generate. Extraction + embedding only. |
+| Model tiers | fast = `claude-haiku-4-5` · standard = `claude-haiku-4-5` (revisit after E6) · deep = `claude-sonnet-5` only if an eval justifies it |
+| Output format | Keep BlockNote HTML until E6 measures Markdown+fences; switch only if the eval says so |
+| User skills storage | Bundled skills stay files. User-authored skills deferred to H3 — do not build now. |
+| Framework adoption | None. No CrewAI/LangGraph/Temporal. Plain Python in `services/`. |
+| Subagents | Do not spawn Claude Code subagents for execution. Work inline, write to disk as you go. |
+
+---
+
+## Stage 1 — Stop the bleed + fix the hole (no eval needed)
+
+- [ ] 1.1 **E1** — `workspace_on_drop` setting (`nothing|suggest|auto`, default `suggest`); gate
+      `processor.py:240` `maybe_synthesize`; keep `POST /notes/{id}/synthesize` manual path intact.
+- [ ] 1.2 **E1 UI** — Workspace shows a "Generate study guide" action with a token/cost estimate
+      (estimate computed locally from chars/4 × price, no model call).
+- [ ] 1.3 **E11a** — `brain.delete_note` confirmation must come from the client, not from
+      `args["confirm"]` (`services/agent/permissions.py` + `engine.py` + the SSE contract).
+- [ ] 1.4 **E11b** — mark retrieved note/source text as untrusted data in the prompt; a turn that
+      read untrusted content may not call a write tool without explicit user approval.
+- [ ] 1.5 Backend tests for 1.1–1.4 green; CLI commands given to the user.
+
+## Stage 2 — H1 scoreboard (the real unlock)
+
+- [ ] 2.1 `ai_runs` table migration (SQL written by Claude, **applied by the user** — see prompt).
+- [ ] 2.2 `services/ai/usage.py` — every model call records tokens in/out/cache, model, latency,
+      surface, skill, trigger, status, cost estimate.
+- [ ] 2.3 `backend/evals/score_note.py` — deterministic scorer: headings, toggles-with-children,
+      callouts, math blocks, tables, anchors-that-resolve, must-mention hits.
+- [ ] 2.4 `backend/evals/corpus/manifest.json` + the corpus itself (**user supplies source files**;
+      until then use `frontend/e2e/fixtures/test.pdf` + synthetic md/txt/website cases).
+- [ ] 2.5 Adversarial case: source text that tries to trigger `delete_note`. Must yield 0 write calls.
+- [ ] 2.6 `backend/evals/run.py` — runs the manifest n times per config, writes `ai_runs` rows +
+      a JSON report, prints a comparison table.
+- [ ] 2.7 **E2 baseline** — 3 runs per case on current code; numbers written into the plan doc.
+
+## Stage 3 — H2 core harness (one experiment at a time, card per experiment)
+
+- [ ] 3.1 **E3** cache-shaped context assembly (stable prefix, volatile tail, `cache_control`).
+- [ ] 3.2 **E4** close the tool loop (feed results back, round cap, parallel results in one message).
+- [ ] 3.3 **E5** tool-output discipline (25k cap + hint, `response_format`, errors as instructions).
+- [ ] 3.4 Gateway merge — `services/agent/model.py` + `services/llm.py` + the Next.js Gemini route
+      all go through `services/ai/`.
+- [ ] 3.5 Per-run budgets + `max_usd` guard.
+
+## Stage 4 — H3 (only after Stage 3 numbers justify it)
+
+- [ ] 4.1 **E6** Markdown+fences vs HTML (n=5, guardrail: every structure count).
+- [ ] 4.2 **E7** progressive disclosure (skill metadata only, tool groups, MCP discovery cached).
+- [ ] 4.3 Skill folders + frontmatter; `study-guide` skill replaces `prompts/note_synthesis.py`.
+- [ ] 4.4 **E8** retrieval upgrades (contextual chunk prefixes, reranking).
+- [ ] 4.5 **E9** map-reduce for 3+ sources.
+- [ ] 4.6 **E10** model/effort tiering incl. local Gemma fast tier.
+
+## Stage 5 — H4 (not before Stage 4 is measured)
+
+- [ ] 5.1 Workspace action bar / `/` palette / selection menu + run cards.
+- [ ] 5.2 **E12** learned style playbook.
+- [ ] 5.3 Background agents (triggers, budgets, activity page) on the Batch API.
+- [ ] 5.4 Remote MCP server + per-user OAuth (the subscription bridge); MCP Apps UI.
+
+---
+
+## Blocked / needs the user
+
+_(Claude keeps this list short and batched. Nothing here right now.)_
+
+## Session log
+
+_(One line per session: date · what shipped · commit sha.)_
