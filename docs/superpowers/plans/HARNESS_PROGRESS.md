@@ -8,8 +8,10 @@
 **Status legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (say why + what's needed)
 
 **Branch:** `feat/ai-harness` (created, 3 commits)
-**Last session:** 2026-09-22 — Stage 1 complete (drop policy, priced estimate, approval gate)
-**Next action:** Stage 2, task 2.1 — the `ai_runs` migration
+**Last session:** 2026-09-22 — Stage 1 complete; Stage 2 built and baselined
+**Next action:** Stage 3, task 3.1 (**E3** cache-shaped context) — but read the
+blocked list first: the Anthropic credit balance is empty, so no further
+Claude measurement is possible until it is topped up.
 
 **Run the backend suite with `env -u PYTHONPATH`** — this machine's ROS install
 puts `/opt/ros/jazzy` on PYTHONPATH and its pytest plugins crash collection:
@@ -46,17 +48,17 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 
 ## Stage 2 — H1 scoreboard (the real unlock)
 
-- [ ] 2.1 `ai_runs` table migration (SQL written by Claude, **applied by the user** — see prompt).
-- [ ] 2.2 `services/ai/usage.py` — every model call records tokens in/out/cache, model, latency,
+- [~] 2.1 `ai_runs` table migration (SQL written by Claude, **applied by the user** — see prompt).
+- [x] 2.2 `services/ai/usage.py` — every model call records tokens in/out/cache, model, latency,
       surface, skill, trigger, status, cost estimate.
-- [ ] 2.3 `backend/evals/score_note.py` — deterministic scorer: headings, toggles-with-children,
+- [x] 2.3 `backend/evals/score_note.py` — deterministic scorer: headings, toggles-with-children,
       callouts, math blocks, tables, anchors-that-resolve, must-mention hits.
-- [ ] 2.4 `backend/evals/corpus/manifest.json` + the corpus itself (**user supplies source files**;
+- [~] 2.4 `backend/evals/corpus/manifest.json` + the corpus itself (**user supplies source files**;
       until then use `frontend/e2e/fixtures/test.pdf` + synthetic md/txt/website cases).
-- [ ] 2.5 Adversarial case: source text that tries to trigger `delete_note`. Must yield 0 write calls.
-- [ ] 2.6 `backend/evals/run.py` — runs the manifest n times per config, writes `ai_runs` rows +
+- [x] 2.5 Adversarial case: source text that tries to trigger `delete_note`. Must yield 0 write calls.
+- [x] 2.6 `backend/evals/run.py` — runs the manifest n times per config, writes `ai_runs` rows +
       a JSON report, prints a comparison table.
-- [ ] 2.7 **E2 baseline** — 3 runs per case on current code; numbers written into the plan doc.
+- [~] 2.7 **E2 baseline** — 3 runs per case on current code; numbers written into the plan doc.
 
 ## Stage 3 — H2 core harness (one experiment at a time, card per experiment)
 
@@ -87,7 +89,19 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 
 ## Blocked / needs the user
 
-_(Claude keeps this list short and batched. Nothing here right now.)_
+1. **Apply `supabase/migrations/020_ai_runs.sql`** in the Supabase SQL editor.
+   Until then runs are measured from an in-process buffer (evals work, the app
+   works) but nothing is persisted and no history accumulates.
+2. **Anthropic credits are exhausted** — `Your credit balance is too low`
+   (2026-09-22, after ~$0.27 of baseline runs). Every Claude measurement is
+   blocked until it is topped up; the chain currently falls back to OpenRouter's
+   free Nemotron, which is a different model and cannot be compared.
+3. **Gemini is unreachable from `backend/venv`**: `No module named 'google'`.
+   Either `./venv/bin/pip install google-genai` or accept that the second
+   fallback is dead there.
+4. **Real lecture PDFs for the corpus** (task 2.4) — drop them in
+   `backend/evals/corpus/sources/` and say which topics; the manifest currently
+   ships four synthetic cases.
 
 ## Session log
 
@@ -95,7 +109,11 @@ _(Claude keeps this list short and batched. Nothing here right now.)_
 - 2026-09-22 · Stage 1.1–1.2: `workspace_on_drop` (default `suggest`) + priced
   `GET /synthesis/estimate` + "Generate note" CTA · `0bd3827`
 - 2026-09-22 · Stage 1.3–1.4: approval gate (`NeedsApproval`, client-minted
-  approval keys, untrusted-context taint, Confirm button in chat) · pending
+  approval keys, untrusted-context taint, Confirm button in chat) · `5e00382`
+- 2026-09-22 · Stage 2.2–2.6: `ai_runs` migration, usage recording inside the
+  AI client, deterministic note scorer, eval corpus + runner · `ae60e33`
+- 2026-09-22 · Stage 2.7: baseline measured on claude-haiku-4-5 (3 cases × 3
+  runs, $0.27 spent); runner now surfaces provider fallbacks · pending
 
 ## Decisions taken while executing (not re-asked)
 

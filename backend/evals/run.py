@@ -27,7 +27,7 @@ import json
 import statistics
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +54,14 @@ class CaseResult:
     #: Reported and estimated runs are never averaged together.
     usage_reported: bool = False
     model: str | None = None
+    #: First part of what the model actually produced. Without it a failure is
+    #: a number with no explanation, and the next session re-runs the case
+    #: blind just to see the text.
+    html_excerpt: str = ""
+    #: Every provider attempt this run made, in order. A fallback chain that
+    #: quietly answered with a different model would otherwise look like a
+    #: result from the model you thought you were measuring.
+    attempts: list[dict] = field(default_factory=list)
 
 
 def load_manifest(path: Path | None = None) -> dict:
@@ -123,6 +131,7 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool) -> CaseResu
 
     blocks = _source_blocks(case)
     prompt = build_note_synthesis_prompt(blocks)
+    mark = len(usage_log.RECENT)
     started = time.monotonic()
     html, error = "", None
 
@@ -147,7 +156,10 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool) -> CaseResu
     latency_ms = int((time.monotonic() - started) * 1000)
     # Straight from the run log, so the eval's cost column and the app's own
     # spend numbers can never disagree.
-    last = usage_log.RECENT[-1] if usage_log.RECENT and not dry_run else {}
+    rows = [] if dry_run else list(usage_log.RECENT)[mark:]
+    last = rows[-1] if rows else {}
+    attempts = [{"model": r.get("model"), "status": r.get("status"),
+                 "error": r.get("error")} for r in rows]
     score = score_note(html, source_count=len(blocks),
                        must_mention=case.get("must_mention"),
                        must_not_mention=case.get("must_not_mention"))
@@ -162,7 +174,9 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool) -> CaseResu
                       output_tokens=last.get("output_tokens", 0),
                       usd=last.get("estimated_usd"),
                       usage_reported=bool(last.get("usage_reported")),
-                      model=last.get("model"))
+                      model=last.get("model"),
+                      html_excerpt=(html or "")[:800],
+                      attempts=attempts)
 
 
 def summarise(results: list[CaseResult]) -> dict:
@@ -184,6 +198,9 @@ def summarise(results: list[CaseResult]) -> dict:
             "median_usd": round(statistics.median(spend), 4) if spend else None,
             "total_usd": round(sum(spend), 4) if spend else None,
             "usage_reported": all(r.usage_reported for r in runs),
+            "models": sorted({r.model for r in runs if r.model}),
+            "fallbacks": [a for r in runs for a in r.attempts
+                          if a["status"] == "error"],
             "median_latency_ms": int(statistics.median(r.latency_ms for r in runs)),
             "median_headings": statistics.median(
                 r.score["heading_total"] for r in runs),
@@ -197,7 +214,7 @@ def summarise(results: list[CaseResult]) -> dict:
 
 def print_table(summary: dict) -> None:
     head = (f"{'case':<26}{'pass':>6}{'head':>7}{'math':>6}{'grnd':>7}"
-            f"{'in':>8}{'out':>8}{'usd':>9}{'ms':>8}")
+            f"{'in':>8}{'out':>8}{'usd':>9}{'ms':>8}  model")
     print(head)
     print("-" * len(head))
     total = 0.0
@@ -209,7 +226,17 @@ def print_table(summary: dict) -> None:
               f"{s['median_grounding']:>7}{s['median_input_tokens']:>8}"
               f"{s['median_output_tokens']:>8}"
               f"{('$' + format(usd, '.4f')) if usd is not None else '—':>9}"
-              f"{s['median_latency_ms']:>8}")
+              f"{s['median_latency_ms']:>8}  "
+              f"{'/'.join(m.split('/')[-1][:22] for m in s['models']) or '—'}")
+    all_models = sorted({m for s in summary.values() for m in s["models"]})
+    if len(all_models) > 1:
+        print("\n  !! runs used MORE THAN ONE MODEL: " + ", ".join(all_models))
+        print("     The provider chain fell back mid-run. These numbers are not"
+              " one measurement —\n     fix the provider or split the report"
+              " before comparing anything.")
+    for case_id, s in summary.items():
+        for f in s["fallbacks"]:
+            print(f"  fallback in {case_id}: {f['model']} failed — {f['error']}")
     print(f"\n  spent this run: ${total:.4f}"
           + ("" if all(s["usage_reported"] for s in summary.values())
              else "  (some numbers are ESTIMATES — the provider reported none)"))

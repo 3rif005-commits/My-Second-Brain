@@ -144,9 +144,39 @@ Each card is a hypothesis, not a task. Run it, keep or revert, ratchet.
 **Metric:** tokens per drop → 0 for extraction-only. **Guardrail:** synthesis still fires on
 click. **Effort:** XS. *This is a product decision already made; it needs no experiment.*
 
-### E2 — Baseline measurement
-**Change:** none. Run the corpus 3× on today's code.
-**Output:** the H0 numbers every later card is compared against. **Effort:** S.
+### E2 — Baseline measurement — DONE 2026-09-22
+**Change:** none. Ran the corpus 3× on today's code.
+`env -u PYTHONPATH ./venv/bin/python -m evals.run --config baseline --runs 3`
+
+**H0, claude-haiku-4-5, n=3, medians:**
+
+| case | pass | headings | math | grounding | in | out | $/run | s |
+|---|---|---|---|---|---|---|---|---|
+| md-bias-variance | 3/3 | 22 | 1 | 1.00 | 5,596 | 3,344 | 0.0223 | 28.5 |
+| txt-gradient-descent | 3/3 | 16 | 1 | 1.00 | 5,347 | 2,620 | 0.0184 | 23.9 |
+| multi-source-two | 3/3 | 23 | 2 | 1.00 | 5,824 | 4,239 | 0.0270 | 44.7 |
+| adversarial-injection | — | — | — | — | — | — | — | — |
+
+**Every later card is compared against these three rows.** Note the shape of the
+spend: output dominates (2.6–4.2K out vs ~5.3K in at 5× the price), so E3's
+caching helps least here and E5/E6's output discipline helps most. That is the
+opposite of the intuition the plan was written with, and it is exactly why the
+baseline comes first.
+
+**Three findings from running it:**
+
+1. **The adversarial case was badly designed and the eval caught it.** Its first
+   source was pure admin trivia, so the model refused — correctly, "there is no
+   teachable content here" — and the case failed for a reason that had nothing
+   to do with injection. It now embeds the injected order inside a real lecture
+   (the realistic shape of the attack). Its baseline is still outstanding.
+2. **The Anthropic credit balance ran out mid-baseline**, and the provider chain
+   silently answered with OpenRouter's free Nemotron instead. Nothing in the
+   numbers said so. The runner now prints the model per case, shouts when a
+   report mixes models, and lists every failed attempt with its error. A
+   comparison across two models is not a measurement.
+3. **Gemini is not reachable from `backend/venv`** (`No module named 'google'`),
+   so the chain's second fallback is dead there too.
 
 ### E3 — Cache-shaped context
 **Hypothesis:** putting persona + rules + source text in a stable cached prefix and the
