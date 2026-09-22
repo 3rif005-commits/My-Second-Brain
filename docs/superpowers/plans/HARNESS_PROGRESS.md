@@ -9,9 +9,10 @@
 
 **Branch:** `feat/ai-harness` (created, 3 commits)
 **Last session:** 2026-09-22 — Stage 1 complete; Stage 2 built and baselined
-**Next action:** Stage 3, task 3.1 (**E3** cache-shaped context) — but read the
-blocked list first: the Anthropic credit balance is empty, so no further
-Claude measurement is possible until it is topped up.
+**Next action:** Stage 3, task 3.4 (gateway merge) — code-only, so it proceeds
+while credits are out. Measurement-bearing cards (E3, E5, E6) are parked until
+the Anthropic balance is topped up; measuring them on the free fallback model
+would measure the fallback.
 
 **Run the backend suite with `env -u PYTHONPATH`** — this machine's ROS install
 puts `/opt/ros/jazzy` on PYTHONPATH and its pytest plugins crash collection:
@@ -63,7 +64,7 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 ## Stage 3 — H2 core harness (one experiment at a time, card per experiment)
 
 - [ ] 3.1 **E3** cache-shaped context assembly (stable prefix, volatile tail, `cache_control`).
-- [ ] 3.2 **E4** close the tool loop (feed results back, round cap, parallel results in one message).
+- [x] 3.2 **E4** close the tool loop (code + unit tests; measurement pending credits) (feed results back, round cap, parallel results in one message).
 - [ ] 3.3 **E5** tool-output discipline (25k cap + hint, `response_format`, errors as instructions).
 - [ ] 3.4 Gateway merge — `services/agent/model.py` + `services/llm.py` + the Next.js Gemini route
       all go through `services/ai/`.
@@ -113,7 +114,9 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - 2026-09-22 · Stage 2.2–2.6: `ai_runs` migration, usage recording inside the
   AI client, deterministic note scorer, eval corpus + runner · `ae60e33`
 - 2026-09-22 · Stage 2.7: baseline measured on claude-haiku-4-5 (3 cases × 3
-  runs, $0.27 spent); runner now surfaces provider fallbacks · pending
+  runs, $0.27 spent); runner now surfaces provider fallbacks · `39e2117`
+- 2026-09-22 · Stage 3.2 (E4): multi-round tool loop, every call answered,
+  results capped, both budgets visible · pending
 
 ## Decisions taken while executing (not re-asked)
 

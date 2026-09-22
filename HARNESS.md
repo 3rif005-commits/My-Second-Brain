@@ -39,3 +39,14 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   collection with `unknown hook 'pytest_launch_collect_makemodule'`.)
 - The ~448 database tests need Postgres on `127.0.0.1:55432`; without it they
   error at setup. That is the environment, not a regression.
+
+## The loop
+
+- Every `tool_call` gets exactly one `tool` reply — success, denial, error, or
+  waiting-on-approval. (An unanswered `tool_call_id` is a 400 from the provider,
+  and a refusal the model cannot see is one it repeats.)
+- An approval-pending reply tells the model to stop and say what it would do.
+  (Otherwise it spends every remaining round retrying the same blocked call.)
+- Tool results are capped, with the truncation notice written as an instruction.
+  (A result is re-sent on every later round of the same turn; a silent stump
+  teaches the model nothing about narrowing its next call.)

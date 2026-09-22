@@ -32,6 +32,12 @@ from services.embedder import embed
 from services.retriever import retrieve
 
 MAX_TOOL_CALLS_PER_TURN = 10
+# How many times the model may be handed tool results and asked again. Five is
+# enough for search → read → act → confirm with a round to spare; the ceiling
+# exists so a confused model cannot bill an unbounded conversation.
+MAX_TOOL_ROUNDS = 5
+# Provisional; E5 measures it. Claude Code's equivalent cap is ~25k tokens.
+TOOL_RESULT_CHAR_CAP = 8_000
 
 
 BASE_PERSONA = """You are the Second Brain assistant. You help the user think
@@ -358,130 +364,212 @@ async def _stream_loop(
     untrusted_context: bool = False,
     approvals: set[str] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
-    """Inner streaming loop — handles a single LLM call. Re-entered after
-    each tool call to continue generation."""
-    pending_tool_calls: list[dict[str, Any]] = []
+    """The agent loop: stream a model turn, run whatever tools it asked for,
+    feed the results back, and go round again until it answers in text.
 
-    async with client.stream(
-        "POST", endpoint["url"], headers=endpoint["headers"], json=payload
-    ) as resp:
-        if resp.status_code != 200:
-            body = await resp.aread()
-            yield _ev({"type": "error",
-                       "content": f"LLM error {resp.status_code}: {body.decode()[:400]}"})
-            return
+    Before this, results were executed and streamed to the UI but never
+    returned to the model, so the agent could act once and then had to guess —
+    "search my notes and update the stale one" could search, and stop. Every
+    tool call now produces a `tool` message, including denials and approval
+    stops: a provider rejects the whole request if any tool_call_id goes
+    unanswered, and a model that never learns its call was refused simply
+    repeats it.
 
-        async for line in resp.aiter_lines():
-            if not line.startswith("data: "):
+    Two budgets bound the loop: MAX_TOOL_CALLS_PER_TURN for work done, and
+    MAX_TOOL_ROUNDS for round trips. Both end the turn with an error event
+    rather than silently truncating.
+    """
+    approvals = approvals or set()
+
+    for round_index in range(MAX_TOOL_ROUNDS):
+        pending_tool_calls: list[dict[str, Any]] = []
+        assistant_text: list[str] = []
+
+        async with client.stream(
+            "POST", endpoint["url"], headers=endpoint["headers"], json=payload
+        ) as resp:
+            if resp.status_code != 200:
+                body = await resp.aread()
+                yield _ev({"type": "error",
+                           "content": f"LLM error {resp.status_code}: {body.decode()[:400]}"})
+                return
+
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                raw = line[6:]
+                if raw == "[DONE]":
+                    break
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                delta = data.get("choices", [{}])[0].get("delta", {})
+
+                # Text content
+                text = delta.get("content")
+                if text:
+                    assistant_text.append(text)
+                    yield _ev({"type": "text", "content": text})
+
+                # Tool calls (OpenAI streaming format — accumulate by index)
+                for tc in delta.get("tool_calls", []) or []:
+                    idx = tc.get("index", 0)
+                    while len(pending_tool_calls) <= idx:
+                        pending_tool_calls.append({"id": "", "name": "", "args_buf": ""})
+                    slot = pending_tool_calls[idx]
+                    if tc.get("id"):
+                        slot["id"] = tc["id"]
+                    fn = tc.get("function") or {}
+                    if fn.get("name"):
+                        slot["name"] = fn["name"]
+                    if fn.get("arguments"):
+                        slot["args_buf"] += fn["arguments"]
+
+        if not pending_tool_calls:
+            return                      # the model answered; the turn is done
+
+        tool_messages: list[dict] = []
+
+        def _answer(slot: dict, content: str) -> None:
+            """Every tool_call the model made must get exactly one reply."""
+            tool_messages.append({"role": "tool", "tool_call_id": slot["id"],
+                                  "name": slot["name"], "content": content})
+
+        for slot in pending_tool_calls:
+            tool = slot["name"]
+
+            if tool_calls_made >= MAX_TOOL_CALLS_PER_TURN:
+                _answer(slot, "Not run: this turn's tool budget is spent. "
+                              "Answer with what you already have.")
+                yield _ev({"type": "error",
+                           "content": "tool call budget exhausted"})
                 continue
-            raw = line[6:]
-            if raw == "[DONE]":
-                break
+
             try:
-                data = json.loads(raw)
+                args = json.loads(slot["args_buf"] or "{}")
             except json.JSONDecodeError:
-                continue
-            delta = data.get("choices", [{}])[0].get("delta", {})
-
-            # Text content
-            text = delta.get("content")
-            if text:
-                yield _ev({"type": "text", "content": text})
-
-            # Tool calls (OpenAI streaming format — accumulate by index)
-            for tc in delta.get("tool_calls", []) or []:
-                idx = tc.get("index", 0)
-                while len(pending_tool_calls) <= idx:
-                    pending_tool_calls.append({"id": "", "name": "", "args_buf": ""})
-                slot = pending_tool_calls[idx]
-                if tc.get("id"):
-                    slot["id"] = tc["id"]
-                fn = tc.get("function") or {}
-                if fn.get("name"):
-                    slot["name"] = fn["name"]
-                if fn.get("arguments"):
-                    slot["args_buf"] += fn["arguments"]
-
-    # After stream finishes, execute any tool calls (one round in Phase 1;
-    # multi-round will follow once we wire continue-on-tool-result).
-    for slot in pending_tool_calls:
-        if tool_calls_made >= MAX_TOOL_CALLS_PER_TURN:
-            yield _ev({"type": "error",
-                       "content": "tool call budget exhausted"})
-            return
-        tool = slot["name"]
-        try:
-            args = json.loads(slot["args_buf"] or "{}")
-        except json.JSONDecodeError:
-            yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
-                       "reason": "invalid JSON arguments"})
-            continue
-
-        yield _ev({"type": "tool_call", "id": slot["id"],
-                   "tool": tool, "args": args})
-
-        # Permission check — note-targeted tools need note_meta
-        note_meta: dict[str, Any] | None = None
-        target_id = args.get("id") or args.get("note_id")
-        if target_id and tool != "brain.search_brain":
-            try:
-                note_meta = await execute_brain_tool(
-                    "brain.get_note", args={"id": target_id}, user_id=user_id
-                )
-            except Exception:
-                note_meta = None
-
-        decision = permission_check(tool, tier, args, note_meta,
-                                    untrusted_context=untrusted_context,
-                                    approvals=approvals or set())
-        if isinstance(decision, NeedsApproval):
-            # Not a failure: the call is legal, it just needs a human. The
-            # client shows a Confirm button and replays the turn with this key
-            # in `approvals` — which is why approval never rides in `args`.
-            yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
-                       "reason": decision.reason, "requires_approval": True,
-                       "approval_key": decision.key})
-            continue
-        if isinstance(decision, Deny):
-            yield _ev({"type": "tool_denied", "id": slot["id"],
-                       "tool": tool, "reason": decision.reason})
-            continue
-
-        if tool.startswith("mcp."):
-            parts = tool.split(".", 2)
-            if len(parts) != 3:
+                reason = ("Arguments were not valid JSON. Send the arguments "
+                          "again as a single JSON object.")
+                _answer(slot, f"Error: {reason}")
                 yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
-                           "reason": "invalid mcp tool name format"})
+                           "reason": "invalid JSON arguments"})
                 continue
-            _, server_name, bare_tool = parts
-            cfg = next((c for c in (mcp_configs or []) if c.name == server_name), None)
-            if cfg is None:
+
+            yield _ev({"type": "tool_call", "id": slot["id"],
+                       "tool": tool, "args": args})
+
+            # Permission check — note-targeted tools need note_meta
+            note_meta: dict[str, Any] | None = None
+            target_id = args.get("id") or args.get("note_id")
+            if target_id and tool != "brain.search_brain":
+                try:
+                    note_meta = await execute_brain_tool(
+                        "brain.get_note", args={"id": target_id}, user_id=user_id
+                    )
+                except Exception:
+                    note_meta = None
+
+            decision = permission_check(tool, tier, args, note_meta,
+                                        untrusted_context=untrusted_context,
+                                        approvals=approvals)
+            if isinstance(decision, NeedsApproval):
+                # Not a failure: the call is legal, it just needs a human. The
+                # client shows a Confirm button and replays the turn with this
+                # key in `approvals` — which is why approval never rides in
+                # `args`. The model is told to stop asking and say what it
+                # would do, so it cannot spend the remaining rounds retrying.
+                _answer(slot, "Waiting for the user to confirm this action. "
+                              "Do not call it again. Tell the user what you "
+                              "intend to do and stop.")
                 yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
-                           "reason": f"MCP server '{server_name}' not found or disabled"})
+                           "reason": decision.reason, "requires_approval": True,
+                           "approval_key": decision.key})
                 continue
-            mcp_result = await mcp_call_tool(cfg, bare_tool, args)
-            result_code = "error" if mcp_result.get("error") else "ok"
-            log_tool_call(user_id, server_name, bare_tool, args, result_code)
-            if mcp_result.get("error"):
-                yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
-                           "reason": mcp_result["error"]})
-                continue
-            result = {"content": mcp_result["content"]}
-            # Whatever a third-party server returns is now in the model's
-            # context, so everything after this point in the turn is untrusted.
-            untrusted_context = True
-        else:
-            try:
-                result = await execute_brain_tool(tool, args=args, user_id=user_id)
-            except Exception as e:
+            if isinstance(decision, Deny):
+                _answer(slot, f"Denied: {decision.reason}. Do not retry; "
+                              f"continue without this tool.")
                 yield _ev({"type": "tool_denied", "id": slot["id"],
-                           "tool": tool, "reason": f"execution error: {e}"})
+                           "tool": tool, "reason": decision.reason})
                 continue
 
-        tool_calls_made += 1
-        summary = _summarize_result(tool, result)
-        yield _ev({"type": "tool_result", "id": slot["id"],
-                   "summary": summary, "data": result})
+            if tool.startswith("mcp."):
+                parts = tool.split(".", 2)
+                if len(parts) != 3:
+                    _answer(slot, "Error: mcp tool names are mcp.<server>.<tool>.")
+                    yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
+                               "reason": "invalid mcp tool name format"})
+                    continue
+                _, server_name, bare_tool = parts
+                cfg = next((c for c in (mcp_configs or []) if c.name == server_name), None)
+                if cfg is None:
+                    _answer(slot, f"Error: MCP server '{server_name}' is not "
+                                  f"configured or is disabled.")
+                    yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
+                               "reason": f"MCP server '{server_name}' not found or disabled"})
+                    continue
+                mcp_result = await mcp_call_tool(cfg, bare_tool, args)
+                result_code = "error" if mcp_result.get("error") else "ok"
+                log_tool_call(user_id, server_name, bare_tool, args, result_code)
+                if mcp_result.get("error"):
+                    _answer(slot, f"Error: {mcp_result['error']}")
+                    yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
+                               "reason": mcp_result["error"]})
+                    continue
+                result = {"content": mcp_result["content"]}
+                # Whatever a third-party server returns is now in the model's
+                # context, so everything after this point in the turn is
+                # untrusted.
+                untrusted_context = True
+            else:
+                try:
+                    result = await execute_brain_tool(tool, args=args, user_id=user_id)
+                except Exception as e:
+                    _answer(slot, f"Error: {e}")
+                    yield _ev({"type": "tool_denied", "id": slot["id"],
+                               "tool": tool, "reason": f"execution error: {e}"})
+                    continue
+
+            tool_calls_made += 1
+            summary = _summarize_result(tool, result)
+            _answer(slot, _tool_message_content(summary, result))
+            yield _ev({"type": "tool_result", "id": slot["id"],
+                       "summary": summary, "data": result})
+
+        # Hand the round back to the model: its own tool_calls, then the
+        # replies. Note `content` stays present-but-empty rather than absent —
+        # some OpenAI-compatible gateways reject an assistant message without
+        # a content key.
+        messages_payload.append({
+            "role": "assistant",
+            "content": "".join(assistant_text),
+            "tool_calls": [{
+                "id": s["id"], "type": "function",
+                "function": {"name": s["name"], "arguments": s["args_buf"] or "{}"},
+            } for s in pending_tool_calls],
+        })
+        messages_payload.extend(tool_messages)
+        payload = {**payload, "messages": messages_payload}
+
+    yield _ev({"type": "error",
+               "content": f"stopped after {MAX_TOOL_ROUNDS} rounds of tool calls"})
+
+
+def _tool_message_content(summary: str, result: dict[str, Any]) -> str:
+    """What the model gets back from a tool.
+
+    Capped, because a tool result is not free: it is re-sent with every later
+    round of the same turn. The cap is provisional — E5 measures what the right
+    size and shape actually are — and the truncation notice is written as an
+    instruction, since a model that is told how to narrow its next call does,
+    and one that is handed a silent stump does not.
+    """
+    body = json.dumps(result, default=str)
+    if len(body) <= TOOL_RESULT_CHAR_CAP:
+        return body
+    return (body[:TOOL_RESULT_CHAR_CAP]
+            + f"\n\n[truncated at {TOOL_RESULT_CHAR_CAP} characters — {summary}."
+              " Narrow the query or request fewer items to see the rest.]")
 
 
 def _summarize_result(tool: str, result: dict[str, Any]) -> str:
