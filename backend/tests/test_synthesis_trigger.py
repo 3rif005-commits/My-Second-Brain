@@ -2,9 +2,20 @@
 the last source lands) and the run itself (prompt, writes, failure policy)."""
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from services.workspace import synthesis
 
 READY = {"id": "s1", "status": "ready"}
+
+
+@pytest.fixture(autouse=True)
+def _auto_on_drop(monkeypatch):
+    """These tests are about the settle guard, not the drop policy, so they run
+    with auto-fire enabled. The policy itself is covered in
+    test_synthesis_estimate.py — under the shipped default ("suggest") none of
+    the cases below would fire at all."""
+    monkeypatch.setattr(synthesis.settings, "workspace_on_drop", "auto")
 
 
 def _db(sources, synth_rows, note_rows):

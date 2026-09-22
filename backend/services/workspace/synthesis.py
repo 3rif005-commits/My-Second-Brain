@@ -18,8 +18,9 @@ import re
 from datetime import datetime, timezone
 
 from core.config import settings
-from prompts.note_synthesis import build_note_synthesis_prompt
+from prompts.note_synthesis import build_note_synthesis_prompt, split_budget
 from services.ai.client import complete
+from services.ai.pricing import estimate_usd, tokens_from_chars
 from services.ai.router import complete_with_fallback, pick
 from services.database import get_supabase
 from services.workspace.dbretry import with_retry
@@ -105,11 +106,23 @@ def _claim(note_id: str, user_id: str) -> bool:
 
 
 def maybe_synthesize(note_id: str) -> bool:
-    """The settle guard. Proceeds only if no source on this note is still
-    pending, no synthesis exists yet, and the note has no user content — so
-    dropping 3 sources at once produces exactly one synthesis, fired by
-    whichever source finishes last. Returns True if it fired."""
+    """The auto-fire decision: policy first, then the settle guard.
+
+    Policy (`settings.workspace_on_drop`): only "auto" may spend tokens without
+    being asked. Under the default "suggest", dropping sources indexes them and
+    the UI offers a priced Generate action instead — see
+    `estimate_synthesis()`. The manual synthesize endpoint does not come
+    through here, so an explicit request is never blocked by this.
+
+    Settle guard: proceeds only if no source on this note is still pending, no
+    synthesis exists yet, and the note has no user content — so dropping 3
+    sources at once produces exactly one synthesis, fired by whichever source
+    finishes last. Returns True if it fired."""
     if not note_id:
+        return False
+    if settings.workspace_on_drop != "auto":
+        logger.info(f"note {note_id}: auto-synthesis skipped "
+                    f"(workspace_on_drop={settings.workspace_on_drop!r})")
         return False
     db = get_supabase()
     sources = (db.table("note_resources").select("id,status")
@@ -127,6 +140,51 @@ def maybe_synthesize(note_id: str) -> bool:
         return False
     run_synthesis(note_id, "replace")
     return True
+
+
+# A 242-block mastery guide measured ~40K chars of HTML on the reference
+# lecture. Only the pre-run estimate uses this; the real figure comes from the
+# provider's usage fields after the run.
+_OUTPUT_CHARS_ESTIMATE = 40_000
+
+
+def _prompt_overhead_chars() -> int:
+    """Size of the static part of the prompt — measured, not hardcoded, so it
+    cannot drift away from prompts/note_synthesis.py."""
+    try:
+        return len(build_note_synthesis_prompt([], has_figures=False))
+    except Exception:
+        return 8_000
+
+
+def estimate_synthesis(note_id: str, user_id: str) -> dict:
+    """What one synthesis over this note's ready sources would cost.
+
+    Derived from the stored chunks and the price table: no model call, no
+    tokenizer round trip, so the UI can show it before the user commits. It
+    reproduces run_synthesis's own budgeting (`split_budget`), so a source the
+    run would truncate is counted truncated here too.
+    """
+    sources = ready_sources(note_id)
+    lengths = [len(source_text_from_chunks(s["id"])) for s in sources]
+    allotted = split_budget(lengths) if lengths else []
+    source_chars = sum(min(length, allot)
+                       for length, allot in zip(lengths, allotted))
+    input_tokens = tokens_from_chars(source_chars + _prompt_overhead_chars())
+    output_tokens = tokens_from_chars(_OUTPUT_CHARS_ESTIMATE)
+    provider = pick("summarize_text", user_id)
+    model = provider.model if provider else None
+    return {
+        "on_drop": settings.workspace_on_drop,
+        "ready_sources": len(sources),
+        "source_chars": source_chars,
+        "truncated": sum(lengths) > source_chars,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "provider": provider.provider if provider else None,
+        "model": model,
+        "usd": estimate_usd(model, input_tokens, output_tokens),
+    }
 
 
 def _looks_like_a_mastery_guide(html: str) -> bool:

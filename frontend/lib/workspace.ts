@@ -73,6 +73,33 @@ export interface Synthesis {
   updated_at?: string | null;
 }
 
+/** Priced preview of the Generate action. Computed server-side from the stored
+ * chunks — asking what a run would cost costs nothing. `usd` is null when the
+ * model has no published price (unknown ≠ free). */
+export interface SynthesisEstimate {
+  on_drop: "suggest" | "auto" | "nothing";
+  ready_sources: number;
+  source_chars: number;
+  truncated: boolean;
+  input_tokens: number;
+  output_tokens: number;
+  provider: string | null;
+  model: string | null;
+  usd: number | null;
+}
+
+/** Short form for a button or meta line: "≈45K tokens · ≈$0.07".
+ * Returns null when there is nothing to price, and omits the money entirely
+ * when the model has no published price. */
+export function formatEstimate(est: SynthesisEstimate | null): string | null {
+  if (!est || est.ready_sources === 0) return null;
+  const tokens = est.input_tokens + est.output_tokens;
+  const t = tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : `${tokens}`;
+  if (est.usd === null) return `≈${t} tokens`;
+  const usd = est.usd < 0.01 ? est.usd.toFixed(3) : est.usd.toFixed(2);
+  return `≈${t} tokens · ≈$${usd}`;
+}
+
 export interface RecentSession {
   note_id: string;
   title: string;
@@ -150,6 +177,9 @@ export const wsApi = {
     }).then((r) => j<{ ok: boolean; status: string }>(r)),
   getSynthesis: (noteId: string) =>
     fetch(`/api/ws/notes/${noteId}/synthesis`).then((r) => j<Synthesis>(r)),
+  getSynthesisEstimate: (noteId: string) =>
+    fetch(`/api/ws/notes/${noteId}/synthesis/estimate`)
+      .then((r) => j<SynthesisEstimate>(r)),
   markSynthesisApplied: (noteId: string) =>
     fetch(`/api/ws/notes/${noteId}/synthesis/applied`, { method: "POST" })
       .then((r) => j(r)),

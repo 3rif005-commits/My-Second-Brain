@@ -30,7 +30,7 @@ from services.workspace import storage
 from services.workspace.chat import run_note_chat
 from services.workspace.media import CaptureError, capture, formula_to_latex
 from services.workspace.processor import process_resource
-from services.workspace.synthesis import run_synthesis
+from services.workspace.synthesis import estimate_synthesis, run_synthesis
 
 logger = logging.getLogger(__name__)
 
@@ -462,6 +462,16 @@ async def synthesize(note_id: str, body: SynthesizeRequest,
     }, on_conflict="note_id").execute()
     background.add_task(run_synthesis, note_id, body.mode)
     return {"ok": True, "status": "queued"}
+
+
+@router.get("/notes/{note_id}/synthesis/estimate")
+async def get_synthesis_estimate(note_id: str, authorization: str = Header()):
+    """Priced preview of the Generate action — computed from stored chunks, so
+    asking what it would cost costs nothing. Also carries the current
+    `on_drop` policy, so the client needs one round trip, not two."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    return estimate_synthesis(note_id, user_id)
 
 
 @router.get("/notes/{note_id}/synthesis")

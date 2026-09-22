@@ -50,6 +50,17 @@ class Settings(BaseSettings):
     # diagram-heavy sources; re-measure before making it the default.
     workspace_synthesis_vision: bool = False
 
+    # What happens when the last dropped source finishes processing.
+    #   "suggest" (default) — extract, chunk and embed only; the UI offers a
+    #                         priced "Generate" action and the user decides.
+    #   "auto"              — the old behaviour: fire one synthesis unasked.
+    #   "nothing"           — no synthesis trigger and no suggestion.
+    # Default is "suggest" because the auto path spent up to ~45K tokens on a
+    # drop the user may only have wanted indexed, and re-synthesis paid it
+    # again. The manual POST /notes/{id}/synthesize path is unaffected by this
+    # setting — it is an explicit request.
+    workspace_on_drop: str = "suggest"
+
     # Inline editor AI uses forced tool-calling (xl-ai applyDocumentOperations).
     # Free models don't support tool_choice: required — use a model that does.
     # Override via INLINE_MODEL in .env.

@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/app/providers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { sourceColor, takeStagedSources, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
+import { formatEstimate, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
 import { DropZone } from "./DropZone";
 import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
 import { SourceRail } from "./SourceRail";
@@ -108,6 +108,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const dragDepth = useRef(0);
 
   const syn = useSynthesis({ noteId, sources, applyRef });
+  const estimateText = formatEstimate(syn.estimate);
 
   // ── load ──────────────────────────────────────────────────────────────────
   const loadSources = useCallback(async () => {
@@ -411,6 +412,13 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
             <span className="shrink-0">
               {sources.length} source{sources.length === 1 ? "" : "s"}
             </span>
+            {/* The first run is the user's decision, so its price is on screen,
+                not hidden in a tooltip no touch device can open. */}
+            {syn.neverGenerated && !syn.running && estimateText && (
+              <span className="shrink-0 hidden sm:inline">
+                · {estimateText} to generate
+              </span>
+            )}
             <StatusNote saving={saving} saved={savedFlash} synthesizing={syn.running} />
           </div>
         </div>
@@ -418,21 +426,27 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
         <button
           onClick={syn.requestSynthesis}
           disabled={syn.running || syn.readyCount === 0}
-          title="Rewrite the note from the current sources"
+          title={syn.neverGenerated
+            ? `Write this note from ${syn.readyCount} source${syn.readyCount === 1 ? "" : "s"}`
+              + (estimateText ? ` — ${estimateText}` : "")
+              + (syn.estimate?.model ? ` (${syn.estimate.model})` : "")
+            : "Rewrite the note from the current sources"}
           className={`shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12px] font-medium
             transition-all duration-150 active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100
             focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
-            syn.stale
+            syn.stale || syn.neverGenerated
               ? "ws-accent"
               : "text-gray-500 dark:text-gray-400 border border-gray-200/80 dark:border-white/10 hover:bg-white dark:hover:bg-white/5 hover:text-gray-800 dark:hover:text-gray-100"
           }`}
         >
           {syn.running
             ? <RefreshCw size={12} className="animate-spin" />
-            : syn.stale ? <Sparkles size={12} /> : <RefreshCw size={12} />}
-          {syn.stale
-            ? `Re-synthesize · ${syn.readyCount}`
-            : "Re-synthesize"}
+            : syn.stale || syn.neverGenerated ? <Sparkles size={12} /> : <RefreshCw size={12} />}
+          {syn.neverGenerated
+            ? "Generate note"
+            : syn.stale
+              ? `Re-synthesize · ${syn.readyCount}`
+              : "Re-synthesize"}
         </button>
         <button
           onClick={() => setChatOpen((v) => !v)}

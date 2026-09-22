@@ -4,7 +4,7 @@
 // and derive the "Re-synthesize (N sources)" state from what the current draft
 // was actually built from.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { wsApi, type NoteSource, type Synthesis } from "@/lib/workspace";
+import { wsApi, type NoteSource, type Synthesis, type SynthesisEstimate } from "@/lib/workspace";
 import type { NoteApplyApi } from "./NotePane";
 
 interface Options {
@@ -20,6 +20,11 @@ export interface SynthesisController {
   /** The current draft was built from a different source set than what's ready. */
   stale: boolean;
   readyCount: number;
+  /** No draft has ever been written for this note — the first run is a decision,
+   * not a refresh, so the UI offers it with a price instead of firing it. */
+  neverGenerated: boolean;
+  /** What that first run would cost. Null while unknown or with no sources. */
+  estimate: SynthesisEstimate | null;
   /** The replace-vs-append dialog should be open. */
   askMode: boolean;
   requestSynthesis: () => void;
@@ -39,6 +44,7 @@ function sameSet(a: string[], b: string[]): boolean {
 
 export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisController {
   const [synthesis, setSynthesis] = useState<Synthesis | null>(null);
+  const [estimate, setEstimate] = useState<SynthesisEstimate | null>(null);
   const [askMode, setAskMode] = useState(false);
   const [errorDismissed, setErrorDismissed] = useState(false);
   const appliedRef = useRef<string | null>(null);   // html we already applied
@@ -76,6 +82,19 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
     setSynthesis(null);
     refresh();
   }, [noteId, refresh]);
+
+  // Price the next run whenever the ready source set changes. Cheap by
+  // construction (the server reads chunk lengths, it does not call a model),
+  // and keyed on the source ids so adding a source re-prices it.
+  const readyKey = readyIds.join(",");
+  useEffect(() => {
+    if (!noteId || readyKey === "") { setEstimate(null); return; }
+    let live = true;
+    wsApi.getSynthesisEstimate(noteId)
+      .then((e) => { if (live) setEstimate(e); })
+      .catch(() => { if (live) setEstimate(null); });
+    return () => { live = false; };
+  }, [noteId, readyKey]);
 
   // Poll while a source is still processing (the settle guard fires on the last
   // one) or while a draft is being written.
@@ -140,6 +159,8 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
     stale: synthesis?.status === "ready"
       && !sameSet(synthesis.source_ids ?? [], readyIds),
     readyCount: readyIds.length,
+    neverGenerated: !synthesis || synthesis.status === "none",
+    estimate,
     askMode,
     requestSynthesis,
     markApplied,
