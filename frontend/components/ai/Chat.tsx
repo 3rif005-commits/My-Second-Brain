@@ -30,6 +30,8 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
   const [mode, setMode] = useMode();
   const scrollRef = useRef<HTMLDivElement>(null);
   const didAutoSend = useRef(false);
+  // The question an approval replays. Set on every send, never from a tool arg.
+  const lastQueryRef = useRef<string>("");
   const modeMenuRef = useRef<HTMLDivElement>(null);
 
   // Close mode menu on outside click
@@ -80,10 +82,23 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
     }
   }, [initialQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function send(e?: React.FormEvent) {
-    e?.preventDefault();
-    const query = input.trim();
+  /** Re-run the last question, this time carrying the user's approval for one
+   * specific action. The key never comes from the model — it is minted by the
+   * server's gate and handed back only after the user presses Confirm. */
+  function approve(approvalKey: string) {
+    const query = lastQueryRef.current;
     if (!query || loading) return;
+    send(undefined, { query, approvals: [approvalKey] });
+  }
+
+  async function send(
+    e?: React.FormEvent,
+    opts?: { query?: string; approvals?: string[] },
+  ) {
+    e?.preventDefault();
+    const query = (opts?.query ?? input).trim();
+    if (!query || loading) return;
+    lastQueryRef.current = query;
 
     const userMsg: StreamItem = { kind: "user", id: crypto.randomUUID(), content: query };
     const assistantId = crypto.randomUUID();
@@ -101,6 +116,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
           thread_id: threadId,
           query,
           mode,
+          approvals: opts?.approvals ?? [],
           messages: [
             ...items.filter((i) => i.kind === "user" || i.kind === "assistant")
                   .map((i) => ({ role: i.kind, content: (i as { content: string }).content })),
@@ -153,7 +169,12 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
           } else if (ev.type === "tool_denied") {
             setItems((prev) => prev.map((it) =>
               it.kind === "tool" && it.id === ev.id
-                ? { ...it, denied: ev.reason as string }
+                ? {
+                    ...it,
+                    denied: ev.reason as string,
+                    requiresApproval: ev.requires_approval === true,
+                    approvalKey: (ev.approval_key as string) ?? undefined,
+                  }
                 : it
             ));
           } else if (ev.type === "done") {
@@ -252,7 +273,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
             </p>
           </div>
         ) : (
-          <MessageList items={items} />
+          <MessageList items={items} onApprove={approve} />
         )}
         {error && (
           <div className="px-4 mb-4">

@@ -7,9 +7,15 @@
 
 **Status legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (say why + what's needed)
 
-**Branch:** `feat/ai-harness` (not created yet)
-**Last session:** — (none yet)
-**Next action:** Stage 1, task 1.1
+**Branch:** `feat/ai-harness` (created, 3 commits)
+**Last session:** 2026-09-22 — Stage 1 complete (drop policy, priced estimate, approval gate)
+**Next action:** Stage 2, task 2.1 — the `ai_runs` migration
+
+**Run the backend suite with `env -u PYTHONPATH`** — this machine's ROS install
+puts `/opt/ros/jazzy` on PYTHONPATH and its pytest plugins crash collection:
+`env -u PYTHONPATH ./venv/bin/python -m pytest -q` from `backend/`.
+The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
+`127.0.0.1:55432`, not a regression — 1440 tests pass without it.
 
 ---
 
@@ -28,15 +34,15 @@
 
 ## Stage 1 — Stop the bleed + fix the hole (no eval needed)
 
-- [ ] 1.1 **E1** — `workspace_on_drop` setting (`nothing|suggest|auto`, default `suggest`); gate
+- [x] 1.1 **E1** — `workspace_on_drop` setting (`nothing|suggest|auto`, default `suggest`); gate
       `processor.py:240` `maybe_synthesize`; keep `POST /notes/{id}/synthesize` manual path intact.
-- [ ] 1.2 **E1 UI** — Workspace shows a "Generate study guide" action with a token/cost estimate
+- [x] 1.2 **E1 UI** — Workspace shows a "Generate study guide" action with a token/cost estimate
       (estimate computed locally from chars/4 × price, no model call).
-- [ ] 1.3 **E11a** — `brain.delete_note` confirmation must come from the client, not from
+- [x] 1.3 **E11a** — `brain.delete_note` confirmation must come from the client, not from
       `args["confirm"]` (`services/agent/permissions.py` + `engine.py` + the SSE contract).
-- [ ] 1.4 **E11b** — mark retrieved note/source text as untrusted data in the prompt; a turn that
+- [x] 1.4 **E11b** — mark retrieved note/source text as untrusted data in the prompt; a turn that
       read untrusted content may not call a write tool without explicit user approval.
-- [ ] 1.5 Backend tests for 1.1–1.4 green; CLI commands given to the user.
+- [x] 1.5 Backend tests for 1.1–1.4 green; CLI commands given to the user.
 
 ## Stage 2 — H1 scoreboard (the real unlock)
 
@@ -85,4 +91,16 @@ _(Claude keeps this list short and batched. Nothing here right now.)_
 
 ## Session log
 
-_(One line per session: date · what shipped · commit sha.)_
+- 2026-09-22 · docs committed (proposal, research, plan) · `2529cd7`
+- 2026-09-22 · Stage 1.1–1.2: `workspace_on_drop` (default `suggest`) + priced
+  `GET /synthesis/estimate` + "Generate note" CTA · `0bd3827`
+- 2026-09-22 · Stage 1.3–1.4: approval gate (`NeedsApproval`, client-minted
+  approval keys, untrusted-context taint, Confirm button in chat) · pending
+
+## Decisions taken while executing (not re-asked)
+
+| Decision | Value | Why |
+|---|---|---|
+| Approval transport | `AgentRequest.approvals: ["<tool>:<target>"]`, replayed by the client after Confirm | The model writes tool args, so consent cannot live there; a separate channel is the only honest one. Reversible: it is one field. |
+| Untrusted taint scope | Editing existing data + any MCP call need approval once a turn has read untrusted text; additive tools stay open | Gating `create_note` would break the assistant's main job; the worst an injection then achieves is a note the user can delete. |
+| Ingest surface | Always treated as untrusted (its messages ARE the uploaded document) | Cheap and correct; only affects edit/MCP paths. |

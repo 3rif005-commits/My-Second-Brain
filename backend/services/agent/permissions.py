@@ -1,10 +1,19 @@
 """Permission gate — enforces D6 tiers from the AI substrate spec.
 
-Every tool call passes through check() before execution. Returns Allow or
-Deny(reason). Deny is serialized as a tool_denied SSE event.
+Every tool call passes through check() before execution. Returns Allow,
+Deny(reason), or NeedsApproval(reason, key) — the last one is serialized as a
+tool_denied SSE event carrying `requires_approval`, which the client turns into
+a Confirm button and replays as `AgentRequest.approvals`.
+
+Why approval cannot be an argument: the model writes the arguments. A
+`confirm=true` flag in a tool call proves only that the model emitted it, and
+the model's context contains text from the user's PDFs, web pages and MCP
+servers — all attacker-controllable. Approval has to arrive on a separate
+channel from the one the untrusted text can reach, which is the client.
 """
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,6 +28,40 @@ class Allow:
 @dataclass(frozen=True)
 class Deny:
     reason: str
+
+
+@dataclass(frozen=True)
+class NeedsApproval:
+    """Allowed in principle, but a human has to say so first."""
+    reason: str
+    key: str
+
+
+# Irreversible from inside the app: always a human decision, whatever the
+# conversation says.
+_DESTRUCTIVE = {"brain.delete_note", "editor.delete_block"}
+
+# These change data that already exists. Fine on their own — but a turn that
+# has read untrusted text must not perform one unasked: that is the indirect
+# prompt-injection path (private data + untrusted content + the ability to act).
+# Additive tools (create_note, create_row, link_notes) stay unguarded: the worst
+# an injection achieves is a new note the user can delete.
+_MUTATES_EXISTING = {
+    "brain.update_note", "brain.patch_note", "brain.move_note",
+    "brain.set_mastery", "brain.update_row",
+    "editor.replace_block", "editor.insert_block",
+}
+
+
+def approval_key(tool: str, args: dict[str, Any]) -> str:
+    """Identifies one approvable action: tool + the thing it acts on.
+
+    Scoping by target means approving one deletion does not approve the next
+    one, and a replayed approval cannot be redirected to another note.
+    """
+    target = (args.get("id") or args.get("note_id") or args.get("row_id")
+              or args.get("block_id") or "*")
+    return f"{tool}:{target}"
 
 
 # Map each known tool to the minimum tier required. A tool can be present in
@@ -76,42 +119,63 @@ def check(
     tier: Tier,
     args: dict[str, Any],
     note_meta: dict[str, Any] | None,
-) -> Allow | Deny:
+    *,
+    untrusted_context: bool = False,
+    approvals: Collection[str] = (),
+) -> Allow | Deny | NeedsApproval:
     """Decide whether a tool call is permitted.
 
     Args:
         tool: namespaced tool name, e.g. "brain.search_brain"
         tier: the caller's permission tier
-        args: the tool's arguments (used for local_only and confirm checks)
+        args: the tool's arguments (used for local_only and target scoping)
         note_meta: when the tool targets a note, the note's row (or None)
+        untrusted_context: this turn has read content the user did not write —
+            retrieved note text (ingested from PDFs, websites, transcripts) or
+            an MCP server's output
+        approvals: approval keys the user granted on the client for this turn
     """
-    # MCP tools — allowed at internal tiers, denied externally
-    if tool.startswith("mcp."):
+    is_mcp = tool.startswith("mcp.")
+
+    if is_mcp:
         if tier == Tier.EXTERNAL:
             return Deny(reason="MCP tools are not available in external tier")
-        return Allow()
+    else:
+        min_tier = _TOOL_MIN_TIER.get(tool)
+        if min_tier is None:
+            return Deny(reason=f"unknown tool: {tool}")
 
-    min_tier = _TOOL_MIN_TIER.get(tool)
-    if min_tier is None:
-        return Deny(reason=f"unknown tool: {tool}")
+        if not _tier_at_least(tier, min_tier):
+            return Deny(
+                reason=f"tool {tool} requires {min_tier.value}, caller is {tier.value}"
+            )
 
-    if not _tier_at_least(tier, min_tier):
-        return Deny(
-            reason=f"tool {tool} requires {min_tier.value}, caller is {tier.value}"
+        # local_only enforcement (does NOT apply to INTERNAL_LOCAL)
+        if tier in (Tier.EXTERNAL, Tier.INTERNAL_API):
+            if note_meta and note_meta.get("local_only"):
+                return Deny(
+                    reason=f"note is local_only — tool {tool} cannot be invoked in {tier.value} mode"
+                )
+
+    key = approval_key(tool, args)
+
+    if tool in _DESTRUCTIVE:
+        if key in approvals:
+            return Allow()
+        return NeedsApproval(
+            reason="Deleting is permanent — confirm it in the app first.",
+            key=key,
         )
 
-    # local_only enforcement (does NOT apply to INTERNAL_LOCAL)
-    if tier in (Tier.EXTERNAL, Tier.INTERNAL_API):
-        if note_meta and note_meta.get("local_only"):
-            return Deny(
-                reason=f"note is local_only — tool {tool} cannot be invoked in {tier.value} mode"
-            )
-
-    # Destructive ops require explicit confirm flag
-    if tool == "brain.delete_note":
-        if not args.get("confirm"):
-            return Deny(
-                reason="brain.delete_note requires confirm=true argument"
-            )
+    # An MCP server is an outside party: sending it anything after reading
+    # untrusted text is the exfiltration half of an injection.
+    if untrusted_context and (tool in _MUTATES_EXISTING or is_mcp):
+        if key in approvals:
+            return Allow()
+        return NeedsApproval(
+            reason=("This turn read text from your sources, which the app "
+                    "treats as untrusted — confirm this change first."),
+            key=key,
+        )
 
     return Allow()

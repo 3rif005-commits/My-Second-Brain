@@ -43,6 +43,11 @@ class ToolDeniedEvent(BaseModel):
     id: str
     tool: str
     reason: str
+    # Set when the call was refused only for want of a human decision. The
+    # client renders a Confirm button and replays the turn with the key in
+    # AgentRequest.approvals.
+    requires_approval: bool = False
+    approval_key: str | None = None
 
 
 class SkillActiveEvent(BaseModel):
@@ -103,3 +108,6 @@ class AgentRequest(BaseModel):
     mode: Mode = Mode.API
     current_note_id: str | None = None  # set when invoked from inline /ai
     surface: Literal["chat", "inline", "ingest", "interactive"] = "chat"
+    # Approval keys ("<tool>:<target id>") the user granted in the UI after a
+    # previous turn asked. Never written by the model — that is the point.
+    approvals: list[str] = Field(default_factory=list)

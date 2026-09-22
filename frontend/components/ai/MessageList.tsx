@@ -9,13 +9,17 @@ export type StreamItem =
   | { kind: "user"; id: string; content: string }
   | { kind: "assistant"; id: string; content: string; streaming?: boolean }
   | { kind: "skill"; id: string; name: string }
-  | { kind: "tool"; id: string; tool: string; args: Record<string, unknown>; summary?: string; denied?: string };
+  | { kind: "tool"; id: string; tool: string; args: Record<string, unknown>;
+      summary?: string; denied?: string;
+      /** Refused only for want of a human decision — render a Confirm button. */
+      requiresApproval?: boolean; approvalKey?: string };
 
 interface Props {
   items: StreamItem[];
+  onApprove?: (approvalKey: string) => void;
 }
 
-export function MessageList({ items }: Props) {
+export function MessageList({ items, onApprove }: Props) {
   return (
     <div className="px-4 py-5 flex flex-col gap-4">
       {items.map((item) => {
@@ -41,6 +45,10 @@ export function MessageList({ items }: Props) {
               args={item.args}
               summary={item.summary}
               deniedReason={item.denied}
+              requiresApproval={item.requiresApproval}
+              onApprove={item.approvalKey && onApprove
+                ? () => onApprove(item.approvalKey!)
+                : undefined}
             />
           );
         }

@@ -66,15 +66,19 @@ def test_internal_local_allows_everything_on_local_only_notes():
                              note_meta={"local_only": True}))
 
 
-def test_delete_requires_confirm_flag_in_args():
+def test_delete_requires_a_client_approval_not_an_argument():
+    """Replaces the old `confirm=true` argument check: the model writes the
+    arguments, and its context holds text ingested from the user's own PDFs and
+    web pages, so an argument could never be evidence of consent. Full coverage
+    in test_permissions_approval.py."""
+    from services.agent.permissions import NeedsApproval
+
     decision = check("brain.delete_note", Tier.INTERNAL_API,
-                     args={"id": "n1"}, note_meta=None)
-    assert isinstance(decision, Deny)
-    assert "confirm" in decision.reason.lower()
-    # With confirm flag set, allowed
+                     args={"id": "n1", "confirm": True}, note_meta=None)
+    assert isinstance(decision, NeedsApproval)
     assert _is_allowed(check("brain.delete_note", Tier.INTERNAL_API,
-                             args={"id": "n1", "confirm": True},
-                             note_meta=None))
+                             args={"id": "n1"}, note_meta=None,
+                             approvals={"brain.delete_note:n1"}))
 
 
 def test_unknown_tool_denied_by_default():
