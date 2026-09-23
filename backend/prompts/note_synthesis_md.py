@@ -75,8 +75,17 @@ Every ### heading ends with {SOURCE:TYPE:VALUE} where
   VALUE is the number shown in the [page N] / [mm:ss] / [section N] tag that
   precedes the material in the source text.
 Example: ### Gradient descent {1:p:14}
+
+SOURCE is which source, NOT which section. With N sources attached it is a
+number from 1 to N and nothing else: with one source every single anchor starts
+with 1, however many sections you write. The number AFTER the type is the one
+that varies.
+
 Use only the tag type that actually appears in that source's text. Never put an
 anchor on any other line.
+
+Before you finish, read your ### anchors back in order and check that every
+SOURCE number is one you were actually given.
 
 WHAT TO LEAVE OUT: course admin, timetables, marking schemes, and anything a
 reader already knows. Cover everything else the sources teach — this replaces
