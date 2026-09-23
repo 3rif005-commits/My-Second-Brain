@@ -112,7 +112,12 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 
 ## Stage 5 — H4 (not before Stage 4 is measured)
 
-- [ ] 5.1 Workspace action bar / `/` palette / selection menu + run cards.
+- [~] 5.1 Workspace action bar — **backend done**: `services/workspace/skill_run.py`
+      runs any skill over a note's sources into the same `note_synthesis` draft
+      row, `GET /notes/{id}/skills` prices every offerable skill and says why one
+      cannot run yet, `POST /notes/{id}/skills/{name}/run` starts it. Two real
+      jobs ship (`compare-sources`, `flashcards`). **Frontend next**: the action
+      bar itself, then the `/` palette and selection menu.
 - [ ] 5.2 **E12** learned style playbook.
 - [ ] 5.3 Background agents (triggers, budgets, activity page) on the Batch API.
 - [ ] 5.4 Remote MCP server + per-user OAuth (the subscription bridge); MCP Apps UI.

@@ -31,6 +31,8 @@ from services.workspace.chat import run_note_chat
 from services.workspace.media import CaptureError, capture, formula_to_latex
 from services.workspace.processor import process_resource
 from services.workspace.synthesis import estimate_synthesis, run_synthesis
+from services.workspace.skill_run import estimate as estimate_skill
+from services.workspace.skill_run import run_skill, workspace_skills
 
 logger = logging.getLogger(__name__)
 
@@ -462,6 +464,37 @@ async def synthesize(note_id: str, body: SynthesizeRequest,
     }, on_conflict="note_id").execute()
     background.add_task(run_synthesis, note_id, body.mode)
     return {"ok": True, "status": "queued"}
+
+
+@router.get("/notes/{note_id}/skills")
+async def list_note_skills(note_id: str, authorization: str = Header()):
+    """Every skill this workspace can offer for this note, priced.
+
+    Each entry says what it would cost and, when it cannot run yet, why —
+    "comparing needs at least two sources" is a better thing to show than a
+    disabled button with no explanation.
+    """
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    return {"skills": [estimate_skill(note_id, user_id, s)
+                       for s in workspace_skills()]}
+
+
+@router.post("/notes/{note_id}/skills/{skill_name}/run")
+async def run_note_skill(note_id: str, skill_name: str,
+                         background: BackgroundTasks,
+                         authorization: str = Header()):
+    """Run one skill over this note's sources. The result lands in the same
+    synthesis row the editor already applies drafts from."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    get_supabase().table("note_synthesis").upsert({
+        "note_id": note_id, "user_id": user_id, "status": "queued", "error": None,
+        "applied_at": None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }, on_conflict="note_id").execute()
+    background.add_task(run_skill, note_id, user_id, skill_name)
+    return {"ok": True, "status": "queued", "skill": skill_name}
 
 
 @router.get("/notes/{note_id}/synthesis/estimate")

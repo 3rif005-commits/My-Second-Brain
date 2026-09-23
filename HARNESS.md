@@ -98,3 +98,6 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   SDK) get `services/ai/passthrough`: forward untouched, tee the stream. They
   are logged and budgeted without anyone owning a wire contract only a browser
   can verify.
+- A skill reaches the workspace action bar only if it declares an `output`. No
+  output means there is nowhere to put the result — those are agent
+  instructions (cite-everything), not jobs.
