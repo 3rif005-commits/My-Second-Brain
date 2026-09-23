@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import statistics
 import sys
 import time
@@ -32,6 +33,14 @@ from pathlib import Path
 from typing import Any
 
 from evals.score_note import score_note
+
+#: Provider hiccups, not model behaviour. Retrying these is not hiding a
+#: failure: a rate-limited call never produced a note to judge, and scoring it
+#: as a bad note measures the queue rather than the prompt. Every other
+#: failure — a refusal, a malformed answer, a budget stop — is a result.
+_TRANSIENT = re.compile(
+    r"overloaded|rate.?limit|429|timeout|timed out|temporarily|503|502|upstream",
+    re.IGNORECASE)
 
 CORPUS = Path(__file__).parent / "corpus"
 REPORTS = Path(__file__).parent / "reports"
@@ -128,7 +137,8 @@ def check(score, expect: dict, source_count: int) -> list[str]:
 
 
 def run_case(case: dict, config: str, run_index: int, dry_run: bool,
-             model: str | None = None, variant: str = "html") -> CaseResult:
+             model: str | None = None, variant: str = "html",
+             retries: int = 2) -> CaseResult:
     from prompts.note_synthesis import build_note_synthesis_prompt
     from prompts.note_synthesis_md import build_markdown_synthesis_prompt
     from services.ai import usage as usage_log
@@ -149,16 +159,26 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
     else:
         from services.ai.router import complete_with_fallback
         from services.workspace.synthesis import _strip_fences
-        try:
-            with usage_log.annotate(surface="eval", job="synthesis",
-                                    trigger="eval", user_id=None,
-                                    eval_case=case["id"], eval_config=config):
-                html = _strip_fences(complete_with_fallback(
-                    "summarize_text", EVAL_USER,
-                    [{"role": "user", "content": prompt}], max_tokens=16000,
-                    model_override=model))
-        except Exception as e:                      # noqa: BLE001
-            error = f"{type(e).__name__}: {e}"[:300]
+        for attempt in range(retries + 1):
+            error = None
+            try:
+                with usage_log.annotate(surface="eval", job="synthesis",
+                                        trigger="eval", user_id=None,
+                                        eval_case=case["id"], eval_config=config):
+                    html = _strip_fences(complete_with_fallback(
+                        "summarize_text", EVAL_USER,
+                        [{"role": "user", "content": prompt}], max_tokens=16000,
+                        model_override=model))
+                break
+            except Exception as e:                  # noqa: BLE001
+                error = f"{type(e).__name__}: {e}"[:300]
+                if attempt < retries and _TRANSIENT.search(error):
+                    wait = 10 * (attempt + 1)
+                    print(f"    transient, retrying in {wait}s: {error[:70]}",
+                          file=sys.stderr)
+                    time.sleep(wait)
+                    continue
+                break
 
     if variant == "md" and html and not dry_run:
         # The editor is not part of the question: the variant is converted to
@@ -280,6 +300,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="run every case on this model id instead of the chain's "
                          "first choice — the honest way to compare two models, "
                          "since a report that mixes them measures neither")
+    ap.add_argument("--retries", type=int, default=2,
+                    help="retry a call that failed for a transient provider "
+                         "reason (overloaded, rate limited, timeout) — a queue "
+                         "is not a model behaviour; other failures stand")
     ap.add_argument("--variant", choices=("html", "md"), default="html",
                     help="which prompt to run: the shipped HTML dialect, or "
                          "E6's Markdown-with-fences variant (converted to the "
@@ -304,7 +328,7 @@ def main(argv: list[str] | None = None) -> int:
     for case in cases:
         for i in range(args.runs):
             r = run_case(case, args.config, i, args.dry_run, model=args.model,
-                         variant=args.variant)
+                         variant=args.variant, retries=args.retries)
             results.append(r)
             print(f"  {case['id']} run {i + 1}/{args.runs}: "
                   f"{'ok' if r.ok else 'FAIL'} ({r.latency_ms} ms)", file=sys.stderr)
