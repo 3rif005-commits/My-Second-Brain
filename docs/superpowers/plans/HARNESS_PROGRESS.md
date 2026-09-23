@@ -116,8 +116,11 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       runs any skill over a note's sources into the same `note_synthesis` draft
       row, `GET /notes/{id}/skills` prices every offerable skill and says why one
       cannot run yet, `POST /notes/{id}/skills/{name}/run` starts it. Two real
-      jobs ship (`compare-sources`, `flashcards`). **Frontend next**: the action
-      bar itself, then the `/` palette and selection menu.
+      jobs ship (`compare-sources`, `flashcards`). **Action bar shipped** (`components/workspace/SkillBar.tsx`):
+      a chip per skill under the header, each priced before the click, a
+      blocked skill showing its reason instead of being greyed out, and the run
+      feeding the existing draft/apply flow. **Next**: the `/` palette and the
+      selection menu; then a live browser pass, which nothing here has had.
 - [ ] 5.2 **E12** learned style playbook.
 - [ ] 5.3 Background agents (triggers, budgets, activity page) on the Batch API.
 - [ ] 5.4 Remote MCP server + per-user OAuth (the subscription bridge); MCP Apps UI.

@@ -20,6 +20,9 @@ export interface SynthesisController {
   /** The current draft was built from a different source set than what's ready. */
   stale: boolean;
   readyCount: number;
+  /** The ready source ids, joined — what both the estimate and the skill bar
+   * re-price on. */
+  readyKey: string;
   /** No draft has ever been written for this note — the first run is a decision,
    * not a refresh, so the UI offers it with a price instead of firing it. */
   neverGenerated: boolean;
@@ -30,6 +33,10 @@ export interface SynthesisController {
   requestSynthesis: () => void;
   /** Call once the applied draft has been saved into the note. */
   markApplied: () => void;
+  /** A run was queued by something other than the Generate button (a skill):
+   * flip to the running state so the poll starts immediately instead of after
+   * the next interval. */
+  refreshAfterStart: () => void;
   chooseMode: (mode: "replace" | "append") => void;
   cancelMode: () => void;
   dismissError: () => void;
@@ -147,6 +154,14 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
     else queue("replace");
   }, [noteId, running, applyRef, queue]);
 
+  const refreshAfterStart = useCallback(() => {
+    setErrorDismissed(false);
+    modeRef.current = null;
+    setSynthesis((s) => ({ status: "queued", source_ids: s?.source_ids ?? [],
+                           html: null }));
+    refresh();
+  }, [refresh]);
+
   const chooseMode = useCallback((mode: "replace" | "append") => {
     setAskMode(false);
     queue(mode);
@@ -159,11 +174,13 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
     stale: synthesis?.status === "ready"
       && !sameSet(synthesis.source_ids ?? [], readyIds),
     readyCount: readyIds.length,
+    readyKey,
     neverGenerated: !synthesis || synthesis.status === "none",
     estimate,
     askMode,
     requestSynthesis,
     markApplied,
+    refreshAfterStart,
     chooseMode,
     cancelMode: () => setAskMode(false),
     dismissError: () => setErrorDismissed(true),

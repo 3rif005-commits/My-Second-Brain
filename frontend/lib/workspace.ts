@@ -88,6 +88,15 @@ export interface SynthesisEstimate {
   usd: number | null;
 }
 
+/** A skill's price for a chip: "≈$0.05" or "≈12K tokens" when unpriced. */
+export function formatSkillCost(skill: NoteSkill): string {
+  if (skill.usd !== null) {
+    return `≈$${skill.usd < 0.01 ? skill.usd.toFixed(3) : skill.usd.toFixed(2)}`;
+  }
+  const tokens = skill.input_tokens + skill.output_tokens;
+  return `≈${tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : tokens} tokens`;
+}
+
 /** Short form for a button or meta line: "≈45K tokens · ≈$0.07".
  * Returns null when there is nothing to price, and omits the money entirely
  * when the model has no published price. */
@@ -98,6 +107,22 @@ export function formatEstimate(est: SynthesisEstimate | null): string | null {
   if (est.usd === null) return `≈${t} tokens`;
   const usd = est.usd < 0.01 ? est.usd.toFixed(3) : est.usd.toFixed(2);
   return `≈${t} tokens · ≈$${usd}`;
+}
+
+/** One skill the workspace can run over this note's sources, already priced.
+ * `runnable` is null when it can run, otherwise the reason it cannot — which
+ * is what the UI shows instead of an unexplained disabled button. */
+export interface NoteSkill {
+  skill: string;
+  description: string;
+  output: string;
+  confirm: boolean;
+  ready_sources: number;
+  input_tokens: number;
+  output_tokens: number;
+  model: string | null;
+  usd: number | null;
+  runnable: string | null;
 }
 
 export interface RecentSession {
@@ -177,6 +202,13 @@ export const wsApi = {
     }).then((r) => j<{ ok: boolean; status: string }>(r)),
   getSynthesis: (noteId: string) =>
     fetch(`/api/ws/notes/${noteId}/synthesis`).then((r) => j<Synthesis>(r)),
+  listSkills: (noteId: string) =>
+    fetch(`/api/ws/notes/${noteId}/skills`)
+      .then((r) => j<{ skills: NoteSkill[] }>(r)).then((d) => d.skills),
+  runSkill: (noteId: string, skill: string) =>
+    fetch(`/api/ws/notes/${noteId}/skills/${encodeURIComponent(skill)}/run`,
+          { method: "POST" })
+      .then((r) => j<{ ok: boolean; status: string; skill: string }>(r)),
   getSynthesisEstimate: (noteId: string) =>
     fetch(`/api/ws/notes/${noteId}/synthesis/estimate`)
       .then((r) => j<SynthesisEstimate>(r)),

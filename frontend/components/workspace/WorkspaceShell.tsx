@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/app/providers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { SkillBar } from "./SkillBar";
 import { formatEstimate, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
 import { DropZone } from "./DropZone";
 import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
@@ -469,6 +470,15 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
           <ExternalLink size={15} />
         </a>
       </header>
+
+      {/* The workspace's other jobs. Nothing here runs on its own — every chip
+          shows its price first, and a skill that cannot run yet says why. */}
+      <SkillBar
+        noteId={noteId}
+        readyKey={syn.readyKey}
+        busy={syn.running}
+        onStarted={syn.refreshAfterStart}
+      />
 
       {/* synthesis failure banner */}
       {syn.synthesis?.status === "failed" && syn.synthesis.error && (
