@@ -88,10 +88,12 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 
 ## Stage 4 — H3 (only after Stage 3 numbers justify it)
 
-- [ ] 4.1 **E6** Markdown+fences vs HTML (n=5, guardrail: every structure count).
-- [~] 4.2 **E7** progressive disclosure — **MCP discovery caching done**
-      (5-minute TTL, failures never cached, cleared on any server change, live
-      bypass for the settings page). Skill metadata and tool groups still open.
+- [~] 4.1 **E6** Markdown+fences vs HTML — variant prompt, converter and
+      `--variant` flag shipped; A/B running on the free model (n=3).
+- [~] 4.2 **E7** progressive disclosure — MCP discovery caching done; skill
+      index + `skill.load` implemented behind `AGENT_SKILL_DISCLOSURE=index`
+      (default `inline`). **Measurement blocked**: the corpus has no agent-loop
+      cases, so the tool loop has never been measured at all. Tool groups open.
 - [~] 4.3 Skill folders + frontmatter — **loader done**: `<name>/SKILL.md`
       folders alongside flat `.md`, frontmatter for surfaces/inputs/output/
       model_tier/auto/confirm, `reference()` files read on demand, `index()`

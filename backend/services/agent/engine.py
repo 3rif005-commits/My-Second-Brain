@@ -481,6 +481,12 @@ async def _stream_loop(
                     yield _ev({"type": "tool_denied", "id": slot["id"],
                                "tool": tool, "reason": "unknown skill"})
                 else:
+                    # Known limitation: a skill's `tools` whitelist is applied
+                    # when the request is built, so a skill loaded mid-turn
+                    # cannot narrow the tool list that was already sent. It can
+                    # only instruct. Narrowing would mean re-sending the tool
+                    # definitions, which invalidates the prompt cache for the
+                    # rest of the turn — a worse trade than it sounds.
                     _answer(slot, skill.body)
                     tool_calls_made += 1
                     yield _ev({"type": "skill_active", "name": skill.name})
