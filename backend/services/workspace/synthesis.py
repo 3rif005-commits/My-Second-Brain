@@ -150,10 +150,16 @@ def maybe_synthesize(note_id: str) -> bool:
     return True
 
 
-# A 242-block mastery guide measured ~40K chars of HTML on the reference
-# lecture. Only the pre-run estimate uses this; the real figure comes from the
+# A guide's length follows its sources: two real lectures (~17K source tokens)
+# came out at 14.7K–25.6K tokens (E13, median 17.6K), short synthetic sources
+# at ~3K. A flat 40K-char (~10K-token) guess under-quoted the real case by half.
+# Only the pre-run estimate uses this; the real figure comes from the
 # provider's usage fields after the run.
-_OUTPUT_CHARS_ESTIMATE = 40_000
+_MIN_OUTPUT_TOKENS = 3_000
+
+
+def _expected_output_tokens(source_chars: int) -> int:
+    return min(OUTPUT_CAP, max(_MIN_OUTPUT_TOKENS, tokens_from_chars(source_chars)))
 
 
 def _prompt_overhead_chars() -> int:
@@ -179,7 +185,7 @@ def estimate_synthesis(note_id: str, user_id: str) -> dict:
     source_chars = sum(min(length, allot)
                        for length, allot in zip(lengths, allotted))
     input_tokens = tokens_from_chars(source_chars + _prompt_overhead_chars())
-    output_tokens = tokens_from_chars(_OUTPUT_CHARS_ESTIMATE)
+    output_tokens = _expected_output_tokens(source_chars)
     provider = pick("summarize_text", user_id)
     model = provider.model if provider else None
     return {

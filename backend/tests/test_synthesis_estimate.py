@@ -149,3 +149,13 @@ def test_an_over_budget_synthesis_is_refused_before_the_model_is_called(monkeypa
     assert failure["status"] == "failed"
     assert "$4.20" in failure["error"] and "$0.10" in failure["error"]
     assert "MAX_USD_PER_RUN" in failure["error"]
+
+
+def test_the_expected_output_follows_the_sources():
+    """E13: two real lectures (~17K source tokens) wrote ~17.6K tokens; a flat
+    ~10K guess quoted that run at half its real price."""
+    from services.workspace.synthesis import OUTPUT_CAP, _expected_output_tokens
+    two_lectures = 17_000 * 4                       # chars
+    assert 15_000 <= _expected_output_tokens(two_lectures) <= 20_000
+    assert _expected_output_tokens(400) == 3_000     # a tiny note still writes a guide
+    assert _expected_output_tokens(10_000_000) == OUTPUT_CAP

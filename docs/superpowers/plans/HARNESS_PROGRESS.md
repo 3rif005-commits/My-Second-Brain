@@ -17,9 +17,9 @@ live, and the selection menu shipped after fixing editor AI edits for everyone.
 0. [x] **Truncation on real lectures** — done 2026-09-24: detection + UI
    warning (`1b5c095`), cap raised to 32K on evidence (E13: 1/3 → 3/3, 0
    truncated, +8% cost).
-0b. **Pre-run estimate under-quotes by ~half** — `_OUTPUT_CHARS_ESTIMATE`
-   (synthesis) and skill_run's 40K chars assume ~10K output tokens; real
-   two-lecture guides are ~17.6K. Calibrate from `ai_runs` actuals.
+0b. [x] **Pre-run estimate** — done 2026-09-24: the study-guide estimate now
+   scales with source length (min 3K, max the cap) instead of a flat ~10K;
+   skill estimates stay a deliberate ceiling (compare-sources used 2.2K of 10K).
 1. **compare-sources quality** — the first live note (committed at
    `frontend/e2e/screenshots/compare-sources-live/note.txt`) leaks the
    extractor's labels ("constraint C-01", "states INS-06") and labels two
