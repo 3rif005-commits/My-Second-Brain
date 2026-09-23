@@ -1,0 +1,283 @@
+"""One agent turn, in whatever dialect the provider speaks.
+
+The engine thinks in OpenAI's shape — assistant messages carrying `tool_calls`,
+`tool` messages carrying results — because that is what it was written against
+and what every OpenAI-compatible gateway accepts. Anthropic's Messages API uses
+a different shape entirely: `tool_use` blocks inside assistant content, and
+`tool_result` blocks inside the *user* turn.
+
+This module is the translation, so the engine keeps one history format and
+Claude can still drive the loop. It yields provider-agnostic events:
+
+    {"type": "text", "content": "..."}
+    {"type": "tool_call", "id": "...", "name": "...", "arguments": "{json}"}
+
+`arguments` stays a JSON *string*, matching what the OpenAI stream delivers, so
+the caller's existing parse-and-report-errors path is unchanged.
+
+Usage is reported to the run log from here, because both dialects carry it in
+their own place and neither caller should have to know where.
+"""
+from __future__ import annotations
+
+import json
+from typing import Any, AsyncIterator
+
+import httpx
+
+from services.ai import usage as usage_log
+from services.ai.client import (
+    _ANTHROPIC_URL, _ANTHROPIC_VERSION, _anthropic_error, _local_endpoint,
+    _openai_url, _to_anthropic, _to_openai_messages,
+)
+from services.ai.providers import Provider
+
+_TIMEOUT = 300
+
+ANTHROPIC_DIALECT = {"anthropic"}
+
+
+# ── request shaping ──────────────────────────────────────────────────────────
+
+def tools_to_anthropic(tools: list[dict]) -> list[dict]:
+    """OpenAI `parameters` is Anthropic's `input_schema`; the rest matches."""
+    out = []
+    for t in tools or []:
+        fn = t.get("function", t)
+        out.append({
+            "name": fn["name"],
+            "description": fn.get("description", ""),
+            "input_schema": fn.get("parameters") or {"type": "object",
+                                                     "properties": {}},
+        })
+    return out
+
+
+def history_to_anthropic(messages: list[dict]) -> tuple[str, list[dict]]:
+    """OpenAI-shaped history → (system, Anthropic messages).
+
+    Two rules that are easy to get wrong and fail loudly at the API:
+      - an assistant turn's tool calls become `tool_use` blocks in that
+        assistant message, not a separate message;
+      - every `tool` reply becomes a `tool_result` block in a USER message, and
+        consecutive replies merge into one user turn — Anthropic rejects a
+        conversation where an assistant turn follows an assistant turn.
+    """
+    system_parts: list[str] = []
+    out: list[dict] = []
+
+    for m in messages:
+        role = m.get("role")
+
+        if role == "system":
+            content = m.get("content")
+            if isinstance(content, str):
+                system_parts.append(content)
+            continue
+
+        if role == "tool":
+            block = {"type": "tool_result",
+                     "tool_use_id": m.get("tool_call_id"),
+                     "content": m.get("content") or ""}
+            if out and out[-1]["role"] == "user" and isinstance(out[-1]["content"], list) \
+                    and out[-1]["content"] and out[-1]["content"][0].get("type") == "tool_result":
+                out[-1]["content"].append(block)
+            else:
+                out.append({"role": "user", "content": [block]})
+            continue
+
+        if role == "assistant" and m.get("tool_calls"):
+            blocks: list[dict] = []
+            text = m.get("content")
+            if isinstance(text, str) and text.strip():
+                blocks.append({"type": "text", "text": text})
+            for call in m["tool_calls"]:
+                fn = call.get("function", {})
+                try:
+                    args = json.loads(fn.get("arguments") or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+                blocks.append({"type": "tool_use", "id": call.get("id"),
+                               "name": fn.get("name"), "input": args})
+            out.append({"role": "assistant", "content": blocks})
+            continue
+
+        # Anything else goes through the plain converter, which also knows
+        # about image parts.
+        sub_system, converted = _to_anthropic([m])
+        if sub_system:
+            system_parts.append(sub_system)
+        # An assistant turn with empty content is not sendable; drop it rather
+        # than have the API reject the whole request.
+        out.extend(c for c in converted
+                   if c.get("content") not in ("", [], None))
+
+    return "\n".join(p for p in system_parts if p).strip(), out
+
+
+# ── streaming ────────────────────────────────────────────────────────────────
+
+async def _stream_anthropic(client: httpx.AsyncClient, p: Provider,
+                            messages: list[dict], tools: list[dict],
+                            max_tokens: int) -> AsyncIterator[dict[str, Any]]:
+    system, msgs = history_to_anthropic(messages)
+    payload: dict[str, Any] = {"model": p.model, "messages": msgs,
+                               "max_tokens": max_tokens, "stream": True}
+    if system:
+        payload["system"] = system
+    if tools:
+        payload["tools"] = tools_to_anthropic(tools)
+
+    # tool_use arguments arrive as partial JSON fragments keyed by block index
+    open_blocks: dict[int, dict] = {}
+
+    async with client.stream(
+        "POST", _ANTHROPIC_URL,
+        headers={"x-api-key": p.api_key, "anthropic-version": _ANTHROPIC_VERSION,
+                 "Content-Type": "application/json"},
+        json=payload,
+    ) as resp:
+        if resp.status_code != 200:
+            raise _anthropic_error(resp.status_code, await resp.aread())
+
+        async for line in resp.aiter_lines():
+            if not line.startswith("data: "):
+                continue
+            try:
+                data = json.loads(line[6:])
+            except json.JSONDecodeError:
+                continue
+
+            kind = data.get("type")
+
+            if kind == "error":
+                raise RuntimeError(
+                    f"Anthropic stream error: "
+                    f"{(data.get('error') or {}).get('message', '')}"[:300])
+
+            if kind == "message_start":
+                u = ((data.get("message") or {}).get("usage") or {})
+                usage_log.report(
+                    input_tokens=u.get("input_tokens") or 0,
+                    cache_read_tokens=u.get("cache_read_input_tokens") or 0,
+                    cache_write_tokens=u.get("cache_creation_input_tokens") or 0,
+                    output_tokens=u.get("output_tokens") or 0)
+
+            elif kind == "message_delta":
+                usage_log.report(
+                    output_tokens=(data.get("usage") or {}).get("output_tokens") or 0)
+
+            elif kind == "content_block_start":
+                block = data.get("content_block") or {}
+                if block.get("type") == "tool_use":
+                    open_blocks[data.get("index", 0)] = {
+                        "id": block.get("id"), "name": block.get("name"),
+                        "args": ""}
+
+            elif kind == "content_block_delta":
+                delta = data.get("delta") or {}
+                if delta.get("type") == "text_delta" and delta.get("text"):
+                    yield {"type": "text", "content": delta["text"]}
+                elif delta.get("type") == "input_json_delta":
+                    slot = open_blocks.get(data.get("index", 0))
+                    if slot is not None:
+                        slot["args"] += delta.get("partial_json") or ""
+
+            elif kind == "content_block_stop":
+                slot = open_blocks.pop(data.get("index", 0), None)
+                if slot is not None:
+                    yield {"type": "tool_call", "id": slot["id"],
+                           "name": slot["name"],
+                           "arguments": slot["args"] or "{}"}
+
+
+async def _stream_openai(client: httpx.AsyncClient, url: str, headers: dict,
+                         model: str, messages: list[dict], tools: list[dict],
+                         max_tokens: int) -> AsyncIterator[dict[str, Any]]:
+    payload: dict[str, Any] = {"model": model,
+                               "messages": _openai_history(messages),
+                               "max_tokens": max_tokens, "stream": True}
+    if tools:
+        payload["tools"] = [t if "function" in t else {"type": "function", "function": t}
+                            for t in tools]
+    if any(host in url for host in ("openrouter.ai", "api.openai.com")):
+        payload["stream_options"] = {"include_usage": True}
+
+    pending: list[dict] = []
+    async with client.stream("POST", url, headers=headers, json=payload) as resp:
+        if resp.status_code != 200:
+            body = await resp.aread()
+            raise RuntimeError(f"LLM error {resp.status_code}: {body.decode()[:400]}")
+
+        async for line in resp.aiter_lines():
+            if not line.startswith("data: "):
+                continue
+            raw = line[6:]
+            if raw == "[DONE]":
+                break
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            usage_log.report_openai_usage(data)
+            delta = (data.get("choices") or [{}])[0].get("delta", {})
+
+            text = delta.get("content")
+            if text:
+                yield {"type": "text", "content": text}
+
+            for tc in delta.get("tool_calls", []) or []:
+                idx = tc.get("index", 0)
+                while len(pending) <= idx:
+                    pending.append({"id": "", "name": "", "args": ""})
+                slot = pending[idx]
+                if tc.get("id"):
+                    slot["id"] = tc["id"]
+                fn = tc.get("function") or {}
+                if fn.get("name"):
+                    slot["name"] = fn["name"]
+                if fn.get("arguments"):
+                    slot["args"] += fn["arguments"]
+
+    # OpenAI only completes tool calls at the end of the stream.
+    for slot in pending:
+        yield {"type": "tool_call", "id": slot["id"], "name": slot["name"],
+               "arguments": slot["args"] or "{}"}
+
+
+def _openai_history(messages: list[dict]) -> list[dict]:
+    """Pass tool plumbing through untouched; convert only the parts the
+    multimodal converter understands."""
+    out = []
+    for m in messages:
+        if m.get("role") == "tool" or m.get("tool_calls"):
+            out.append(m)
+        else:
+            out.extend(_to_openai_messages([m]))
+    return out
+
+
+async def stream_agent(p: Provider, messages: list[dict],
+                       tools: list[dict] | None = None,
+                       max_tokens: int = 2048) -> AsyncIterator[dict[str, Any]]:
+    """One model turn for the agent loop, as provider-agnostic events."""
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        if p.provider == "anthropic":
+            async for ev in _stream_anthropic(client, p, messages, tools or [],
+                                              max_tokens):
+                yield ev
+            return
+
+        if p.provider == "local":
+            ep = _local_endpoint()
+            url, headers, model = ep["url"], ep["headers"], ep["model"]
+        else:
+            url = _openai_url(p)
+            headers = {"Authorization": f"Bearer {p.api_key}",
+                       "Content-Type": "application/json"}
+            model = p.model
+
+        async for ev in _stream_openai(client, url, headers, model, messages,
+                                       tools or [], max_tokens):
+            yield ev
