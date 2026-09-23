@@ -39,6 +39,10 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   collection with `unknown hook 'pytest_launch_collect_makemodule'`.)
 - The ~448 database tests need Postgres on `127.0.0.1:55432`; without it they
   error at setup. That is the environment, not a regression.
+- A pass-rate guardrail cannot see a note that got shorter. Check a token
+  saving against content density (text, anchors, callouts) before calling it a
+  saving. (E6 on Claude: −68% output tokens at an equal pass rate was mostly
+  the model writing 44% less and citing the source 42% less.)
 
 ## The loop
 

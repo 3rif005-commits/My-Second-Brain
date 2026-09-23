@@ -80,3 +80,52 @@ about Markdown.
 log dropping every eval row (uuid column, silent debug log) and the swallowed
 in-stream provider errors. Both were invisible until something started
 counting.
+
+## Re-run on Claude — 2026-09-23 (`claude-haiku-4-5`, n=3, zero fallbacks)
+
+Configs `e6-html-claude` vs `e6-md-claude`; reports in `backend/evals/reports/`.
+
+| case | pass HTML | pass MD | out HTML | out MD | Δ out |
+|---|---|---|---|---|---|
+| md-bias-variance | 3/3 | 2/3 | 3,883 | 1,153 | −70% |
+| txt-gradient-descent | 3/3 | 3/3 | 2,989 | 784 | −74% |
+| multi-source-two | 2/3 | 3/3 | 4,179 | 1,837 | −56% |
+| adversarial-injection | 3/3 | 3/3 | 3,144 | 778 | −75% |
+| **total** | **11/12** | **11/12** | 14,195 | 4,552 | **−68%** |
+
+Cost for the 12 synthesis runs: $0.283 → $0.086. Median latency 33 s → 14 s.
+
+**Primary metric (output tokens): −68%. Guardrail (pass rate): flat, 11/12
+each.** On the card's own terms the variant wins. It is still not shipped,
+because reading the notes shows *where* the tokens went:
+
+| median per note | HTML | MD | Δ |
+|---|---|---|---|
+| text chars | 7,784 | 4,342 | −44% |
+| anchors back to the source | 6 | 3.5 | −42% |
+| callouts | 11.5 | 6 | −48% |
+| headings | 20.5 | 13.5 | −34% |
+| toggles with a body, math, tables | = | = | — |
+
+Most of the saving is the model **writing less**, not the same note in a
+cheaper format — and the part it cut includes almost half of the citations
+back to the lecture, which is this app's reason to exist. The pass-rate
+guardrail cannot see that: every case's ranges accept a note half as long. The
+two failures are different in kind: HTML's was one invalid anchor (0.83), MD's
+was a dropped math block on the case that needs one.
+
+## Decision (Claude): KEEP the variant, DO NOT switch the default
+
+- The HTML dialect stays the shipped synthesis path (nothing to revert — the
+  variant was only ever reachable through `--variant md`).
+- Skills (`compare-sources`, `flashcards`) already write Markdown through
+  `md_to_blocks`; that is unchanged.
+- **Next, E6b** — the confound the card named up front, now with a depth
+  guardrail: (a) HTML dialect with the spec cut to the variant's length, vs
+  (b) the MD variant with the anchor/callout density rules restored. Add
+  `anchors` and `text_chars` floors per case to the manifest first, so the
+  guardrail can fail a thin note.
+
+**Ratchet line added:** a pass-rate guardrail is blind to a note that got
+shorter; a token saving must be checked against content density before it is
+called a saving.
