@@ -141,7 +141,7 @@ def check(score, expect: dict, source_count: int) -> list[str]:
 
 def run_case(case: dict, config: str, run_index: int, dry_run: bool,
              model: str | None = None, variant: str = "html",
-             max_tokens: int = 16000,
+             max_tokens: int = 32000,
              retries: int = 2) -> CaseResult:
     if case.get("mode") == "agent":
         return _run_agent_case(case, config, run_index, dry_run, model)
@@ -379,8 +379,9 @@ def main(argv: list[str] | None = None) -> int:
                          "E6's Markdown-with-fences variant (converted to the "
                          "same HTML before scoring, so the editor is not part "
                          "of the comparison)")
-    ap.add_argument("--max-tokens", type=int, default=16000,
-                    help="output cap for synthesis cases — the app uses 16000")
+    ap.add_argument("--max-tokens", type=int, default=32000,
+                    help="output cap for synthesis cases — matches the app's "
+                         "OUTPUT_CAP (32000 since E13)")
     ap.add_argument("--dry-run", action="store_true",
                     help="no model calls — checks the corpus, scorer and report path")
     ap.add_argument("--manifest", type=Path, default=None)

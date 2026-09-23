@@ -14,15 +14,12 @@ suite, E7 decided (keep inline), the first compare-sources note was written
 live, and the selection menu shipped after fixing editor AI edits for everyone.
 
 **Next action, in order:**
-0. [~] **Truncation on real lectures (found 2026-09-24)** — the first real case,
-   `rs-lectures-two` (two Remote Sensing lectures, ~6.4K words), hit the
-   16,000 output-token cap in 3/3 runs on Claude: every note was cut off, 1/3
-   passed (a late term missed the cut), $0.10 and 156 s per run. The app's
-   synthesis uses the same cap (`synthesis.py:254/260`, `skill_run.py:163`), so
-   real two-lecture guides are truncated today. Experiment: raise the cap vs
-   tighten length (E6's MD variant wrote 44% less) — primary: pass rate on
-   `rs-lectures-two`; guardrail: anchors and cost. Detect truncation
-   (`stop_reason == "max_tokens"`) and say so in the UI either way.
+0. [x] **Truncation on real lectures** — done 2026-09-24: detection + UI
+   warning (`1b5c095`), cap raised to 32K on evidence (E13: 1/3 → 3/3, 0
+   truncated, +8% cost).
+0b. **Pre-run estimate under-quotes by ~half** — `_OUTPUT_CHARS_ESTIMATE`
+   (synthesis) and skill_run's 40K chars assume ~10K output tokens; real
+   two-lecture guides are ~17.6K. Calibrate from `ai_runs` actuals.
 1. **compare-sources quality** — the first live note (committed at
    `frontend/e2e/screenshots/compare-sources-live/note.txt`) leaks the
    extractor's labels ("constraint C-01", "states INS-06") and labels two

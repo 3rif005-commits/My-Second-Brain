@@ -31,6 +31,11 @@ from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML
 
 logger = logging.getLogger(__name__)
 
+#: Output cap for a whole-note generation. 16K cut off every guide written from
+#: two real lectures (E13: 1/3 pass, 3/3 truncated); at 32K they finish —
+#: 14.7K–25.6K tokens, 3/3 pass, +8% cost. The cap bills nothing unused.
+OUTPUT_CAP = 32000
+
 _FENCE = re.compile(r"^```(?:html)?\s*|\s*```$", re.MULTILINE)
 _H1 = re.compile(r"<h1[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
 _TAGS = re.compile(r"<[^>]+>")
@@ -252,13 +257,13 @@ def _complete(prompt: str, video_urls: list[str], has_text: bool,
             return _strip_fences(complete_with_fallback(
                 "synthesize_vision", user_id,
                 [{"role": "user", "content": content}],
-                max_tokens=16000, validate=_looks_like_a_mastery_guide))
+                max_tokens=OUTPUT_CAP, validate=_looks_like_a_mastery_guide))
         except Exception as e:
             logger.warning(f"vision synthesis failed, retrying without the "
                            f"{len(figures) // 2} figure(s): {e}")
     return _strip_fences(complete_with_fallback(
         "summarize_text", user_id, [{"role": "user", "content": prompt}],
-        max_tokens=16000, validate=_looks_like_a_mastery_guide))
+        max_tokens=OUTPUT_CAP, validate=_looks_like_a_mastery_guide))
 
 
 def run_synthesis(note_id: str, mode: str = "replace",

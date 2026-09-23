@@ -30,7 +30,7 @@ from services.ai.router import complete_with_fallback, pick
 from services.ai.client import last_call_truncated
 from services.workspace.md_to_blocks import TRUNCATION_NOTICE_MD, markdown_to_html
 from services.workspace.synthesis import (
-    _strip_fences, _write, ready_sources, source_text_from_chunks,
+    OUTPUT_CAP, _strip_fences, _write, ready_sources, source_text_from_chunks,
 )
 
 logger = logging.getLogger(__name__)
@@ -161,7 +161,7 @@ def run_skill(note_id: str, user_id: str, skill_name: str,
                                what=f"Running {skill.name}")
             answer = _strip_fences(complete_with_fallback(
                 "summarize_text", user_id,
-                [{"role": "user", "content": prompt}], max_tokens=16000))
+                [{"role": "user", "content": prompt}], max_tokens=OUTPUT_CAP))
 
         if not answer.strip():
             raise RuntimeError("The model returned nothing.")
