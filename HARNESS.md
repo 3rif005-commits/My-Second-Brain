@@ -70,3 +70,6 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - A migration is not live when the SQL succeeds: PostgREST caches the schema,
   and inserts fail for a while with an error naming the new table. Re-check
   before concluding the code is wrong.
+- A provider with no balance is not a fallback: it is a guaranteed failure on
+  every call. `AI_DISABLED_PROVIDERS` takes it out of the chain. The local model
+  is never dropped — it is the floor.

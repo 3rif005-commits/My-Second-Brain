@@ -68,6 +68,27 @@ class Settings(BaseSettings):
     # leaves plenty of room while still catching a runaway.
     max_usd_per_run: float = 0.50
 
+    # ── A custom OpenAI-compatible provider ──────────────────────────────
+    # Any platform that speaks /v1/chat/completions: DeepSeek, Groq, Together,
+    # a self-hosted gateway. Set the four CUSTOM_LLM_* values and it joins the
+    # provider chain ahead of the other .env providers (behind Anthropic, which
+    # the note prompts are tuned for — unless Anthropic is disabled below).
+    custom_llm_base_url: str = ""      # e.g. https://api.deepseek.com
+    custom_llm_api_key: str = ""
+    custom_llm_model: str = ""         # e.g. deepseek-flash
+    custom_llm_label: str = ""         # shown in the run log and eval reports
+    # USD per 1M tokens. Leave empty when unknown: the run log then reports no
+    # dollar figure rather than pretending a call was free. Set 0 for a genuinely
+    # free tier.
+    custom_llm_price_in: float | None = None
+    custom_llm_price_out: float | None = None
+
+    # Providers to skip entirely, comma-separated ("anthropic,gemini").
+    # A provider with no balance is not a fallback: it is a guaranteed failed
+    # request on every single call, a wasted round trip, and an error row in
+    # the run log. Disabling it is how you stop paying for that.
+    ai_disabled_providers: str = ""
+
     # Inline editor AI uses forced tool-calling (xl-ai applyDocumentOperations).
     # Free models don't support tool_choice: required — use a model that does.
     # Override via INLINE_MODEL in .env.

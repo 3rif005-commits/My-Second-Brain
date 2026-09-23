@@ -36,6 +36,12 @@ def price_for(model: str | None) -> tuple[float, float] | None:
     """(input, output) $/MTok for a model id, or None when unpriced."""
     if not model:
         return None
+    # A configured custom provider can carry its own price. Left unset it stays
+    # unpriced, which reports "we don't know" rather than "it was free" — the
+    # difference that keeps a bill from arriving as a surprise.
+    from core.config import settings
+    if model == settings.custom_llm_model and settings.custom_llm_price_in is not None:
+        return (settings.custom_llm_price_in, settings.custom_llm_price_out or 0.0)
     if model in PRICES:
         return PRICES[model]
     # OpenRouter marks no-cost models with a `:free` suffix.

@@ -48,6 +48,17 @@ class Provider:
         return self.chat_model or DEFAULT_MODELS.get(self.provider, "")
 
 
+def _host_of(url: str) -> str:
+    """A readable label when none was configured — the run log should say
+    "api.deepseek.com", not "openai_compatible"."""
+    return (url or "").split("//")[-1].split("/")[0] or "custom"
+
+
+def disabled_providers() -> set[str]:
+    return {p.strip().lower() for p in (settings.ai_disabled_providers or "").split(",")
+            if p.strip()}
+
+
 def _env_providers() -> list[Provider]:
     """Providers derived from .env settings (server-level configuration).
 
@@ -63,6 +74,13 @@ def _env_providers() -> list[Provider]:
         out.append(Provider("anthropic", api_key=settings.anthropic_api_key,
                             chat_model=settings.api_model_anthropic,
                             label="Anthropic (.env)", capabilities=set(CAPABILITIES["anthropic"])))
+    if settings.custom_llm_base_url and settings.custom_llm_api_key:
+        out.append(Provider(
+            "openai_compatible", api_key=settings.custom_llm_api_key,
+            base_url=settings.custom_llm_base_url.rstrip("/"),
+            chat_model=settings.custom_llm_model,
+            label=settings.custom_llm_label or _host_of(settings.custom_llm_base_url),
+            capabilities=set(CAPABILITIES["openai_compatible"])))
     if settings.google_api_key:
         out.append(Provider("gemini", api_key=settings.google_api_key,
                             label="Gemini (.env)", capabilities=set(CAPABILITIES["gemini"])))
@@ -112,6 +130,11 @@ def local_provider() -> Provider:
     return Provider("local", label="Local (Gemma)", capabilities=set(CAPABILITIES["local"]))
 
 
+def _drop_disabled(providers: list[Provider]) -> list[Provider]:
+    off = disabled_providers()
+    return [p for p in providers if p.provider not in off]
+
+
 def list_providers(user_id: str) -> list[Provider]:
     """All usable providers for a user, in preference order.
 
@@ -130,6 +153,13 @@ def list_providers(user_id: str) -> list[Provider]:
     job's capability chain first, so `summarize_video` still reaches Gemini —
     Claude has no `video_native`, so it is not a candidate for that chain at
     all.
+
+    `AI_DISABLED_PROVIDERS` removes a provider from the chain entirely. A
+    provider with no credit balance is not a fallback — it is a guaranteed
+    failure on every call, a wasted round trip and an error row each time — so
+    when Anthropic runs dry, turning it off is how the app stops paying for it
+    in latency. The local model is never dropped: it is the floor.
     """
-    ordered = _user_providers(user_id) + _env_providers() + [local_provider()]
+    ordered = _drop_disabled(
+        _user_providers(user_id) + _env_providers()) + [local_provider()]
     return sorted(ordered, key=lambda p: 0 if p.provider == "anthropic" else 1)
