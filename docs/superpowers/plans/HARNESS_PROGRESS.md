@@ -9,10 +9,11 @@
 
 **Branch:** `feat/ai-harness` (created, 3 commits)
 **Last session:** 2026-09-22 — Stage 1 complete; Stage 2 built and baselined
-**Next action:** finish 3.4 — fold `services/llm.py` into the gateway and move
-the Next.js `/api/ai` Gemini route behind the backend, so every model call in
-the app is logged and budgeted. Code-only. After that, Stage 4 work that does
-not need measurement: skill folders + frontmatter (4.3). Measurement-bearing cards (E3, E5, E6) are parked until
+**Next action:** `routers/agent_inline.py` onto the gateway (needs
+`tool_choice` support in `agent_stream`), then the Next.js `/api/ai` route —
+which needs the backend to expose an OpenAI-compatible endpoint the AI SDK can
+point at, since BlockNote's xl-ai helper wants a LanguageModel object. Then
+Stage 4.3 (skill folders). All code-only. Measurement-bearing cards (E3, E5, E6) are parked until
 the Anthropic balance is topped up; measuring them on the free fallback model
 would measure the fallback.
 
@@ -72,8 +73,11 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       comes from `services/ai`, agent turns write run rows, and
       `services/ai/agent_stream.py` drives the tool loop in either dialect, so
       **Claude can now run the agent**. `services/descriptor.py` moved onto the
-      gateway too. **Remaining**: fold in `services/llm.py` (legacy ingest) and
-      move `frontend/app/api/ai/route.ts` off its direct Gemini call; a Gemini
+      gateway too. `services/llm.py` folded in too (330 → 158 lines, no provider
+      clients left; the X-LLM-Model choice survives as the gateway's
+      `model_override`). **Remaining**: `frontend/app/api/ai/route.ts` still
+      calls Gemini directly from Next.js, and `routers/agent_inline.py` still
+      builds its own OpenRouter endpoint for forced tool calling; a Gemini
       tool-loop adapter is the one dialect still missing.
 - [x] 3.5 Per-run budgets + `max_usd` guard (`services/ai/budget.py`,
       `MAX_USD_PER_RUN`, default $0.50: synthesis refuses pre-flight, an agent
@@ -133,7 +137,9 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
   synthesis, between-rounds stop for agent turns) · `c7e8c45`
 - 2026-09-23 · Stage 3.4 step B: `services/ai/agent_stream.py` (both tool
   dialects), engine + descriptor migrated onto it, Claude can drive the agent
-  · `b4071fa` + pending
+  · `b4071fa`, `32a86ca`
+- 2026-09-23 · Stage 3.4: `services/llm.py` folded into the gateway; model
+  override preserved; error classifier kept · pending
 
 ## Decisions taken while executing (not re-asked)
 

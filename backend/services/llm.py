@@ -1,4 +1,14 @@
-"""LLM client — OpenRouter, llama.cpp, or Gemini, switched via LLM_PROVIDER env var."""
+"""The ingest page's two model calls.
+
+This module used to be a third LLM client, with its own OpenRouter, Gemini and
+llama.cpp paths, its own provider order, and no run log or budget. It now calls
+`services/ai` like everything else and keeps only the part that was genuinely
+its own: `_classify_error`, whose suggestions the ingest page shows to the user
+("rate-limited — wait or switch model"), which a bare 500 cannot replace.
+
+The per-request model choice (the X-LLM-Model header) survives as the gateway's
+`model_override`.
+"""
 
 import json
 import logging
@@ -6,7 +16,8 @@ import re
 import time
 from fastapi import HTTPException
 from prompts.mastery_guide import build_mastery_guide_prompt
-from core.config import settings
+from services.ai import usage as usage_log
+from services.ai.router import complete_with_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -73,183 +84,39 @@ def _classify_error(exc: Exception, model: str, elapsed_ms: int) -> HTTPExceptio
 _openrouter_client = None
 
 
-def _get_openrouter():
-    global _openrouter_client
-    if _openrouter_client is None:
-        import httpx
-        from openai import OpenAI
-        if not settings.openrouter_api_key:
-            raise RuntimeError("OPENROUTER_API_KEY is not set in backend/.env")
-        _openrouter_client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=settings.openrouter_api_key,
-            timeout=httpx.Timeout(connect=10.0, read=45.0, write=30.0, pool=5.0),
-        )
-    return _openrouter_client
+def _fallback_model_name(model_override: str | None) -> str:
+    """What to call the model in an error message the user will read."""
+    if model_override in ("llamacpp", "local"):
+        return "the local model"
+    return model_override or "the configured model"
 
 
-def _openrouter_complete(system: str, user: str, model: str, request_id: str = "") -> str:
-    client = _get_openrouter()
+def _complete(system: str, user: str, *, max_tokens: int,
+              model_override: str | None, request_id: str,
+              job: str) -> str:
+    """One call through the shared gateway, with this module's error
+    classification kept on top.
+
+    Everything else in the app routes through services/ai — provider order,
+    fallback, the run log, the budget ceiling. This path used to have its own
+    OpenRouter, Gemini and llama.cpp clients and none of that; the only thing
+    worth keeping was the classifier, because the ingest page shows its
+    suggestions to the user.
+    """
     rid = f"rid={request_id} | " if request_id else ""
-    logger.info(f"{rid}llm_attempt | model={model}")
+    logger.info(f"{rid}llm_attempt | job={job} | override={model_override}")
     t0 = time.perf_counter()
-
     try:
-        stream = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            max_tokens=4096,
-            stream=True,
-            # Reasoning-capable free-tier models (e.g. Nemotron) can emit their
-            # chain-of-thought as regular content instead of a separate
-            # reasoning delta, burning the whole max_tokens budget on planning
-            # text and never reaching the actual answer. Ask OpenRouter to
-            # drop reasoning generation entirely rather than relying on a
-            # delta-field split that isn't guaranteed for every model/endpoint.
-            extra_body={"reasoning": {"exclude": True}},
-        )
-        chunks: list[str] = []
-        for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                chunks.append(chunk.choices[0].delta.content)
-        content = "".join(chunks)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        ms = int((time.perf_counter() - t0) * 1000)
-        logger.warning(f"{rid}llm_error | model={model} | {ms}ms | {exc}")
-        raise _classify_error(exc, model, ms)
-
-    ms = int((time.perf_counter() - t0) * 1000)
-
-    if not content:
-        logger.warning(f"{rid}llm_empty | model={model} | {ms}ms")
-        raise HTTPException(status_code=502, detail={
-            "error": f"{model} returned an empty response.",
-            "error_code": "EMPTY_RESPONSE",
-            "model": model,
-            "suggestion": (
-                "This endpoint may be degraded or discontinued. "
-                "Try a different model."
-            ),
-        })
-
-    logger.info(f"{rid}llm_ok | model={model} | {ms}ms | chars={len(content)}")
-    return content
-
-
-# ── llama.cpp (OpenAI-compatible local server) ─────────────────────────────
-
-def _llamacpp_complete(system: str, user: str, max_tokens: int = 2000, request_id: str = "") -> str:
-    import httpx
-    rid = f"rid={request_id} | " if request_id else ""
-    logger.info(f"{rid}llm_attempt | model=llamacpp | url={settings.llamacpp_base_url}")
-    t0 = time.perf_counter()
-
-    payload = {
-        "model": settings.llamacpp_model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        "max_tokens": max_tokens,
-        "stream": True,
-    }
-    chunks: list[str] = []
-    try:
-        with httpx.Client(timeout=httpx.Timeout(connect=10, read=1800, write=30, pool=10)) as client:
-            with client.stream(
-                "POST",
-                f"{settings.llamacpp_base_url}/v1/chat/completions",
-                json=payload,
-            ) as resp:
-                if resp.status_code != 200:
-                    error = resp.read().decode()
-                    raise RuntimeError(f"HTTP {resp.status_code}: {error[:300]}")
-                for line in resp.iter_lines():
-                    if line.startswith("data: ") and line != "data: [DONE]":
-                        try:
-                            data = json.loads(line[6:])
-                            delta = data["choices"][0]["delta"].get("content", "")
-                            if delta:
-                                chunks.append(delta)
-                        except Exception:
-                            pass
-    except HTTPException:
-        raise
+        with usage_log.annotate(surface="ingest", job=job, trigger="user"):
+            return complete_with_fallback(
+                "summarize_text", "",
+                [{"role": "system", "content": system},
+                 {"role": "user", "content": user}],
+                max_tokens=max_tokens, model_override=model_override)
     except Exception as e:
-        ms = int((time.perf_counter() - t0) * 1000)
-        logger.error(f"{rid}llm_error | model=llamacpp | {ms}ms | {e}")
-        raise HTTPException(status_code=502, detail={
-            "error": f"Local llama.cpp server error: {e}",
-            "error_code": "LLAMACPP_UNAVAILABLE",
-            "model": "llamacpp",
-            "suggestion": (
-                "Make sure llama.cpp is running: "
-                "./llama-server -m gemma-4-e2b.gguf --port 8080 --chat-template gemma"
-            ),
-        })
-
-    ms = int((time.perf_counter() - t0) * 1000)
-    content = "".join(chunks)
-    if not content:
-        logger.warning(f"{rid}llm_empty | model=llamacpp | {ms}ms")
-        raise HTTPException(status_code=502, detail={
-            "error": "llama.cpp returned no content.",
-            "error_code": "LLAMACPP_EMPTY",
-            "model": "llamacpp",
-            "suggestion": "Check that the llama.cpp model is fully loaded.",
-        })
-
-    logger.info(f"{rid}llm_ok | model=llamacpp | {ms}ms | chars={len(content)}")
-    return content
-
-
-# ── Gemini ─────────────────────────────────────────────────────────────────
-
-_gemini_client = None
-
-
-def _get_gemini():
-    global _gemini_client
-    if _gemini_client is None:
-        from google import genai
-        if not settings.google_api_key:
-            raise RuntimeError("GOOGLE_API_KEY is not set in backend/.env")
-        _gemini_client = genai.Client(api_key=settings.google_api_key)
-    return _gemini_client
-
-
-def _gemini_complete(prompt: str, request_id: str = "") -> str:
-    from google.genai import errors as genai_errors
-    rid = f"rid={request_id} | " if request_id else ""
-    logger.info(f"{rid}llm_attempt | model=gemini-flash-latest")
-    t0 = time.perf_counter()
-    client = _get_gemini()
-    try:
-        response = client.models.generate_content(model="gemini-flash-latest", contents=prompt)
-        ms = int((time.perf_counter() - t0) * 1000)
-        logger.info(f"{rid}llm_ok | model=gemini-flash-latest | {ms}ms")
-        return response.text
-    except genai_errors.ClientError as e:
-        ms = int((time.perf_counter() - t0) * 1000)
-        logger.error(f"{rid}llm_error | model=gemini-flash-latest | {ms}ms | {e}")
-        if e.status_code == 429:
-            raise HTTPException(status_code=503, detail={
-                "error": "Gemini quota exhausted.",
-                "error_code": "GEMINI_QUOTA",
-                "model": "gemini-flash-latest",
-                "suggestion": "Enable billing on Google AI Studio or switch LLM_PROVIDER.",
-            })
-        raise HTTPException(status_code=502, detail={
-            "error": f"Gemini API error: {e}",
-            "error_code": "GEMINI_ERROR",
-            "model": "gemini-flash-latest",
-            "suggestion": "Check the backend logs for more detail.",
-        })
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        logger.warning(f"{rid}llm_failed | {elapsed_ms}ms | {e}")
+        raise _classify_error(e, _fallback_model_name(model_override), elapsed_ms)
 
 
 # ── Public API ──────────────────────────────────────────────────────────────
@@ -261,21 +128,14 @@ def generate_mastery_guide(
     request_id: str = "",
 ) -> str:
     system = "Follow the instructions in the user message exactly. Output only HTML."
-
-    # model_override from the request header always wins over the .env default
-    use_llamacpp = model_override == "llamacpp" or (
-        model_override is None and settings.llm_provider == "llamacpp"
-    )
-    if use_llamacpp:
-        prompt = build_mastery_guide_prompt(source_text[:6000], title)
-        return _llamacpp_complete(system, prompt, max_tokens=2048, request_id=request_id)
-    if model_override is None and settings.llm_provider == "gemini":
-        prompt = build_mastery_guide_prompt(source_text, title)
-        return _gemini_complete(prompt, request_id=request_id)
-
-    model = model_override or OPENROUTER_DEFAULT_MODEL
-    prompt = build_mastery_guide_prompt(source_text, title)
-    return _openrouter_complete(system, prompt, model=model, request_id=request_id)
+    local = model_override in ("llamacpp", "local")
+    # The on-device model has a small context; the old code fed it a truncated
+    # source for exactly this reason and that limit has not changed.
+    prompt = build_mastery_guide_prompt(
+        source_text[:6000] if local else source_text, title)
+    return _complete(system, prompt, max_tokens=2048 if local else 4096,
+                     model_override=model_override, request_id=request_id,
+                     job="mastery_guide")
 
 
 def extract_metadata(
@@ -290,17 +150,9 @@ def extract_metadata(
     )
     system = "You extract metadata. Return only valid JSON, no commentary."
 
-    use_llamacpp = model_override == "llamacpp" or (
-        model_override is None and settings.llm_provider == "llamacpp"
-    )
-    if use_llamacpp:
-        text = _llamacpp_complete(system, user_prompt, max_tokens=200, request_id=request_id)
-    elif model_override is None and settings.llm_provider == "gemini":
-        text = _gemini_complete(user_prompt, request_id=request_id)
-    else:
-        model = model_override or OPENROUTER_DEFAULT_MODEL
-        text = _openrouter_complete(system, user_prompt, model=model, request_id=request_id)
-
+    text = _complete(system, user_prompt, max_tokens=200,
+                     model_override=model_override, request_id=request_id,
+                     job="metadata")
     text = text.strip()
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.MULTILINE).strip()
     return json.loads(text)

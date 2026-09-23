@@ -55,9 +55,31 @@ def pick(job: str, user_id: str, providers: list[Provider] | None = None) -> Pro
     return ranked[0] if ranked else None
 
 
+def with_model_override(pool: list[Provider], model: str | None) -> list[Provider]:
+    """Narrow a candidate chain to one explicitly chosen model.
+
+    The ingest page lets the user pick the model per request (the X-LLM-Model
+    header), and that choice has to survive the move onto this gateway. Two
+    shapes: "llamacpp"/"local" means the on-device model, anything else is a
+    model id to run on the first gateway that can carry one.
+    """
+    from dataclasses import replace
+
+    if not model:
+        return pool
+    if model in ("llamacpp", "local"):
+        return [p for p in pool if p.provider == "local"] or [
+            Provider(provider="local", label="Local (Gemma)", capabilities={"text"})]
+    for p in pool:
+        if p.provider in ("openai_compatible", "openai"):
+            return [replace(p, chat_model=model)]
+    return pool
+
+
 def complete_with_fallback(job: str, user_id: str, messages: list[dict],
                            max_tokens: int = 4096,
-                           validate: Callable[[str], bool] | None = None) -> str:
+                           validate: Callable[[str], bool] | None = None,
+                           model_override: str | None = None) -> str:
     """Run a completion, falling through the candidate chain on failure.
 
     A provider can return HTTP 200 with content that's useless for the job
@@ -71,7 +93,7 @@ def complete_with_fallback(job: str, user_id: str, messages: list[dict],
     from services.ai import usage as usage_log
 
     errors: list[str] = []
-    for p in candidates(job, user_id):
+    for p in with_model_override(candidates(job, user_id), model_override):
         try:
             # Each attempt is its own run row: a fallback chain that burned two
             # providers cost two calls, and the log should say so.
