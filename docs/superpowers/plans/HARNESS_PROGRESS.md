@@ -9,11 +9,10 @@
 
 **Branch:** `feat/ai-harness` (created, 3 commits)
 **Last session:** 2026-09-22 — Stage 1 complete; Stage 2 built and baselined
-**Next action:** `routers/agent_inline.py` onto the gateway (needs
-`tool_choice` support in `agent_stream`), then the Next.js `/api/ai` route —
-which needs the backend to expose an OpenAI-compatible endpoint the AI SDK can
-point at, since BlockNote's xl-ai helper wants a LanguageModel object. Then
-Stage 4.3 (skill folders). All code-only. Measurement-bearing cards (E3, E5, E6) are parked until
+**Next action:** Stage 4.3 — skill folders with frontmatter, moving
+`prompts/note_synthesis.py` into a `study-guide` skill. Pure plumbing (the
+prompt text is unchanged), so it is verifiable by comparing the built prompt,
+and it is what E6/E7 need underneath them. Code-only. Measurement-bearing cards (E3, E5, E6) are parked until
 the Anthropic balance is topped up; measuring them on the free fallback model
 would measure the fallback.
 
@@ -75,10 +74,13 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       **Claude can now run the agent**. `services/descriptor.py` moved onto the
       gateway too. `services/llm.py` folded in too (330 → 158 lines, no provider
       clients left; the X-LLM-Model choice survives as the gateway's
-      `model_override`). **Remaining**: `frontend/app/api/ai/route.ts` still
-      calls Gemini directly from Next.js, and `routers/agent_inline.py` still
-      builds its own OpenRouter endpoint for forced tool calling; a Gemini
-      tool-loop adapter is the one dialect still missing.
+      `model_override`). `routers/agent_inline.py` keeps its byte-level
+      pass-through **deliberately** (xl-ai parses the upstream bytes itself, so
+      re-encoding changes a contract only a browser can verify) but now tees
+      its stream into the run log. **Remaining**:
+      `frontend/app/api/ai/route.ts` still calls Gemini directly from Next.js —
+      it needs an OpenAI-compatible backend endpoint the AI SDK can point at;
+      and a Gemini tool-loop adapter is the one dialect still missing.
 - [x] 3.5 Per-run budgets + `max_usd` guard (`services/ai/budget.py`,
       `MAX_USD_PER_RUN`, default $0.50: synthesis refuses pre-flight, an agent
       turn stops between rounds).
@@ -86,7 +88,9 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 ## Stage 4 — H3 (only after Stage 3 numbers justify it)
 
 - [ ] 4.1 **E6** Markdown+fences vs HTML (n=5, guardrail: every structure count).
-- [ ] 4.2 **E7** progressive disclosure (skill metadata only, tool groups, MCP discovery cached).
+- [~] 4.2 **E7** progressive disclosure — **MCP discovery caching done**
+      (5-minute TTL, failures never cached, cleared on any server change, live
+      bypass for the settings page). Skill metadata and tool groups still open.
 - [ ] 4.3 Skill folders + frontmatter; `study-guide` skill replaces `prompts/note_synthesis.py`.
 - [ ] 4.4 **E8** retrieval upgrades (contextual chunk prefixes, reranking).
 - [ ] 4.5 **E9** map-reduce for 3+ sources.
@@ -139,7 +143,9 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
   dialects), engine + descriptor migrated onto it, Claude can drive the agent
   · `b4071fa`, `32a86ca`
 - 2026-09-23 · Stage 3.4: `services/llm.py` folded into the gateway; model
-  override preserved; error classifier kept · pending
+  override preserved; error classifier kept · `2f3e8ac`
+- 2026-09-23 · inline AI spend now logged (byte-level proxy kept); MCP
+  discovery cached per server with a 5-minute TTL · pending
 
 ## Decisions taken while executing (not re-asked)
 

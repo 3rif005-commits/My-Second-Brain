@@ -61,3 +61,5 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - The engine keeps ONE history format (OpenAI-shaped) and the stream adapter
   translates per provider. (Two history formats in the loop would mean every
   tool-handling branch existed twice.)
+- Discovery results are cached for minutes, failures never. (A server that was
+  down a minute ago may be up now; caching the empty list hides its tools.)

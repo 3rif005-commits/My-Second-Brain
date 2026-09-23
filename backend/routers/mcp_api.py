@@ -9,7 +9,9 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from routers.ingest import get_user_id
-from services.agent.mcp_client import McpServerConfig, discover_tools
+from services.agent.mcp_client import (
+    McpServerConfig, clear_discovery_cache, discover_tools
+)
 from services.database import get_supabase
 
 router = APIRouter(tags=["mcp"])
@@ -68,6 +70,7 @@ def add_server(payload: ServerPayload, authorization: str = Header()):
         .execute()
         .data[0]
     )
+    clear_discovery_cache()   # a new server's tools must show up immediately
     return row
 
 
@@ -90,6 +93,7 @@ def toggle_server(server_id: str, body: dict, authorization: str = Header()):
     )
     if not rows:
         raise HTTPException(404, detail="Server not found")
+    clear_discovery_cache()   # command, url or enabled changed → tools may have
     return rows[0]
 
 
@@ -97,6 +101,7 @@ def toggle_server(server_id: str, body: dict, authorization: str = Header()):
 def delete_server(server_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     get_supabase().table("mcp_servers").delete().eq("id", server_id).eq("user_id", user_id).execute()
+    clear_discovery_cache()   # a removed server must not keep offering tools
 
 
 @router.get("/mcp-servers/{server_id}/tools")
@@ -115,7 +120,9 @@ async def list_server_tools(server_id: str, authorization: str = Header()):
     if not row:
         raise HTTPException(404, detail="Server not found")
     config = McpServerConfig(**row)
-    tools = await discover_tools(config)
+    # Settings shows what the server offers right now: a user who just fixed
+    # a broken command must not be told the old story for five minutes.
+    tools = await discover_tools(config, use_cache=False)
     return {"tools": [t.to_llm_schema() for t in tools]}
 
 

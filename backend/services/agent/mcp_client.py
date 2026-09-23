@@ -5,6 +5,8 @@ and dispatches calls. Logs each call to mcp_audit_log.
 """
 from __future__ import annotations
 
+import time
+
 from dataclasses import dataclass
 from typing import Any
 
@@ -50,16 +52,50 @@ class McpToolSchema:
         }
 
 
-async def discover_tools(config: McpServerConfig) -> list[McpToolSchema]:
+#: Discovery is a network round trip per server, and the engine asked for it on
+#: every single turn — a three-server setup paid three connections before the
+#: model saw a word. Tool lists change when a server is reconfigured, not
+#: between two messages, so a short TTL is plenty. The MCP spec's own list
+#: responses now carry cache hints for exactly this reason.
+_DISCOVERY_TTL_SECONDS = 300
+_discovery_cache: dict[str, tuple[float, list["McpToolSchema"]]] = {}
+
+
+def _cache_key(config: McpServerConfig) -> str:
+    """Anything that changes what the server offers busts the entry."""
+    return "|".join(str(x) for x in (
+        config.name, getattr(config, "url", ""), getattr(config, "command", ""),
+        getattr(config, "args", ""), getattr(config, "transport", "")))
+
+
+def clear_discovery_cache() -> None:
+    """Called when a server is added, edited or toggled — the settings UI must
+    not show a stale tool list."""
+    _discovery_cache.clear()
+
+
+async def discover_tools(config: McpServerConfig,
+                         use_cache: bool = True) -> list[McpToolSchema]:
     """Connect to a server, list its tools, and return namespaced schemas.
 
-    Returns [] if the server is unreachable (non-fatal).
+    Returns [] if the server is unreachable (non-fatal). A failure is NOT
+    cached: a server that was down a minute ago may be up now, and caching the
+    empty list would keep its tools hidden for the whole TTL.
     """
+    key = _cache_key(config)
+    if use_cache:
+        hit = _discovery_cache.get(key)
+        if hit and time.monotonic() - hit[0] < _DISCOVERY_TTL_SECONDS:
+            return hit[1]
+
     try:
         tools = await _list_tools(config)
-        return [McpToolSchema.from_mcp_tool(config.name, t) for t in tools]
     except Exception:
         return []
+
+    schemas = [McpToolSchema.from_mcp_tool(config.name, t) for t in tools]
+    _discovery_cache[key] = (time.monotonic(), schemas)
+    return schemas
 
 
 async def call_tool(
