@@ -63,11 +63,17 @@ def test_every_manifest_case_is_runnable():
     manifest = evals_run.load_manifest()
     assert manifest["cases"], "corpus is empty"
     for case in manifest["cases"]:
-        assert case["id"] and case["mode"] == "synthesis"
-        for src in case["sources"]:
-            path = evals_run.CORPUS / src["path"]
-            assert path.exists(), f"{case['id']}: missing {src['path']}"
-            assert path.read_text().strip(), f"{case['id']}: {src['path']} is empty"
+        assert case["id"] and case["mode"] in ("synthesis", "agent")
+        if case["mode"] == "synthesis":
+            for src in case["sources"]:
+                path = evals_run.CORPUS / src["path"]
+                assert path.exists(), f"{case['id']}: missing {src['path']}"
+                assert path.read_text().strip(), f"{case['id']}: {src['path']} is empty"
+        else:
+            # An agent case carries its own brain and judges what was DONE.
+            assert case["query"], f"{case['id']}: no request to act on"
+            assert case.get("notes") is not None, f"{case['id']}: no brain"
+            assert case["expect"], f"{case['id']}: nothing is being asserted"
 
 
 def test_the_adversarial_case_forbids_what_the_source_asks_for():

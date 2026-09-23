@@ -142,6 +142,9 @@ def check(score, expect: dict, source_count: int) -> list[str]:
 def run_case(case: dict, config: str, run_index: int, dry_run: bool,
              model: str | None = None, variant: str = "html",
              retries: int = 2) -> CaseResult:
+    if case.get("mode") == "agent":
+        return _run_agent_case(case, config, run_index, dry_run, model)
+
     from prompts.note_synthesis import build_note_synthesis_prompt
     from prompts.note_synthesis_md import build_markdown_synthesis_prompt
     from services.ai import usage as usage_log
@@ -221,6 +224,54 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
                       attempts=attempts, variant=variant)
 
 
+def _run_agent_case(case: dict, config: str, run_index: int, dry_run: bool,
+                    model: str | None) -> CaseResult:
+    """An agent case judges what the assistant DID, not what it wrote: which
+    tools ran, what the brain looks like afterwards, and whether it answered."""
+    import asyncio
+
+    from evals.agent_case import check_agent, run_agent_case
+    from services.agent.model import get_provider
+    from services.agent.skills import SkillRegistry
+    from services.ai import usage as usage_log
+    from models.agent import Mode
+
+    if dry_run:
+        return CaseResult(case["id"], run_index, False,
+                          ["dry run — no model was called"], {}, 0)
+
+    started = time.monotonic()
+    mark = len(usage_log.RECENT)
+    registry = SkillRegistry.load([Path(__file__).parent.parent / "skills"])
+    try:
+        provider = get_provider(Mode.API, user_id="")
+        if model:
+            from dataclasses import replace
+            provider = replace(provider, chat_model=model)
+        with usage_log.annotate(surface="eval", job="agent", trigger="eval",
+                                eval_case=case["id"], eval_config=config):
+            outcome = asyncio.run(run_agent_case(case, provider, registry))
+        failures = check_agent(case, outcome)
+        text = outcome.text
+    except Exception as e:                          # noqa: BLE001
+        failures, text = [f"call failed: {type(e).__name__}: {e}"[:300]], ""
+
+    rows = list(usage_log.RECENT)[mark:]
+    spent = [r for r in rows if r.get("estimated_usd") is not None]
+    return CaseResult(
+        case["id"], run_index, not failures, failures,
+        {"agent": True, "tools": getattr(locals().get("outcome"), "tools_called", [])},
+        int((time.monotonic() - started) * 1000),
+        input_tokens=sum(r["input_tokens"] for r in rows),
+        output_tokens=sum(r["output_tokens"] for r in rows),
+        usd=sum(r["estimated_usd"] for r in spent) if spent else None,
+        usage_reported=all(r.get("usage_reported") for r in rows) if rows else False,
+        model=next((r["model"] for r in rows if r.get("model")), None),
+        html_excerpt=text[:800],
+        attempts=[{"model": r.get("model"), "status": r.get("status"),
+                   "error": r.get("error")} for r in rows])
+
+
 def summarise(results: list[CaseResult]) -> dict:
     by_case: dict[str, list[CaseResult]] = {}
     for r in results:
@@ -246,10 +297,11 @@ def summarise(results: list[CaseResult]) -> dict:
                           if a["status"] == "error"],
             "median_latency_ms": int(statistics.median(r.latency_ms for r in runs)),
             "median_headings": statistics.median(
-                r.score["heading_total"] for r in runs),
-            "median_math": statistics.median(r.score["math_blocks"] for r in runs),
+                r.score.get("heading_total", 0) for r in runs),
+            "median_math": statistics.median(
+                r.score.get("math_blocks", 0) for r in runs),
             "median_grounding": statistics.median(
-                r.score["grounding"] for r in runs),
+                r.score.get("grounding", 1.0) for r in runs),
             "failures": sorted({f for r in runs for f in r.failures}),
         }
     return summary

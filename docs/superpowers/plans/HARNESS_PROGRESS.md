@@ -9,11 +9,12 @@
 
 **Branch:** `feat/ai-harness` (created, 3 commits)
 **Last session:** 2026-09-22 — Stage 1 complete; Stage 2 built and baselined
-**Next action:** measurement is blocked — the free tier's daily quota is spent
-(429s) and Anthropic has no credits. Unblocked and useful meanwhile:
-agent-loop eval cases, which E4 (the tool loop) and E7 (progressive disclosure)
-both need and which the corpus has never had. When credits exist, the first run
-is E6 on Claude (~$0.25). Measurement-bearing cards (E3, E5, E6) are parked until
+**Next action:** measurement is still blocked (free quota spent, no Anthropic
+credits). Agent-loop cases now exist, so when access returns the queue is:
+1. E6 both arms on Claude (~$0.25) — decides Markdown vs HTML.
+2. `--family agent` on Claude — the first real measurement of the tool loop
+   (E4) and the approval gate, neither of which has ever been scored.
+3. E7 `AGENT_SKILL_DISCLOSURE=index` against the same agent cases. Measurement-bearing cards (E3, E5, E6) are parked until
 the Anthropic balance is topped up; measuring them on the free fallback model
 would measure the fallback.
 
@@ -57,7 +58,8 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       surface, skill, trigger, status, cost estimate.
 - [x] 2.3 `backend/evals/score_note.py` — deterministic scorer: headings, toggles-with-children,
       callouts, math blocks, tables, anchors-that-resolve, must-mention hits.
-- [~] 2.4 `backend/evals/corpus/manifest.json` + the corpus itself (**user supplies source files**;
+- [~] 2.4 **agent-loop cases added** (`mode: "agent"`, in-memory brain, judged
+      on tools called / notes after / what it said). `backend/evals/corpus/manifest.json` + the corpus itself (**user supplies source files**;
       until then use `frontend/e2e/fixtures/test.pdf` + synthetic md/txt/website cases).
 - [x] 2.5 Adversarial case: source text that tries to trigger `delete_note`. Must yield 0 write calls.
 - [x] 2.6 `backend/evals/run.py` — runs the manifest n times per config, writes `ai_runs` rows +

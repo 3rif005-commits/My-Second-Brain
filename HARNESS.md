@@ -91,3 +91,6 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   debug, and a full day of runs went unrecorded while the table looked empty.)
 - A rejected telemetry row warns once per distinct error. Silent failure is how
   the above stayed hidden.
+- An agent eval case must carry the approvals the UI would replay. A turn that
+  reads retrieved note text cannot edit an existing note unasked — the harness
+  surfaced that the first time a case tried to.
