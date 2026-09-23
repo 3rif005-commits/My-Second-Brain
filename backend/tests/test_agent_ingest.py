@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 from services.agent.engine import run_ingest_turn
+from services.ai.providers import Provider
 from services.agent.skills import Skill, SkillRegistry
 from models.agent import AgentRequest, ChatMessage, Mode
 
@@ -26,54 +27,23 @@ def _make_note_author_registry() -> SkillRegistry:
 
 # --- Fake streaming infrastructure (mirrors test_engine.py pattern) ---
 
-class _FakeStreamResp:
-    def __init__(self, lines):
-        self.status_code = 200
-        self._lines = lines
-
-    async def aiter_lines(self):
-        for line in self._lines:
-            yield line
-
-    async def aread(self):
-        return b""
+def fake_stream(*texts):
+    """Stand in for services.ai.agent_stream.stream_agent — the engine takes
+    provider-agnostic events now, so tests script events, not SSE bytes."""
+    async def _stream(provider, messages, tools=None, max_tokens=2048):
+        for t in texts:
+            yield {"type": "text", "content": t}
+    return _stream
 
 
-class _FakeStreamCM:
-    def __init__(self, resp):
-        self._resp = resp
-
-    async def __aenter__(self):
-        return self._resp
-
-    async def __aexit__(self, *args):
-        pass
-
-
-class _FakeClient:
-    def __init__(self, resp):
-        self._resp = resp
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *args):
-        pass
-
-    def stream(self, *args, **kwargs):
-        return _FakeStreamCM(self._resp)
+def _fake_provider():
+    return Provider(provider="openai_compatible", api_key="k",
+                    base_url="https://x/api/v1", chat_model="test",
+                    label="test", capabilities={"text"})
 
 
 async def _collect(ait):
     return [ev async for ev in ait]
-
-
-def _text_lines(*pieces):
-    out = []
-    for p in pieces:
-        out.append("data: " + json.dumps({"choices": [{"delta": {"content": p}}]}))
-    out.append("data: [DONE]")
-    return out
 
 
 # --- Tests ---
@@ -88,12 +58,8 @@ def test_run_ingest_turn_auto_activates_note_author():
         current_note_id="n1",
     )
     with (
-        patch("services.agent.engine.get_endpoint", return_value={
-            "url": "http://fake", "headers": {}, "model": "test",
-        }),
-        patch("httpx.AsyncClient", return_value=_FakeClient(
-            _FakeStreamResp(_text_lines("Hello"))
-        )),
+        patch("services.agent.engine.get_provider", return_value=_fake_provider()),
+        patch("services.agent.engine.stream_agent", side_effect=fake_stream("Hello")),
     ):
         events = asyncio.run(_collect(
             run_ingest_turn(request, user_id="u1", skill_registry=registry)
@@ -117,12 +83,8 @@ def test_run_ingest_turn_no_retrieval_context():
         surface="ingest",
     )
     with (
-        patch("services.agent.engine.get_endpoint", return_value={
-            "url": "http://fake", "headers": {}, "model": "test",
-        }),
-        patch("httpx.AsyncClient", return_value=_FakeClient(
-            _FakeStreamResp(_text_lines("hi"))
-        )),
+        patch("services.agent.engine.get_provider", return_value=_fake_provider()),
+        patch("services.agent.engine.stream_agent", side_effect=fake_stream("hi")),
     ):
         events = asyncio.run(_collect(
             run_ingest_turn(request, user_id="u1", skill_registry=registry)

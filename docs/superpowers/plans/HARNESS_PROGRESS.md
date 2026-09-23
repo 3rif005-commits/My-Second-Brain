@@ -9,9 +9,10 @@
 
 **Branch:** `feat/ai-harness` (created, 3 commits)
 **Last session:** 2026-09-22 — Stage 1 complete; Stage 2 built and baselined
-**Next action:** 3.4 step B — teach `services/ai/client` the Anthropic tool
-dialect so Claude can drive the agent, which also deletes `OPENAI_DIALECT` and
-the refusal in `services/agent/model.py`. Code-only; verification needs credits. Measurement-bearing cards (E3, E5, E6) are parked until
+**Next action:** finish 3.4 — fold `services/llm.py` into the gateway and move
+the Next.js `/api/ai` Gemini route behind the backend, so every model call in
+the app is logged and budgeted. Code-only. After that, Stage 4 work that does
+not need measurement: skill folders + frontmatter (4.3). Measurement-bearing cards (E3, E5, E6) are parked until
 the Anthropic balance is topped up; measuring them on the free fallback model
 would measure the fallback.
 
@@ -67,12 +68,13 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - [ ] 3.1 **E3** cache-shaped context assembly (stable prefix, volatile tail, `cache_control`).
 - [x] 3.2 **E4** close the tool loop (code + unit tests; measurement pending credits) (feed results back, round cap, parallel results in one message).
 - [ ] 3.3 **E5** tool-output discipline (25k cap + hint, `response_format`, errors as instructions).
-- [~] 3.4 Gateway merge — **step A done**: agent provider selection comes from
-      `services/ai` and agent turns write run rows (`services/agent/model.py`,
-      `engine.py`). **Step B open**: teach `services/ai/client` the Anthropic
-      tool dialect (then Claude can drive the agent and `OPENAI_DIALECT` goes),
-      fold in `services/llm.py`, and move `frontend/app/api/ai/route.ts` off its
-      direct Gemini call.
+- [~] 3.4 Gateway merge — **steps A and B done**: agent provider selection
+      comes from `services/ai`, agent turns write run rows, and
+      `services/ai/agent_stream.py` drives the tool loop in either dialect, so
+      **Claude can now run the agent**. `services/descriptor.py` moved onto the
+      gateway too. **Remaining**: fold in `services/llm.py` (legacy ingest) and
+      move `frontend/app/api/ai/route.ts` off its direct Gemini call; a Gemini
+      tool-loop adapter is the one dialect still missing.
 - [x] 3.5 Per-run budgets + `max_usd` guard (`services/ai/budget.py`,
       `MAX_USD_PER_RUN`, default $0.50: synthesis refuses pre-flight, an agent
       turn stops between rounds).
@@ -128,7 +130,10 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
   services/ai; agent turns write run rows; found and fixed the
   API_PROVIDER=anthropic endpoint mismatch · `f40aeef`
 - 2026-09-23 · Stage 3.5: per-run budget guard (pre-flight refusal for
-  synthesis, between-rounds stop for agent turns) · pending
+  synthesis, between-rounds stop for agent turns) · `c7e8c45`
+- 2026-09-23 · Stage 3.4 step B: `services/ai/agent_stream.py` (both tool
+  dialects), engine + descriptor migrated onto it, Claude can drive the agent
+  · `b4071fa` + pending
 
 ## Decisions taken while executing (not re-asked)
 

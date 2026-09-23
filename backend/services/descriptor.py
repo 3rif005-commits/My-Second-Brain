@@ -5,10 +5,10 @@ two-pass retriever can find notes by topic before drilling into blocks.
 """
 from __future__ import annotations
 
-import httpx
 
 from models.agent import Mode
-from services.agent.model import get_endpoint
+from services.ai import usage as usage_log
+from services.ai.router import complete_with_fallback
 
 _PROMPT = """\
 You are summarizing a personal knowledge note for use in an AI retrieval system.
@@ -31,23 +31,16 @@ def generate(note_title: str, blocks: list[str]) -> str:
     content = "\n\n".join(blocks)[:2000]
 
     try:
-        endpoint = get_endpoint(mode=Mode.API, task="chat")
-    except RuntimeError:
-        return _fallback(note_title, blocks)
-
-    payload = {
-        "model": endpoint["model"],
-        "messages": [{"role": "user", "content": _PROMPT.format(title=note_title, content=content)}],
-        "max_tokens": 120,
-        "stream": False,
-    }
-
-    try:
-        with httpx.Client(timeout=30) as client:
-            resp = client.post(endpoint["url"], headers=endpoint["headers"], json=payload)
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"].strip()
+        with usage_log.annotate(surface="indexer", job="descriptor",
+                                trigger="auto"):
+            text = complete_with_fallback(
+                "summarize_text", "",
+                [{"role": "user",
+                  "content": _PROMPT.format(title=note_title, content=content)}],
+                max_tokens=120)
+        return text.strip() or _fallback(note_title, blocks)
     except Exception:
+        # A descriptor is a nicety; indexing must not fail for want of one.
         return _fallback(note_title, blocks)
 
 

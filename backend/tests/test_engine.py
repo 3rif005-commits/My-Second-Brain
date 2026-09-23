@@ -13,6 +13,13 @@ import pytest
 from models.agent import AgentRequest, ChatMessage, Mode, Tier
 from services.agent.engine import run_turn
 from services.agent.skills import SkillRegistry, Skill
+from services.ai.providers import Provider
+
+
+def _fake_provider():
+    return Provider(provider="openai_compatible", api_key="k",
+                    base_url="https://x/api/v1", chat_model="fake",
+                    label="test", capabilities={"text"})
 
 
 async def _collect(ait):
@@ -32,81 +39,32 @@ def _make_registry() -> SkillRegistry:
     return SkillRegistry(skills)
 
 
-class _FakeStreamResp:
-    def __init__(self, lines):
-        self.status_code = 200
-        self._lines = lines
-
-    async def aiter_lines(self):
-        for line in self._lines:
-            yield line
-
-    async def aread(self):
-        return b""
+def fake_stream(*events):
+    """Stand in for services.ai.agent_stream.stream_agent: the engine now takes
+    provider-agnostic events, so tests script events rather than SSE bytes."""
+    async def _stream(provider, messages, tools=None, max_tokens=2048):
+        for ev in events:
+            yield ev
+    return _stream
 
 
-class _FakeStreamCM:
-    def __init__(self, resp):
-        self._resp = resp
-
-    async def __aenter__(self):
-        return self._resp
-
-    async def __aexit__(self, *args):
-        return None
-
-
-class _FakeClient:
-    def __init__(self, resp):
-        self._resp = resp
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *args):
-        return None
-
-    def stream(self, *args, **kwargs):
-        return _FakeStreamCM(self._resp)
-
-
-def _openai_chunks(content_pieces, tool_calls=None):
-    """Build SSE-shaped data: lines that mimic OpenAI streaming format."""
-    out = []
-    for piece in content_pieces:
-        out.append(
-            "data: " + json.dumps({
-                "choices": [{"delta": {"content": piece}}]
-            })
-        )
-    if tool_calls:
-        for tc in tool_calls:
-            out.append("data: " + json.dumps({
-                "choices": [{"delta": {"tool_calls": [tc]}}]
-            }))
-    out.append("data: [DONE]")
-    return out
+def say(*pieces):
+    return [{"type": "text", "content": p} for p in pieces]
 
 
 @pytest.mark.asyncio
 @patch("services.agent.engine.execute_brain_tool")
 @patch("services.agent.engine.retrieve")
 @patch("services.agent.engine.embed")
-@patch("services.agent.engine.get_endpoint")
-@patch("services.agent.engine.httpx.AsyncClient")
+@patch("services.agent.engine.get_provider")
+@patch("services.agent.engine.stream_agent")
 async def test_engine_streams_text_event(
-    mock_client_cls, mock_endpoint, mock_embed, mock_retrieve, mock_exec,
+    mock_stream, mock_provider, mock_embed, mock_retrieve, mock_exec,
 ):
-    mock_endpoint.return_value = {
-        "url": "http://x/chat/completions",
-        "headers": {},
-        "model": "fake",
-        "source": "openrouter",
-    }
+    mock_provider.return_value = _fake_provider()
     mock_embed.return_value = [0.1] * 768
     mock_retrieve.return_value = []
-    chunks = _openai_chunks(["Hello", " world"])
-    mock_client_cls.return_value = _FakeClient(_FakeStreamResp(chunks))
+    mock_stream.side_effect = fake_stream(*say("Hello", " world"))
 
     req = AgentRequest(
         messages=[ChatMessage(role="user", content="hi")],
@@ -125,17 +83,15 @@ async def test_engine_streams_text_event(
 @patch("services.agent.engine.execute_brain_tool")
 @patch("services.agent.engine.retrieve")
 @patch("services.agent.engine.embed")
-@patch("services.agent.engine.get_endpoint")
-@patch("services.agent.engine.httpx.AsyncClient")
+@patch("services.agent.engine.get_provider")
+@patch("services.agent.engine.stream_agent")
 async def test_engine_activates_matching_skill(
-    mock_client_cls, mock_endpoint, mock_embed, mock_retrieve, mock_exec,
+    mock_stream, mock_provider, mock_embed, mock_retrieve, mock_exec,
 ):
-    mock_endpoint.return_value = {"url": "u", "headers": {}, "model": "m",
-                                  "source": "openrouter"}
+    mock_provider.return_value = _fake_provider()
     mock_embed.return_value = [0.0] * 768
     mock_retrieve.return_value = []
-    chunks = _openai_chunks(["ok"])
-    mock_client_cls.return_value = _FakeClient(_FakeStreamResp(chunks))
+    mock_stream.side_effect = fake_stream(*say("ok"))
 
     req = AgentRequest(
         messages=[ChatMessage(role="user", content="cite from my notes")],
@@ -153,12 +109,12 @@ async def test_engine_activates_matching_skill(
 @patch("services.agent.engine.execute_brain_tool")
 @patch("services.agent.engine.retrieve")
 @patch("services.agent.engine.embed")
-@patch("services.agent.engine.get_endpoint")
-@patch("services.agent.engine.httpx.AsyncClient")
+@patch("services.agent.engine.get_provider")
+@patch("services.agent.engine.stream_agent")
 async def test_engine_emits_error_when_endpoint_fails(
-    mock_client_cls, mock_endpoint, mock_embed, mock_retrieve, mock_exec,
+    mock_stream, mock_provider, mock_embed, mock_retrieve, mock_exec,
 ):
-    mock_endpoint.side_effect = RuntimeError("API key not configured")
+    mock_provider.side_effect = RuntimeError("API key not configured")
     req = AgentRequest(
         messages=[ChatMessage(role="user", content="hi")],
         query="hi",
@@ -189,15 +145,10 @@ def test_interactive_turn_auto_loads_interactive_skill():
         mode=Mode.API,
         surface="interactive",
     )
-    lines = [
-        'data: {"choices":[{"delta":{"content":"<html><body>Quiz</body></html>"}}]}',
-        "data: [DONE]",
-    ]
     with (
-        patch("services.agent.engine.get_endpoint", return_value={
-            "url": "http://fake", "headers": {}, "model": "test",
-        }),
-        patch("httpx.AsyncClient", return_value=_FakeClient(_FakeStreamResp(lines))),
+        patch("services.agent.engine.get_provider", return_value=_fake_provider()),
+        patch("services.agent.engine.stream_agent",
+              side_effect=fake_stream(*say("<html><body>Quiz</body></html>"))),
     ):
         events = asyncio.run(_collect(
             run_interactive_turn(request, user_id="u1", skill_registry=registry)

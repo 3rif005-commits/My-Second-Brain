@@ -58,3 +58,6 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   rounds, never during one — a call already paid for is left to finish.
 - An unpriced model never trips the cap. (Refusing work because our price list
   is incomplete would be the wrong failure.)
+- The engine keeps ONE history format (OpenAI-shaped) and the stream adapter
+  translates per provider. (Two history formats in the loop would mean every
+  tool-handling branch existed twice.)

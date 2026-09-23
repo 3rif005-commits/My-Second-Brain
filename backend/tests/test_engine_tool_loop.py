@@ -13,76 +13,67 @@ import pytest
 
 from models.agent import Tier
 from services.agent import engine
+from services.ai import usage as usage_log
+from services.ai.providers import Provider
 from services.agent.engine import MAX_TOOL_ROUNDS, _stream_loop
 
 
-def sse(*events: dict) -> list[str]:
-    return [f"data: {json.dumps(e)}" for e in events] + ["data: [DONE]"]
+def say(text: str) -> list[dict]:
+    return [{"type": "text", "content": text}]
 
 
-def text_turn(text: str) -> list[str]:
-    return sse({"choices": [{"delta": {"content": text}}]})
+def call(call_id: str, name: str, args: dict) -> list[dict]:
+    return [{"type": "tool_call", "id": call_id, "name": name,
+             "arguments": json.dumps(args)}]
 
 
-def tool_turn(call_id: str, name: str, args: dict) -> list[str]:
-    return sse({"choices": [{"delta": {"tool_calls": [{
-        "index": 0, "id": call_id,
-        "function": {"name": name, "arguments": json.dumps(args)},
-    }]}}]})
+def usage(input_tokens: int, output_tokens: int = 0) -> list[dict]:
+    """A round that reports real usage, expressed as a marker the fake stream
+    turns into a usage report — the engine sees only text/tool_call events."""
+    return [{"type": "_usage", "input_tokens": input_tokens,
+             "output_tokens": output_tokens}]
 
 
-class _Resp:
-    def __init__(self, lines, status=200):
-        self.status_code = status
-        self._lines = lines
+class _Scripted:
+    """One scripted turn per round, recording the history it was handed — the
+    only way to prove tool results actually went back to the model."""
 
-    async def aiter_lines(self):
-        for line in self._lines:
-            yield line
+    def __init__(self, rounds):
+        self.rounds = list(rounds)
+        self.requests: list[list[dict]] = []
 
-    async def aread(self):
-        return b""
-
-
-class _CM:
-    def __init__(self, resp):
-        self._resp = resp
-
-    async def __aenter__(self):
-        return self._resp
-
-    async def __aexit__(self, *a):
-        return None
+    async def __call__(self, provider, messages, tools=None, max_tokens=2048):
+        # copy: the engine keeps mutating the same list between rounds
+        self.requests.append([dict(m) for m in messages])
+        events = self.rounds.pop(0) if self.rounds else say("done")
+        for ev in events:
+            if ev["type"] == "_usage":
+                usage_log.report(input_tokens=ev["input_tokens"],
+                                 output_tokens=ev["output_tokens"])
+                continue
+            yield ev
 
 
-class _SeqClient:
-    """A model that answers differently each round, and records what it was
-    sent — which is the only way to prove the results actually went back."""
-
-    def __init__(self, turns):
-        self.turns = list(turns)
-        self.requests: list[dict] = []
-
-    def stream(self, method, url, headers=None, json=None):
-        self.requests.append(json)
-        lines = self.turns.pop(0) if self.turns else text_turn("done")
-        return _CM(_Resp(lines))
+def _provider():
+    return Provider(provider="anthropic", api_key="k",
+                    chat_model="claude-haiku-4-5", capabilities={"text"})
 
 
-async def _collect(client, endpoint=None, **kw):
-    payload = {"model": "m", "messages": kw.get("messages", []), "stream": True}
-    return [e async for e in _stream_loop(
-        client, endpoint or {"url": "u", "headers": {}}, payload,
-        messages_payload=kw.get("messages", []),
-        tool_schemas=[], tier=Tier.INTERNAL_API, user_id="u1",
-        tool_calls_made=0, **{k: v for k, v in kw.items() if k != "messages"})]
+async def _collect(stream, provider=None, **kw):
+    with patch.object(engine, "stream_agent", stream):
+        return [e async for e in _stream_loop(
+            provider or _provider(),
+            messages_payload=kw.get("messages", []),
+            tool_schemas=[], tier=Tier.INTERNAL_API, user_id="u1",
+            tool_calls_made=0,
+            **{k: v for k, v in kw.items() if k != "messages"})]
 
 
 @pytest.mark.asyncio
 async def test_a_tool_result_goes_back_to_the_model_and_the_turn_continues():
-    client = _SeqClient([
-        tool_turn("c1", "brain.search_brain", {"query": "bias"}),
-        text_turn("Found it: your Lecture 4 note."),
+    client = _Scripted([
+        call("c1", "brain.search_brain", {"query": "bias"}),
+        say("Found it: your Lecture 4 note."),
     ])
     with patch.object(engine, "execute_brain_tool",
                       return_value={"matches": [{"id": "n1"}]}) as run:
@@ -93,7 +84,7 @@ async def test_a_tool_result_goes_back_to_the_model_and_the_turn_continues():
     assert kinds == ["tool_call", "tool_result", "text"]
 
     # Round two carried the assistant's tool_calls AND a matching tool reply.
-    second = client.requests[1]["messages"]
+    second = client.requests[1]
     assistant = next(m for m in second if m["role"] == "assistant")
     reply = next(m for m in second if m["role"] == "tool")
     assert assistant["tool_calls"][0]["id"] == "c1"
@@ -105,9 +96,9 @@ async def test_a_tool_result_goes_back_to_the_model_and_the_turn_continues():
 async def test_a_denial_is_answered_too_so_the_provider_does_not_reject_the_turn():
     """Every tool_call id must get exactly one reply — an unanswered one is a
     400 from the provider, not a quiet skip."""
-    client = _SeqClient([
-        tool_turn("c1", "brain.delete_note", {"id": "n1", "confirm": True}),
-        text_turn("I'll need you to confirm that."),
+    client = _Scripted([
+        call("c1", "brain.delete_note", {"id": "n1", "confirm": True}),
+        say("I'll need you to confirm that."),
     ])
     with patch.object(engine, "execute_brain_tool", return_value={"local_only": False}):
         events = await _collect(client, messages=[{"role": "user", "content": "delete it"}])
@@ -115,7 +106,7 @@ async def test_a_denial_is_answered_too_so_the_provider_does_not_reject_the_turn
     denied = next(e for e in events if e["type"] == "tool_denied")
     assert denied["requires_approval"] is True
 
-    replies = [m for m in client.requests[1]["messages"] if m["role"] == "tool"]
+    replies = [m for m in client.requests[1] if m["role"] == "tool"]
     assert len(replies) == 1 and replies[0]["tool_call_id"] == "c1"
     # And it must tell the model to stop, or it spends every round retrying.
     assert "not call it again" in replies[0]["content"].lower()
@@ -123,44 +114,42 @@ async def test_a_denial_is_answered_too_so_the_provider_does_not_reject_the_turn
 
 @pytest.mark.asyncio
 async def test_a_failing_tool_reports_the_error_to_the_model():
-    client = _SeqClient([
-        tool_turn("c1", "brain.get_note", {"id": "gone"}),
-        text_turn("That note doesn't exist."),
+    client = _Scripted([
+        call("c1", "brain.get_note", {"id": "gone"}),
+        say("That note doesn't exist."),
     ])
     with patch.object(engine, "execute_brain_tool", side_effect=RuntimeError("404 not found")):
         events = await _collect(client, messages=[])
 
     assert any(e["type"] == "tool_denied" for e in events)
-    reply = next(m for m in client.requests[1]["messages"] if m["role"] == "tool")
+    reply = next(m for m in client.requests[1] if m["role"] == "tool")
     assert "404 not found" in reply["content"]
 
 
 @pytest.mark.asyncio
 async def test_invalid_json_arguments_teach_the_model_the_right_shape():
-    client = _SeqClient([
-        sse({"choices": [{"delta": {"tool_calls": [{
-            "index": 0, "id": "c1",
-            "function": {"name": "brain.search_brain", "arguments": "{oops"},
-        }]}}]}),
-        text_turn("retrying"),
+    client = _Scripted([
+        [{"type": "tool_call", "id": "c1", "name": "brain.search_brain",
+          "arguments": "{oops"}],
+        say("retrying"),
     ])
     events = await _collect(client, messages=[])
     assert events[0]["type"] == "tool_denied"
-    reply = next(m for m in client.requests[1]["messages"] if m["role"] == "tool")
+    reply = next(m for m in client.requests[1] if m["role"] == "tool")
     assert "JSON" in reply["content"]
 
 
 @pytest.mark.asyncio
 async def test_a_large_tool_result_is_capped_with_an_instruction():
     big = {"matches": [{"id": f"n{i}", "text": "x" * 200} for i in range(200)]}
-    client = _SeqClient([
-        tool_turn("c1", "brain.search_brain", {"query": "everything"}),
-        text_turn("ok"),
+    client = _Scripted([
+        call("c1", "brain.search_brain", {"query": "everything"}),
+        say("ok"),
     ])
     with patch.object(engine, "execute_brain_tool", return_value=big):
         await _collect(client, messages=[])
 
-    reply = next(m for m in client.requests[1]["messages"] if m["role"] == "tool")
+    reply = next(m for m in client.requests[1] if m["role"] == "tool")
     assert len(reply["content"]) < engine.TOOL_RESULT_CHAR_CAP + 400
     assert "Narrow the query" in reply["content"]
 
@@ -169,8 +158,8 @@ async def test_a_large_tool_result_is_capped_with_an_instruction():
 async def test_the_loop_stops_after_the_round_budget_instead_of_running_forever():
     """A model that keeps calling tools must hit a ceiling, and the ceiling
     must be visible rather than a silent truncation."""
-    client = _SeqClient([tool_turn(f"c{i}", "brain.search_brain", {"query": "x"})
-                         for i in range(MAX_TOOL_ROUNDS + 3)])
+    client = _Scripted([call(f"c{i}", "brain.search_brain", {"query": "x"})
+                        for i in range(MAX_TOOL_ROUNDS + 3)])
     with patch.object(engine, "execute_brain_tool", return_value={"matches": []}):
         events = await _collect(client, messages=[])
 
@@ -181,22 +170,22 @@ async def test_the_loop_stops_after_the_round_budget_instead_of_running_forever(
 
 @pytest.mark.asyncio
 async def test_the_call_budget_ends_the_work_but_still_answers_every_call():
-    client = _SeqClient([tool_turn(f"c{i}", "brain.search_brain", {"query": "x"})
-                         for i in range(MAX_TOOL_ROUNDS)])
+    client = _Scripted([call(f"c{i}", "brain.search_brain", {"query": "x"})
+                        for i in range(MAX_TOOL_ROUNDS)])
     with patch.object(engine, "execute_brain_tool", return_value={"matches": []}), \
          patch.object(engine, "MAX_TOOL_CALLS_PER_TURN", 2):
         events = await _collect(client, messages=[])
 
     assert any(e["type"] == "error" and "budget" in e["content"] for e in events)
     for request in client.requests[1:]:
-        calls = [m for m in request["messages"] if m["role"] == "assistant" and m.get("tool_calls")]
-        replies = [m for m in request["messages"] if m["role"] == "tool"]
+        calls = [m for m in request if m["role"] == "assistant" and m.get("tool_calls")]
+        replies = [m for m in request if m["role"] == "tool"]
         assert len(replies) == sum(len(c["tool_calls"]) for c in calls)
 
 
 @pytest.mark.asyncio
 async def test_a_plain_answer_makes_exactly_one_request():
-    client = _SeqClient([text_turn("No tools needed.")])
+    client = _Scripted([say("No tools needed.")])
     events = await _collect(client, messages=[])
     assert len(client.requests) == 1
     assert [e["type"] for e in events] == ["text"]
@@ -215,11 +204,9 @@ async def test_each_round_writes_its_own_run_row(monkeypatch):
     monkeypatch.setattr("services.database.get_supabase",
                         lambda: (_ for _ in ()).throw(RuntimeError("no db in tests")))
 
-    usage_chunk = {"choices": [{"delta": {}}],
-                   "usage": {"prompt_tokens": 1200, "completion_tokens": 90}}
-    client = _SeqClient([
-        tool_turn("c1", "brain.search_brain", {"query": "bias"}),
-        sse({"choices": [{"delta": {"content": "done"}}]}, usage_chunk),
+    client = _Scripted([
+        call("c1", "brain.search_brain", {"query": "bias"}),
+        say("done") + usage(1200, 90),
     ])
     with patch.object(engine, "execute_brain_tool", return_value={"matches": []}):
         with usage_log.annotate(surface="chat", job="agent", user_id="u1"):
@@ -241,21 +228,14 @@ async def test_a_turn_stops_when_its_budget_is_spent(monkeypatch):
 
     monkeypatch.setattr("services.database.get_supabase",
                         lambda: (_ for _ in ()).throw(RuntimeError("no db")))
-    expensive = {"choices": [{"delta": {}}],
-                 "usage": {"prompt_tokens": 400_000, "completion_tokens": 0}}
-    client = _SeqClient([
-        sse({"choices": [{"delta": {"tool_calls": [{
-            "index": 0, "id": "c1",
-            "function": {"name": "brain.search_brain", "arguments": "{}"},
-        }]}}]}, expensive),
-        text_turn("should never be reached"),
+    client = _Scripted([
+        call("c1", "brain.search_brain", {}) + usage(400_000),
+        say("should never be reached"),
     ])
 
     with patch.object(engine, "execute_brain_tool", return_value={"matches": []}):
         with budget_guard.limit(0.10) as spend:          # $0.40 of input > cap
-            events = await _collect(client, endpoint={
-                "url": "u", "headers": {}, "model": "claude-haiku-4-5",
-                "provider": "anthropic"})
+            events = await _collect(client)
 
     assert len(client.requests) == 1                     # round two never ran
     assert events[-1]["type"] == "error"
