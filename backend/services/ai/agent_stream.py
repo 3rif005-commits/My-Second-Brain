@@ -28,7 +28,7 @@ import httpx
 from services.ai import usage as usage_log
 from services.ai.client import (
     _ANTHROPIC_URL, _ANTHROPIC_VERSION, _anthropic_error, _local_endpoint,
-    _openai_url, _to_anthropic, _to_openai_messages,
+    _openai_url, _raise_stream_error, _to_anthropic, _to_openai_messages,
 )
 from services.ai.providers import Provider
 
@@ -220,6 +220,7 @@ async def _stream_openai(client: httpx.AsyncClient, url: str, headers: dict,
             except json.JSONDecodeError:
                 continue
 
+            _raise_stream_error(data)
             usage_log.report_openai_usage(data)
             delta = (data.get("choices") or [{}])[0].get("delta", {})
 

@@ -165,8 +165,14 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
     score = score_note(html, source_count=len(blocks),
                        must_mention=case.get("must_mention"),
                        must_not_mention=case.get("must_not_mention"))
-    failures = ["call failed: " + error] if error else check(
-        score, case.get("expect", {}), len(blocks))
+    if error:
+        failures = ["call failed: " + error]
+    elif not html.strip():
+        # Distinct from "scored badly": a blank answer is a failed call wearing
+        # a success, and reading it as six unmet expectations hides that.
+        failures = ["the model returned no content"]
+    else:
+        failures = check(score, case.get("expect", {}), len(blocks))
     if dry_run:
         failures = ["dry run — no model was called"]
 

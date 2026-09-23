@@ -47,6 +47,18 @@ def _anthropic_usage(data: dict) -> None:
         usage_log.report(output_tokens=u.get("output_tokens") or 0)
 
 
+def _raise_stream_error(data: dict) -> None:
+    """An OpenAI-compatible gateway can answer 200 and then put the failure
+    INSIDE the stream — a rate limit, a provider outage, a moderation block.
+    Reading only `delta.content` turns that into an empty string and a
+    successful-looking call, which is how an eval came back with a zero score
+    and no error to explain it."""
+    err = data.get("error")
+    if err:
+        message = err.get("message") if isinstance(err, dict) else str(err)
+        raise RuntimeError(f"LLM stream error: {str(message)[:300]}")
+
+
 def _openai_usage(data: dict) -> None:
     """OpenAI-compatible servers put usage on a final chunk (OpenRouter and
     llama.cpp both do when asked); absent on gateways that don't."""
@@ -323,6 +335,7 @@ def _openai_compatible_complete(url: str, headers: dict, model: str,
                 data = json.loads(raw)
             except json.JSONDecodeError:
                 continue
+            _raise_stream_error(data)
             _openai_usage(data)
             text = (data.get("choices") or [{}])[0].get("delta", {}).get("content")
             if text:
@@ -412,6 +425,7 @@ async def _stream_inner(p: Provider, messages: list[dict],
                     data = json.loads(raw)
                 except json.JSONDecodeError:
                     continue
+                _raise_stream_error(data)
                 _openai_usage(data)
                 text = (data.get("choices") or [{}])[0].get("delta", {}).get("content")
                 if text:

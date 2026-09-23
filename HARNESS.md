@@ -73,3 +73,7 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - A provider with no balance is not a fallback: it is a guaranteed failure on
   every call. `AI_DISABLED_PROVIDERS` takes it out of the chain. The local model
   is never dropped — it is the floor.
+- An OpenAI-compatible gateway can answer 200 and put the failure inside the
+  stream. Raise on `error` in a chunk. (Reading only `delta.content` turned an
+  overloaded provider into an empty string and a successful-looking call, and an
+  eval blamed the model for it.)

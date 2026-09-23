@@ -112,3 +112,20 @@ def test_telemetry_never_breaks_the_call_it_measures(monkeypatch, caplog):
 def test_report_outside_a_tracked_call_is_a_no_op():
     """Nothing is tracking; this must not raise or leak into the next run."""
     usage_log.report(input_tokens=99)
+
+
+# ── in-stream errors ─────────────────────────────────────────────────────────
+
+def test_an_error_inside_the_stream_is_raised_not_swallowed():
+    """OpenAI-compatible gateways answer 200 and then put the failure in the
+    stream. Reading only delta.content turned that into an empty string and a
+    successful-looking call — an eval scored it zero with nothing to explain
+    why."""
+    from services.ai.client import _raise_stream_error
+
+    with pytest.raises(RuntimeError, match="rate limit"):
+        _raise_stream_error({"error": {"message": "rate limit exceeded"}})
+    with pytest.raises(RuntimeError, match="upstream exploded"):
+        _raise_stream_error({"error": "upstream exploded"})
+    # a normal chunk passes straight through
+    _raise_stream_error({"choices": [{"delta": {"content": "hi"}}]})

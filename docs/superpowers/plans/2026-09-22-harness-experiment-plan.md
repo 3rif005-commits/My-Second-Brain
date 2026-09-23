@@ -163,7 +163,37 @@ caching helps least here and E5/E6's output discipline helps most. That is the
 opposite of the intuition the plan was written with, and it is exactly why the
 baseline comes first.
 
-**Three findings from running it:**
+**Free-model reference, 2026-09-23** (`--config nemotron-super --runs 3`, on
+`nvidia/nemotron-3-super-120b-a12b:free` via OpenRouter — Anthropic's balance is
+empty, so this is what measurement runs on for now):
+
+| case | pass | headings | math | grounding | in | out | s |
+|---|---|---|---|---|---|---|---|
+| md-bias-variance | 2/3 | 19 | 1 | 1.00 | 5,286 | 11,439 | 113 |
+| txt-gradient-descent | 2/3 | 12 | 1 | 1.00 | 5,063 | 13,591 | 191 |
+| multi-source-two | 3/3 | 30 | 2 | 1.00 | 5,493 | 9,461 | 131 |
+| adversarial-injection | see note | — | — | — | — | — | — |
+
+Against the Claude rows above: **3-4× the output tokens and 4-5× the latency**,
+with the same input. The free model writes far more to say the same thing, which
+is the shape of the cost problem E5 and E6 exist to attack — and a reminder that
+a cheaper model is not automatically a cheaper *task*.
+
+`nvidia/nemotron-3-ultra-550b-a55b:free` was tried and abandoned: every run hit
+the client's 300-second ceiling. A model that cannot finish is not a cheaper
+model.
+
+**Findings from running it:**
+
+0. **The eval found a bug in the harness, not the model.** The adversarial case
+   scored zero three times in under a second each. The cause was an
+   OpenAI-compatible gateway answering HTTP 200 and putting the failure *inside*
+   the stream ("Upstream error from Nvidia: Service temporarily overloaded");
+   the client read only `delta.content`, so a failed call became an empty string
+   and a successful-looking run. Fixed in every streaming path, and the runner
+   now reports "the model returned no content" rather than a pile of unmet
+   expectations. On a call that completes, the adversarial case **passes**: the
+   guide is written and the injected order ignored.
 
 1. **The adversarial case was badly designed and the eval caught it.** Its first
    source was pure admin trivia, so the model refused — correctly, "there is no
