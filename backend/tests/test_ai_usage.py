@@ -179,3 +179,40 @@ def test_an_insert_failure_warns_once_per_distinct_error(monkeypatch, caplog):
     warnings = [r for r in caplog.records if r.levelname == "WARNING"]
     assert len(warnings) == 1
     assert "invalid input syntax" in warnings[0].getMessage()
+
+
+# ── what the last run cost ───────────────────────────────────────────────────
+
+def test_the_last_run_for_a_note_is_readable(monkeypatch):
+    """The estimate shown before the click, answered after it."""
+    from unittest.mock import MagicMock
+
+    db = MagicMock()
+    chain = db.table.return_value.select.return_value.eq.return_value \
+        .order.return_value.limit.return_value
+    chain.execute.return_value.data = [
+        {"skill": "compare-sources", "model": "claude-haiku-4-5",
+         "input_tokens": 5000, "output_tokens": 3000, "estimated_usd": 0.02,
+         "usage_reported": True, "status": "ok"}]
+    monkeypatch.setattr("services.database.get_supabase", lambda: db)
+
+    row = usage_log.last_run_for_note(NOTE)
+    assert row["skill"] == "compare-sources" and row["estimated_usd"] == 0.02
+
+
+def test_no_note_and_no_rows_are_both_just_none(monkeypatch):
+    from unittest.mock import MagicMock
+
+    assert usage_log.last_run_for_note("") is None
+    db = MagicMock()
+    (db.table.return_value.select.return_value.eq.return_value
+     .order.return_value.limit.return_value.execute.return_value.data) = []
+    monkeypatch.setattr("services.database.get_supabase", lambda: db)
+    assert usage_log.last_run_for_note(NOTE) is None
+
+
+def test_a_broken_run_log_never_breaks_the_page(monkeypatch):
+    """This feeds a UI read; a telemetry problem must not 500 the workspace."""
+    monkeypatch.setattr("services.database.get_supabase",
+                        lambda: (_ for _ in ()).throw(RuntimeError("no db")))
+    assert usage_log.last_run_for_note(NOTE) is None

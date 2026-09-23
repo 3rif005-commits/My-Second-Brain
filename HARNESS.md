@@ -101,3 +101,6 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - A skill reaches the workspace action bar only if it declares an `output`. No
   output means there is nowhere to put the result — those are agent
   instructions (cite-everything), not jobs.
+- The UI shows the estimate before a run and the real cost after it, and says
+  "estimated" when the numbers are ours rather than the provider's. A promise
+  and a receipt are different claims.

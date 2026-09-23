@@ -33,6 +33,7 @@ from services.workspace.processor import process_resource
 from services.workspace.synthesis import estimate_synthesis, run_synthesis
 from services.workspace.skill_run import estimate as estimate_skill
 from services.workspace.skill_run import run_skill, workspace_skills
+from services.ai.usage import last_run_for_note
 
 logger = logging.getLogger(__name__)
 
@@ -520,7 +521,10 @@ async def get_synthesis(note_id: str, authorization: str = Header()):
             "source_ids": r.get("source_ids") or [],
             "title_suggestion": r.get("title_suggestion"),
             "error": r.get("error"), "applied_at": r.get("applied_at"),
-            "updated_at": r.get("updated_at")}
+            "updated_at": r.get("updated_at"),
+            # What the last model call on this note actually cost, straight
+            # from the run log — the estimate shown before the click, answered.
+            "last_run": last_run_for_note(note_id)}
 
 
 @router.post("/notes/{note_id}/synthesis/applied")

@@ -167,6 +167,29 @@ def _as_uuid(value: str | None) -> str | None:
         return None
 
 
+def last_run_for_note(note_id: str) -> dict | None:
+    """What the most recent model call on this note cost.
+
+    The run log exists so spend is answerable; this is the smallest question
+    worth answering in the UI — "what did this note just cost me?" — and it
+    reads the same rows the eval runner and any future activity page do.
+    """
+    if not note_id:
+        return None
+    try:
+        from services.database import get_supabase
+        rows = (get_supabase().table("ai_runs")
+                .select("skill,job,model,input_tokens,output_tokens,"
+                        "cache_read_tokens,estimated_usd,usage_reported,"
+                        "latency_ms,status,created_at")
+                .eq("note_id", note_id).order("created_at", desc=True)
+                .limit(1).execute().data or [])
+        return rows[0] if rows else None
+    except Exception as e:                          # noqa: BLE001
+        logger.debug("last_run_for_note failed: %s", str(e)[:200])
+        return None
+
+
 def _write_row(provider: str | None, model: str | None, usage: Usage,
                latency_ms: int, status: str, error: str | None) -> None:
     global _missing_table_warned

@@ -13,7 +13,7 @@ import {
 import { useToast } from "@/app/providers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SkillBar } from "./SkillBar";
-import { formatEstimate, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
+import { formatEstimate, formatLastRun, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
 import { DropZone } from "./DropZone";
 import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
 import { SourceRail } from "./SourceRail";
@@ -110,6 +110,9 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
 
   const syn = useSynthesis({ noteId, sources, applyRef });
   const estimateText = formatEstimate(syn.estimate);
+  // What the last run cost. Shown once a draft exists, where the estimate used
+  // to be — the promise, then the receipt.
+  const lastRunText = formatLastRun(syn.synthesis?.last_run);
 
   // ── load ──────────────────────────────────────────────────────────────────
   const loadSources = useCallback(async () => {
@@ -418,6 +421,11 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
             {syn.neverGenerated && !syn.running && estimateText && (
               <span className="shrink-0 hidden sm:inline">
                 · {estimateText} to generate
+              </span>
+            )}
+            {!syn.neverGenerated && !syn.running && lastRunText && (
+              <span className="shrink-0 hidden sm:inline" title="What the last run cost">
+                · {lastRunText}
               </span>
             )}
             <StatusNote saving={saving} saved={savedFlash} synthesizing={syn.running} />

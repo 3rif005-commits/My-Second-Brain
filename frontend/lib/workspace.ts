@@ -63,6 +63,23 @@ export interface Citation {
   snippet?: string;
 }
 
+/** What the most recent model call on this note actually cost — the estimate
+ * shown before the click, answered after it. `usage_reported` is false when
+ * the numbers are this app's own estimate rather than the provider's. */
+export interface LastRun {
+  skill: string | null;
+  job: string | null;
+  model: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  estimated_usd: number | null;
+  usage_reported: boolean;
+  latency_ms: number | null;
+  status: string;
+  created_at?: string;
+}
+
 export interface Synthesis {
   status: SynthesisStatus;
   html?: string | null;
@@ -71,6 +88,7 @@ export interface Synthesis {
   error?: string | null;
   applied_at?: string | null;
   updated_at?: string | null;
+  last_run?: LastRun | null;
 }
 
 /** Priced preview of the Generate action. Computed server-side from the stored
@@ -86,6 +104,25 @@ export interface SynthesisEstimate {
   provider: string | null;
   model: string | null;
   usd: number | null;
+}
+
+/** "compare sources · 8K tokens · $0.021" — what the run that just finished
+ * cost, or null when there is nothing to report. */
+export function formatLastRun(run: LastRun | null | undefined): string | null {
+  if (!run || run.status !== "ok") return null;
+  const tokens = run.input_tokens + run.output_tokens;
+  const parts: string[] = [];
+  if (run.skill) parts.push(run.skill.replace(/-/g, " "));
+  if (tokens > 0) {
+    parts.push(`${tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : tokens} tokens`);
+  }
+  if (run.estimated_usd !== null && run.estimated_usd > 0) {
+    parts.push(`$${run.estimated_usd < 0.01
+      ? run.estimated_usd.toFixed(3) : run.estimated_usd.toFixed(2)}`);
+  }
+  // An estimate and a provider's own count are different claims; say which.
+  if (!run.usage_reported && tokens > 0) parts.push("estimated");
+  return parts.length ? parts.join(" · ") : null;
 }
 
 /** A skill's price for a chip: "≈$0.05" or "≈12K tokens" when unpriced. */
