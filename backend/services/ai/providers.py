@@ -99,6 +99,8 @@ def _env_providers() -> list[Provider]:
 
 def _user_providers(user_id: str) -> list[Provider]:
     from services.database import get_supabase
+    if not user_id:
+        return []          # no user, no saved rows — skip the doomed query
     try:
         rows = (
             get_supabase()

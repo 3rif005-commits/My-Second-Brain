@@ -10,6 +10,11 @@ import pytest
 
 from services.ai import usage as usage_log
 
+# Real uuids: `user_id` and `note_id` are uuid columns, so "u1" would be
+# dropped by the guard — which is the point of the guard.
+USER = "11111111-1111-4111-8111-111111111111"
+NOTE = "22222222-2222-4222-8222-222222222222"
+
 
 @pytest.fixture
 def rows(monkeypatch):
@@ -25,7 +30,7 @@ def rows(monkeypatch):
 
 def test_a_reported_run_records_the_providers_own_numbers(rows):
     with usage_log.annotate(surface="workspace", job="synthesis",
-                            note_id="n1", user_id="u1", trigger="user"):
+                            note_id=NOTE, user_id=USER, trigger="user"):
         with usage_log.track("anthropic", "claude-haiku-4-5"):
             usage_log.report(input_tokens=1000, output_tokens=500,
                              cache_read_tokens=200)
@@ -33,7 +38,7 @@ def test_a_reported_run_records_the_providers_own_numbers(rows):
     assert len(rows) == 1
     row = rows[0]
     assert (row["surface"], row["job"], row["note_id"], row["trigger"]) == \
-        ("workspace", "synthesis", "n1", "user")
+        ("workspace", "synthesis", NOTE, "user")
     assert row["input_tokens"] == 1000
     assert row["output_tokens"] == 500
     assert row["cache_read_tokens"] == 200
@@ -80,8 +85,8 @@ def test_a_failed_call_is_still_logged_then_re_raised(rows):
 
 
 def test_annotations_nest_and_restore(rows):
-    with usage_log.annotate(surface="workspace", user_id="u1"):
-        with usage_log.annotate(job="chat", note_id="n9"):
+    with usage_log.annotate(surface="workspace", user_id=USER):
+        with usage_log.annotate(job="chat", note_id=NOTE):
             with usage_log.track("anthropic", "claude-haiku-4-5"):
                 usage_log.report(input_tokens=10, output_tokens=1)
         # inner annotation is gone, outer survives
@@ -89,9 +94,9 @@ def test_annotations_nest_and_restore(rows):
             usage_log.report(input_tokens=10, output_tokens=1)
 
     inner, outer = rows
-    assert (inner["surface"], inner["job"], inner["note_id"]) == ("workspace", "chat", "n9")
+    assert (inner["surface"], inner["job"], inner["note_id"]) == ("workspace", "chat", NOTE)
     assert (outer["surface"], outer["job"], outer["note_id"]) == ("workspace", None, None)
-    assert outer["user_id"] == "u1"
+    assert outer["user_id"] == USER
 
 
 def test_telemetry_never_breaks_the_call_it_measures(monkeypatch, caplog):
@@ -129,3 +134,48 @@ def test_an_error_inside_the_stream_is_raised_not_swallowed():
         _raise_stream_error({"error": "upstream exploded"})
     # a normal chunk passes straight through
     _raise_stream_error({"choices": [{"delta": {"content": "hi"}}]})
+
+
+# ── the uuid columns ─────────────────────────────────────────────────────────
+
+def test_a_non_uuid_user_id_is_dropped_rather_than_losing_the_row(rows):
+    """ai_runs.user_id is a uuid column. The eval runner passed the literal
+    string "eval", Postgres rejected every insert, and the error never
+    mentioned ai_runs — so it was logged at debug and a full day of eval runs
+    went unrecorded while the scoreboard just looked empty."""
+    with usage_log.annotate(surface="eval", user_id="eval", note_id="not-a-uuid"):
+        with usage_log.track("openai_compatible", "some-model"):
+            usage_log.report(input_tokens=10, output_tokens=1)
+
+    row = rows[0]
+    assert row["user_id"] is None and row["note_id"] is None
+    assert row["surface"] == "eval"          # the rest of the row survives
+
+
+def test_a_real_uuid_is_preserved(rows):
+    import uuid as _uuid
+    user = str(_uuid.uuid4())
+    with usage_log.annotate(user_id=user, note_id=user):
+        with usage_log.track("anthropic", "claude-haiku-4-5"):
+            usage_log.report(input_tokens=1, output_tokens=1)
+    assert rows[0]["user_id"] == user and rows[0]["note_id"] == user
+
+
+def test_an_insert_failure_warns_once_per_distinct_error(monkeypatch, caplog):
+    """Silent telemetry is how the above stayed hidden. A rejected row now says
+    so — once per distinct failure, not once per call."""
+    from unittest.mock import MagicMock
+
+    db = MagicMock()
+    db.table.return_value.insert.return_value.execute.side_effect = RuntimeError(
+        'invalid input syntax for type uuid: "eval"')
+    monkeypatch.setattr("services.database.get_supabase", lambda: db)
+    monkeypatch.setattr(usage_log, "_seen_write_errors", set())
+
+    for _ in range(3):
+        with usage_log.track("anthropic", "claude-haiku-4-5"):
+            usage_log.report(input_tokens=1, output_tokens=1)
+
+    warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "invalid input syntax" in warnings[0].getMessage()

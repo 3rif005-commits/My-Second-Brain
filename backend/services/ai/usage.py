@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid as _uuid
 from contextlib import contextmanager
 from collections import deque
 from contextvars import ContextVar
@@ -77,6 +78,7 @@ _context: ContextVar[RunContext] = ContextVar("ai_run_context", default=RunConte
 _usage: ContextVar[Usage | None] = ContextVar("ai_usage", default=None)
 
 _missing_table_warned = False
+_seen_write_errors: set[str] = set()
 
 #: The last rows written, in this process. The eval runner reads its numbers
 #: from here so measuring works before migration 020 is applied — and it is a
@@ -152,17 +154,30 @@ def track(provider: str | None, model: str | None,
         _write_row(provider, model, usage, latency_ms, status, error)
 
 
+def _as_uuid(value: str | None) -> str | None:
+    """`user_id` and `note_id` are uuid columns. A caller that passes something
+    else — the eval runner passed the literal "eval" — makes Postgres reject
+    the whole row with an error that never mentions ai_runs, which is how an
+    entire day of eval runs went unlogged without a word of complaint."""
+    if not value:
+        return None
+    try:
+        return str(_uuid.UUID(str(value)))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
 def _write_row(provider: str | None, model: str | None, usage: Usage,
                latency_ms: int, status: str, error: str | None) -> None:
     global _missing_table_warned
     ctx = _context.get()
     row = {
-        "user_id": ctx.user_id,
+        "user_id": _as_uuid(ctx.user_id),
         "surface": ctx.surface,
         "job": ctx.job,
         "skill": ctx.skill,
         "trigger": ctx.trigger,
-        "note_id": ctx.note_id,
+        "note_id": _as_uuid(ctx.note_id),
         "provider": provider,
         "model": model,
         "status": status,
@@ -193,5 +208,9 @@ def _write_row(provider: str | None, model: str | None, usage: Usage,
             logger.warning(
                 "ai_runs not written (%s). Apply supabase/migrations/020_ai_runs.sql "
                 "to start measuring; the app works without it.", message[:200])
-        elif "ai_runs" not in message:
-            logger.debug("ai_runs insert failed: %s", message[:200])
+        elif message[:80] not in _seen_write_errors:
+            # Warn once per distinct failure, not debug. Silent telemetry is
+            # how a whole day of runs went missing: the row was rejected, the
+            # log said nothing, and the scoreboard looked merely empty.
+            _seen_write_errors.add(message[:80])
+            logger.warning("ai_runs insert failed: %s", message[:200])

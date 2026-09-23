@@ -44,7 +44,10 @@ _TRANSIENT = re.compile(
 
 CORPUS = Path(__file__).parent / "corpus"
 REPORTS = Path(__file__).parent / "reports"
-EVAL_USER = "eval"          # no DB row; .env providers are used
+#: Deliberately empty, not a label: it reaches ai_runs.user_id, which is a uuid
+#: column, and it reaches the saved-providers lookup, which is a query keyed on
+#: one. "eval" broke both quietly.
+EVAL_USER = ""
 
 
 @dataclass

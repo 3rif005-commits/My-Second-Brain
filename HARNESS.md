@@ -85,3 +85,9 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - Progressive disclosure buys nothing until the bodies or the catalogue are
   large: with two 30-character skills the index costs MORE than the bodies it
   replaces. Measure before switching `AGENT_SKILL_DISCLOSURE` to "index".
+- `ai_runs.user_id` and `note_id` are uuid columns: anything else is dropped
+  before the insert. (The eval runner passed the literal "eval"; Postgres
+  rejected every row with an error that never said "ai_runs", it was logged at
+  debug, and a full day of runs went unrecorded while the table looked empty.)
+- A rejected telemetry row warns once per distinct error. Silent failure is how
+  the above stayed hidden.
