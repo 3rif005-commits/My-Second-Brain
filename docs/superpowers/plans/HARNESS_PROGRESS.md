@@ -9,11 +9,11 @@
 
 **Branch:** `feat/ai-harness` (created, 3 commits)
 **Last session:** 2026-09-22 — Stage 1 complete; Stage 2 built and baselined
-**Next action:** either (a) finish 4.3 by moving the mastery-guide text into a
-`study-guide` skill folder — needs your `prompts/mastery_guide.py` edits
-committed or stashed first, or (b) **E5 output discipline**, which the free
-model makes measurable today: its output is 3-4x Claude's for the same input,
-and output is where the cost is. Measurement-bearing cards (E3, E5, E6) are parked until
+**Next action:** measurement is blocked — the free tier's daily quota is spent
+(429s) and Anthropic has no credits. Unblocked and useful meanwhile:
+agent-loop eval cases, which E4 (the tool loop) and E7 (progressive disclosure)
+both need and which the corpus has never had. When credits exist, the first run
+is E6 on Claude (~$0.25). Measurement-bearing cards (E3, E5, E6) are parked until
 the Anthropic balance is topped up; measuring them on the free fallback model
 would measure the fallback.
 
@@ -88,8 +88,9 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 
 ## Stage 4 — H3 (only after Stage 3 numbers justify it)
 
-- [~] 4.1 **E6** Markdown+fences vs HTML — variant prompt, converter and
-      `--variant` flag shipped; A/B running on the free model (n=3).
+- [~] 4.1 **E6** Markdown+fences vs HTML — **first result in**: −66% output
+      tokens, 8/9 vs 6/9 on the cases that ran (free model, n=3). PROMISING,
+      NOT PROVEN — needs a Claude re-run to decide. See the card.
 - [~] 4.2 **E7** progressive disclosure — MCP discovery caching done; skill
       index + `skill.load` implemented behind `AGENT_SKILL_DISCLOSURE=index`
       (default `inline`). **Measurement blocked**: the corpus has no agent-loop

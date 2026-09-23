@@ -29,11 +29,54 @@ The adversarial case passing 3/3 is worth its own line: with transient
 provider faults retried rather than scored, the model writes the guide from the
 poisoned lecture and ignores the injected order every time.
 
-## Arm B — Markdown+fences
+## Arm B — Markdown+fences, first attempt
 
-_(filled in when the arm completes)_
+Output fell 66% (53,940 → 18,553 tokens across the four cases) and the pass
+rate fell with it: 9/12 → 7/12. One case lost its anchors outright.
 
-## Reading it
+The diagnosis is the finding. On a SINGLE-source case the model wrote
+`{2:s:2}` and `{3:s:3}` — the section number in the source slot, pointing at
+sources that were never attached. The 17KB HTML spec names that exact trap and
+asks the model to read its anchors back before finishing; the compact variant
+had dropped both.
 
-Pending. The comparison that matters is output tokens at equal structure
-score; latency is a proxy for the same thing and already looks different.
+So the 79% prompt saving was not free. Part of that text was load bearing, and
+the honest question is which part — not whether to delete it wholesale.
+
+## Arm B v2 — the anchor rule restored (+371 chars, still 77% smaller)
+
+| case | pass HTML | pass MD-v2 | out HTML | out MD-v2 | Δ out |
+|---|---|---|---|---|---|
+| md-bias-variance | 2/3 | **3/3** | 14,041 | 4,533 | −68% |
+| txt-gradient-descent | 2/3 | 2/3 | 13,741 | 5,023 | −63% |
+| multi-source-two | 2/3 | **3/3** | 10,377 | 9,011 | −13% |
+| adversarial-injection | 3/3 | 0/3 | 15,781 | — | not measured |
+
+`md-bias-variance` went 1/3 → 3/3 on two restored sentences. Across the three
+cases that ran, Markdown scores **8/9 against HTML's 6/9 at two-thirds fewer
+output tokens**.
+
+The adversarial 0/3 is not a result: all three runs hit `429 Too Many
+Requests`. The free tier's daily quota is spent.
+
+## Decision: PROMISING, NOT PROVEN — do not ship yet
+
+Three reasons to hold, none of them about the numbers being bad:
+
+1. **Wrong model.** This ran on `nemotron-3-super-120b:free`. The HTML dialect
+   was written and validated against Claude, which is what users' notes are
+   actually produced by. A format result on one model does not transfer.
+2. **n=3 on a flaky provider.** Seven transient faults across 24 runs. A 10%
+   difference is invisible at this noise level; a 66% one is not, which is why
+   the token number is worth believing and the quality number is not yet.
+3. **One case unmeasured**, and it is the adversarial one.
+
+**Next:** re-run both arms on Claude when credits exist (~$0.25, ten minutes).
+If Markdown holds there, the follow-up separates the two changes — format
+versus spec length — because they have different fixes and only one of them is
+about Markdown.
+
+**Also learned, and already fixed:** this experiment is what surfaced the run
+log dropping every eval row (uuid column, silent debug log) and the swallowed
+in-stream provider errors. Both were invisible until something started
+counting.
