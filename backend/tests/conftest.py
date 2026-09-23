@@ -5,6 +5,31 @@ import pytest
 import pytest_asyncio
 
 
+@pytest.fixture(autouse=True)
+def no_real_supabase(monkeypatch, request):
+    """No test may reach the real Supabase project.
+
+    This is not hypothetical: the run log writes a row from inside
+    `usage.track`, so any test that exercised a model call path wrote telemetry
+    straight into the production `ai_runs` table — 21 junk rows with a null
+    surface before anyone noticed. Telemetry is deliberately failure-tolerant,
+    which is exactly why it never complained.
+
+    Tests that want to observe what would have been written patch
+    `services.database.get_supabase` themselves; that patch wins, because it is
+    applied inside the test. Tests using the local pgtest harness are
+    unaffected — that path never goes through this client.
+    """
+    def _refuse(*a, **kw):
+        raise RuntimeError(
+            "This test tried to reach the real Supabase project. Patch "
+            "services.database.get_supabase (or the module-level alias the "
+            "code under test imported) and assert on the calls instead."
+        )
+
+    monkeypatch.setattr("services.database.get_supabase", _refuse)
+
+
 @pytest.fixture
 def tmp_skills_dir(tmp_path):
     """A temp directory with no skills, ready to be populated."""

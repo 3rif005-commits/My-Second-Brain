@@ -63,3 +63,10 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   tool-handling branch existed twice.)
 - Discovery results are cached for minutes, failures never. (A server that was
   down a minute ago may be up now; caching the empty list hides its tools.)
+- Tests never reach the real Supabase project (autouse guard in
+  `tests/conftest.py`). The run log writes from inside `usage.track` and is
+  failure-tolerant by design, so the suite quietly wrote 21 rows into
+  production `ai_runs` before anyone looked.
+- A migration is not live when the SQL succeeds: PostgREST caches the schema,
+  and inserts fail for a while with an error naming the new table. Re-check
+  before concluding the code is wrong.
