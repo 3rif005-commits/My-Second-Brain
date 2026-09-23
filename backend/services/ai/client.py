@@ -14,6 +14,7 @@ stream(provider, messages)    → AsyncIterator[str]  (chat SSE)
 from __future__ import annotations
 
 import base64
+import contextvars
 import json
 from typing import AsyncIterator
 
@@ -215,12 +216,28 @@ def _local_endpoint() -> dict:
 
 # ── sync completion ──────────────────────────────────────────────────────────
 
+#: Why the most recent `complete()` in this context stopped, as the provider
+#: said it: Anthropic "max_tokens" / OpenAI "length" mean the answer was CUT
+#: OFF. The first real lecture pair hit a 16K cap on every run and nothing
+#: noticed — the note simply ended mid-section.
+_last_stop: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "ai_last_stop", default=None)
+
+_TRUNCATED = {"max_tokens", "length"}
+
+
+def last_call_truncated() -> bool:
+    """True if the last completion in this context ran out of output tokens."""
+    return _last_stop.get() in _TRUNCATED
+
+
 def complete(p: Provider, messages: list[dict], max_tokens: int = 4096) -> str:
     """Every completion in the app comes through here, so this is where the run
     log is written — one place, no call site to forget."""
     # estimate_chars covers the failure path (a call that dies mid-stream still
     # spent its input); on success the estimate is redone below with the real
     # output length, unless the provider reported actual usage.
+    _last_stop.set(None)
     with usage_log.track(p.provider, p.model,
                          estimate_chars=(_messages_chars(messages), 0)) as u:
         text = _complete_inner(p, messages, max_tokens)
@@ -285,6 +302,10 @@ def _anthropic_complete(p: Provider, messages: list[dict], max_tokens: int) -> s
             except json.JSONDecodeError:
                 continue
             _anthropic_usage(data)
+            if data.get("type") == "message_delta":
+                stop = (data.get("delta") or {}).get("stop_reason")
+                if stop:
+                    _last_stop.set(stop)
             text = _anthropic_text_delta(data)
             if text:
                 chunks.append(text)
@@ -337,6 +358,9 @@ def _openai_compatible_complete(url: str, headers: dict, model: str,
                 continue
             _raise_stream_error(data)
             _openai_usage(data)
+            finish = (data.get("choices") or [{}])[0].get("finish_reason")
+            if finish:
+                _last_stop.set(finish)
             text = (data.get("choices") or [{}])[0].get("delta", {}).get("content")
             if text:
                 chunks.append(text)

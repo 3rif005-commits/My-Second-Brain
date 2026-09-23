@@ -14,7 +14,7 @@ suite, E7 decided (keep inline), the first compare-sources note was written
 live, and the selection menu shipped after fixing editor AI edits for everyone.
 
 **Next action, in order:**
-0. **Truncation on real lectures (found 2026-09-24)** — the first real case,
+0. [~] **Truncation on real lectures (found 2026-09-24)** — the first real case,
    `rs-lectures-two` (two Remote Sensing lectures, ~6.4K words), hit the
    16,000 output-token cap in 3/3 runs on Claude: every note was cut off, 1/3
    passed (a late term missed the cut), $0.10 and 156 s per run. The app's

@@ -27,7 +27,8 @@ from services.ai import budget as budget_guard
 from services.ai import usage as usage_log
 from services.ai.pricing import estimate_usd, tokens_from_chars
 from services.ai.router import complete_with_fallback, pick
-from services.workspace.md_to_blocks import markdown_to_html
+from services.ai.client import last_call_truncated
+from services.workspace.md_to_blocks import TRUNCATION_NOTICE_MD, markdown_to_html
 from services.workspace.synthesis import (
     _strip_fences, _write, ready_sources, source_text_from_chunks,
 )
@@ -164,6 +165,9 @@ def run_skill(note_id: str, user_id: str, skill_name: str,
 
         if not answer.strip():
             raise RuntimeError("The model returned nothing.")
+        if last_call_truncated():
+            logger.warning(f"note {note_id}: {skill.name} hit the output cap")
+            answer = answer.rstrip() + "\n\n" + TRUNCATION_NOTICE_MD
 
         # Skills speak Markdown; the editor speaks the HTML dialect. One
         # converter, the same one E6 measures, sits between them.

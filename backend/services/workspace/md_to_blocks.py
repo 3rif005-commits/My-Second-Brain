@@ -176,3 +176,14 @@ def markdown_to_html(md: str) -> str:
         out.append("</div>")
 
     return "\n".join(out)
+
+
+#: Appended to a note whose model ran out of output tokens. Rendered by the
+#: same converter as every note, so the editor shows a normal WARNING callout.
+TRUNCATION_NOTICE_MD = """:::warning
+This note was cut off: the model reached its length limit before finishing,
+so the last section may end mid-way and later material is missing. Regenerate
+with fewer sources, or split the sources across notes.
+:::
+"""
+TRUNCATION_NOTICE_HTML = markdown_to_html(TRUNCATION_NOTICE_MD)

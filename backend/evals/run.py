@@ -141,6 +141,7 @@ def check(score, expect: dict, source_count: int) -> list[str]:
 
 def run_case(case: dict, config: str, run_index: int, dry_run: bool,
              model: str | None = None, variant: str = "html",
+             max_tokens: int = 16000,
              retries: int = 2) -> CaseResult:
     if case.get("mode") == "agent":
         return _run_agent_case(case, config, run_index, dry_run, model)
@@ -155,7 +156,7 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
     prompt_chars = len(prompt)
     mark = len(usage_log.RECENT)
     started = time.monotonic()
-    html, error = "", None
+    html, error, truncated = "", None, False
 
     if dry_run:
         # Plumbing check: score the sources themselves so the whole path runs
@@ -173,8 +174,10 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
                                         eval_case=case["id"], eval_config=config):
                     html = _strip_fences(complete_with_fallback(
                         "summarize_text", EVAL_USER,
-                        [{"role": "user", "content": prompt}], max_tokens=16000,
+                        [{"role": "user", "content": prompt}], max_tokens=max_tokens,
                         model_override=model))
+                from services.ai.client import last_call_truncated
+                truncated = last_call_truncated()
                 break
             except Exception as e:                  # noqa: BLE001
                 error = f"{type(e).__name__}: {e}"[:300]
@@ -213,8 +216,10 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
     if dry_run:
         failures = ["dry run — no model was called"]
 
+    # Truncation is recorded, never scored away: a note cut off at the output
+    # cap can clear every range while the reader lost the end of the lecture.
     return CaseResult(case["id"], run_index, not failures, failures,
-                      score.as_dict(), latency_ms, error,
+                      {**score.as_dict(), "truncated": truncated}, latency_ms, error,
                       input_tokens=last.get("input_tokens", 0),
                       output_tokens=last.get("output_tokens", 0),
                       usd=last.get("estimated_usd"),
@@ -293,6 +298,7 @@ def summarise(results: list[CaseResult]) -> dict:
             "variant": runs[0].variant,
             "median_input_tokens": int(statistics.median(
                 r.input_tokens for r in runs)),
+            "truncated": sum(1 for r in runs if r.score.get("truncated")),
             "median_output_tokens": int(statistics.median(
                 r.output_tokens for r in runs)),
             "median_usd": round(statistics.median(spend), 4) if spend else None,
@@ -336,6 +342,9 @@ def print_table(summary: dict) -> None:
               " one measurement —\n     fix the provider or split the report"
               " before comparing anything.")
     for case_id, s in summary.items():
+        if s.get("truncated"):
+            print(f"  !! {case_id}: {s['truncated']}/{s['runs']} runs CUT OFF at "
+                  f"the output cap — the note ends mid-way")
         for f in s["fallbacks"]:
             print(f"  fallback in {case_id}: {f['model']} failed — {f['error']}")
     print(f"\n  spent this run: ${total:.4f}"
@@ -370,6 +379,8 @@ def main(argv: list[str] | None = None) -> int:
                          "E6's Markdown-with-fences variant (converted to the "
                          "same HTML before scoring, so the editor is not part "
                          "of the comparison)")
+    ap.add_argument("--max-tokens", type=int, default=16000,
+                    help="output cap for synthesis cases — the app uses 16000")
     ap.add_argument("--dry-run", action="store_true",
                     help="no model calls — checks the corpus, scorer and report path")
     ap.add_argument("--manifest", type=Path, default=None)
@@ -389,7 +400,8 @@ def main(argv: list[str] | None = None) -> int:
     for case in cases:
         for i in range(args.runs):
             r = run_case(case, args.config, i, args.dry_run, model=args.model,
-                         variant=args.variant, retries=args.retries)
+                         variant=args.variant, retries=args.retries,
+                         max_tokens=args.max_tokens)
             results.append(r)
             print(f"  {case['id']} run {i + 1}/{args.runs}: "
                   f"{'ok' if r.ok else 'FAIL'} ({r.latency_ms} ms)", file=sys.stderr)
