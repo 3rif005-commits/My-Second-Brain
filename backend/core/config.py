@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     # setting — it is an explicit request.
     workspace_on_drop: str = "suggest"
 
+    # Spending ceiling for one piece of work: one synthesis, or one agent turn
+    # including all of its tool rounds. A run that would exceed it is refused
+    # with the estimate in the message rather than attempted. 0 disables the
+    # check. The reference lecture synthesis costs ~$0.03, so the default
+    # leaves plenty of room while still catching a runaway.
+    max_usd_per_run: float = 0.50
+
     # Inline editor AI uses forced tool-calling (xl-ai applyDocumentOperations).
     # Free models don't support tool_choice: required — use a model that does.
     # Override via INLINE_MODEL in .env.

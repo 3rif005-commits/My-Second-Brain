@@ -53,3 +53,8 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - One provider chain for every surface. (The agent had its own
   `settings.api_provider`, whose `anthropic` branch returned the Messages API
   URL for an OpenAI-shaped payload — broken on the first request.)
+- Work that would exceed its cost ceiling is refused before it is sent, with the
+  estimate and the ceiling in the message. An agent turn is checked between
+  rounds, never during one — a call already paid for is left to finish.
+- An unpriced model never trips the cap. (Refusing work because our price list
+  is incomplete would be the wrong failure.)

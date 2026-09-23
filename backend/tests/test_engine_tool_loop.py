@@ -69,10 +69,10 @@ class _SeqClient:
         return _CM(_Resp(lines))
 
 
-async def _collect(client, **kw):
+async def _collect(client, endpoint=None, **kw):
     payload = {"model": "m", "messages": kw.get("messages", []), "stream": True}
     return [e async for e in _stream_loop(
-        client, {"url": "u", "headers": {}}, payload,
+        client, endpoint or {"url": "u", "headers": {}}, payload,
         messages_payload=kw.get("messages", []),
         tool_schemas=[], tier=Tier.INTERNAL_API, user_id="u1",
         tool_calls_made=0, **{k: v for k, v in kw.items() if k != "messages"})]
@@ -231,3 +231,34 @@ async def test_each_round_writes_its_own_run_row(monkeypatch):
     # Round two reported real usage; round one had none and is marked estimated.
     assert rows[1]["input_tokens"] == 1200 and rows[1]["usage_reported"] is True
     assert rows[0]["usage_reported"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_turn_stops_when_its_budget_is_spent(monkeypatch):
+    """Checked between rounds, never during one: a call already paid for is
+    left to finish, because killing it wastes the spend without saving it."""
+    from services.ai import budget as budget_guard
+
+    monkeypatch.setattr("services.database.get_supabase",
+                        lambda: (_ for _ in ()).throw(RuntimeError("no db")))
+    expensive = {"choices": [{"delta": {}}],
+                 "usage": {"prompt_tokens": 400_000, "completion_tokens": 0}}
+    client = _SeqClient([
+        sse({"choices": [{"delta": {"tool_calls": [{
+            "index": 0, "id": "c1",
+            "function": {"name": "brain.search_brain", "arguments": "{}"},
+        }]}}]}, expensive),
+        text_turn("should never be reached"),
+    ])
+
+    with patch.object(engine, "execute_brain_tool", return_value={"matches": []}):
+        with budget_guard.limit(0.10) as spend:          # $0.40 of input > cap
+            events = await _collect(client, endpoint={
+                "url": "u", "headers": {}, "model": "claude-haiku-4-5",
+                "provider": "anthropic"})
+
+    assert len(client.requests) == 1                     # round two never ran
+    assert events[-1]["type"] == "error"
+    assert "$0.40" in events[-1]["content"]              # what it spent
+    assert "$0.10" in events[-1]["content"]              # and the ceiling
+    assert spend.exceeded is True

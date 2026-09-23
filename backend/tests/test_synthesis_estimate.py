@@ -117,3 +117,35 @@ def test_estimate_without_a_provider_reports_tokens_but_no_price():
     assert est["usd"] is None
     assert est["input_tokens"] > 0        # the static prompt still counts
     assert est["on_drop"] == synthesis.settings.workspace_on_drop
+
+
+# ── budget ───────────────────────────────────────────────────────────────────
+
+SOURCE_ROWS = [
+    {"id": "s1", "note_id": "n1", "user_id": "u1", "kind": "pdf",
+     "title": "Lecture 10", "source_url": None, "meta": {}},
+    {"id": "s2", "note_id": "n1", "user_id": "u1", "kind": "document",
+     "title": "Notes", "source_url": None, "meta": {}},
+]
+
+def test_an_over_budget_synthesis_is_refused_before_the_model_is_called(monkeypatch):
+    """The estimate is built from the same chunks and the same budget split the
+    run would use, so it is exact enough to refuse on."""
+    monkeypatch.setattr(synthesis.settings, "max_usd_per_run", 0.10)
+    db = MagicMock()
+    with patch.object(synthesis, "get_supabase", return_value=db), \
+         patch.object(synthesis, "ready_sources", return_value=SOURCE_ROWS), \
+         patch.object(synthesis, "source_text_from_chunks", return_value="x" * 500), \
+         patch.object(synthesis, "estimate_synthesis",
+                      return_value={"usd": 4.20, "ready_sources": 2}), \
+         patch.object(synthesis, "_complete") as model_call, \
+         patch.object(synthesis, "_write") as write:
+        (db.table.return_value.select.return_value.eq.return_value
+         .execute.return_value.data) = NOTE
+        synthesis.run_synthesis("n1")
+
+    model_call.assert_not_called()
+    failure = write.call_args[0][2]
+    assert failure["status"] == "failed"
+    assert "$4.20" in failure["error"] and "$0.10" in failure["error"]
+    assert "MAX_USD_PER_RUN" in failure["error"]

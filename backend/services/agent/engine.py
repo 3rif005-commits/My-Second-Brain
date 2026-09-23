@@ -29,6 +29,8 @@ from services.agent.permissions import (
     Deny, NeedsApproval, check as permission_check
 )
 from services.agent.skills import SkillRegistry, classify_skills
+from core.config import settings
+from services.ai import budget as budget_guard
 from services.ai import usage as usage_log
 from services.embedder import embed
 from services.retriever import retrieve
@@ -227,6 +229,7 @@ async def run_turn(
         stack.enter_context(usage_log.annotate(
             surface=request.surface, job="agent", trigger="user",
             user_id=user_id, note_id=request.current_note_id))
+        stack.enter_context(budget_guard.limit(settings.max_usd_per_run or None))
         client = await stack.enter_async_context(httpx.AsyncClient(timeout=240))
         async for ev in _stream_loop(
             client, endpoint, payload,
@@ -295,6 +298,7 @@ async def run_ingest_turn(
     async with AsyncExitStack() as stack:
         stack.enter_context(usage_log.annotate(
             surface="ingest", job="agent", trigger="user", user_id=user_id))
+        stack.enter_context(budget_guard.limit(settings.max_usd_per_run or None))
         client = await stack.enter_async_context(httpx.AsyncClient(timeout=300))
         async for ev in _stream_loop(
             client, endpoint, payload,
@@ -355,6 +359,7 @@ async def run_interactive_turn(
     async with AsyncExitStack() as stack:
         stack.enter_context(usage_log.annotate(
             surface="interactive", job="agent", trigger="user", user_id=user_id))
+        stack.enter_context(budget_guard.limit(settings.max_usd_per_run or None))
         stack.enter_context(usage_log.track(
             endpoint.get("provider") or endpoint.get("source"),
             endpoint.get("model"),
@@ -601,6 +606,16 @@ async def _stream_loop(
         })
         messages_payload.extend(tool_messages)
         payload = {**payload, "messages": messages_payload}
+
+        # Between rounds, not during: a call already paid for is left to
+        # finish, because tearing it down wastes the spend without saving it.
+        spend = budget_guard.current()
+        if spend is not None and spend.exceeded:
+            yield _ev({"type": "error",
+                       "content": f"stopped after spending ${spend.spent_usd:.2f} "
+                                  f"on this turn (limit ${spend.max_usd:.2f}). "
+                                  f"Ask again to continue."})
+            return
 
     yield _ev({"type": "error",
                "content": f"stopped after {MAX_TOOL_ROUNDS} rounds of tool calls"})

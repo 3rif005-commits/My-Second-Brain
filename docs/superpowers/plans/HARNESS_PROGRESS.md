@@ -9,8 +9,9 @@
 
 **Branch:** `feat/ai-harness` (created, 3 commits)
 **Last session:** 2026-09-22 — Stage 1 complete; Stage 2 built and baselined
-**Next action:** Stage 3, task 3.5 (per-run budgets + `max_usd` guard), then
-3.4 step B (Anthropic tool dialect in `services/ai/client`). Both code-only. Measurement-bearing cards (E3, E5, E6) are parked until
+**Next action:** 3.4 step B — teach `services/ai/client` the Anthropic tool
+dialect so Claude can drive the agent, which also deletes `OPENAI_DIALECT` and
+the refusal in `services/agent/model.py`. Code-only; verification needs credits. Measurement-bearing cards (E3, E5, E6) are parked until
 the Anthropic balance is topped up; measuring them on the free fallback model
 would measure the fallback.
 
@@ -72,7 +73,9 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       tool dialect (then Claude can drive the agent and `OPENAI_DIALECT` goes),
       fold in `services/llm.py`, and move `frontend/app/api/ai/route.ts` off its
       direct Gemini call.
-- [ ] 3.5 Per-run budgets + `max_usd` guard.
+- [x] 3.5 Per-run budgets + `max_usd` guard (`services/ai/budget.py`,
+      `MAX_USD_PER_RUN`, default $0.50: synthesis refuses pre-flight, an agent
+      turn stops between rounds).
 
 ## Stage 4 — H3 (only after Stage 3 numbers justify it)
 
@@ -123,7 +126,9 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
   results capped, both budgets visible · `b8f5b3c`
 - 2026-09-23 · Stage 3.4 step A: agent provider selection unified with
   services/ai; agent turns write run rows; found and fixed the
-  API_PROVIDER=anthropic endpoint mismatch · pending
+  API_PROVIDER=anthropic endpoint mismatch · `f40aeef`
+- 2026-09-23 · Stage 3.5: per-run budget guard (pre-flight refusal for
+  synthesis, between-rounds stop for agent turns) · pending
 
 ## Decisions taken while executing (not re-asked)
 

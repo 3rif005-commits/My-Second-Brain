@@ -27,6 +27,7 @@ from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterator
 
+from services.ai import budget as budget_guard
 from services.ai.pricing import estimate_usd, tokens_from_chars
 
 logger = logging.getLogger(__name__)
@@ -178,6 +179,9 @@ def _write_row(provider: str | None, model: str | None, usage: Usage,
         "eval_case": ctx.eval_case,
         "eval_config": ctx.eval_config,
     }
+    # Charge the active budget before anything can fail: a call that happened
+    # counts whether or not its row reaches the database.
+    budget_guard.record(row["estimated_usd"])
     RECENT.append(row)
     try:
         from services.database import get_supabase

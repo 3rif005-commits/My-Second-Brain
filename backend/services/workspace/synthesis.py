@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from core.config import settings
 from prompts.note_synthesis import build_note_synthesis_prompt, split_budget
 from services.ai.client import complete
+from services.ai import budget as budget_guard
 from services.ai import usage as usage_log
 from services.ai.pricing import estimate_usd, tokens_from_chars
 from services.ai.router import complete_with_fallback, pick
@@ -319,7 +320,12 @@ def run_synthesis(note_id: str, mode: str = "replace",
         prompt = build_note_synthesis_prompt(blocks, has_figures=bool(figures))
         with usage_log.annotate(surface="workspace", job="synthesis",
                                 trigger=trigger, note_id=note_id,
-                                user_id=user_id):
+                                user_id=user_id), \
+             budget_guard.limit(settings.max_usd_per_run or None):
+            # The estimate is already exact enough to refuse on: it is built
+            # from the same chunks and the same budget split the run will use.
+            budget_guard.check(estimate_synthesis(note_id, user_id)["usd"],
+                               what="Writing this note", setting="MAX_USD_PER_RUN")
             html = _complete(prompt, video_urls, has_text, user_id, figures)
         if not html.strip():
             raise RuntimeError("The model returned an empty draft.")
