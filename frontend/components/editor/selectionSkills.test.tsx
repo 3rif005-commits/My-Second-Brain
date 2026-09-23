@@ -47,3 +47,37 @@ describe("selection menu skills", () => {
     expect(streamToolsFor("rewrite_selection")).toEqual({ add: false, update: true, delete: false });
   });
 });
+
+describe("keeping the selection across the menu opening", () => {
+  function fakeView(from: number, to: number) {
+    const doc = {};
+    const mk = (f: number, t: number) => ({ from: f, to: t, empty: f === t,
+      eq: (o: { from: number; to: number }) => o.from === f && o.to === t });
+    const view = {
+      state: { doc, selection: mk(from, to),
+               tr: { setSelection: (s: unknown) => ({ sel: s }) } },
+      dispatch: vi.fn((tr: { sel: ReturnType<typeof mk> }) => { view.state.selection = tr.sel; }),
+    };
+    return { view, mk, editor: { prosemirrorView: view } };
+  }
+
+  it("puts back a range that collapsed while the document stayed the same", async () => {
+    const { rememberSelection, restoreSelection } = await import("./selectionSkills");
+    const { view, mk, editor } = fakeView(3, 26);
+    rememberSelection(editor);
+    view.state.selection = mk(3, 3);                  // the collapse
+    expect(restoreSelection(editor)).toBe(true);
+    expect(view.state.selection.from).toBe(3);
+    expect(view.state.selection.to).toBe(26);
+  });
+
+  it("never restores onto a changed document", async () => {
+    const { rememberSelection, restoreSelection } = await import("./selectionSkills");
+    const { view, mk, editor } = fakeView(3, 26);
+    rememberSelection(editor);
+    view.state.doc = {};                                  // text changed
+    view.state.selection = mk(3, 3);
+    expect(restoreSelection(editor)).toBe(false);
+    expect(view.dispatch).not.toHaveBeenCalled();
+  });
+});

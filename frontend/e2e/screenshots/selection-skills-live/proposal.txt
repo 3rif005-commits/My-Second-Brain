@@ -1,0 +1,18 @@
+http://localhost:3000/brain/102427c4-8967-4afc-9ebf-cc0ae0044764
+
+Gradient descent minimises the loss by stepping against the gradient. The learning rate sets the step size, and momentum damps oscillation.
+
+Gradient descent: A method used for finding the minimum of a function by iteratively moving in the direction of the steepest descent.
+
+Learning rate: A hyperparameter that controls how much to change the model in response to the estimated error each time the model weights are updated.
+
+Momentum: A technique that helps accelerate gradients vectors in the right directions, thus leading to faster converging.
+
+Loss: A measure of how well or poorly a model is functioning, typically by comparing the model's predictions with the actual outcomes.
+
+Oscillation: The behavior in which the learning process fluctuates back and forth instead of converging towards a minimum.⁠
+AI
+⁠
+
+
+

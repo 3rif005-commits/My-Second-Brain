@@ -280,12 +280,18 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     const inlineTransport = useMemo(
       () =>
         new ClientSideTransport({
+          // `.chat(...)`, not `(...)`: calling the provider directly selects
+          // OpenAI's Responses API (`input: [...]`), and /agent/inline
+          // forwards to chat/completions, which answered every editor AI
+          // request with 400 "specify prompt or messages" — found live when
+          // stock "Improve Writing" wrote nothing. The model id is replaced
+          // server-side by settings.inline_model.
           model: createOpenAI({
             apiKey: "x",
             fetch: fetchViaProxy(
               (_url: string) => `/api/ai/blocknote?noteId=${encodeURIComponent(_noteId)}`
             ),
-          })("gpt-4o"),
+          }).chat("gpt-4o"),
         }),
       [_noteId]
     );

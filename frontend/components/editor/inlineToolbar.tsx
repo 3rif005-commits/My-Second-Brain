@@ -28,6 +28,7 @@ import {
   useBlockNoteEditor,
   useComponentsContext,
 } from "@blocknote/react";
+import { SelectionKeepingAIButton } from "./selectionSkills";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyEditor = any;
@@ -88,6 +89,10 @@ export function NoteFormattingToolbar() {
     <FormattingToolbarController
       formattingToolbar={() => (
         <FormattingToolbar>
+          {/* First, so selection-surface skills are one click from any
+              selection — before this, the AI menu over a selection was
+              reachable only by ⌘J, which nothing on screen mentions. */}
+          <SelectionKeepingAIButton />
           {getFormattingToolbarItems()}
           <BasicTextStyleButton basicTextStyle="code" />
           <InlineMathButton />

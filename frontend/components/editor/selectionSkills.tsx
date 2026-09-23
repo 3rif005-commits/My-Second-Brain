@@ -14,8 +14,10 @@
 // Neither may delete.
 
 import { useEffect, useState } from "react";
+import { useBlockNoteEditor } from "@blocknote/react";
 import {
-  AIExtension, AIMenu, getDefaultAIMenuItems, type AIMenuSuggestionItem,
+  AIExtension, AIMenu, AIToolbarButton, getDefaultAIMenuItems,
+  type AIMenuSuggestionItem,
 } from "@blocknote/xl-ai";
 // @ts-ignore — xl-ai@0.48.0 exports aiDocumentFormats at runtime but its
 // index.d.ts leaves the api module out (same upstream gap as @blocknote/core)
@@ -31,6 +33,53 @@ export type SelectionSkill = {
 type Status = Parameters<typeof getDefaultAIMenuItems>[1];
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyEditor = any;
+
+// ── keeping the selection ────────────────────────────────────────────────────
+//
+// Opening the AI menu makes the editor read-only, and that sometimes
+// collapses ProseMirror's selection to its head — measured live, [3,26] →
+// [3,3], not on every click. xl-ai decides which items to show, and what
+// `useSelection` acts on, from that selection, so a collapsed one silently
+// turns "act on what I selected" into "continue writing at the cursor". The
+// range is remembered when the button is pressed and put back after the menu
+// opens and again right before a run — only while the document is unchanged,
+// because a stale range would point at different text.
+
+let saved: { sel: AnyEditor; doc: AnyEditor } | null = null;
+
+export function rememberSelection(editor: AnyEditor): void {
+  const state = editor.prosemirrorView?.state;
+  saved = state && !state.selection.empty ? { sel: state.selection, doc: state.doc } : null;
+}
+
+export function restoreSelection(editor: AnyEditor): boolean {
+  const view = editor.prosemirrorView;
+  if (!saved || !view) return false;
+  if (view.state.doc !== saved.doc) { saved = null; return false; }
+  if (!view.state.selection.eq(saved.sel)) {
+    view.dispatch(view.state.tr.setSelection(saved.sel));
+  }
+  return true;
+}
+
+/** xl-ai's toolbar button, with the selection held across the menu opening. */
+export function SelectionKeepingAIButton() {
+  const editor = useBlockNoteEditor();
+  return (
+    <span
+      className="contents"
+      onPointerDownCapture={() => rememberSelection(editor)}
+      onClick={() => {
+        // After xl-ai's own handler has opened the menu; once more on the
+        // next tick, because the collapse can land after the click.
+        restoreSelection(editor);
+        setTimeout(() => restoreSelection(editor), 0);
+      }}
+    >
+      <AIToolbarButton />
+    </span>
+  );
+}
 
 /** Which edits a skill's output contract allows. */
 export function streamToolsFor(output: SelectionSkill["output"]) {
@@ -64,6 +113,7 @@ export function selectionMenuItems(
     group: "Skills",
     size: "small",
     onItemClick: async () => {
+      restoreSelection(editor);
       await editor.getExtension(AIExtension)?.invokeAI({
         useSelection: true,
         userPrompt: s.prompt,
@@ -96,10 +146,18 @@ export function useSelectionSkills(): SelectionSkill[] {
 /** Drop-in for AIMenuController's `aiMenu` prop. */
 export function SkillAIMenu(props: React.ComponentProps<typeof AIMenu>) {
   const skills = useSelectionSkills();
+  const editor = useBlockNoteEditor();
+  // The menu may render before the button's restore runs, and AIMenu
+  // memoises its items on the `items` function — a new render with a new
+  // function is what makes it look at the restored selection.
+  const [, setRestored] = useState(0);
+  useEffect(() => {
+    if (restoreSelection(editor)) setRestored((n) => n + 1);
+  }, [editor]);
   return (
     <AIMenu
       {...props}
-      items={(editor, status) => selectionMenuItems(editor, status, skills)}
+      items={(ed, status) => selectionMenuItems(ed, status, skills)}
     />
   );
 }

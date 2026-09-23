@@ -19,12 +19,15 @@ import json
 from typing import AsyncIterator
 
 import httpx
+import logging
 
 from core.config import settings
 from services.ai import budget as budget_guard
 from services.ai import usage as usage_log
 from services.ai.providers import Provider
 from services.ai.router import candidates
+
+logger = logging.getLogger(__name__)
 
 OPENAI_DIALECT = {"openai", "openai_compatible", "local"}
 _TIMEOUT = 120
@@ -95,6 +98,10 @@ async def stream_passthrough(provider: Provider, payload: dict, *, surface: str,
                 if resp.status_code != 200:
                     raw = await resp.aread()
                     message = _error_message(raw, resp.status_code)
+                    # The client gets the SSE event; the server log gets it too.
+                    # Without this line a live 400 from the inline model left no
+                    # trace anywhere but an empty review in the editor.
+                    logger.warning(f"passthrough {provider.provider}/{body.get('model')}: {message}")
                     yield (f"data: {json.dumps({'type': 'error', 'content': message})}"
                            "\n\n").encode()
                     raise RuntimeError(message)
