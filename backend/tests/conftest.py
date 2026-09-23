@@ -30,6 +30,26 @@ def no_real_supabase(monkeypatch, request):
     monkeypatch.setattr("services.database.get_supabase", _refuse)
 
 
+@pytest.fixture(autouse=True)
+def neutral_provider_config(monkeypatch):
+    """Tests must not depend on whatever is in the developer's .env.
+
+    Provider order and availability are configuration, and this machine's .env
+    legitimately changes them — `AI_DISABLED_PROVIDERS=anthropic` while its
+    balance is empty, a CUSTOM_LLM_* block pointing at a gateway. Three router
+    tests started failing for exactly that reason, which is a test isolation
+    bug, not a routing bug. Each test sets the configuration it is about.
+    """
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "ai_disabled_providers", "")
+    for field in ("custom_llm_base_url", "custom_llm_api_key",
+                  "custom_llm_model", "custom_llm_label"):
+        monkeypatch.setattr(settings, field, "")
+    monkeypatch.setattr(settings, "custom_llm_price_in", None)
+    monkeypatch.setattr(settings, "custom_llm_price_out", None)
+
+
 @pytest.fixture
 def tmp_skills_dir(tmp_path):
     """A temp directory with no skills, ready to be populated."""

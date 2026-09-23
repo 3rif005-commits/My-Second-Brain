@@ -77,3 +77,8 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   stream. Raise on `error` in a chunk. (Reading only `delta.content` turned an
   overloaded provider into an empty string and a successful-looking call, and an
   eval blamed the model for it.)
+- Tests never read provider configuration from the developer's `.env` either.
+  (`AI_DISABLED_PROVIDERS=anthropic` was legitimate local config and it broke
+  three routing tests — a test isolation bug, not a routing bug.)
+- A skill may not be auto-selected unless it says `auto: true`. (Same rule
+  Notion settles on, and the reason the workspace stopped generating unasked.)

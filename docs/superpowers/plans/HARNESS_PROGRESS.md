@@ -9,10 +9,11 @@
 
 **Branch:** `feat/ai-harness` (created, 3 commits)
 **Last session:** 2026-09-22 — Stage 1 complete; Stage 2 built and baselined
-**Next action:** Stage 4.3 — skill folders with frontmatter, moving
-`prompts/note_synthesis.py` into a `study-guide` skill. Pure plumbing (the
-prompt text is unchanged), so it is verifiable by comparing the built prompt,
-and it is what E6/E7 need underneath them. Code-only. Measurement-bearing cards (E3, E5, E6) are parked until
+**Next action:** either (a) finish 4.3 by moving the mastery-guide text into a
+`study-guide` skill folder — needs your `prompts/mastery_guide.py` edits
+committed or stashed first, or (b) **E5 output discipline**, which the free
+model makes measurable today: its output is 3-4x Claude's for the same input,
+and output is where the cost is. Measurement-bearing cards (E3, E5, E6) are parked until
 the Anthropic balance is topped up; measuring them on the free fallback model
 would measure the fallback.
 
@@ -91,7 +92,14 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - [~] 4.2 **E7** progressive disclosure — **MCP discovery caching done**
       (5-minute TTL, failures never cached, cleared on any server change, live
       bypass for the settings page). Skill metadata and tool groups still open.
-- [ ] 4.3 Skill folders + frontmatter; `study-guide` skill replaces `prompts/note_synthesis.py`.
+- [~] 4.3 Skill folders + frontmatter — **loader done**: `<name>/SKILL.md`
+      folders alongside flat `.md`, frontmatter for surfaces/inputs/output/
+      model_tier/auto/confirm, `reference()` files read on demand, `index()`
+      for the metadata-only prompt listing, and `require_auto` so the
+      classifier cannot fire a skill that did not opt in. **Not done**: moving
+      the mastery-guide text out of `prompts/mastery_guide.py` into a
+      `study-guide` skill — that file has uncommitted edits of yours, so it is
+      waiting on you rather than on the code.
 - [ ] 4.4 **E8** retrieval upgrades (contextual chunk prefixes, reranking).
 - [ ] 4.5 **E9** map-reduce for 3+ sources.
 - [ ] 4.6 **E10** model/effort tiering incl. local Gemma fast tier.
@@ -145,7 +153,12 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - 2026-09-23 · Stage 3.4: `services/llm.py` folded into the gateway; model
   override preserved; error classifier kept · `2f3e8ac`
 - 2026-09-23 · inline AI spend now logged (byte-level proxy kept); MCP
-  discovery cached per server with a 5-minute TTL · pending
+  discovery cached per server with a 5-minute TTL · `3f501cb`
+- 2026-09-23 · migration applied by user; free-model baseline measured; found
+  and fixed swallowed in-stream errors; test isolation (no production DB, no
+  .env-dependent provider config) · `97b0d13`, `c486235`, `961ae90`, `7e42cc5`
+- 2026-09-23 · skill loader: folders, frontmatter, on-demand references,
+  metadata index, auto-gating · pending
 
 ## Decisions taken while executing (not re-asked)
 
