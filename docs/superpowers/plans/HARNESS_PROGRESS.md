@@ -8,15 +8,25 @@
 **Status legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (say why + what's needed)
 
 **Branch:** `feat/ai-harness` (created, 3 commits)
-**Last session:** 2026-09-22 — Stage 1 complete; Stage 2 built and baselined
-**Next action:** measurement is still blocked (free quota spent, no Anthropic
-credits). Agent-loop cases now exist, so when access returns the queue is:
-1. E6 both arms on Claude (~$0.25) — decides Markdown vs HTML.
-2. `--family agent` on Claude — the first real measurement of the tool loop
-   (E4) and the approval gate, neither of which has ever been scored.
-3. E7 `AGENT_SKILL_DISCLOSURE=index` against the same agent cases. Measurement-bearing cards (E3, E5, E6) are parked until
-the Anthropic balance is topped up; measuring them on the free fallback model
-would measure the fallback.
+**Last session:** 2026-09-23 — gateway merge finished, skills became jobs (action bar + slash menu), budgets, agent eval cases, E6 measured on the free model, first live browser pass
+**Next action — THE MEASUREMENT QUEUE.** Code is no longer the blocker; access
+is. Everything verifiable without a model is verified (1,592 backend tests,
+clean builds, 3 live browser tests). Run these in order the moment an API key
+with credit exists:
+
+1. `env -u PYTHONPATH ./venv/bin/python -m evals.run --config e6-html-claude --runs 3 --variant html`
+   then `--config e6-md-claude --runs 3 --variant md`, then
+   `python -m evals.compare e6-html-claude e6-md-claude`. **Decides E6**
+   (Markdown vs the HTML dialect). ~$0.25.
+2. `--family agent --runs 3` — the first measurement of the tool loop (E4) and
+   the approval gate, ever.
+3. Run `compare-sources` on two real lectures through the UI and read the note.
+   Nothing has ever produced one.
+4. `AGENT_SKILL_DISCLOSURE=index` against the agent cases — decides E7.
+
+Then: migrate the mastery guide into a `study-guide` skill folder (needs
+`backend/prompts/mastery_guide.py` committed or stashed first), and finish the
+UI with selection-menu skills and a run card.
 
 **Run the backend suite with `env -u PYTHONPATH`** — this machine's ROS install
 puts `/opt/ros/jazzy` on PYTHONPATH and its pytest plugins crash collection:
@@ -134,6 +144,15 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - [ ] 5.4 Remote MCP server + per-user OAuth (the subscription bridge); MCP Apps UI.
 
 ---
+
+## Never exercised against a real model (the honest list)
+
+- `compare-sources` and `flashcards` have never produced a note.
+- The Anthropic tool dialect has never hit the live API — Claude has never
+  actually driven the agent loop.
+- `POST /v1/chat/completions` has never served a real editor request.
+- The agent-loop eval cases have never run.
+- E6's −66% is from a free model, n=3, with one case unmeasured.
 
 ## Blocked / needs the user
 
