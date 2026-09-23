@@ -119,8 +119,11 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       jobs ship (`compare-sources`, `flashcards`). **Action bar shipped** (`components/workspace/SkillBar.tsx`):
       a chip per skill under the header, each priced before the click, a
       blocked skill showing its reason instead of being greyed out, and the run
-      feeding the existing draft/apply flow. **Next**: the `/` palette and the
-      selection menu; then a live browser pass, which nothing here has had.
+      feeding the existing draft/apply flow. **Live pass done** (`e2e/workspace-skills.spec.ts`,
+      4 tests green against the running stack): chips render priced, a blocked
+      skill shows its reason, and a drop indexes without generating. It caught
+      one real defect — "≈$0.000" on a free model. **Next**: the `/` palette
+      and the selection menu.
 - [ ] 5.2 **E12** learned style playbook.
 - [ ] 5.3 Background agents (triggers, budgets, activity page) on the Batch API.
 - [ ] 5.4 Remote MCP server + per-user OAuth (the subscription bridge); MCP Apps UI.

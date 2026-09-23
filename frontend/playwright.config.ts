@@ -39,7 +39,18 @@ export default defineConfig({
       use: { storageState: AUTH_FILE },
     },
 
-    // 4. Phase 2 ingest tests — PDF + YouTube URL
+    // 4. Workspace action bar — drop a source, check the jobs it offers.
+    //    No model call: the drop policy is "suggest" and the test stops at the
+    //    offer, so it does not depend on a provider's daily quota.
+    {
+      name: "workspace-skills",
+      testMatch: "**/workspace-skills.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      timeout: 240_000,
+    },
+
+    // 5. Phase 2 ingest tests — PDF + YouTube URL
     {
       name: "ingest",
       testMatch: "**/03-ingest.spec.ts",

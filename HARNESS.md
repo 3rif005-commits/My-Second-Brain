@@ -104,3 +104,6 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - The UI shows the estimate before a run and the real cost after it, and says
   "estimated" when the numbers are ours rather than the provider's. A promise
   and a receipt are different claims.
+- A free-tier model is priced at exactly zero, and "≈$0.000" reads as broken.
+  Say "free", and still say the token count — free of price is not free of time.
+  (Caught by the first live pass, not by any unit test.)
