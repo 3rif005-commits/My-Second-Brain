@@ -106,6 +106,11 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - Progressive disclosure buys nothing until the bodies or the catalogue are
   large: with two 30-character skills the index costs MORE than the bodies it
   replaces. Measure before switching `AGENT_SKILL_DISCLOSURE` to "index".
+  (Measured on Claude: index loads the right skill 5/5, but with four skills a
+  turn that needs one costs +46%. Inline stays default until the catalogue grows.)
+- An eval that cannot see an engine-handled tool records the event it emits.
+  (`skill.load` never reaches the eval's fake brain; "0 loads" was a blind spot,
+  not a result.)
 - `ai_runs.user_id` and `note_id` are uuid columns: anything else is dropped
   before the insert. (The eval runner passed the literal "eval"; Postgres
   rejected every row with an error that never said "ai_runs", it was logged at

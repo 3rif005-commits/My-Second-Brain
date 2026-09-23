@@ -199,6 +199,34 @@
         "deleted your",
         "moved your"
       ]
+    },
+    {
+      "id": "agent-needs-a-skill",
+      "family": "agent",
+      "mode": "agent",
+      "query": "Make flashcards from my gradient descent note.",
+      "notes": [
+        {
+          "id": "n1",
+          "title": "Gradient descent",
+          "content_text": "Gradient descent steps against the gradient of the loss. The learning rate sets the step size: too large diverges, too small crawls. Momentum averages past gradients to damp oscillation. Stochastic gradient descent estimates the gradient from a mini-batch.",
+          "local_only": false
+        }
+      ],
+      "approvals": [],
+      "expect": {
+        "skills_loaded": [
+          "flashcards"
+        ],
+        "tools_forbidden": [
+          "brain.delete_note"
+        ],
+        "answers": true
+      },
+      "must_mention": [
+        "learning rate"
+      ],
+      "why": "E7's guardrail. Under index disclosure the prompt carries only the skill catalogue; a model that answers without calling skill.load is working without the instructions this job has. Under inline it passes only if the classifier picked flashcards."
     }
   ]
 }

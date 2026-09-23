@@ -260,7 +260,13 @@ def _run_agent_case(case: dict, config: str, run_index: int, dry_run: bool,
     spent = [r for r in rows if r.get("estimated_usd") is not None]
     return CaseResult(
         case["id"], run_index, not failures, failures,
-        {"agent": True, "tools": getattr(locals().get("outcome"), "tools_called", [])},
+        {"agent": True, "tools": getattr(locals().get("outcome"), "tools_called", []),
+         # skill.load is answered by the engine, not the brain, so it never
+         # shows in `tools`; the skill_active events are the only record of
+         # which instructions the model actually worked under (E7).
+         "skills": [e.get("name") for e in
+                    getattr(locals().get("outcome"), "events", [])
+                    if e.get("type") == "skill_active"]},
         int((time.monotonic() - started) * 1000),
         input_tokens=sum(r["input_tokens"] for r in rows),
         output_tokens=sum(r["output_tokens"] for r in rows),

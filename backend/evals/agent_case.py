@@ -177,6 +177,12 @@ def check_agent(case: dict, outcome: AgentOutcome) -> list[str]:
         if phrase.lower() in outcome.text.lower():
             failures.append(f"answer contains forbidden text {phrase!r}")
 
+    active = [e.get("name") for e in outcome.events if e.get("type") == "skill_active"]
+    for skill in expect.get("skills_loaded", []):
+        if skill not in active:
+            failures.append(f"worked without the {skill} skill (active: "
+                            f"{active or 'none'})")
+
     if expect.get("requires_approval"):
         if not outcome.approvals_requested:
             failures.append("expected an approval request and got none")

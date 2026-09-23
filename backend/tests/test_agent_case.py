@@ -158,3 +158,14 @@ async def test_without_an_approval_the_edit_is_refused_and_the_case_can_say_so()
     assert check_agent(case, outcome) == []
     assert outcome.approvals_requested == ["brain.update_note:n1"]
     assert outcome.brain.notes["n1"].get("updated") is not True
+
+
+@pytest.mark.asyncio
+async def test_a_case_can_require_that_a_skill_was_loaded():
+    """E7's guardrail: under index disclosure a model that never loads the
+    skill is working without its instructions, and the case must say so."""
+    stream = scripted([{"type": "text", "content": "Here are some flashcards."}])
+    case = {**CASE, "approvals": [], "must_mention": [],
+            "expect": {"skills_loaded": ["flashcards"], "answers": True}}
+    outcome = await run_agent_case(case, _provider(), SkillRegistry({}), stream)
+    assert any("without the flashcards skill" in f for f in check_agent(case, outcome))
