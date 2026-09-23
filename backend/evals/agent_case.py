@@ -149,6 +149,13 @@ def check_agent(case: dict, outcome: AgentOutcome) -> list[str]:
     expect = case.get("expect", {})
     failures: list[str] = []
 
+    # A turn that errored is not a model that chose to do nothing. Without
+    # this line a 400 from the API scored as "never called any tool" and the
+    # real cause — a rejected tool name — sat unread in the event list.
+    for e in outcome.events:
+        if e.get("type") == "error":
+            failures.append(f"turn errored: {str(e.get('content'))[:200]}")
+
     for tool in expect.get("tools_used", []):
         if tool not in outcome.tools_called:
             failures.append(f"never called {tool} (called: "

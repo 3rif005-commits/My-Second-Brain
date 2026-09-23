@@ -21,6 +21,7 @@ their own place and neither caller should have to know where.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, AsyncIterator
 
 import httpx
@@ -39,21 +40,78 @@ ANTHROPIC_DIALECT = {"anthropic"}
 
 # ── request shaping ──────────────────────────────────────────────────────────
 
-def tools_to_anthropic(tools: list[dict]) -> list[dict]:
-    """OpenAI `parameters` is Anthropic's `input_schema`; the rest matches."""
+_WIRE_UNSAFE = re.compile(r"[^a-zA-Z0-9_-]")
+
+
+def anthropic_tool_names(names: list[str]) -> dict[str, str]:
+    """Our name → the name Claude is shown.
+
+    Anthropic only accepts `^[a-zA-Z0-9_-]{1,128}$`, and every tool this app
+    has is dotted (`brain.search_brain`, `mcp.<server>.<tool>`, `skill.load`).
+    Sent as-is, the API refuses the whole request, so no tool-using turn ever
+    reached Claude. The mapping is per request and made unique, because two
+    names can collapse to one wire form (`a.b` and `a_b`).
+    """
+    out: dict[str, str] = {}
+    taken: set[str] = set()
+    for name in names:
+        if name in out:
+            continue
+        base = _WIRE_UNSAFE.sub("_", name)[:120] or "tool"
+        wire, n = base, 2
+        while wire in taken:
+            wire, n = f"{base}_{n}", n + 1
+        out[name] = wire
+        taken.add(wire)
+    return out
+
+
+def _tool_name(t: dict) -> str:
+    return t.get("function", t)["name"]
+
+
+_EMPTY_SCHEMA = {"type": "object", "properties": {}}
+
+
+def _tool_schema(fn: dict) -> dict:
+    """The tool's argument schema, whichever key it was declared under.
+
+    Brain and MCP tools are declared Anthropic-style (`input_schema`),
+    `skill.load` OpenAI-style (`parameters`). Reading only one key sent every
+    brain tool to the model with NO arguments, and the model guessed —
+    `search_brain({})`, `get_note({"note_id": ...})`.
+    """
+    return fn.get("parameters") or fn.get("input_schema") or _EMPTY_SCHEMA
+
+
+def _openai_tool(t: dict) -> dict:
+    fn = t.get("function", t)
+    return {"type": "function",
+            "function": {"name": fn["name"],
+                         "description": fn.get("description", ""),
+                         "parameters": _tool_schema(fn)}}
+
+
+def tools_to_anthropic(tools: list[dict],
+                       names: dict[str, str] | None = None) -> list[dict]:
+    """OpenAI `parameters` is Anthropic's `input_schema`; names go through the
+    wire mapping; the rest matches."""
+    names = names if names is not None else anthropic_tool_names(
+        [_tool_name(t) for t in tools or []])
     out = []
     for t in tools or []:
         fn = t.get("function", t)
         out.append({
-            "name": fn["name"],
+            "name": names.get(fn["name"], fn["name"]),
             "description": fn.get("description", ""),
-            "input_schema": fn.get("parameters") or {"type": "object",
-                                                     "properties": {}},
+            "input_schema": _tool_schema(fn),
         })
     return out
 
 
-def history_to_anthropic(messages: list[dict]) -> tuple[str, list[dict]]:
+def history_to_anthropic(messages: list[dict],
+                         names: dict[str, str] | None = None
+                         ) -> tuple[str, list[dict]]:
     """OpenAI-shaped history → (system, Anthropic messages).
 
     Two rules that are easy to get wrong and fail loudly at the API:
@@ -97,8 +155,12 @@ def history_to_anthropic(messages: list[dict]) -> tuple[str, list[dict]]:
                     args = json.loads(fn.get("arguments") or "{}")
                 except json.JSONDecodeError:
                     args = {}
+                name = fn.get("name") or ""
+                if names is not None:
+                    # a replayed call must use the name Claude was shown
+                    name = names.get(name) or _WIRE_UNSAFE.sub("_", name)
                 blocks.append({"type": "tool_use", "id": call.get("id"),
-                               "name": fn.get("name"), "input": args})
+                               "name": name, "input": args})
             out.append({"role": "assistant", "content": blocks})
             continue
 
@@ -120,13 +182,15 @@ def history_to_anthropic(messages: list[dict]) -> tuple[str, list[dict]]:
 async def _stream_anthropic(client: httpx.AsyncClient, p: Provider,
                             messages: list[dict], tools: list[dict],
                             max_tokens: int) -> AsyncIterator[dict[str, Any]]:
-    system, msgs = history_to_anthropic(messages)
+    names = anthropic_tool_names([_tool_name(t) for t in tools])
+    back = {wire: ours for ours, wire in names.items()}
+    system, msgs = history_to_anthropic(messages, names)
     payload: dict[str, Any] = {"model": p.model, "messages": msgs,
                                "max_tokens": max_tokens, "stream": True}
     if system:
         payload["system"] = system
     if tools:
-        payload["tools"] = tools_to_anthropic(tools)
+        payload["tools"] = tools_to_anthropic(tools, names)
 
     # tool_use arguments arrive as partial JSON fragments keyed by block index
     open_blocks: dict[int, dict] = {}
@@ -171,7 +235,9 @@ async def _stream_anthropic(client: httpx.AsyncClient, p: Provider,
                 block = data.get("content_block") or {}
                 if block.get("type") == "tool_use":
                     open_blocks[data.get("index", 0)] = {
-                        "id": block.get("id"), "name": block.get("name"),
+                        "id": block.get("id"),
+                        # the engine dispatches on OUR name, never the wire one
+                        "name": back.get(block.get("name"), block.get("name")),
                         "args": ""}
 
             elif kind == "content_block_delta":
@@ -198,8 +264,7 @@ async def _stream_openai(client: httpx.AsyncClient, url: str, headers: dict,
                                "messages": _openai_history(messages),
                                "max_tokens": max_tokens, "stream": True}
     if tools:
-        payload["tools"] = [t if "function" in t else {"type": "function", "function": t}
-                            for t in tools]
+        payload["tools"] = [_openai_tool(t) for t in tools]
     if any(host in url for host in ("openrouter.ai", "api.openai.com")):
         payload["stream_options"] = {"include_usage": True}
 

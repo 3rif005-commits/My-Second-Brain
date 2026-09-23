@@ -129,6 +129,19 @@ async def test_a_silent_agent_is_a_failure():
 
 
 @pytest.mark.asyncio
+async def test_a_provider_error_is_reported_as_the_cause():
+    """A rejected request must not score as "the model called nothing" — that
+    is how a 400 on every Claude tool turn read as a weak model."""
+    async def _broken(provider, messages, tools=None, max_tokens=2048):
+        raise RuntimeError("Anthropic API error 400: tools.0.custom.name")
+        yield  # pragma: no cover
+    case = {**CASE, "expect": {"answers": True}, "must_mention": []}
+    outcome = await run_agent_case(case, _provider(), SkillRegistry({}), _broken)
+    failures = check_agent(case, outcome)
+    assert any("turn errored" in f and "tools.0.custom.name" in f for f in failures)
+
+
+@pytest.mark.asyncio
 async def test_without_an_approval_the_edit_is_refused_and_the_case_can_say_so():
     """The product rule the harness exists to keep honest: a turn that has read
     retrieved note text may not edit an existing note unasked."""

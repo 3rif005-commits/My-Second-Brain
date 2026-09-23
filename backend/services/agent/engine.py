@@ -41,6 +41,12 @@ MAX_TOOL_CALLS_PER_TURN = 10
 MAX_TOOL_ROUNDS = 5
 # Provisional; E5 measures it. Claude Code's equivalent cap is ~25k tokens.
 TOOL_RESULT_CHAR_CAP = 8_000
+#: What the model is told when a call is held for the user's Confirm click.
+APPROVAL_PENDING_REPLY = (
+    "NOT DONE. This action was NOT performed and nothing has changed. It is "
+    "held until the user clicks Confirm. Do not call it again. Tell the user "
+    "what you will do once they confirm, and that it has not happened yet. "
+    "Never say it is done.")
 
 
 BASE_PERSONA = """You are the Second Brain assistant. You help the user think
@@ -515,9 +521,10 @@ async def _stream_loop(
                 # key in `approvals` — which is why approval never rides in
                 # `args`. The model is told to stop asking and say what it
                 # would do, so it cannot spend the remaining rounds retrying.
-                _answer(slot, "Waiting for the user to confirm this action. "
-                              "Do not call it again. Tell the user what you "
-                              "intend to do and stop.")
+                # "Waiting for the user to confirm" alone read as success to
+                # Claude: 3 runs in 4 told the user a held delete was done.
+                # The reply has to say, in so many words, that nothing happened.
+                _answer(slot, APPROVAL_PENDING_REPLY)
                 yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
                            "reason": decision.reason, "requires_approval": True,
                            "approval_key": decision.key})

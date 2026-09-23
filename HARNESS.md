@@ -31,6 +31,10 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   content + the ability to act is the shape of every published injection.)
 - Retrieved material is announced to the model as data, not instructions — the
   cheap half of the pair whose expensive half is the gate.
+- A held action is reported to the model as NOT done, in so many words.
+  "Waiting for the user to confirm" read as success: 3 turns in 4, Claude told
+  the user a delete the gate had held was "Done!". A gate that holds while the
+  assistant claims it acted still leaves the user believing something false.
 
 ## Measuring
 
@@ -46,6 +50,15 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 
 ## The loop
 
+- Tool names are translated per dialect. Anthropic accepts only
+  `[a-zA-Z0-9_-]`, every tool here is dotted, and the API refused every
+  tool-using request — Claude had never run the loop while the suite was green.
+- A tool's schema is read from `parameters` OR `input_schema`. Reading one key
+  sent every brain tool with no arguments, and the model guessed them.
+- Test fixtures use the shape the real code declares. Both defects above
+  passed because the fixtures were written in the shape the converter expected.
+- An eval scores a provider error as an error, quoting it — never as a model
+  that chose to do nothing.
 - Every `tool_call` gets exactly one `tool` reply — success, denial, error, or
   waiting-on-approval. (An unanswered `tool_call_id` is a 400 from the provider,
   and a refusal the model cannot see is one it repeats.)
