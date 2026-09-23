@@ -125,7 +125,8 @@ def check(score, expect: dict, source_count: int) -> list[str]:
     return out
 
 
-def run_case(case: dict, config: str, run_index: int, dry_run: bool) -> CaseResult:
+def run_case(case: dict, config: str, run_index: int, dry_run: bool,
+             model: str | None = None) -> CaseResult:
     from prompts.note_synthesis import build_note_synthesis_prompt
     from services.ai import usage as usage_log
 
@@ -149,7 +150,8 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool) -> CaseResu
                                     eval_case=case["id"], eval_config=config):
                 html = _strip_fences(complete_with_fallback(
                     "summarize_text", EVAL_USER,
-                    [{"role": "user", "content": prompt}], max_tokens=16000))
+                    [{"role": "user", "content": prompt}], max_tokens=16000,
+                    model_override=model))
         except Exception as e:                      # noqa: BLE001
             error = f"{type(e).__name__}: {e}"[:300]
 
@@ -256,6 +258,10 @@ def main(argv: list[str] | None = None) -> int:
                     help="runs per case; 1 is a demo, not a measurement")
     ap.add_argument("--case", action="append", help="limit to these case ids")
     ap.add_argument("--family", action="append", help="limit to these families")
+    ap.add_argument("--model",
+                    help="run every case on this model id instead of the chain's "
+                         "first choice — the honest way to compare two models, "
+                         "since a report that mixes them measures neither")
     ap.add_argument("--dry-run", action="store_true",
                     help="no model calls — checks the corpus, scorer and report path")
     ap.add_argument("--manifest", type=Path, default=None)
@@ -274,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
     results: list[CaseResult] = []
     for case in cases:
         for i in range(args.runs):
-            r = run_case(case, args.config, i, args.dry_run)
+            r = run_case(case, args.config, i, args.dry_run, model=args.model)
             results.append(r)
             print(f"  {case['id']} run {i + 1}/{args.runs}: "
                   f"{'ok' if r.ok else 'FAIL'} ({r.latency_ms} ms)", file=sys.stderr)
@@ -287,6 +293,7 @@ def main(argv: list[str] | None = None) -> int:
     report = REPORTS / f"{args.config}-{stamp}.json"
     report.write_text(json.dumps({
         "config": args.config,
+        "model_override": args.model,
         "runs_per_case": args.runs,
         "dry_run": args.dry_run,
         "summary": summary,
