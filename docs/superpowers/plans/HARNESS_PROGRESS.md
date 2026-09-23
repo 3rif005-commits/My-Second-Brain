@@ -7,26 +7,26 @@
 
 **Status legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (say why + what's needed)
 
-**Branch:** `feat/ai-harness` (created, 3 commits)
-**Last session:** 2026-09-23 — gateway merge finished, skills became jobs (action bar + slash menu), budgets, agent eval cases, E6 measured on the free model, first live browser pass
-**Next action — THE MEASUREMENT QUEUE.** Code is no longer the blocker; access
-is. Everything verifiable without a model is verified (1,592 backend tests,
-clean builds, 3 live browser tests). Run these in order the moment an API key
-with credit exists:
+**Branch:** `feat/ai-harness`
+**Last session:** 2026-09-23 (evening) — the measurement queue ran on Claude.
+E6 decided (keep HTML), E4 measured 5/5 after fixing three defects under a green
+suite, E7 decided (keep inline), the first compare-sources note was written
+live, and the selection menu shipped after fixing editor AI edits for everyone.
 
-1. `env -u PYTHONPATH ./venv/bin/python -m evals.run --config e6-html-claude --runs 3 --variant html`
-   then `--config e6-md-claude --runs 3 --variant md`, then
-   `python -m evals.compare e6-html-claude e6-md-claude`. **Decides E6**
-   (Markdown vs the HTML dialect). ~$0.25.
-2. `--family agent --runs 3` — the first measurement of the tool loop (E4) and
-   the approval gate, ever.
-3. Run `compare-sources` on two real lectures through the UI and read the note.
-   Nothing has ever produced one.
-4. `AGENT_SKILL_DISCLOSURE=index` against the agent cases — decides E7.
-
-Then: migrate the mastery guide into a `study-guide` skill folder (needs
-`backend/prompts/mastery_guide.py` committed or stashed first), and finish the
-UI with selection-menu skills and a run card.
+**Next action, in order:**
+1. **compare-sources quality** — the first live note (committed at
+   `frontend/e2e/screenshots/compare-sources-live/note.txt`) leaks the
+   extractor's labels ("constraint C-01", "states INS-06") and labels two
+   coverage differences "Contradiction", against its own rule. Add a
+   `must_not_mention` / regex guard for `\b[A-Z]{1,4}-\d{2}\b` to the
+   multi-source corpus case, measure n=3 on Claude, then change the skill.
+2. **E6b** — format vs spec length, with `anchors` and `text_chars` floors
+   added to the manifest first (the pass-rate guardrail cannot see a thin note).
+3. **Blocked reason lies when a source FAILED**: the chip says "needs at least
+   two sources" when one of two failed processing. Say which source failed.
+4. Study-guide migration — still waiting on `backend/prompts/mastery_guide.py`
+   (uncommitted, yours).
+5. Run card (5.1 remainder).
 
 **Run the backend suite with `env -u PYTHONPATH`** — this machine's ROS install
 puts `/opt/ros/jazzy` on PYTHONPATH and its pytest plugins crash collection:
@@ -46,6 +46,10 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 | User skills storage | Bundled skills stay files. User-authored skills deferred to H3 — do not build now. |
 | Framework adoption | None. No CrewAI/LangGraph/Temporal. Plain Python in `services/`. |
 | Subagents | Do not spawn Claude Code subagents for execution. Work inline, write to disk as you go. |
+| E6 outcome (2026-09-23) | Synthesis stays on the HTML dialect. The Markdown variant is kept behind `--variant md`; skills keep writing Markdown. |
+| E7 outcome (2026-09-23) | `AGENT_SKILL_DISCLOSURE` stays `inline` until the catalogue grows; `index` is proven safe (loads the right skill 5/5). |
+| Supabase transport (2026-09-23) | PostgREST over HTTP/1.1 — reversible in `services/database.py`; h2 GOAWAY killed two live runs. |
+| Selection skills (2026-09-23) | Run through xl-ai's own invokeAI and review (no second model path); output `insert_below` = add only, `rewrite_selection` = update only; never delete. |
 | Paid vs free model (user, 2026-09-23) | Claude (Haiku 4.5) for every run that DECIDES something — experiment arms, agent/approval measurements, the first real note of a skill. Free OpenRouter model for plumbing, smoke and iteration. A deciding run whose `attempts` show a fallback is discarded, not scored. Claude is re-enabled per process (`AI_DISABLED_PROVIDERS=gemini`) until `.env` is edited. |
 
 ---
@@ -102,13 +106,13 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 
 ## Stage 4 — H3 (only after Stage 3 numbers justify it)
 
-- [~] 4.1 **E6** Markdown+fences vs HTML — **first result in**: −66% output
-      tokens, 8/9 vs 6/9 on the cases that ran (free model, n=3). PROMISING,
-      NOT PROVEN — needs a Claude re-run to decide. See the card.
-- [~] 4.2 **E7** progressive disclosure — MCP discovery caching done; skill
-      index + `skill.load` implemented behind `AGENT_SKILL_DISCLOSURE=index`
-      (default `inline`). **Measurement blocked**: the corpus has no agent-loop
-      cases, so the tool loop has never been measured at all. Tool groups open.
+- [x] 4.1 **E6** Markdown+fences vs HTML — **decided on Claude** (n=3): 11/12
+      vs 11/12 at −68% output tokens, but the Markdown notes are 44% shorter
+      with 42% fewer anchors. Default stays HTML; E6b separates format from
+      spec length. See the card.
+- [x] 4.2 **E7** progressive disclosure — **decided on Claude** (n=5): index
+      loads the right skill 5/5 and trims 10–16% on no-skill turns, but costs
+      +46% on a turn that needs one. Inline stays default. Tool groups open.
 - [~] 4.3 Skill folders + frontmatter — **loader done**: `<name>/SKILL.md`
       folders alongside flat `.md`, frontmatter for surfaces/inputs/output/
       model_tier/auto/confirm, `reference()` files read on demand, `index()`
@@ -137,9 +141,11 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       source of jobs for both the action bar and the editor's slash menu (two
       lists that could drift is two lists that will), and `BlockEditor` grew a
       generic `extraSlashItems` slot so it stays unaware that skills exist.
-      Type-checked and built; the slash-menu e2e is written but **not yet run**
-      — this machine ran out of RAM for Chromium. **Next**: the selection menu,
-      and run `--project=workspace-skills` when the machine is free.
+      Slash-menu e2e **run and green** (its selector was wrong; fixed).
+      **Selection menu shipped**: skills declaring `surfaces: [selection]`
+      (first: `define-terms`) lead xl-ai's AI menu over a selection, via an
+      AI button now in the formatting toolbar; verified live on the inline
+      model (`openai/gpt-4o-mini`). **Next**: the run card.
 - [ ] 5.2 **E12** learned style playbook.
 - [ ] 5.3 Background agents (triggers, budgets, activity page) on the Batch API.
 - [ ] 5.4 Remote MCP server + per-user OAuth (the subscription bridge); MCP Apps UI.
@@ -148,22 +154,23 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 
 ## Never exercised against a real model (the honest list)
 
-- `compare-sources` and `flashcards` have never produced a note.
-- The Anthropic tool dialect has never hit the live API — Claude has never
-  actually driven the agent loop.
+- `flashcards` has never produced a note (compare-sources has, once, live).
 - `POST /v1/chat/completions` has never served a real editor request.
-- The agent-loop eval cases have never run.
-- E6's −66% is from a free model, n=3, with one case unmeasured.
+- The editor's inline AI runs on OpenRouter `openai/gpt-4o-mini` (pinned by
+  `/agent/inline`), never on Claude; selection skills inherit that.
+- The agent loop has run only against the eval's in-memory brain, never a real
+  chat turn in the browser.
+- E7's primary metric (prompt flat as the catalogue grows) needs >4 skills.
 
 ## Blocked / needs the user
 
 1. **Apply `supabase/migrations/020_ai_runs.sql`** in the Supabase SQL editor.
    Until then runs are measured from an in-process buffer (evals work, the app
    works) but nothing is persisted and no history accumulates.
-2. **Anthropic credits are exhausted** — `Your credit balance is too low`
-   (2026-09-22, after ~$0.27 of baseline runs). Every Claude measurement is
-   blocked until it is topped up; the chain currently falls back to OpenRouter's
-   free Nemotron, which is a different model and cannot be compared.
+2. ~~Anthropic credits~~ — **resolved 2026-09-23**. Claude is re-enabled per
+   process with `AI_DISABLED_PROVIDERS=gemini`; **`backend/.env` still says
+   `anthropic,gemini`** because the file was open in your editor all session.
+   Remove `anthropic,` from that line when you close it.
 3. **Gemini is unreachable from `backend/venv`**: `No module named 'google'`.
    Either `./venv/bin/pip install google-genai` or accept that the second
    fallback is dead there.
@@ -209,3 +216,10 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 | Approval transport | `AgentRequest.approvals: ["<tool>:<target>"]`, replayed by the client after Confirm | The model writes tool args, so consent cannot live there; a separate channel is the only honest one. Reversible: it is one field. |
 | Untrusted taint scope | Editing existing data + any MCP call need approval once a turn has read untrusted text; additive tools stay open | Gating `create_note` would break the assistant's main job; the worst an injection then achieves is a note the user can delete. |
 | Ingest surface | Always treated as untrusted (its messages ARE the uploaded document) | Cheap and correct; only affects edit/MCP paths. |
+- 2026-09-23 · E6 on Claude: HTML stays default (MD writes 44% less) · `a6d7980`
+- 2026-09-23 · agent loop on Claude: dotted tool names 400'd, schemas dropped,
+  held deletes reported "Done!" — all fixed, 5/5 + 5/5 · `82ab9ed`
+- 2026-09-23 · Supabase over HTTP/1.1; first compare-sources note, live · `44bf65c`
+- 2026-09-23 · E7 on Claude: inline stays default; skill_active recorded · `8c6af2f`
+- 2026-09-23 · selection menu + define-terms; editor AI edits fixed (Responses
+  API vs chat/completions), selection kept across menu open · `6695e84`, `4dc8da3`

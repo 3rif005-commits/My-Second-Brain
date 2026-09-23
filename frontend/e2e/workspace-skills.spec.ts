@@ -75,7 +75,7 @@ test.describe("workspace action bar", () => {
       .toBeVisible({ timeout: 30_000 });
 
     // Type "/" in the note and look for the Skills group.
-    await page.locator(".bn-editor [contenteditable='true']").first().click();
+    await page.locator(".bn-editor[contenteditable='true']").first().click();
     await page.keyboard.type("/flash");
     const menuItem = page.getByText(/^Flashcards$/).first();
     await expect(menuItem).toBeVisible({ timeout: 10_000 });

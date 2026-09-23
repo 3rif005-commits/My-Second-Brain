@@ -124,6 +124,19 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   SDK) get `services/ai/passthrough`: forward untouched, tee the stream. They
   are logged and budgeted without anyone owning a wire contract only a browser
   can verify.
+- The editor's xl-ai transport is `createOpenAI(...).chat(model)`. Calling the
+  provider directly selects the Responses API, `/agent/inline` forwards to
+  chat/completions, and every editor AI edit got a 400 the user never saw —
+  found only when a live pass ran stock "Improve Writing".
+- The AI menu keeps the selection it was opened on. Going read-only sometimes
+  collapsed it, and the menu silently offered "continue writing" instead of
+  acting on the selected text. Remember on press, restore after open and
+  before a run, and only onto the same document.
+- A selection skill must ASK for the selection surface. "No surfaces means
+  anywhere" is right for agent instructions and wrong for a button that
+  edits the user's text.
+- A passthrough logs upstream errors on the server as well as sending them to
+  the client. (The editor's 400 left no trace anywhere.)
 - A skill reaches the workspace action bar only if it declares an `output`. No
   output means there is nowhere to put the result — those are agent
   instructions (cite-everything), not jobs.
