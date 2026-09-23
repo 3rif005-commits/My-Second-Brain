@@ -10,7 +10,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { Link2 } from "lucide-react";
-import type { BlockEditorHandle } from "@/components/editor/BlockEditor";
+import type { BlockEditorHandle, ExtraSlashItem } from "@/components/editor/BlockEditor";
 import {
   anchorLabel, parseSourceAnchor, sourceColor, wsApi,
   type AnchorType, type NoteAnchor, type NoteSource, type SendAction,
@@ -60,6 +60,8 @@ interface NotePaneProps {
   applyRef: React.MutableRefObject<NoteApplyApi | null>;
   onApplied: () => void;
   onSavingChange?: (saving: boolean) => void;
+  /** Slash-menu entries the workspace supplies — its skills. */
+  extraSlashItems?: ExtraSlashItem[];
 }
 
 function getPlainText(blocks: AnyBlock[]): string {
@@ -101,7 +103,7 @@ function markdownTableToBlock(md: string): AnyBlock | null {
 
 export function NotePane({
   note, sources, activeSourceId, onJump, actionSinkRef,
-  positionSinkRef, applyRef, onApplied, onSavingChange,
+  positionSinkRef, applyRef, onApplied, onSavingChange, extraSlashItems,
 }: NotePaneProps) {
   const [anchors, setAnchors] = useState<NoteAnchor[]>([]);
   const [ingestHtml, setIngestHtml] = useState<string | undefined>();
@@ -425,6 +427,7 @@ export function NotePane({
             ingestHtml={ingestHtml}
             onBlocksApplied={handleBlocksApplied}
             onDirty={markDirty}
+            extraSlashItems={extraSlashItems}
           />
         </div>
       </div>

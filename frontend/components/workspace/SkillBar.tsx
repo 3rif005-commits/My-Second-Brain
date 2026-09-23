@@ -1,16 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
-import { formatSkillCost, wsApi, type NoteSkill } from "@/lib/workspace";
+import { formatSkillCost, type NoteSkill } from "@/lib/workspace";
 
 interface Props {
-  noteId: string | null;
-  /** Re-price when the ready source set changes. */
-  readyKey: string;
+  skills: NoteSkill[];
+  /** The skill being started, if any. */
+  starting: string | null;
   /** A run is already in flight; the bar goes quiet rather than queueing. */
   busy: boolean;
-  onStarted: () => void;
+  onRun: (skill: NoteSkill) => void;
 }
 
 /** The workspace's other jobs.
@@ -20,30 +19,7 @@ interface Props {
  * greyed-out button. Nothing here fires on its own: that is the rule the
  * workspace broke before, and the reason it stopped generating unasked.
  */
-export function SkillBar({ noteId, readyKey, busy, onStarted }: Props) {
-  const [skills, setSkills] = useState<NoteSkill[]>([]);
-  const [starting, setStarting] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!noteId || readyKey === "") { setSkills([]); return; }
-    let live = true;
-    wsApi.listSkills(noteId)
-      .then((s) => { if (live) setSkills(s); })
-      .catch(() => { if (live) setSkills([]); });
-    return () => { live = false; };
-  }, [noteId, readyKey]);
-
-  const run = useCallback(async (skill: NoteSkill) => {
-    if (!noteId || busy || skill.runnable) return;
-    setStarting(skill.skill);
-    try {
-      await wsApi.runSkill(noteId, skill.skill);
-      onStarted();
-    } finally {
-      setStarting(null);
-    }
-  }, [noteId, busy, onStarted]);
-
+export function SkillBar({ skills, starting, busy, onRun }: Props) {
   if (!skills.length) return null;
 
   return (
@@ -57,7 +33,7 @@ export function SkillBar({ noteId, readyKey, busy, onStarted }: Props) {
         return (
           <button
             key={skill.skill}
-            onClick={() => run(skill)}
+            onClick={() => onRun(skill)}
             disabled={blocked || busy || starting !== null}
             title={blocked ? skill.runnable! : `${skill.description} · ${formatSkillCost(skill)}`}
             className={`shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px]

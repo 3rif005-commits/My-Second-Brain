@@ -69,6 +69,22 @@ test.describe("workspace action bar", () => {
     await ss(page, "03-blocked-with-reason");
   });
 
+  test("the editor's slash menu offers the same jobs", async ({ page }) => {
+    await openRecent(page, /2 sources/);
+    await expect(page.getByRole("button", { name: /flashcards/i }))
+      .toBeVisible({ timeout: 30_000 });
+
+    // Type "/" in the note and look for the Skills group.
+    await page.locator(".bn-editor [contenteditable='true']").first().click();
+    await page.keyboard.type("/flash");
+    const menuItem = page.getByText(/^Flashcards$/).first();
+    await expect(menuItem).toBeVisible({ timeout: 10_000 });
+    await ss(page, "06-slash-menu");
+
+    // Escape without running anything — this test spends no quota.
+    await page.keyboard.press("Escape");
+  });
+
   test("dropping a source indexes it without generating anything", async ({ page }) => {
     await page.goto("/brain/workspace", { waitUntil: "networkidle" });
 

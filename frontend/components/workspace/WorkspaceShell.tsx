@@ -13,6 +13,7 @@ import {
 import { useToast } from "@/app/providers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SkillBar } from "./SkillBar";
+import { useNoteSkills } from "./useNoteSkills";
 import { formatEstimate, formatLastRun, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
 import { DropZone } from "./DropZone";
 import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
@@ -113,6 +114,20 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   // What the last run cost. Shown once a draft exists, where the estimate used
   // to be — the promise, then the receipt.
   const lastRunText = formatLastRun(syn.synthesis?.last_run);
+  // One source of jobs for both the action bar and the editor's slash menu:
+  // two lists that could drift is two lists that will.
+  const jobs = useNoteSkills(noteId, syn.readyKey, syn.running, syn.refreshAfterStart);
+  const slashItems = useMemo(
+    () => jobs.skills.filter((s) => !s.runnable).map((s) => ({
+      title: s.skill.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase()),
+      group: "Skills",
+      subtext: s.description,
+      aliases: [s.skill, "skill"],
+      icon: "✨",
+      onItemClick: () => jobs.run(s),
+    })),
+    [jobs],
+  );
 
   // ── load ──────────────────────────────────────────────────────────────────
   const loadSources = useCallback(async () => {
@@ -482,10 +497,10 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       {/* The workspace's other jobs. Nothing here runs on its own — every chip
           shows its price first, and a skill that cannot run yet says why. */}
       <SkillBar
-        noteId={noteId}
-        readyKey={syn.readyKey}
+        skills={jobs.skills}
+        starting={jobs.starting}
         busy={syn.running}
-        onStarted={syn.refreshAfterStart}
+        onRun={jobs.run}
       />
 
       {/* synthesis failure banner */}
@@ -550,6 +565,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
 
         <div className="ws-panel relative flex-1 min-w-0 rounded-2xl overflow-hidden">
           <NotePane
+            extraSlashItems={slashItems}
             note={note}
             sources={sources}
             activeSourceId={activeId}

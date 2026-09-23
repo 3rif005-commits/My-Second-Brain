@@ -237,6 +237,19 @@ interface BlockEditorProps {
   /** Fires on every editor change, before the debounced save — lets a consumer
    *  know the document is dirty while autosave is still pending. */
   onDirty?: () => void;
+  /** Extra slash-menu entries supplied by whoever is hosting the editor.
+   *  Kept generic on purpose: the workspace injects its skills here, and the
+   *  editor stays unaware that skills exist. */
+  extraSlashItems?: ExtraSlashItem[];
+}
+
+export interface ExtraSlashItem {
+  title: string;
+  group: string;
+  subtext?: string;
+  aliases?: string[];
+  icon?: string;
+  onItemClick: () => void;
 }
 
 function getPlainText(blocks: AnyBlock[]): string {
@@ -256,7 +269,7 @@ function getPlainText(blocks: AnyBlock[]): string {
 }
 
 export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
-  function BlockEditorComponent({ noteId: _noteId, initialContent, onSave, ingestHtml, onInteractiveBlocks, onAddInteractiveBlock, onBlocksApplied, onDirty }, ref) {
+  function BlockEditorComponent({ noteId: _noteId, initialContent, onSave, ingestHtml, onInteractiveBlocks, onAddInteractiveBlock, onBlocksApplied, onDirty, extraSlashItems }, ref) {
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastUserBlockRef = useRef<string | null>(null);
     const { resolvedTheme } = useTheme();
@@ -541,6 +554,15 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                 // @ts-ignore — runtime export, not in type definitions
                 getAISlashMenuItems(editor),
               ]);
+              const hosted = (extraSlashItems ?? []).map((item) => ({
+                title: item.title,
+                group: item.group,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                icon: <span style={{ fontSize: 16 }}>{item.icon ?? "✨"}</span> as any,
+                subtext: item.subtext,
+                aliases: item.aliases,
+                onItemClick: item.onItemClick,
+              }));
               const custom = onAddInteractiveBlock
                 ? [{
                     title: "Knowledge Check",
@@ -646,7 +668,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
               // though the block types exist and paste/drag can produce them.
               const columnItems = getMultiColumnSlashMenuItems(editor);
               const all = withContiguousGroups([
-                ...defaults, ...aiItems, ...custom,
+                ...hosted, ...defaults, ...aiItems, ...custom,
                 ...databaseItems, ...buttonItems, ...moreBlockItems, ...columnItems,
               ]);
               if (!query) return all;

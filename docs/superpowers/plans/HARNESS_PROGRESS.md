@@ -122,8 +122,13 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       feeding the existing draft/apply flow. **Live pass done** (`e2e/workspace-skills.spec.ts`,
       4 tests green against the running stack): chips render priced, a blocked
       skill shows its reason, and a drop indexes without generating. It caught
-      one real defect — "≈$0.000" on a free model. **Next**: the `/` palette
-      and the selection menu.
+      one real defect — "≈$0.000" on a free model. **`/` palette done** — `useNoteSkills` is the single
+      source of jobs for both the action bar and the editor's slash menu (two
+      lists that could drift is two lists that will), and `BlockEditor` grew a
+      generic `extraSlashItems` slot so it stays unaware that skills exist.
+      Type-checked and built; the slash-menu e2e is written but **not yet run**
+      — this machine ran out of RAM for Chromium. **Next**: the selection menu,
+      and run `--project=workspace-skills` when the machine is free.
 - [ ] 5.2 **E12** learned style playbook.
 - [ ] 5.3 Background agents (triggers, budgets, activity page) on the Batch API.
 - [ ] 5.4 Remote MCP server + per-user OAuth (the subscription bridge); MCP Apps UI.

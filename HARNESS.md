@@ -107,3 +107,9 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - A free-tier model is priced at exactly zero, and "≈$0.000" reads as broken.
   Say "free", and still say the token count — free of price is not free of time.
   (Caught by the first live pass, not by any unit test.)
+- Never `pkill -f <pattern>` where the pattern appears in your own command line:
+  it kills the shell running it. Use `pgrep -f "[l]lama-server"` or kill by pid.
+  (Cost three dead shells before it was written down.)
+- This machine has 3.8GB RAM. Playwright needs the generation server stopped,
+  the frontend on `npm run start` rather than `next dev`, and nothing else big
+  open. `app.sh` starts the dev server, which is too heavy to test against here.
