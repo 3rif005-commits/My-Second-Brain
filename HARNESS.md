@@ -50,3 +50,6 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - Tool results are capped, with the truncation notice written as an instruction.
   (A result is re-sent on every later round of the same turn; a silent stump
   teaches the model nothing about narrowing its next call.)
+- One provider chain for every surface. (The agent had its own
+  `settings.api_provider`, whose `anthropic` branch returned the Messages API
+  URL for an OpenAI-shaped payload — broken on the first request.)

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from contextlib import AsyncExitStack
 from typing import Any, AsyncIterator
 
 import httpx
@@ -28,6 +29,7 @@ from services.agent.permissions import (
     Deny, NeedsApproval, check as permission_check
 )
 from services.agent.skills import SkillRegistry, classify_skills
+from services.ai import usage as usage_log
 from services.embedder import embed
 from services.retriever import retrieve
 
@@ -118,6 +120,21 @@ async def _get_mcp_tools_for_user(user_id: str) -> tuple[list[dict], list[McpSer
     return schemas, configs
 
 
+def _payload_chars(payload: dict[str, Any]) -> int:
+    """Rough size of what we are about to send, for the run log's estimate when
+    a gateway reports no usage of its own."""
+    total = 0
+    for m in payload.get("messages", []):
+        content = m.get("content")
+        if isinstance(content, str):
+            total += len(content)
+        for call in m.get("tool_calls") or []:
+            total += len(json.dumps(call))
+    for tool in payload.get("tools", []):
+        total += len(json.dumps(tool, default=str))
+    return total
+
+
 def _ev(payload: dict) -> dict:
     """Identity helper — exists so callers can grep for event creation sites."""
     return payload
@@ -183,7 +200,7 @@ async def run_turn(
 
     # 4. Open the endpoint
     try:
-        endpoint = get_endpoint(request.mode, task="chat")
+        endpoint = get_endpoint(request.mode, task="chat", user_id=user_id)
     except RuntimeError as e:
         yield _ev({"type": "error", "content": str(e)})
         yield _ev({"type": "done", "thread_id": thread_id,
@@ -203,7 +220,14 @@ async def run_turn(
 
     # 5. Drive the streaming loop
     tool_calls_made = 0
-    async with httpx.AsyncClient(timeout=240) as client:
+    # AsyncExitStack so the sync annotate() and the async client sit at one
+    # indent level: a sync context manager cannot ride in an `async with`
+    # header, which is what broke every engine test the first time.
+    async with AsyncExitStack() as stack:
+        stack.enter_context(usage_log.annotate(
+            surface=request.surface, job="agent", trigger="user",
+            user_id=user_id, note_id=request.current_note_id))
+        client = await stack.enter_async_context(httpx.AsyncClient(timeout=240))
         async for ev in _stream_loop(
             client, endpoint, payload,
             messages_payload=messages_payload,
@@ -251,7 +275,7 @@ async def run_ingest_turn(
     )
 
     try:
-        endpoint = get_endpoint(request.mode, task="chat")
+        endpoint = get_endpoint(request.mode, task="chat", user_id=user_id)
     except RuntimeError as e:
         yield _ev({"type": "error", "content": str(e)})
         yield _ev({"type": "done", "thread_id": thread_id, "message_id": message_id})
@@ -268,7 +292,10 @@ async def run_ingest_turn(
         "tools": [{"type": "function", "function": t} for t in BRAIN_TOOL_SCHEMAS],
     }
 
-    async with httpx.AsyncClient(timeout=300) as client:
+    async with AsyncExitStack() as stack:
+        stack.enter_context(usage_log.annotate(
+            surface="ingest", job="agent", trigger="user", user_id=user_id))
+        client = await stack.enter_async_context(httpx.AsyncClient(timeout=300))
         async for ev in _stream_loop(
             client, endpoint, payload,
             messages_payload=messages_payload,
@@ -309,7 +336,7 @@ async def run_interactive_turn(
     )
 
     try:
-        endpoint = get_endpoint(request.mode, task="chat")
+        endpoint = get_endpoint(request.mode, task="chat", user_id=user_id)
     except RuntimeError as e:
         yield _ev({"type": "error", "content": str(e)})
         yield _ev({"type": "done", "thread_id": thread_id, "message_id": message_id})
@@ -325,7 +352,14 @@ async def run_interactive_turn(
         "max_tokens": 2048,
     }
 
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with AsyncExitStack() as stack:
+        stack.enter_context(usage_log.annotate(
+            surface="interactive", job="agent", trigger="user", user_id=user_id))
+        stack.enter_context(usage_log.track(
+            endpoint.get("provider") or endpoint.get("source"),
+            endpoint.get("model"),
+            estimate_chars=(_payload_chars(payload), 0)))
+        client = await stack.enter_async_context(httpx.AsyncClient(timeout=120))
         async with client.stream(
             "POST", endpoint["url"], headers=endpoint["headers"], json=payload
         ) as resp:
@@ -344,6 +378,7 @@ async def run_interactive_turn(
                         data = json.loads(raw)
                     except json.JSONDecodeError:
                         continue
+                    usage_log.report_openai_usage(data)
                     text = (data.get("choices") or [{}])[0].get("delta", {}).get("content")
                     if text:
                         yield _ev({"type": "text", "content": text})
@@ -380,51 +415,67 @@ async def _stream_loop(
     rather than silently truncating.
     """
     approvals = approvals or set()
+    # Gateways that can report token usage are asked to; the rest fall back to
+    # the estimate in usage.track(). A strict server rejects unknown fields, so
+    # this is only sent where it is known to be accepted.
+    if any(host in endpoint["url"] for host in ("openrouter.ai", "api.openai.com")):
+        payload = {**payload, "stream_options": {"include_usage": True}}
 
     for round_index in range(MAX_TOOL_ROUNDS):
         pending_tool_calls: list[dict[str, Any]] = []
         assistant_text: list[str] = []
 
-        async with client.stream(
-            "POST", endpoint["url"], headers=endpoint["headers"], json=payload
-        ) as resp:
-            if resp.status_code != 200:
-                body = await resp.aread()
-                yield _ev({"type": "error",
-                           "content": f"LLM error {resp.status_code}: {body.decode()[:400]}"})
-                return
+        # One run row per round — a turn that took four tool rounds cost four
+        # model calls, and the log should be able to say so.
+        with usage_log.track(endpoint.get("provider") or endpoint.get("source"),
+                             endpoint.get("model"),
+                             estimate_chars=(_payload_chars(payload), 0)) as round_usage:
+            async with client.stream(
+                "POST", endpoint["url"], headers=endpoint["headers"], json=payload
+            ) as resp:
+                if resp.status_code != 200:
+                    body = await resp.aread()
+                    yield _ev({"type": "error",
+                               "content": f"LLM error {resp.status_code}: {body.decode()[:400]}"})
+                    return
 
-            async for line in resp.aiter_lines():
-                if not line.startswith("data: "):
-                    continue
-                raw = line[6:]
-                if raw == "[DONE]":
-                    break
-                try:
-                    data = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
-                delta = data.get("choices", [{}])[0].get("delta", {})
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    raw = line[6:]
+                    if raw == "[DONE]":
+                        break
+                    try:
+                        data = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    usage_log.report_openai_usage(data)
+                    delta = data.get("choices", [{}])[0].get("delta", {})
 
-                # Text content
-                text = delta.get("content")
-                if text:
-                    assistant_text.append(text)
-                    yield _ev({"type": "text", "content": text})
+                    # Text content
+                    text = delta.get("content")
+                    if text:
+                        assistant_text.append(text)
+                        yield _ev({"type": "text", "content": text})
 
-                # Tool calls (OpenAI streaming format — accumulate by index)
-                for tc in delta.get("tool_calls", []) or []:
-                    idx = tc.get("index", 0)
-                    while len(pending_tool_calls) <= idx:
-                        pending_tool_calls.append({"id": "", "name": "", "args_buf": ""})
-                    slot = pending_tool_calls[idx]
-                    if tc.get("id"):
-                        slot["id"] = tc["id"]
-                    fn = tc.get("function") or {}
-                    if fn.get("name"):
-                        slot["name"] = fn["name"]
-                    if fn.get("arguments"):
-                        slot["args_buf"] += fn["arguments"]
+                    # Tool calls (OpenAI streaming format — accumulate by index)
+                    for tc in delta.get("tool_calls", []) or []:
+                        idx = tc.get("index", 0)
+                        while len(pending_tool_calls) <= idx:
+                            pending_tool_calls.append({"id": "", "name": "", "args_buf": ""})
+                        slot = pending_tool_calls[idx]
+                        if tc.get("id"):
+                            slot["id"] = tc["id"]
+                        fn = tc.get("function") or {}
+                        if fn.get("name"):
+                            slot["name"] = fn["name"]
+                        if fn.get("arguments"):
+                            slot["args_buf"] += fn["arguments"]
+
+            if not round_usage.reported:
+                round_usage.set_estimate(
+                    usage_log.tokens_from_chars(_payload_chars(payload)),
+                    usage_log.tokens_from_chars(len("".join(assistant_text))))
 
         if not pending_tool_calls:
             return                      # the model answered; the turn is done

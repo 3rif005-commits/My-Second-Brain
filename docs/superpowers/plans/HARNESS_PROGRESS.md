@@ -9,8 +9,8 @@
 
 **Branch:** `feat/ai-harness` (created, 3 commits)
 **Last session:** 2026-09-22 — Stage 1 complete; Stage 2 built and baselined
-**Next action:** Stage 3, task 3.4 (gateway merge) — code-only, so it proceeds
-while credits are out. Measurement-bearing cards (E3, E5, E6) are parked until
+**Next action:** Stage 3, task 3.5 (per-run budgets + `max_usd` guard), then
+3.4 step B (Anthropic tool dialect in `services/ai/client`). Both code-only. Measurement-bearing cards (E3, E5, E6) are parked until
 the Anthropic balance is topped up; measuring them on the free fallback model
 would measure the fallback.
 
@@ -66,8 +66,12 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - [ ] 3.1 **E3** cache-shaped context assembly (stable prefix, volatile tail, `cache_control`).
 - [x] 3.2 **E4** close the tool loop (code + unit tests; measurement pending credits) (feed results back, round cap, parallel results in one message).
 - [ ] 3.3 **E5** tool-output discipline (25k cap + hint, `response_format`, errors as instructions).
-- [ ] 3.4 Gateway merge — `services/agent/model.py` + `services/llm.py` + the Next.js Gemini route
-      all go through `services/ai/`.
+- [~] 3.4 Gateway merge — **step A done**: agent provider selection comes from
+      `services/ai` and agent turns write run rows (`services/agent/model.py`,
+      `engine.py`). **Step B open**: teach `services/ai/client` the Anthropic
+      tool dialect (then Claude can drive the agent and `OPENAI_DIALECT` goes),
+      fold in `services/llm.py`, and move `frontend/app/api/ai/route.ts` off its
+      direct Gemini call.
 - [ ] 3.5 Per-run budgets + `max_usd` guard.
 
 ## Stage 4 — H3 (only after Stage 3 numbers justify it)
@@ -116,7 +120,10 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - 2026-09-22 · Stage 2.7: baseline measured on claude-haiku-4-5 (3 cases × 3
   runs, $0.27 spent); runner now surfaces provider fallbacks · `39e2117`
 - 2026-09-22 · Stage 3.2 (E4): multi-round tool loop, every call answered,
-  results capped, both budgets visible · pending
+  results capped, both budgets visible · `b8f5b3c`
+- 2026-09-23 · Stage 3.4 step A: agent provider selection unified with
+  services/ai; agent turns write run rows; found and fixed the
+  API_PROVIDER=anthropic endpoint mismatch · pending
 
 ## Decisions taken while executing (not re-asked)
 

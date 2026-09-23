@@ -107,6 +107,22 @@ def report(**counts: int) -> None:
         usage.add(**counts)
 
 
+def report_openai_usage(data: dict) -> None:
+    """Pull usage off an OpenAI-compatible stream chunk.
+
+    Lives here rather than in the client because the agent engine streams its
+    own HTTP (it needs tool_calls, which the client does not carry yet) and
+    both paths must produce identical rows.
+    """
+    u = data.get("usage") or {}
+    if not u:
+        return
+    details = u.get("prompt_tokens_details") or {}
+    report(input_tokens=u.get("prompt_tokens") or 0,
+           output_tokens=u.get("completion_tokens") or 0,
+           cache_read_tokens=details.get("cached_tokens") or 0)
+
+
 @contextmanager
 def track(provider: str | None, model: str | None,
           estimate_chars: tuple[int, int] | None = None) -> Iterator[Usage]:

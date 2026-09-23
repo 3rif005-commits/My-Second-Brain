@@ -200,3 +200,34 @@ async def test_a_plain_answer_makes_exactly_one_request():
     events = await _collect(client, messages=[])
     assert len(client.requests) == 1
     assert [e["type"] for e in events] == ["text"]
+
+
+# ── the run log ──────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_each_round_writes_its_own_run_row(monkeypatch):
+    """A turn that took two model calls cost two model calls, and the log has
+    to be able to say so — otherwise per-turn spend is guesswork."""
+    from services.ai import usage as usage_log
+
+    rows: list[dict] = []
+    monkeypatch.setattr(usage_log, "RECENT", usage_log.RECENT.__class__(maxlen=50))
+    monkeypatch.setattr("services.database.get_supabase",
+                        lambda: (_ for _ in ()).throw(RuntimeError("no db in tests")))
+
+    usage_chunk = {"choices": [{"delta": {}}],
+                   "usage": {"prompt_tokens": 1200, "completion_tokens": 90}}
+    client = _SeqClient([
+        tool_turn("c1", "brain.search_brain", {"query": "bias"}),
+        sse({"choices": [{"delta": {"content": "done"}}]}, usage_chunk),
+    ])
+    with patch.object(engine, "execute_brain_tool", return_value={"matches": []}):
+        with usage_log.annotate(surface="chat", job="agent", user_id="u1"):
+            await _collect(client, messages=[])
+
+    rows = list(usage_log.RECENT)
+    assert len(rows) == 2                      # one per round
+    assert all(r["surface"] == "chat" and r["job"] == "agent" for r in rows)
+    # Round two reported real usage; round one had none and is marked estimated.
+    assert rows[1]["input_tokens"] == 1200 and rows[1]["usage_reported"] is True
+    assert rows[0]["usage_reported"] is False

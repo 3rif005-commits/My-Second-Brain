@@ -50,14 +50,7 @@ def _anthropic_usage(data: dict) -> None:
 def _openai_usage(data: dict) -> None:
     """OpenAI-compatible servers put usage on a final chunk (OpenRouter and
     llama.cpp both do when asked); absent on gateways that don't."""
-    u = data.get("usage") or {}
-    if u:
-        details = u.get("prompt_tokens_details") or {}
-        usage_log.report(
-            input_tokens=u.get("prompt_tokens") or 0,
-            output_tokens=u.get("completion_tokens") or 0,
-            cache_read_tokens=details.get("cached_tokens") or 0,
-        )
+    usage_log.report_openai_usage(data)
 
 
 def _messages_chars(messages: list[dict]) -> int:
