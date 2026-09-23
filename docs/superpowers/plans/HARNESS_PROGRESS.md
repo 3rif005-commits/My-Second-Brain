@@ -14,6 +14,15 @@ suite, E7 decided (keep inline), the first compare-sources note was written
 live, and the selection menu shipped after fixing editor AI edits for everyone.
 
 **Next action, in order:**
+0. **Truncation on real lectures (found 2026-09-24)** — the first real case,
+   `rs-lectures-two` (two Remote Sensing lectures, ~6.4K words), hit the
+   16,000 output-token cap in 3/3 runs on Claude: every note was cut off, 1/3
+   passed (a late term missed the cut), $0.10 and 156 s per run. The app's
+   synthesis uses the same cap (`synthesis.py:254/260`, `skill_run.py:163`), so
+   real two-lecture guides are truncated today. Experiment: raise the cap vs
+   tighten length (E6's MD variant wrote 44% less) — primary: pass rate on
+   `rs-lectures-two`; guardrail: anchors and cost. Detect truncation
+   (`stop_reason == "max_tokens"`) and say so in the UI either way.
 1. **compare-sources quality** — the first live note (committed at
    `frontend/e2e/screenshots/compare-sources-live/note.txt`) leaks the
    extractor's labels ("constraint C-01", "states INS-06") and labels two
@@ -24,8 +33,7 @@ live, and the selection menu shipped after fixing editor AI edits for everyone.
    added to the manifest first (the pass-rate guardrail cannot see a thin note).
 3. **Blocked reason lies when a source FAILED**: the chip says "needs at least
    two sources" when one of two failed processing. Say which source failed.
-4. Study-guide migration — still waiting on `backend/prompts/mastery_guide.py`
-   (uncommitted, yours).
+4. Study-guide migration — **unblocked** (your edit is committed, `1750ee3`).
 5. Run card (5.1 remainder).
 
 **Run the backend suite with `env -u PYTHONPATH`** — this machine's ROS install
@@ -164,17 +172,17 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 
 ## Blocked / needs the user
 
-1. **Apply `supabase/migrations/020_ai_runs.sql`** in the Supabase SQL editor.
+1. ~~Apply 020_ai_runs.sql~~ — **applied** (verified 2026-09-24: `ai_runs` answers, 236 rows). **Was:** Apply `supabase/migrations/020_ai_runs.sql` in the Supabase SQL editor.
    Until then runs are measured from an in-process buffer (evals work, the app
    works) but nothing is persisted and no history accumulates.
 2. ~~Anthropic credits~~ — **resolved 2026-09-23**. Claude is re-enabled per
-   process with `AI_DISABLED_PROVIDERS=gemini`; **`backend/.env` still says
-   `anthropic,gemini`** because the file was open in your editor all session.
-   Remove `anthropic,` from that line when you close it.
+   process with `AI_DISABLED_PROVIDERS=gemini`; `.env` now
+   says `AI_DISABLED_PROVIDERS=gemini` (edited by you, verified 2026-09-24), so
+   no per-process override is needed any more.
 3. **Gemini is unreachable from `backend/venv`**: `No module named 'google'`.
    Either `./venv/bin/pip install google-genai` or accept that the second
    fallback is dead there.
-4. **Real lecture PDFs for the corpus** (task 2.4) — drop them in
+4. ~~Real lecture PDFs~~ — **first pair in** (`rs-lectures-two`, 2026-09-24; PDFs local in `evals/corpus/sources/pdf/`, gitignored). More pairs still welcome. **Was:** Real lecture PDFs for the corpus (task 2.4) — drop them in
    `backend/evals/corpus/sources/` and say which topics; the manifest currently
    ships four synthetic cases.
 
@@ -223,3 +231,4 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - 2026-09-23 · E7 on Claude: inline stays default; skill_active recorded · `8c6af2f`
 - 2026-09-23 · selection menu + define-terms; editor AI edits fixed (Responses
   API vs chat/completions), selection kept across menu open · `6695e84`, `4dc8da3`
+- 2026-09-24 · first real corpus case (two RS lectures); Claude baseline finds every note truncated at 16K tokens · see next commit
