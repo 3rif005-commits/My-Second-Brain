@@ -71,7 +71,7 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - [ ] 3.1 **E3** cache-shaped context assembly (stable prefix, volatile tail, `cache_control`).
 - [x] 3.2 **E4** close the tool loop (code + unit tests; measurement pending credits) (feed results back, round cap, parallel results in one message).
 - [ ] 3.3 **E5** tool-output discipline (25k cap + hint, `response_format`, errors as instructions).
-- [~] 3.4 Gateway merge — **steps A and B done**: agent provider selection
+- [x] 3.4 Gateway merge — **steps A and B done**: agent provider selection
       comes from `services/ai`, agent turns write run rows, and
       `services/ai/agent_stream.py` drives the tool loop in either dialect, so
       **Claude can now run the agent**. `services/descriptor.py` moved onto the
@@ -80,10 +80,11 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       `model_override`). `routers/agent_inline.py` keeps its byte-level
       pass-through **deliberately** (xl-ai parses the upstream bytes itself, so
       re-encoding changes a contract only a browser can verify) but now tees
-      its stream into the run log. **Remaining**:
-      `frontend/app/api/ai/route.ts` still calls Gemini directly from Next.js —
-      it needs an OpenAI-compatible backend endpoint the AI SDK can point at;
-      and a Gemini tool-loop adapter is the one dialect still missing.
+      its stream into the run log. **DONE**: `POST /v1/chat/completions` on the
+      backend + `services/ai/passthrough.py`, and the Next.js `/api/ai` route
+      now points the AI SDK at it instead of calling Gemini directly. Every
+      model call in the app is now logged and budgeted. The one dialect still
+      missing is a Gemini tool-loop adapter.
 - [x] 3.5 Per-run budgets + `max_usd` guard (`services/ai/budget.py`,
       `MAX_USD_PER_RUN`, default $0.50: synthesis refuses pre-flight, an agent
       turn stops between rounds).

@@ -33,6 +33,7 @@ def test_inline_endpoint_requires_api_key():
 import json
 from unittest.mock import MagicMock
 
+from services.ai import passthrough
 from services.ai import usage as usage_log
 
 UPSTREAM = [
@@ -85,7 +86,7 @@ async def test_the_proxy_forwards_bytes_untouched_and_still_logs_the_spend(monke
     monkeypatch.setattr("services.database.get_supabase",
                         lambda: (_ for _ in ()).throw(RuntimeError("no db")))
     monkeypatch.setattr(agent_inline, "get_user_id", lambda auth: "u1")
-    monkeypatch.setattr(agent_inline.httpx, "AsyncClient", lambda **kw: _Client())
+    monkeypatch.setattr(passthrough.httpx, "AsyncClient", lambda **kw: _Client())
 
     with patch.object(agent_inline.settings, "openrouter_api_key", "sk-test"), \
          patch.object(agent_inline.settings, "inline_model", "openai/gpt-4o-mini"):
@@ -118,7 +119,7 @@ async def test_without_upstream_usage_the_row_is_marked_an_estimate(monkeypatch)
                     return _R()
             return _C()
 
-    monkeypatch.setattr(agent_inline.httpx, "AsyncClient", lambda **kw: _NoUsage())
+    monkeypatch.setattr(passthrough.httpx, "AsyncClient", lambda **kw: _NoUsage())
     with patch.object(agent_inline.settings, "openrouter_api_key", "sk-test"):
         response = await agent_inline.agent_inline({"messages": [{"role": "user",
                                                                  "content": "x" * 400}]},

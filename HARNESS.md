@@ -94,3 +94,7 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - An agent eval case must carry the approvals the UI would replay. A turn that
   reads retrieved note text cannot edit an existing note unasked — the harness
   surfaced that the first time a case tried to.
+- Surfaces whose client parses the upstream bytes (BlockNote's xl-ai, the AI
+  SDK) get `services/ai/passthrough`: forward untouched, tee the stream. They
+  are logged and budgeted without anyone owning a wire contract only a browser
+  can verify.
