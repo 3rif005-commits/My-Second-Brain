@@ -84,6 +84,10 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   `tests/conftest.py`). The run log writes from inside `usage.track` and is
   failure-tolerant by design, so the suite quietly wrote 21 rows into
   production `ai_runs` before anyone looked.
+- The Supabase client talks HTTP/1.1. Its one long-lived HTTP/2 connection is
+  ended by the server after ~700 streams and httpx does not retry the request
+  on it — the first live compare-sources run lost a source mid-processing and
+  then the skill run itself to `ConnectionTerminated`, before any model call.
 - A migration is not live when the SQL succeeds: PostgREST caches the schema,
   and inserts fail for a while with an error naming the new table. Re-check
   before concluding the code is wrong.

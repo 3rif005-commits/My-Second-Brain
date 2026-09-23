@@ -50,6 +50,17 @@ export default defineConfig({
       timeout: 240_000,
     },
 
+    // 4b. A skill run on real lectures. SPENDS MODEL QUOTA — run it on purpose,
+    //     never as part of a sweep. Needs LECTURE_A / LECTURE_B.
+    {
+      name: "skills-live",
+      testMatch: "**/compare-sources-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      timeout: 600_000,
+      retries: 0,          // a retry is a second paid run
+    },
+
     // 5. Phase 2 ingest tests — PDF + YouTube URL
     {
       name: "ingest",
