@@ -54,6 +54,8 @@ class CaseResult:
     #: Reported and estimated runs are never averaged together.
     usage_reported: bool = False
     model: str | None = None
+    #: The prompt variant this run used — "html" (shipped) or "md" (E6).
+    variant: str = "html"
     #: First part of what the model actually produced. Without it a failure is
     #: a number with no explanation, and the next session re-runs the case
     #: blind just to see the text.
@@ -126,12 +128,15 @@ def check(score, expect: dict, source_count: int) -> list[str]:
 
 
 def run_case(case: dict, config: str, run_index: int, dry_run: bool,
-             model: str | None = None) -> CaseResult:
+             model: str | None = None, variant: str = "html") -> CaseResult:
     from prompts.note_synthesis import build_note_synthesis_prompt
+    from prompts.note_synthesis_md import build_markdown_synthesis_prompt
     from services.ai import usage as usage_log
 
     blocks = _source_blocks(case)
-    prompt = build_note_synthesis_prompt(blocks)
+    prompt = (build_markdown_synthesis_prompt(blocks) if variant == "md"
+              else build_note_synthesis_prompt(blocks))
+    prompt_chars = len(prompt)
     mark = len(usage_log.RECENT)
     started = time.monotonic()
     html, error = "", None
@@ -154,6 +159,12 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
                     model_override=model))
         except Exception as e:                      # noqa: BLE001
             error = f"{type(e).__name__}: {e}"[:300]
+
+    if variant == "md" and html and not dry_run:
+        # The editor is not part of the question: the variant is converted to
+        # the same HTML the note pane parses, and scored by the same scorer.
+        from services.workspace.md_to_blocks import markdown_to_html
+        html = markdown_to_html(html)
 
     latency_ms = int((time.monotonic() - started) * 1000)
     # Straight from the run log, so the eval's cost column and the app's own
@@ -184,7 +195,7 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
                       usage_reported=bool(last.get("usage_reported")),
                       model=last.get("model"),
                       html_excerpt=(html or "")[:800],
-                      attempts=attempts)
+                      attempts=attempts, variant=variant)
 
 
 def summarise(results: list[CaseResult]) -> dict:
@@ -199,6 +210,7 @@ def summarise(results: list[CaseResult]) -> dict:
             "runs": len(runs),
             "passed": sum(1 for r in runs if r.ok),
             "model": next((r.model for r in runs if r.model), None),
+            "variant": runs[0].variant,
             "median_input_tokens": int(statistics.median(
                 r.input_tokens for r in runs)),
             "median_output_tokens": int(statistics.median(
@@ -268,6 +280,11 @@ def main(argv: list[str] | None = None) -> int:
                     help="run every case on this model id instead of the chain's "
                          "first choice — the honest way to compare two models, "
                          "since a report that mixes them measures neither")
+    ap.add_argument("--variant", choices=("html", "md"), default="html",
+                    help="which prompt to run: the shipped HTML dialect, or "
+                         "E6's Markdown-with-fences variant (converted to the "
+                         "same HTML before scoring, so the editor is not part "
+                         "of the comparison)")
     ap.add_argument("--dry-run", action="store_true",
                     help="no model calls — checks the corpus, scorer and report path")
     ap.add_argument("--manifest", type=Path, default=None)
@@ -286,7 +303,8 @@ def main(argv: list[str] | None = None) -> int:
     results: list[CaseResult] = []
     for case in cases:
         for i in range(args.runs):
-            r = run_case(case, args.config, i, args.dry_run, model=args.model)
+            r = run_case(case, args.config, i, args.dry_run, model=args.model,
+                         variant=args.variant)
             results.append(r)
             print(f"  {case['id']} run {i + 1}/{args.runs}: "
                   f"{'ok' if r.ok else 'FAIL'} ({r.latency_ms} ms)", file=sys.stderr)
@@ -299,6 +317,7 @@ def main(argv: list[str] | None = None) -> int:
     report = REPORTS / f"{args.config}-{stamp}.json"
     report.write_text(json.dumps({
         "config": args.config,
+        "variant": args.variant,
         "model_override": args.model,
         "runs_per_case": args.runs,
         "dry_run": args.dry_run,
