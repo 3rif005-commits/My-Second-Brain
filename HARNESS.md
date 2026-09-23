@@ -82,3 +82,6 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   three routing tests — a test isolation bug, not a routing bug.)
 - A skill may not be auto-selected unless it says `auto: true`. (Same rule
   Notion settles on, and the reason the workspace stopped generating unasked.)
+- Progressive disclosure buys nothing until the bodies or the catalogue are
+  large: with two 30-character skills the index costs MORE than the bodies it
+  replaces. Measure before switching `AGENT_SKILL_DISCLOSURE` to "index".

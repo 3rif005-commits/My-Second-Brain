@@ -83,6 +83,16 @@ class Settings(BaseSettings):
     custom_llm_price_in: float | None = None
     custom_llm_price_out: float | None = None
 
+    # How skill instructions reach the agent's system prompt.
+    #   "inline" (default) — the classifier's top matches are pasted in whole,
+    #                        which is what shipped and what the numbers describe.
+    #   "index"            — only name + description for every skill (~100
+    #                        tokens each), and the model calls skill.load to
+    #                        read one. Keeps the base prompt flat as the
+    #                        catalogue grows, at the cost of a round trip.
+    # Left on "inline" until E7 measures the trade on real agent cases.
+    agent_skill_disclosure: str = "inline"
+
     # Providers to skip entirely, comma-separated ("anthropic,gemini").
     # A provider with no balance is not a fallback: it is a guaranteed failed
     # request on every single call, a wasted round trip, and an error row in
