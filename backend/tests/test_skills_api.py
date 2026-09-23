@@ -71,3 +71,12 @@ def test_cannot_delete_bundled_skill(client):
     tc, _ = client
     res = tc.delete("/skills/cite-everything", headers={"Authorization": "Bearer fake"})
     assert res.status_code == 403
+
+
+def test_selection_skills_carry_their_prompt(client):
+    tc, _ = client
+    res = tc.get("/skills/surface/selection", headers={"Authorization": "Bearer fake"})
+    assert res.status_code == 200
+    skills = {s["name"]: s for s in res.json()["skills"]}
+    assert skills["define-terms"]["output"] == "insert_below"
+    assert "bulleted list" in skills["define-terms"]["prompt"]

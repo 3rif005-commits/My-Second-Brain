@@ -72,6 +72,18 @@ def list_skills(authorization: str = Header()):
     return {"skills": list(skills.values())}
 
 
+@router.get("/surface/selection")
+def list_selection_skills(authorization: str = Header()):
+    """What the editor's selection menu offers. The body travels with it: the
+    menu sends it as the prompt through the same logged, budgeted passthrough
+    every other editor AI request uses, so there is no second model path."""
+    get_user_id(authorization)
+    from services.workspace.skill_run import selection_skills
+    return {"skills": [{"name": s.name, "description": s.description,
+                        "output": s.output, "prompt": s.body}
+                       for s in selection_skills()]}
+
+
 @router.get("/{name}")
 def get_skill(name: str, authorization: str = Header()):
     get_user_id(authorization)

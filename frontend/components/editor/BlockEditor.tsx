@@ -23,6 +23,7 @@ import {
 } from "./calloutChildren";
 import { insertionTarget } from "./insertAtCursor";
 import { NoteFormattingToolbar } from "./inlineToolbar";
+import { SkillAIMenu } from "./selectionSkills";
 import { transformNotionHtml } from "./notionPaste";
 import { readNotionJson, notionJsonToBlocks } from "./notionBlocks";
 import { NoteIdContext } from "./noteIdContext";
@@ -681,8 +682,9 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
             }}
           />
 
-          {/* AI menu — ⌘J or select text to rewrite/explain */}
-          <AIMenuController />
+          {/* AI menu — ⌘J or select text to rewrite/explain. With text
+              selected, selection-surface skills sit above the defaults. */}
+          <AIMenuController aiMenu={SkillAIMenu} />
 
           {/* @ mention menu */}
           <SuggestionMenuController

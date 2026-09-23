@@ -55,6 +55,23 @@ def workspace_skills() -> list[Skill]:
                   key=lambda s: (-s.priority, s.name))
 
 
+#: What a selection skill may do with the selected text. Anything else has no
+#: place in the editor's selection menu: a `draft_note` replaces a whole note.
+SELECTION_OUTPUTS = ("insert_below", "rewrite_selection")
+
+
+def selection_skills() -> list[Skill]:
+    """Skills the editor's selection menu may offer, best first.
+
+    Only skills that ASK for the selection surface: a skill with no
+    `surfaces` is offered "anywhere" by the registry, which is right for an
+    agent instruction and wrong for a button that edits the user's text.
+    """
+    return sorted((s for s in registry().all()
+                   if "selection" in s.surfaces and s.output in SELECTION_OUTPUTS),
+                  key=lambda s: (-s.priority, s.name))
+
+
 def build_prompt(skill: Skill, sources: list[dict],
                  total_budget: int = TOTAL_SOURCE_BUDGET) -> str:
     """The skill's body, then the same source blocks every other job gets."""

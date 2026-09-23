@@ -46,6 +46,7 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 | User skills storage | Bundled skills stay files. User-authored skills deferred to H3 — do not build now. |
 | Framework adoption | None. No CrewAI/LangGraph/Temporal. Plain Python in `services/`. |
 | Subagents | Do not spawn Claude Code subagents for execution. Work inline, write to disk as you go. |
+| Paid vs free model (user, 2026-09-23) | Claude (Haiku 4.5) for every run that DECIDES something — experiment arms, agent/approval measurements, the first real note of a skill. Free OpenRouter model for plumbing, smoke and iteration. A deciding run whose `attempts` show a fallback is discarded, not scored. Claude is re-enabled per process (`AI_DISABLED_PROVIDERS=gemini`) until `.env` is edited. |
 
 ---
 
