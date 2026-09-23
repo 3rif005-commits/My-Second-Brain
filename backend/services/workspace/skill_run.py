@@ -17,6 +17,7 @@ how work gets lost.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -73,11 +74,45 @@ def selection_skills() -> list[Skill]:
                   key=lambda s: (-s.priority, s.name))
 
 
+_ID_HEADER = re.compile(r"^\|\s*ID\s*\|")
+_ID_CELL = re.compile(r"^\|\s*[A-Z]{1,8}-\d{2,3}\s*\|")
+_SEPARATOR_CELL = re.compile(r"^\|\s*:?-{3,}:?\s*\|")
+
+
+def strip_extraction_ids(text: str) -> str:
+    """Drop the extractor's ID column (DEF-01, C-02, INS-06…) from its tables.
+
+    The IDs are bookkeeping for the extraction, and a model shown them writes
+    them into prose ("Source 2 explicitly states INS-06"). Telling it not to
+    did nothing (E14: 1/5 leaked before and after); removing them is the fix
+    that cannot be ignored. Only a table whose header starts `|ID|` loses its
+    first column, so any other table is left exactly as it was.
+    """
+    out, in_id_table = [], False
+    for line in text.split("\n"):
+        if _ID_HEADER.match(line):
+            in_id_table = True
+            out.append(_ID_HEADER.sub("|", line, count=1))
+            continue
+        if in_id_table and _SEPARATOR_CELL.match(line):
+            out.append(_SEPARATOR_CELL.sub("|", line, count=1))
+            continue
+        if in_id_table and _ID_CELL.match(line):
+            out.append(_ID_CELL.sub("|", line, count=1))
+            continue
+        if not line.startswith("|"):
+            in_id_table = False
+        out.append(line)
+    return "\n".join(out)
+
+
 def build_prompt(skill: Skill, sources: list[dict],
                  total_budget: int = TOTAL_SOURCE_BUDGET) -> str:
     """The skill's body, then the same source blocks every other job gets."""
     budgets = split_budget([len((s.get("text") or "").strip()) for s in sources],
                            total_budget)
+    sources = [{**s, "text": strip_extraction_ids(s.get("text") or "")}
+               for s in sources]
     blocks = [_source_block(i, s, b)
               for i, (s, b) in enumerate(zip(sources, budgets), start=1)]
     return (f"{skill.body}\n\n"

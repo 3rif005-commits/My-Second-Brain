@@ -141,6 +141,9 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   edits the user's text.
 - A passthrough logs upstream errors on the server as well as sending them to
   the client. (The editor's 400 left no trace anywhere.)
+- Don't tell a model not to copy something — don't show it. "Never write the
+  extractor's labels (DEF-01, INS-06)" changed nothing (1/5 leaked before and
+  after); stripping the ID column from skill sources made it 0/5 (E14).
 - A skill reaches the workspace action bar only if it declares an `output`. No
   output means there is nowhere to put the result — those are agent
   instructions (cite-everything), not jobs.

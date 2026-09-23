@@ -164,3 +164,19 @@ def test_the_shipped_selection_skills_are_safe_to_offer():
             f"{s.name} has no injection line"
     # and none of them leaks into the workspace action bar
     assert not set(names) & {s.name for s in skill_run.workspace_skills()}
+
+
+def test_the_extractors_id_column_never_reaches_a_skill():
+    """E14: "never write DEF-01" in the prompt changed nothing (1/5 leaked
+    before and after); a label the model never sees cannot leak."""
+    text = ("## Definitions\n|ID|Term|Definition|\n|---|---|---|\n"
+            "|DEF-01|Remote sensing|Sensing at a distance|\n"
+            "|INS-06|Trade-off|Resolution costs coverage|\n\n"
+            "Plain text keeps C-3PO and |a|b| tables alone.\n|a|b|\n|---|---|\n|1|2|\n")
+    out = skill_run.strip_extraction_ids(text)
+    assert "DEF-01" not in out and "INS-06" not in out
+    assert "|Term|Definition|" in out and "|Remote sensing|Sensing at a distance|" in out
+    assert "|---|---|\n|Remote" in out                 # separator lost its ID cell too
+    assert "|a|b|\n|---|---|\n|1|2|" in out            # other tables untouched
+    prompt = skill_run.build_prompt(_skill(), [{"title": "L", "kind": "pdf", "text": text}])
+    assert "DEF-01" not in prompt

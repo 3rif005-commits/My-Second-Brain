@@ -20,12 +20,10 @@ live, and the selection menu shipped after fixing editor AI edits for everyone.
 0b. [x] **Pre-run estimate** — done 2026-09-24: the study-guide estimate now
    scales with source length (min 3K, max the cap) instead of a flat ~10K;
    skill estimates stay a deliberate ceiling (compare-sources used 2.2K of 10K).
-1. **compare-sources quality** — the first live note (committed at
-   `frontend/e2e/screenshots/compare-sources-live/note.txt`) leaks the
-   extractor's labels ("constraint C-01", "states INS-06") and labels two
-   coverage differences "Contradiction", against its own rule. Add a
-   `must_not_mention` / regex guard for `\b[A-Z]{1,4}-\d{2}\b` to the
-   multi-source corpus case, measure n=3 on Claude, then change the skill.
+1. [x] **compare-sources quality** — done 2026-09-24 (E14): the extractor's
+   ID column is stripped from skill sources; leaks 1/5 → 0/5, pass 4/5 → 5/5.
+   Open: "Contradiction" still appears in 3/5 runs — read them and judge;
+   the study-guide synthesis still receives the IDs (unmeasured there).
 2. **E6b** — format vs spec length, with `anchors` and `text_chars` floors
    added to the manifest first (the pass-rate guardrail cannot see a thin note).
 3. **Blocked reason lies when a source FAILED**: the chip says "needs at least

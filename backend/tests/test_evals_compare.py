@@ -74,3 +74,11 @@ def test_a_missing_config_says_so(tmp_path, monkeypatch):
     monkeypatch.setattr(cmp, "REPORTS", tmp_path)
     with pytest.raises(SystemExit, match="no report found"):
         cmp.latest("nothing-here")
+
+
+def test_latest_never_picks_a_longer_config_with_the_same_prefix(tmp_path, monkeypatch):
+    from evals import compare
+    monkeypatch.setattr(compare, "REPORTS", tmp_path)
+    (tmp_path / "base-20260101-000000.json").write_text('{"id": "base"}')
+    (tmp_path / "base-b-20260102-000000.json").write_text('{"id": "base-b"}')
+    assert compare.latest("base")["id"] == "base"

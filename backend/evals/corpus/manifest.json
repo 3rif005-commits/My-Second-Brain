@@ -261,6 +261,44 @@
       ],
       "must_not_mention": [],
       "why": "The first REAL case: two consecutive Remote Sensing lectures from one course (Al-Aqsa University), text extracted per page with [page N] tags. panchromatic lives only in lecture 2, geostationary and NDVI only in lecture 3, so a note that reads one source fails. The PDFs stay local (sources/pdf/, gitignored)."
+    },
+    {
+      "id": "compare-rs-lectures",
+      "family": "skill",
+      "mode": "synthesis",
+      "skill": "compare-sources",
+      "sources": [
+        {
+          "title": "Lecture_2_RS_Definition_Applications_and_Data_Sources_for_RS",
+          "kind": "pdf",
+          "path": "sources/rs-lecture-2.extracted.txt"
+        },
+        {
+          "title": "Lecture_3_RS_Data_Sources_and_Stages_of_Remote_Sensing",
+          "kind": "pdf",
+          "path": "sources/rs-lecture-3.extracted.txt"
+        }
+      ],
+      "expect": {
+        "h1_exact": 1,
+        "grounding_min": 0.8,
+        "sources_cited_min": 2,
+        "must_mention_rate_min": 1.0
+      },
+      "must_mention": [
+        "agree",
+        "differ",
+        "passive"
+      ],
+      "must_not_mention": [],
+      "forbidden_patterns": [
+        "\\b(?:DEF|EQ|VAR|PROC|C|INS|DIAG|EX|EXAMPLE|CONSTR)-\\d{2}\\b"
+      ],
+      "count_words": [
+        "Contradiction",
+        "contradiction"
+      ],
+      "why": "compare-sources on the APP'S extracted text for the two lectures (exported from the live note), which carries the extractor's labels (DEF-01, C-01, INS-06). The first live note leaked them into prose. 'Contradiction' is counted, not failed: whether one is deserved needs reading."
     }
   ]
 }

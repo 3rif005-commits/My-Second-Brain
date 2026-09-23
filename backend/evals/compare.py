@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -24,7 +25,10 @@ REPORTS = Path(__file__).parent / "reports"
 
 def latest(config: str) -> dict:
     """The most recent report for a config name."""
-    matches = sorted(REPORTS.glob(f"{config}-*.json"))
+    # Exact name + timestamp: a bare `{config}-*` also matched `{config}-b-…`,
+    # silently comparing the wrong run (caught while aggregating E14).
+    stamp = re.compile(rf"^{re.escape(config)}-\d{{8}}-\d{{6}}\.json$")
+    matches = sorted(p for p in REPORTS.glob(f"{config}-*.json") if stamp.match(p.name))
     if not matches:
         raise SystemExit(f"no report found for config '{config}' in {REPORTS}")
     return json.loads(matches[-1].read_text())

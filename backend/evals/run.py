@@ -151,8 +151,18 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
     from services.ai import usage as usage_log
 
     blocks = _source_blocks(case)
-    prompt = (build_markdown_synthesis_prompt(blocks) if variant == "md"
-              else build_note_synthesis_prompt(blocks))
+    skill = None
+    if case.get("skill"):
+        # A skill case runs the skill's own prompt over the same source blocks
+        # the app builds, and its Markdown is converted exactly as the app does.
+        from services.workspace import skill_run
+        skill = skill_run.registry().get(case["skill"])
+        if skill is None:
+            raise SystemExit(f"case {case['id']}: no skill named {case['skill']!r}")
+        prompt = skill_run.build_prompt(skill, blocks)
+    else:
+        prompt = (build_markdown_synthesis_prompt(blocks) if variant == "md"
+                  else build_note_synthesis_prompt(blocks))
     prompt_chars = len(prompt)
     mark = len(usage_log.RECENT)
     started = time.monotonic()
@@ -189,7 +199,7 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
                     continue
                 break
 
-    if variant == "md" and html and not dry_run:
+    if (variant == "md" or skill is not None) and html and not dry_run:
         # The editor is not part of the question: the variant is converted to
         # the same HTML the note pane parses, and scored by the same scorer.
         from services.workspace.md_to_blocks import markdown_to_html
@@ -213,13 +223,24 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
         failures = ["the model returned no content"]
     else:
         failures = check(score, case.get("expect", {}), len(blocks))
+        # Text the reader must never see, as regexes over the visible text —
+        # e.g. the extractor's internal labels (DEF-01, INS-06) leaking into
+        # prose, which the first live compare-sources note did.
+        visible = re.sub(r"<[^>]+>", " ", html)
+        for pattern in case.get("forbidden_patterns", []):
+            hits = re.findall(pattern, visible)
+            if hits:
+                failures.append(f"forbidden {pattern!r}: {sorted(set(hits))[:5]}")
     if dry_run:
         failures = ["dry run — no model was called"]
 
     # Truncation is recorded, never scored away: a note cut off at the output
     # cap can clear every range while the reader lost the end of the lecture.
     return CaseResult(case["id"], run_index, not failures, failures,
-                      {**score.as_dict(), "truncated": truncated}, latency_ms, error,
+                      {**score.as_dict(), "truncated": truncated,
+                       **{f"count:{w}": len(re.findall(w, html or ""))
+                          for w in case.get("count_words", [])}},
+                      latency_ms, error,
                       input_tokens=last.get("input_tokens", 0),
                       output_tokens=last.get("output_tokens", 0),
                       usd=last.get("estimated_usd"),

@@ -100,3 +100,19 @@ def test_dry_run_never_counts_as_a_pass(tmp_path):
     assert result.ok is False
     assert "dry run" in result.failures[0]
     assert result.usd is None
+
+
+def test_a_skill_case_fails_on_a_leaked_extractor_label(monkeypatch):
+    """The first live compare-sources note wrote "states INS-06" to a student.
+    A skill case runs the skill's prompt and fails on the label, whatever the
+    score ranges say."""
+    import services.ai.router as router
+    case = next(c for c in evals_run.load_manifest()["cases"]
+                if c["id"] == "compare-rs-lectures")
+    answer = ("# Compare\n\n## Where they agree\nPassive sensors (sources 1, 2).\n\n"
+              "## Where they differ\nSource 2 explicitly states INS-06.\n\n"
+              "### Source 1 — A {1:s:1}\nx\n\n### Source 2 — B {2:s:1}\ny\n")
+    monkeypatch.setattr(router, "complete_with_fallback", lambda *a, **k: answer)
+    result = evals_run.run_case(case, "test", 0, dry_run=False, retries=0)
+    assert any("INS-06" in f for f in result.failures), result.failures
+    assert result.score["count:Contradiction"] == 0
