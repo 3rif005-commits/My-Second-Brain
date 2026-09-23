@@ -58,6 +58,15 @@ Use `####` only when a section is too dense for flat `#####` toggles.
 The number of chapters is determined by the lecture — not by this prompt.
 A lecture with 2 real themes gets 2 chapters. A lecture with 7 gets 7.
 
+A Section is "a coherent CLUSTER of concepts" — plural. A section holding
+exactly one Concept toggle should be rare: it means the section and its one
+toggle are titled two different ways for the same scope, which is a wasted
+collapse the reader has to open for nothing. If most of the sections you are
+about to write would have only one toggle each, the section boundaries are cut
+too fine — merge the related single-toggle sections into one section carrying
+several toggles instead. Only keep a section down to one toggle when the
+lecture genuinely covers nothing else related to it.
+
 **Do not indent any headings.** The converter builds the hierarchy automatically from heading levels:
 `##` captures all content until the next `##`. `###` captures until the next `###` or `##`. `#####` captures until the next `#####`, `###`, or `##`. Write all headings flush to the left margin.
 
