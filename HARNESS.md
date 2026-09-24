@@ -152,6 +152,10 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - Chat only pastes skills declared for chat (or for no surface). A workspace-
   or selection-only skill in a chat prompt is instructions for a job chat
   cannot do.
+- Source tables are carried into a note verbatim, never retyped by a model.
+  On real slides the model kept 9–14 of 23; labelled markers + exact
+  substitution keep all of them (E6d). Unplaced ones are appended — unless the
+  model already retyped them, or the reader gets the same table twice.
 - A skill reaches the workspace action bar only if it declares an `output`. No
   output means there is nowhere to put the result — those are agent
   instructions (cite-everything), not jobs.

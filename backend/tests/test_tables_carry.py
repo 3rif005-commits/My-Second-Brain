@@ -41,3 +41,24 @@ def test_tables_written_back_to_back_are_two_tables():
     labelled, tables = label_tables(src)
     assert list(tables.values()) == ["|A|B|\n|---|---|\n|1|2|", "|C|D|\n|---|---|\n|3|4|"]
     assert "[[TABLE 1.2]]\n|C|D|" in labelled[0]["text"]
+
+
+def test_the_html_path_places_tables_where_the_markers_are():
+    from services.workspace.tables import carry_tables_html
+    _, tables = label_tables(SRC)
+    html = "<h1>G</h1><h2>RL</h2><p>[[TABLE 1.1]]</p><p>text</p>"
+    out = carry_tables_html(html, tables)
+    assert out.startswith("<h1>G</h1><h2>RL</h2><table>")
+    assert "<td>reward</td>" in out and "[[TABLE" not in out
+    assert out.index("Tables from the slides") < out.index("<td>proxy</td>")   # 2.1 appended
+
+
+def test_a_table_the_model_retyped_is_not_appended_again():
+    from services.workspace.tables import carry_tables_html
+    _, tables = label_tables(SRC)
+    retyped = ("<h1>G</h1><p>[[TABLE 1.1]]</p><table><tr><th>Bias</th><th>Source</th></tr>"
+               "<tr><td>Proxy</td><td>data</td></tr></table>")
+    out = carry_tables_html(retyped, tables)
+    assert "Tables from the slides" not in out          # 2.1 is already there
+    md = "# G\n\n|Bias|Source|\n|---|---|\n|proxy|data|\n"
+    assert "Tables from the slides" not in carry_tables(md, tables, offered="[[TABLE 2.1]]")

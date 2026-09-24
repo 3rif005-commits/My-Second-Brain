@@ -10,6 +10,7 @@ at the end, so none can be lost.
 """
 from __future__ import annotations
 
+import html
 import re
 
 # A pipe table: a header row, a separator row, then any number of body rows.
@@ -62,6 +63,33 @@ def label_tables(sources: list[dict]) -> tuple[list[dict], dict[str, str]]:
     return out, tables
 
 
+_HTML_TABLE = re.compile(r"<table>.*?</table>", re.S)
+_HTML_CELL = re.compile(r"<t[hd][^>]*>(.*?)</t[hd]>", re.S)
+
+
+def _norm(cell: str) -> str:
+    # Unescape first: a source cell's "<br>" and a rendered cell's "&lt;br&gt;"
+    # (or a space) must compare equal, or every carried table looks missing.
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html.unescape(cell))).strip().lower()
+
+
+def _cells_md(table: str) -> set[str]:
+    cells = set()
+    for line in table.split("\n"):
+        if _SEPARATOR.match(line):
+            continue
+        cells.update(_norm(c) for c in line.strip().strip("|").split("|"))
+    return {c for c in cells if c}
+
+
+def _already_there(table: str, note_tables: list[set[str]]) -> bool:
+    """The model retyped this table instead of placing its marker. Appending
+    the source copy as well gave the reader the same table twice (E6d: 46
+    tables, 33 distinct)."""
+    cells = _cells_md(table)
+    return bool(cells) and any(len(cells & t) >= 0.8 * len(cells) for t in note_tables)
+
+
 def carry_tables(md: str, tables: dict[str, str], offered: str = "") -> str:
     """Replace each marker line with its table; append the ones never placed.
 
@@ -78,8 +106,39 @@ def carry_tables(md: str, tables: dict[str, str], offered: str = "") -> str:
         return tables[key]
 
     md = _MARKER.sub(_place, md or "")
-    missing = [k for k in tables if k not in placed and (not offered or k in offered)]
+    note_tables = [_cells_md(m.group(1)) for m in _TABLE.finditer(md)]
+    missing = [k for k in tables if k not in placed and (not offered or k in offered)
+               and not _already_there(tables[k], note_tables)]
     if missing:
         md = md.rstrip() + "\n\n## Tables from the slides\n\n" + "\n\n".join(
             tables[k] for k in missing) + "\n"
     return md
+
+
+_HTML_MARKER = re.compile(
+    r"(?:<p>\s*)?\[\[TABLE (\d+)\.(\d+)\]\](?:\s*</p>)?")
+
+
+def carry_tables_html(html: str, tables: dict[str, str], offered: str = "") -> str:
+    """The HTML-dialect twin of `carry_tables`: a marker (bare or alone in a
+    <p>) becomes the exact source table, rendered by the same converter the
+    Markdown path uses; unplaced tables are appended under their own chapter."""
+    from services.workspace.md_to_blocks import markdown_to_html
+    placed: set[str] = set()
+
+    def _place(m: re.Match) -> str:
+        key = marker(int(m.group(1)), int(m.group(2)))
+        if key not in tables:
+            return ""
+        placed.add(key)
+        return markdown_to_html(tables[key])
+
+    html = _HTML_MARKER.sub(_place, html or "")
+    note_tables = [{c for c in (_norm(x) for x in _HTML_CELL.findall(t)) if c}
+                   for t in _HTML_TABLE.findall(html)]
+    missing = [k for k in tables if k not in placed and (not offered or k in offered)
+               and not _already_there(tables[k], note_tables)]
+    if missing:
+        html += "<h2>Tables from the slides</h2>" + "".join(
+            markdown_to_html(tables[k]) for k in missing)
+    return html

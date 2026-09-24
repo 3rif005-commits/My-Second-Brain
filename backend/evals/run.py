@@ -48,6 +48,8 @@ REPORTS = Path(__file__).parent / "reports"
 #: column, and it reaches the saved-providers lookup, which is a query keyed on
 #: one. "eval" broke both quietly.
 EVAL_USER = ""
+#: --keep-html: store every run's full note, not only failed ones.
+KEEP_HTML = False
 
 
 @dataclass
@@ -172,7 +174,9 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
         from prompts.note_synthesis_md import build_markdown_synthesis_prompt_with_tables
         prompt, tables = build_markdown_synthesis_prompt_with_tables(blocks)
     else:
-        prompt = build_note_synthesis_prompt(blocks)
+        from services.workspace.tables import label_tables
+        labelled, tables = label_tables(blocks)
+        prompt = build_note_synthesis_prompt(labelled)
     prompt_chars = len(prompt)
     mark = len(usage_log.RECENT)
     started = time.monotonic()
@@ -208,6 +212,10 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
                     time.sleep(wait)
                     continue
                 break
+
+    if variant == "html" and skill is None and html and not dry_run:
+        from services.workspace.tables import carry_tables_html
+        html = carry_tables_html(html, tables, offered=prompt)
 
     if (variant == "md" or skill is not None) and html and not dry_run:
         # The editor is not part of the question: the variant is converted to
@@ -260,7 +268,7 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
                       usage_reported=bool(last.get("usage_reported")),
                       model=last.get("model"),
                       html_excerpt=(html or "")[:800],
-                      html_failed="" if not failures else (html or ""),
+                      html_failed=(html or "") if (failures or KEEP_HTML) else "",
                       attempts=attempts, variant=variant)
 
 
@@ -417,10 +425,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max-tokens", type=int, default=32000,
                     help="output cap for synthesis cases — matches the app's "
                          "OUTPUT_CAP (32000 since E13)")
+    ap.add_argument("--keep-html", action="store_true",
+                    help="keep every run's full note in the report (for reading)")
     ap.add_argument("--dry-run", action="store_true",
                     help="no model calls — checks the corpus, scorer and report path")
     ap.add_argument("--manifest", type=Path, default=None)
     args = ap.parse_args(argv)
+    global KEEP_HTML
+    KEEP_HTML = args.keep_html
 
     manifest = load_manifest(args.manifest)
     cases = manifest["cases"]

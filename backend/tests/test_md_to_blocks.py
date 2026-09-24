@@ -112,3 +112,9 @@ def test_a_note_has_one_title_and_a_second_one_becomes_a_chapter():
     assert out.count("<h1>") == 1
     assert "<h1>Remote Sensing</h1>" in out
     assert "<h2>Orbits</h2>" in out
+
+
+def test_a_line_break_inside_a_table_cell_is_not_shown_as_text():
+    out = markdown_to_html("|S1|S2<br>-1|\n|---|---|\n|a<br/>b|c|")
+    assert "&lt;br" not in out
+    assert "<th>S2 -1</th>" in out and "<td>a b</td>" in out

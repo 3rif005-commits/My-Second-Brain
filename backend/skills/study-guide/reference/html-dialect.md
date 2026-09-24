@@ -173,6 +173,11 @@ equation becomes a <div data-type="math"> block in LaTeX. Not "usually" — ever
 one. Neither of the two outranks the other: a note that captures the equations
 and loses the tables has failed exactly as badly as one that does the reverse.
 
+Source tables are labelled like [[TABLE 1.3]]. To include one, write
+<p>[[TABLE 1.3]]</p> where it belongs and it is inserted exactly as the source
+has it — never retype a labelled table. A table you build yourself to compare
+things is still written as a <table>.
+
 Equations keep the structure already specified above rather than replacing it.
 An equation worth memorizing is still a FORMULA callout naming what it is for,
 then the math block, then a <ul> breaking down its variables — the math block

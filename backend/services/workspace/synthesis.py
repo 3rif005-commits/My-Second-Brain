@@ -31,7 +31,7 @@ from services.database import get_supabase
 from services.workspace.dbretry import with_retry
 from services.workspace.figures import figure_parts
 from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML, markdown_to_html
-from services.workspace.tables import carry_tables
+from services.workspace.tables import carry_tables, carry_tables_html, label_tables
 
 logger = logging.getLogger(__name__)
 
@@ -367,7 +367,10 @@ def run_synthesis(note_id: str, mode: str = "replace",
         if use_md:
             prompt, tables = build_markdown_synthesis_prompt_with_tables(blocks)
         else:
-            prompt = build_note_synthesis_prompt(blocks, has_figures=bool(figures))
+            # Source tables are labelled here and put back verbatim below: the
+            # HTML path kept 9–14 of a slide pair's 23 tables when retyping them.
+            labelled, tables = label_tables(blocks)
+            prompt = build_note_synthesis_prompt(labelled, has_figures=bool(figures))
         with usage_log.annotate(surface="workspace", job="synthesis",
                                 trigger=trigger, note_id=note_id,
                                 user_id=user_id), \
@@ -378,6 +381,8 @@ def run_synthesis(note_id: str, mode: str = "replace",
                                what="Writing this note", setting="MAX_USD_PER_RUN")
             html = _complete(prompt, video_urls, has_text, user_id, figures,
                              markdown=use_md, tables=tables)
+            if not use_md:
+                html = carry_tables_html(html, tables, offered=prompt)
             if last_call_truncated():
                 # Say so in the note itself: a guide that stops mid-section
                 # with no explanation reads as the whole lecture.

@@ -215,3 +215,27 @@ source 1 although both lectures were covered; one run with anchor-less
 sections). The HTML path never did that. Carry-over is kept on the (opt-in)
 Markdown path; the default stays HTML. **Next:** the same carry-over on the
 HTML path, whose anchors hold but which keeps only 9–14 of 23 tables.
+
+## E6d, HTML path — the fix that ships (2026-09-24, `iml-slides-app`, n=3)
+
+Same carry-over on the default HTML path (`<p>[[TABLE s.k]]</p>` → exact table):
+
+| | HTML before | **HTML + carry** |
+|---|---|---|
+| pass | 3/3 | **3/3** |
+| tables (source: 23) | 9 · 11 · 14 | 30 · 35 · 30 |
+| callouts | 23 · 31 · 10 | 31 · 35 · 45 |
+| anchors | 11 · 13 · 12 | 21 · 21 · 16 |
+| text chars | 28–35K | 33–41K |
+| $/run | 0.080 | 0.093 (+14%) |
+
+Reading one full note (`--keep-html`) found two defects, both fixed
+deterministically and replay-checked on that note:
+- **duplicates**: the model sometimes retyped a table instead of placing its
+  marker, and the unplaced source copy was appended too (46 tables, 33
+  distinct). Unplaced tables whose cells (≥80%) are already in the note are no
+  longer appended — 8 of that note's 11 appended tables were such copies.
+- **`<br>` shown as text** in every multi-line cell (PyMuPDF writes cell line
+  breaks as `<br>`; the converter escaped them). Now a space.
+
+**Decision: KEEP** — table carry-over on both paths; default stays HTML.

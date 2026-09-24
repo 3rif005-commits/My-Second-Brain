@@ -34,6 +34,7 @@ CALLOUT_TYPES = {
     "formula": "FORMULA", "analogy": "ANALOGY", "exam": "EXAM",
 }
 
+_CELL_BREAK = re.compile(r"\s*<br\s*/?>\s*", re.IGNORECASE)
 _HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*(?:\{([^}]+)\})?\s*$")
 _FENCE = re.compile(r"^:::\s*([a-zA-Z]*)\s*$")
 _TOGGLE = re.compile(r"^\?\?\s*(.*)$")
@@ -87,11 +88,17 @@ def markdown_to_html(md: str) -> str:
         if not table:
             return
         header, *body = table
+
+        def cell(c: str) -> str:
+            # PyMuPDF writes a line break inside a cell as <br>; escaped, the
+            # reader saw a literal "<br>" in every multi-line slide cell.
+            return _inline(_CELL_BREAK.sub(" ", c))
+
         out.append("<table><thead><tr>"
-                   + "".join(f"<th>{_inline(c)}</th>" for c in header)
+                   + "".join(f"<th>{cell(c)}</th>" for c in header)
                    + "</tr></thead><tbody>")
         for row in body:
-            out.append("<tr>" + "".join(f"<td>{_inline(c)}</td>" for c in row)
+            out.append("<tr>" + "".join(f"<td>{cell(c)}</td>" for c in row)
                        + "</tr>")
         out.append("</tbody></table>")
         table = []
