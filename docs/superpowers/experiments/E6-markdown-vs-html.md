@@ -1,5 +1,8 @@
 # E6 — Markdown+fences vs the BlockNote HTML dialect
 
+**Correction (2026-09-24, 03:25):** the two "lectures" are not slides. Both PDFs are AI-generated study guides printed from a browser (pdfinfo Creator: HeadlessChrome; they end "END OF MASTERY GUIDE"), built from Arabic lecture transcripts. The DEF-01/INS-06 labels and the "Component Bank" / "Variable Registry" sections are IN the PDFs — not produced by this app's extractor. Results on this case measure this kind of document; they have not been checked on real lecture slides.
+
+
 Date: 2026-09-23 · Model: `nvidia/nemotron-3-super-120b-a12b:free` (n=3)
 Configs: `e6-html` (shipped) vs `e6-md` (variant)
 

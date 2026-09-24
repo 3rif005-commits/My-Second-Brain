@@ -81,9 +81,10 @@ _SEPARATOR_CELL = re.compile(r"^\|\s*:?-{3,}:?\s*\|")
 
 
 def strip_extraction_ids(text: str) -> str:
-    """Drop the extractor's ID column (DEF-01, C-02, INS-06…) from its tables.
+    """Drop an ID column (DEF-01, C-02, INS-06…) from a source's tables.
 
-    The IDs are bookkeeping for the extraction, and a model shown them writes
+    Some sources — AI-generated study guides especially — number every item,
+    and a model shown those IDs writes
     them into prose ("Source 2 explicitly states INS-06"). Telling it not to
     did nothing (E14: 1/5 leaked before and after); removing them is the fix
     that cannot be ignored. Only a table whose header starts `|ID|` loses its

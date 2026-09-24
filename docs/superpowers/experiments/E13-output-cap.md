@@ -1,5 +1,8 @@
 # E13 — The output cap on real lectures
 
+**Correction (2026-09-24, 03:25):** the two "lectures" are not slides. Both PDFs are AI-generated study guides printed from a browser (pdfinfo Creator: HeadlessChrome; they end "END OF MASTERY GUIDE"), built from Arabic lecture transcripts. The DEF-01/INS-06 labels and the "Component Bank" / "Variable Registry" sections are IN the PDFs — not produced by this app's extractor. Results on this case measure this kind of document; they have not been checked on real lecture slides.
+
+
 Date: 2026-09-24 · Model: `claude-haiku-4-5` · Case: `rs-lectures-two`
 
 **Why:** the first real case (two consecutive Remote Sensing lectures, ~6.4K

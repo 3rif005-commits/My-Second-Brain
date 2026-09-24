@@ -262,7 +262,7 @@
         "NDVI"
       ],
       "must_not_mention": [],
-      "why": "The first REAL case: two consecutive Remote Sensing lectures from one course (Al-Aqsa University), text extracted per page with [page N] tags. panchromatic lives only in lecture 2, geostationary and NDVI only in lecture 3, so a note that reads one source fails. The PDFs stay local (sources/pdf/, gitignored). Depth floors (anchors 12, text 22K chars) were set at ~2/3 of the thinnest 32K HTML run BEFORE the E6b Markdown arm ran."
+      "why": "SOURCE TYPE: both PDFs are AI-generated study guides (printed from a browser) built from Arabic Remote Sensing lecture transcripts — not slides. They carry their own DEF-xx/INS-xx labels and 'Component Bank' sections. The first case from the user's own files: two consecutive Remote Sensing lectures from one course (Al-Aqsa University), text extracted per page with [page N] tags. panchromatic lives only in lecture 2, geostationary and NDVI only in lecture 3, so a note that reads one source fails. The PDFs stay local (sources/pdf/, gitignored). Depth floors (anchors 12, text 22K chars) were set at ~2/3 of the thinnest 32K HTML run BEFORE the E6b Markdown arm ran."
     },
     {
       "id": "compare-rs-lectures",
@@ -300,7 +300,7 @@
         "Contradiction",
         "contradiction"
       ],
-      "why": "compare-sources on the APP'S extracted text for the two lectures (exported from the live note), which carries the extractor's labels (DEF-01, C-01, INS-06). The first live note leaked them into prose. 'Contradiction' is counted, not failed: whether one is deserved needs reading."
+      "why": "SOURCE TYPE: both PDFs are AI-generated study guides (printed from a browser) built from Arabic Remote Sensing lecture transcripts — not slides. They carry their own DEF-xx/INS-xx labels and 'Component Bank' sections. compare-sources on the APP'S extracted text for the two lectures (exported from the live note), which carries the source's own labels (DEF-01, C-01, INS-06). The first live note leaked them into prose. 'Contradiction' is counted, not failed: whether one is deserved needs reading."
     }
   ]
 }

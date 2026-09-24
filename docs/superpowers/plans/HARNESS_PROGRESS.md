@@ -24,8 +24,13 @@ live, and the selection menu shipped after fixing editor AI edits for everyone.
    ID column is stripped from skill sources; leaks 1/5 → 0/5, pass 4/5 → 5/5.
    Open: "Contradiction" still appears in 3/5 runs — read them and judge;
    the study-guide synthesis still receives the IDs (unmeasured there).
-2. [~] **E6b** — format vs spec length, with `anchors` and `text_chars` floors
-   added to the manifest first (the pass-rate guardrail cannot see a thin note).
+2. [x] **E6b** — done 2026-09-24: Markdown + a coverage rule reached HTML's
+   depth at −41% cost on `rs-lectures-two` (n=6); study guides now default to
+   Markdown (`SYNTHESIS_FORMAT=md`, `63f5c5e`), HTML one env line away.
+   **Caveat found after:** the `rs-*` PDFs are AI-generated study guides built
+   from lecture transcripts, not slides. E13/E14/E6b were measured on that kind
+   of document. **Re-run E6b on real lecture slides before trusting the
+   default** — needs slide PDFs the user OKs (see Blocked).
 3. [x] **Blocked reason names the source** — done 2026-09-24: a chip blocked
    for want of sources now says '"Lecture 3" failed to process — retry or
    remove it' or 'waiting for "Lecture 3" to finish processing'. Unit-tested;
@@ -180,7 +185,7 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 3. **Gemini is unreachable from `backend/venv`**: `No module named 'google'`.
    Either `./venv/bin/pip install google-genai` or accept that the second
    fallback is dead there.
-4. ~~Real lecture PDFs~~ — **first pair in** (`rs-lectures-two`, 2026-09-24; PDFs local in `evals/corpus/sources/pdf/`, gitignored). More pairs still welcome. **Was:** Real lecture PDFs for the corpus (task 2.4) — drop them in
+4. **Real lecture SLIDES** — the first pair in (`rs-*`) turned out to be AI-generated study guides, not slides. Need a pair of genuine slide decks (e.g. two consecutive `LectNN-IML26.pdf`) with the user's OK. **Was:** ~~Real lecture PDFs~~ — first pair in (`rs-lectures-two`, 2026-09-24; PDFs local in `evals/corpus/sources/pdf/`, gitignored). More pairs still welcome. **Was:** Real lecture PDFs for the corpus (task 2.4) — drop them in
    `backend/evals/corpus/sources/` and say which topics; the manifest currently
    ships four synthetic cases.
 

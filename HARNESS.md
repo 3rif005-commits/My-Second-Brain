@@ -44,9 +44,9 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - The ~448 database tests need Postgres on `127.0.0.1:55432`; without it they
   error at setup. That is the environment, not a regression.
 - A note cut off at the output cap says so, in the note (a WARNING callout)
-  and in the eval (`truncated`). The first real lecture pair hit the 16K cap
+  and in the eval (`truncated`). The first real two-document case hit the 16K cap
   on every run and the note simply ended mid-section, unmarked. The cap is
-  now 32K (E13: guides from two real lectures run 14.7K–25.6K tokens).
+  now 32K (E13: guides from two long real documents ran 14.7K–25.6K tokens).
 - A pass-rate guardrail cannot see a note that got shorter. Check a token
   saving against content density (text, anchors, callouts) before calling it a
   saving. (E6 on Claude: −68% output tokens at an equal pass rate was mostly
@@ -142,7 +142,7 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - A passthrough logs upstream errors on the server as well as sending them to
   the client. (The editor's 400 left no trace anywhere.)
 - Don't tell a model not to copy something — don't show it. "Never write the
-  extractor's labels (DEF-01, INS-06)" changed nothing (1/5 leaked before and
+  source's ID labels (DEF-01, INS-06)" changed nothing (1/5 leaked before and
   after); stripping the ID column from skill sources made it 0/5 (E14).
 - A skill reaches the workspace action bar only if it declares an `output`. No
   output means there is nowhere to put the result — those are agent
