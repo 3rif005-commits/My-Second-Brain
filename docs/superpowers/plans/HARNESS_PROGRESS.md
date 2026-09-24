@@ -87,6 +87,10 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 | Subagents | Do not spawn Claude Code subagents for execution. Work inline, write to disk as you go. |
 | Study-guide instructions (user, 2026-09-24) | The pre-harness HTML instructions, byte for byte, are the standard (the level the user confirmed on a live note). Engine work does not edit them. |
 | Tables (user, 2026-09-24) | The model chooses which tables to include; no forced copying of source tables (E6d carry-over removed). |
+| Workspace = 3 panels (user, 2026-09-24) | Sources · Note · Chat side by side; Sources and Chat collapse to a thin bar; drag to resize. Replaces "chat is a drawer, never a third column". |
+| Skills run from chat (user, 2026-09-24) | No Compare/Flashcards buttons, no Generate/Re-synthesize. `/skill` in chat, or the model picks one (Claude Code style). The editor's "/" menu and the selection Define-terms stay. |
+| Chat results → note (user, 2026-09-24) | A skill's result is a preview card in chat with Insert / Replace; nothing touches the note until clicked. |
+| Editing skills (user, 2026-09-24) | Settings → Skills lists every skill; editing a built-in saves a user copy that overrides it; Reset restores the original. |
 | Collapsed boxes (user) | Callouts sit inside collapsed toggles by design — compact notes. Not a defect. |
 | E6 outcome (2026-09-24) | Synthesis default is HTML. Markdown was default overnight (E6b) and reverted on real slides (E6c: tables 1/3 vs 3/3); opt-in `SYNTHESIS_FORMAT=md`. Skills keep writing Markdown. |
 | E7 outcome (2026-09-23) | `AGENT_SKILL_DISCLOSURE` stays `inline` until the catalogue grows; `index` is proven safe (loads the right skill 5/5). |

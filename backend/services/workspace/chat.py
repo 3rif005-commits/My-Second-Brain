@@ -12,7 +12,9 @@ is exactly what multi-source attribution needs.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 from typing import Any, AsyncIterator
 
 from services.database import get_supabase
@@ -86,11 +88,59 @@ def citations_payload(chunks: list[dict], titles: dict[str, str]) -> list[dict]:
     ]
 
 
+# ── jobs (skills) in the chat ────────────────────────────────────────────────
+#
+# Claude Code style: the model sees the catalogue — name and one line each —
+# and decides whether the request is a job. If it is, it answers with a single
+# marker line instead of prose; the marker is never shown, the job runs, and
+# its result comes back as a card. `/name` in the input skips the decision.
+
+SKILL_MARKER = re.compile(r"^\s*<<skill:([a-z0-9-]+)>>[ \t]*(.*)$", re.S)
+
+SKILLS_NOTICE = """You can also run a JOB over ALL of this note's sources. When
+the user asks for one of these jobs — in any words — reply with ONLY this line
+and nothing else:
+<<skill:NAME>> an optional short focus from their request
+Jobs:
+{catalogue}
+For questions about the material, answer normally with citations."""
+
+
+def skills_notice(skills: list[dict]) -> str:
+    if not skills:
+        return ""
+    return SKILLS_NOTICE.format(catalogue="\n".join(
+        f"- {s['skill']}: {s.get('description', '')}" for s in skills))
+
+
+async def run_skill_in_chat(note_id: str, user_id: str, name: str, focus: str = "",
+                            picked: bool = False) -> AsyncIterator[dict[str, Any]]:
+    """One job, as chat events: skill_start, then result (or error)."""
+    from services.workspace import skill_run
+    yield {"type": "skill_start", "skill": name, "title": skill_run.job_title(name),
+           "focus": focus, "picked": picked}
+    try:
+        result = await asyncio.to_thread(
+            skill_run.produce_skill_result, note_id, user_id, name, focus)
+    except Exception as e:                       # noqa: BLE001
+        yield {"type": "error", "content": str(e)[:400]}
+        return
+    yield {"type": "result", **result}
+
+
 async def run_note_chat(
     note_id: str,
     user_id: str,
     messages: list[dict],
+    skill: str | None = None,
+    focus: str = "",
 ) -> AsyncIterator[dict[str, Any]]:
+    if skill:
+        async for ev in run_skill_in_chat(note_id, user_id, skill, focus):
+            yield ev
+        yield {"type": "done"}
+        return
+
     query = ""
     for m in reversed(messages):
         if m.get("role") == "user":
@@ -125,16 +175,42 @@ async def run_note_chat(
         yield {"type": "done"}
         return
 
-    payload = [{"role": "system", "content": build_system_prompt(chunks, titles)}]
+    try:
+        from services.workspace.skill_run import chat_skills
+        offered = [s for s in chat_skills(note_id, user_id) if not s.get("runnable")]
+    except Exception:                            # noqa: BLE001
+        offered = []
+    system = build_system_prompt(chunks, titles)
+    notice = skills_notice(offered)
+    if notice:
+        system += "\n\n" + notice
+    payload = [{"role": "system", "content": system}]
     payload += [{"role": m["role"], "content": m["content"]} for m in messages]
 
+    names = {s["skill"] for s in offered}
     errors: list[str] = []
+    picked: tuple[str, str] | None = None
     for provider in providers:
         streamed_any = False
+        held = ""                 # the start of the answer, until we know it is not a marker
+        released = False
         try:
             async for text in _annotated_stream(provider, payload, note_id, user_id):
                 streamed_any = True
-                yield {"type": "text", "content": text}
+                if released:
+                    yield {"type": "text", "content": text}
+                    continue
+                held += text
+                if held.lstrip().startswith("<<skill:") or "<<skill:".startswith(held.lstrip()):
+                    continue      # could be a marker: keep holding
+                released = True
+                yield {"type": "text", "content": held}
+            if not released:
+                m = SKILL_MARKER.match(held)
+                if m and m.group(1) in names:
+                    picked = (m.group(1), m.group(2).strip())
+                elif held:
+                    yield {"type": "text", "content": held}
             break
         except Exception as e:
             if streamed_any:
@@ -144,6 +220,13 @@ async def run_note_chat(
             errors.append(f"{provider.label or provider.provider}: {str(e)[:120]}")
     else:
         yield {"type": "error", "content": "All providers failed: " + " | ".join(errors)}
+
+    if picked:
+        async for ev in run_skill_in_chat(note_id, user_id, picked[0], picked[1],
+                                          picked=True):
+            yield ev
+        yield {"type": "done"}
+        return
 
     yield {"type": "citations", "citations": citations}
     yield {"type": "done"}

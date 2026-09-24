@@ -71,6 +71,9 @@ class AnchorRow(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[dict]
+    #: Run this job directly (the `/name` command) instead of answering.
+    skill: str | None = None
+    focus: str = ""
 
 
 class PasteImageRequest(BaseModel):
@@ -585,11 +588,21 @@ async def note_chat(note_id: str, body: ChatRequest, authorization: str = Header
     _own_note(note_id, user_id)
 
     async def stream():
-        async for ev in run_note_chat(note_id, user_id, body.messages):
+        async for ev in run_note_chat(note_id, user_id, body.messages,
+                                      skill=body.skill, focus=body.focus):
             yield "data: " + json.dumps(ev) + "\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@router.get("/notes/{note_id}/chat/skills")
+async def note_chat_skills(note_id: str, authorization: str = Header()):
+    """The jobs the chat offers as /commands on this note, each priced."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    from services.workspace.skill_run import chat_skills
+    return {"skills": chat_skills(note_id, user_id)}
 
 
 # ── recent sessions (the empty shell's recents strip) ────────────────────────

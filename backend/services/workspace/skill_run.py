@@ -241,3 +241,104 @@ def run_skill(note_id: str, user_id: str, skill_name: str,
         # it used to rerun the study guide, a different job at a different price.
         _write(note_id, user_id, {"status": "failed", "source_ids": source_ids,
                                   "error": f"{skill.name}: {e}"[:500]})
+
+
+# ── skills in the workspace chat ─────────────────────────────────────────────
+#
+# The workspace runs its jobs from the chat panel (user decision, 2026-09-24):
+# `/study-guide`, `/flashcards`, `/compare-sources`, or the model picks one. A
+# run produces a RESULT the chat shows as a preview card with Insert / Replace;
+# nothing is written into the note or its draft row until the user clicks.
+
+STUDY_GUIDE = "study-guide"
+CHAT_SURFACES = {"workspace", "chat"}
+
+
+def job_title(name: str) -> str:
+    return name.replace("-", " ").capitalize()
+
+
+def chat_skills(note_id: str, user_id: str) -> list[dict]:
+    """Every job the chat can run on this note, priced, best first."""
+    out = []
+    skills = sorted((s for s in registry().all()
+                     if s.output and CHAT_SURFACES & set(s.surfaces)),
+                    key=lambda s: (-s.priority, s.name))
+    for s in skills:
+        if s.name == STUDY_GUIDE:
+            from services.workspace.synthesis import estimate_synthesis
+            e = estimate_synthesis(note_id, user_id)
+            runnable = None if e["ready_sources"] else "no sources are ready yet"
+            out.append({"skill": s.name, "title": job_title(s.name),
+                        "description": s.description, "usd": e["usd"],
+                        "input_tokens": e["input_tokens"],
+                        "output_tokens": e["output_tokens"], "runnable": runnable})
+        else:
+            e = estimate(note_id, user_id, s)
+            out.append({**e, "title": job_title(s.name)})
+    return out
+
+
+def _focused(prompt: str, focus: str) -> str:
+    focus = (focus or "").strip()
+    if not focus:
+        return prompt
+    return (f"{prompt}\n\nTHE STUDENT'S REQUEST, in their words: {focus}\n"
+            "Follow every instruction above, and shape the result around it.")
+
+
+def produce_skill_result(note_id: str, user_id: str, name: str,
+                         focus: str = "") -> dict:
+    """Run one skill over the note's sources and RETURN the result.
+
+    Raises ValueError with a reason a person can read when the job cannot run
+    (unknown skill, not enough sources, over budget). The study guide runs on
+    its own HTML dialect path — the user's instructions, unchanged — and every
+    other skill on the Markdown path the skills are written for.
+    """
+    from services.ai import usage as usage_log
+    skill = registry().get(name)
+    if skill is None or not skill.output:
+        raise ValueError(f"No job named {name!r}.")
+    blocks, source_ids = _blocks_for(note_id)
+    blocked = _runnable(skill, len(source_ids))
+    if blocked:
+        raise ValueError(f"{job_title(name)}: {blocked}.")
+
+    mark = len(usage_log.RECENT)
+    with usage_log.annotate(surface="workspace", job="skill", skill=name,
+                            trigger="user", note_id=note_id, user_id=user_id), \
+         budget_guard.limit(settings.max_usd_per_run or None):
+        if name == STUDY_GUIDE:
+            from prompts.note_synthesis import build_note_synthesis_prompt
+            from services.workspace import synthesis
+            budget_guard.check(synthesis.estimate_synthesis(note_id, user_id)["usd"],
+                               what="Writing the study guide")
+            prompt = _focused(build_note_synthesis_prompt(blocks), focus)
+            html = synthesis._complete(prompt, [], True, user_id)
+            truncated = last_call_truncated()
+            if truncated:
+                from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML
+                html += TRUNCATION_NOTICE_HTML
+        else:
+            budget_guard.check(estimate(note_id, user_id, skill)["usd"],
+                               what=f"Running {job_title(name)}")
+            answer = _strip_fences(complete_with_fallback(
+                "summarize_text", user_id,
+                [{"role": "user", "content": _focused(build_prompt(skill, blocks), focus)}],
+                max_tokens=OUTPUT_CAP))
+            truncated = last_call_truncated()
+            if not answer.strip():
+                raise ValueError("The model returned nothing.")
+            if truncated:
+                answer = answer.rstrip() + "\n\n" + TRUNCATION_NOTICE_MD
+            html = markdown_to_html(answer)
+
+    rows = list(usage_log.RECENT)[mark:]
+    spent = [r["estimated_usd"] for r in rows if r.get("estimated_usd") is not None]
+    return {"skill": name, "title": job_title(name), "html": html,
+            "source_ids": source_ids, "truncated": truncated,
+            "input_tokens": sum(r.get("input_tokens") or 0 for r in rows),
+            "output_tokens": sum(r.get("output_tokens") or 0 for r in rows),
+            "usd": round(sum(spent), 4) if spent else None}
+

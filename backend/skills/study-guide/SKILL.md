@@ -1,8 +1,9 @@
 ---
 name: study-guide
 description: Write a complete exam-ready study guide from a note's attached sources.
-surfaces: [synthesis]
+surfaces: [workspace]
 inputs: sources
+output: draft_note
 model_tier: standard
 auto: false
 confirm: true
