@@ -59,21 +59,39 @@ export function usePanelContext() {
 
   // The jobs a panel can run: every skill that runs "in the AI panel". Not
   // priced here — before a file is attached there is nothing to price.
-  useEffect(() => {
-    fetch("/api/skills")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!d) return;
+  useEffect(() => { void loadJobs().then((j) => j && setJobs(j)); }, []);
+
+  /** The jobs, fetched now if the first load failed — a `/command` must not
+   *  turn into a plain question because one request did. */
+  const ensureJobs = async (): Promise<ChatJob[]> => {
+    if (jobs.length) return jobs;
+    const j = await loadJobs();
+    if (j) setJobs(j);
+    return j ?? [];
+  };
+
+  return { pageNoteId, pageSources, setPageSources, jobs, ensureJobs };
+}
+
+async function loadJobs(): Promise<ChatJob[] | null> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const r = await fetch("/api/skills");
+      if (r.ok) {
+        const d = await r.json();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setJobs((d.skills ?? []).filter((s: any) => s.where === "chat").map((s: any) => ({
+        return (d.skills ?? []).filter((s: any) => s.where === "chat").map((s: any) => ({
           skill: s.name, title: s.title, description: s.description,
           usd: null, input_tokens: 0, output_tokens: 0, runnable: null,
-        })));
-      })
-      .catch(() => {});
-  }, []);
-
-  return { pageNoteId, pageSources, setPageSources, jobs };
+        }));
+      }
+      console.warn(`[ai-panel] skills list: HTTP ${r.status}`);
+    } catch (e) {
+      console.warn("[ai-panel] skills list failed", e);
+    }
+    await new Promise((res) => setTimeout(res, 800 * (attempt + 1)));
+  }
+  return null;
 }
 
 /** The open note's title, and whether it is empty (no text at all). An

@@ -81,6 +81,19 @@ export function PanelJobCard({ job, pageNoteId, busy, onApply, onUndo, onRetry, 
           {!r && !job.error && <>Writing… <Elapsed since={job.startedAt} /></>}
           {r && r.usd != null && `$${r.usd.toFixed(3)}`}
         </span>
+        {r && (
+          <button onClick={() => { void copyResult(r.html); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+            title="Copy" aria-label="Copy"
+            className="p-1 -my-1 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/10">
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+          </button>
+        )}
+        {(r || job.error) && !job.applied && (
+          <button onClick={onDiscard} title="Discard" aria-label="Discard"
+            className="p-1 -my-1 -mr-1 rounded-md text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/10">
+            <X size={12} />
+          </button>
+        )}
       </div>
 
       {job.error && (
@@ -126,13 +139,6 @@ export function PanelJobCard({ job, pageNoteId, busy, onApply, onUndo, onRetry, 
               </button>
               <button onClick={onRetry} disabled={busy} title="Write it again" className={quiet}>
                 <RotateCcw size={12} /> Try again
-              </button>
-              <button onClick={() => { void copyResult(r.html); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-                title="Copy" className={quiet}>
-                {copied ? <Check size={12} /> : <Copy size={12} />}
-              </button>
-              <button onClick={onDiscard} title="Discard" className={quiet}>
-                <X size={12} />
               </button>
             </div>
           ) : (

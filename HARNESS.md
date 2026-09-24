@@ -182,3 +182,10 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - Supabase Storage also defaults to HTTP/2; source uploads died with
   `ConnectionTerminated error_code:9`, the source failed, and the AI panel had
   no jobs. `services/database.py` gives Storage an HTTP/1.1 session too.
+- The side panel's thread-load effect replaced every item with the stored
+  thread when a new thread got its id — wiping upload and job cards the store
+  does not hold. A thread id adopted from the stream is never reloaded.
+- A `/command` must not depend on one fetch of the skill list: a failed load
+  silently turned `/study-guide` into a plain question (the model then ran
+  the job itself and its result was dropped). The list is re-fetched on
+  demand, and a model-picked job gets a card too.

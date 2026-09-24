@@ -126,6 +126,7 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 | Skills run from chat (user, 2026-09-24) | No Compare/Flashcards buttons, no Generate/Re-synthesize. `/skill` in chat, or the model picks one (Claude Code style). The editor's "/" menu and the selection Define-terms stay. |
 | Chat results → note (user, 2026-09-24) | A skill's result is a preview card in chat with Insert / Replace; nothing touches the note until clicked. |
 | Editing skills (user, 2026-09-24) | Settings → Skills lists every skill; editing a built-in saves a user copy that overrides it; Reset restores the original. |
+| Skills from the side panel (user, 2026-09-24) | The app-wide AI panel runs skills without the workspace: 📎/drop files → `/study-guide …` → a result card. Files go into the open note only if it is EMPTY, else a new note named after the first file. Card = Put in note / Insert here · Preview · Try again · Copy · Discard · Undo (Notion-AI style); nothing is written until clicked. The note's top bar says "Open in workspace". |
 | Collapsed boxes (user) | Callouts sit inside collapsed toggles by design — compact notes. Not a defect. |
 | E6 outcome (2026-09-24) | Synthesis default is HTML. Markdown was default overnight (E6b) and reverted on real slides (E6c: tables 1/3 vs 3/3); opt-in `SYNTHESIS_FORMAT=md`. Skills keep writing Markdown. |
 | E7 outcome (2026-09-23) | `AGENT_SKILL_DISCLOSURE` stays `inline` until the catalogue grows; `index` is proven safe (loads the right skill 5/5). |
@@ -289,6 +290,10 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
   .env-dependent provider config) · `97b0d13`, `c486235`, `961ae90`, `7e42cc5`
 - 2026-09-23 · skill loader: folders, frontmatter, on-demand references,
   metadata index, auto-gating · pending
+- 2026-09-24 · Storage on HTTP/1.1 (uploads died on h2 ConnectionTerminated) · `c9a5196`
+- 2026-09-24 · Skills from the AI side panel: attach → /study-guide → card →
+  Put in note / Insert here / Try again / Copy / Discard / Undo; live run on
+  the test PDF $0.055, guide in the note, Undo clean · `7cb304a` + follow-up
 
 ## Decisions taken while executing (not re-asked)
 

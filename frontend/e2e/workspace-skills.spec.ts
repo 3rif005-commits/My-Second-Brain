@@ -17,11 +17,15 @@ async function ss(page: Page, name: string) {
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}.png`), fullPage: true });
 }
 
-/** Open a recent session from the workspace landing strip. */
+/** Open a workspace session whose source count matches. Looked up by API,
+ *  not clicked on the landing strip: the strip shows only the 12 most recent,
+ *  and every live run adds a one-source "test" note that pushes older ones off. */
 async function openRecent(page: Page, match: RegExp) {
-  await page.goto("/brain/workspace", { waitUntil: "networkidle" });
-  await page.getByText(match).first().click();
-  await page.waitForURL(/\/brain\/workspace\/[0-9a-f-]{36}/, { timeout: 30_000 });
+  const res = await page.request.get("/api/ws/sessions/recent?limit=200");
+  const rows: { note_id: string; source_count: number }[] = await res.json();
+  const hit = rows.find((r) => match.test(`${r.source_count} source${r.source_count === 1 ? "" : "s"}`));
+  expect(hit, `no workspace session with ${match}`).toBeTruthy();
+  await page.goto(`/brain/workspace/${hit!.note_id}`, { waitUntil: "domcontentloaded" });
 }
 
 const aiPanel = (page: Page) => page.getByRole("textbox", { name: /message the ai/i });

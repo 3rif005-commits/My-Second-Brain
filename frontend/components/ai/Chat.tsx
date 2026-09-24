@@ -54,7 +54,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
   const lastQueryRef = useRef<string>("");
   const modeMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  const { pageNoteId, pageSources, setPageSources, jobs } = usePanelContext();
+  const { pageNoteId, pageSources, setPageSources, jobs, ensureJobs } = usePanelContext();
   const [attachments, setAttachments] = useState<File[]>([]);
   // The note this thread's attached files live in: later questions and jobs
   // in the same thread keep working on them.
@@ -103,6 +103,15 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
     return () => document.removeEventListener("mousedown", onDown);
   }, [modeMenuOpen]);
 
+  // A thread id the server just gave this conversation: its messages are
+  // already on screen (with cards the stored thread does not hold), so it
+  // must not be reloaded over them.
+  const adoptedThreadRef = useRef<string | null>(null);
+  function adoptThreadId(id: string) {
+    adoptedThreadRef.current = id;
+    setThreadId(id);
+  }
+
   function setThreadId(id: string | null) {
     setInternalThreadId(id);
     if (id) onThreadIdChange?.(id);
@@ -116,6 +125,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
   // Load thread on switch
   useEffect(() => {
     if (!threadId) { setItems([]); return; }
+    if (threadId === adoptedThreadRef.current) return;
     (async () => {
       const res = await fetch(`/api/threads/${threadId}`);
       if (!res.ok) return;
@@ -172,6 +182,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
             approvals?: string[]; signal?: AbortSignal },
   ) {
     const assistantId = uid();
+    let pickedCard: string | null = null;
     if (!opts.job) {
       setItems((prev) => [...prev, { kind: "assistant", id: assistantId, content: "", streaming: true,
         scopeNoteId: opts.where?.noteId }]);
@@ -221,8 +232,17 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
               ? { ...it, citations: ev.citations as Citation[] } : it);
           } else if (ev.type === "skill_start" && card) {
             patchJob(card, (j) => ({ ...j, title: (ev.title as string) ?? j.title }));
-          } else if (ev.type === "result" && card) {
-            patchJob(card, (j) => ({ ...j, result: ev as unknown as JobResult }));
+          } else if (ev.type === "skill_start" && opts.where) {
+            // The model picked a job itself: it still arrives as a card.
+            pickedCard = uid();
+            const picked: PanelJob = { skill: ev.skill as string, title: (ev.title as string) ?? jobTitle(ev.skill as string),
+              focus: (ev.focus as string) ?? "", startedAt: Date.now(),
+              noteId: opts.where.noteId, noteTitle: opts.where.title };
+            setItems((prev) => insertBefore(prev, assistantId, { kind: "job", id: pickedCard!, job: picked }));
+          } else if (ev.type === "result" && (card || pickedCard)) {
+            patchJob((card ?? pickedCard)!, (j) => ({ ...j, result: ev as unknown as JobResult }));
+          } else if (ev.type === "job_error" && pickedCard) {
+            patchJob(pickedCard, (j) => (j.result ? j : { ...j, error: ev.content as string }));
           } else if ((ev.type === "job_error" || ev.type === "error") && card) {
             patchJob(card, (j) => (j.result ? j : { ...j, error: ev.content as string }));
           } else if (ev.type === "skill_active") {
@@ -252,7 +272,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
                 : it
             ));
           } else if (ev.type === "done") {
-            if (ev.thread_id) setThreadId(ev.thread_id as string);
+            if (ev.thread_id) adoptThreadId(ev.thread_id as string);
           } else if (ev.type === "error") {
             setError(ev.content as string);
           }
@@ -264,6 +284,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
       if (opts.job) patchJob(opts.job.cardId, (j) => ({ ...j, error: msg }));
       else setError(msg);
     } finally {
+      if (pickedCard) {
+        patchJob(pickedCard, (j) => (j.result || j.error ? j
+          : { ...j, error: "The job stopped without a result." }));
+      }
       if (!opts.job) {
         patchItem(assistantId, (it) => it.kind === "assistant" ? { ...it, streaming: false } : it);
       } else {
@@ -302,7 +326,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
     const files = opts?.query ? [] : attachments;
     if ((!query && !files.length) || loading) return;
     lastQueryRef.current = query;
-    const cmd = parseCommand(query, jobs);
+    const cmd = parseCommand(query, query.startsWith("/") ? await ensureJobs() : jobs);
 
     const shown = [query, files.length ? `📎 ${files.map((f) => f.name).join(", ")}` : ""]
       .filter(Boolean).join("\n");
@@ -631,7 +655,11 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
             ref={inputRef}
             rows={1}
             value={input}
-            onChange={(e) => { setInput(e.target.value); setMenuIndex(0); }}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setMenuIndex(0);
+              if (e.target.value === "/" && !jobs.length) void ensureJobs();
+            }}
             onKeyDown={handleKey}
             placeholder={attachments.length
               ? "Ask about them, or type / for a skill…"

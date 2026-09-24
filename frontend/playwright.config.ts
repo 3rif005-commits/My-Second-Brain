@@ -54,11 +54,20 @@ export default defineConfig({
     //     never as part of a sweep. Needs LECTURE_A / LECTURE_B.
     {
       name: "skills-live",
-      testMatch: /(compare-sources|selection-skills|study-guide|undo-refusal|chat-job|one-ai)-live\.spec\.ts/,
+      testMatch: /(compare-sources|selection-skills|study-guide|undo-refusal|chat-job|one-ai|panel-job)-live\.spec\.ts/,
       dependencies: ["auth-setup"],
       use: { storageState: AUTH_FILE },
       timeout: 600_000,
       retries: 0,          // a retry is a second paid run
+    },
+
+    // 4c. Skills from the app-wide AI panel — free: attaches, runs no model.
+    {
+      name: "panel-skills",
+      testMatch: "**/panel-skills.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      timeout: 240_000,
     },
 
     // 4d. Settings → Skills. Free; restores whatever it changes.
