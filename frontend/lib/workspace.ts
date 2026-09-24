@@ -127,6 +127,33 @@ export function formatLastRun(run: LastRun | null | undefined): string | null {
   return parts.length ? parts.join(" · ") : null;
 }
 
+/** Which job a failed run belongs to, so Retry reruns THAT job.
+ *
+ * The study guide and every skill share one draft row, and Retry used to
+ * always restart the study guide — a failed compare-sources run offered a
+ * different job at a different price. `lastJob` is what this page started
+ * ("study-guide" or a skill name); after a reload it is unknown, and the
+ * server's `<skill>: ` error prefix says instead. `skill` null = study guide. */
+export function failedJob(
+  error: string | null | undefined,
+  skills: NoteSkill[],
+  lastJob?: string | null,
+): { skill: NoteSkill | null; message: string } {
+  const text = error ?? "";
+  const byPrefix = skills.find((s) => text.startsWith(`${s.skill}: `)) ?? null;
+  const skill = lastJob != null
+    ? skills.find((s) => s.skill === lastJob) ?? null
+    : byPrefix;
+  const message = skill && text.startsWith(`${skill.skill}: `)
+    ? text.slice(skill.skill.length + 2) : text;
+  return { skill, message };
+}
+
+/** "compare-sources" → "Compare sources". */
+export function jobTitle(name: string): string {
+  return name.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
+
 /** A skill's price for a chip: "≈$0.05" or "≈12K tokens" when unpriced. */
 export function formatSkillCost(skill: NoteSkill): string {
   const tokens = skill.input_tokens + skill.output_tokens;

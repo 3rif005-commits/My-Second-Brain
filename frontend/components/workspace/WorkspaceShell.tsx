@@ -14,7 +14,7 @@ import { useToast } from "@/app/providers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SkillBar } from "./SkillBar";
 import { useNoteSkills } from "./useNoteSkills";
-import { formatEstimate, formatLastRun, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
+import { failedJob, formatEstimate, formatLastRun, jobTitle, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSkill, type NoteSource, type SendAction } from "@/lib/workspace";
 import { DropZone } from "./DropZone";
 import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
 import { SourceRail } from "./SourceRail";
@@ -117,16 +117,23 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   // One source of jobs for both the action bar and the editor's slash menu:
   // two lists that could drift is two lists that will.
   const jobs = useNoteSkills(noteId, syn.readyKey, syn.running, syn.refreshAfterStart);
+  // The job this page last started, so a failure's Retry reruns that job
+  // rather than whichever one the button happens to be wired to.
+  const [lastJob, setLastJob] = useState<string | null>(null);
+  useEffect(() => { setLastJob(null); }, [noteId]);
+  const runJob = useCallback((s: NoteSkill) => { setLastJob(s.skill); jobs.run(s); }, [jobs]);
+  const startGuide = useCallback(() => { setLastJob("study-guide"); syn.requestSynthesis(); }, [syn]);
+  const failure = failedJob(syn.synthesis?.error, jobs.skills, lastJob);
   const slashItems = useMemo(
     () => jobs.skills.filter((s) => !s.runnable).map((s) => ({
-      title: s.skill.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase()),
+      title: jobTitle(s.skill),
       group: "Skills",
       subtext: s.description,
       aliases: [s.skill, "skill"],
       icon: "✨",
-      onItemClick: () => jobs.run(s),
+      onItemClick: () => runJob(s),
     })),
-    [jobs],
+    [jobs, runJob],
   );
 
   // ── load ──────────────────────────────────────────────────────────────────
@@ -448,7 +455,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
         </div>
 
         <button
-          onClick={syn.requestSynthesis}
+          onClick={startGuide}
           disabled={syn.running || syn.readyCount === 0}
           title={syn.neverGenerated
             ? `Write this note from ${syn.readyCount} source${syn.readyCount === 1 ? "" : "s"}`
@@ -500,7 +507,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
         skills={jobs.skills}
         starting={jobs.starting}
         busy={syn.running}
-        onRun={jobs.run}
+        onRun={runJob}
       />
 
       {/* synthesis failure banner */}
@@ -510,10 +517,13 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
           ring-1 ring-amber-200 dark:ring-amber-900/60 shrink-0">
           <AlertTriangle size={14} className="shrink-0 text-amber-500" />
           <span className="flex-1 min-w-0 truncate">
-            Couldn’t write the note: {syn.synthesis.error}
+            {failure.skill
+              ? `${jobTitle(failure.skill.skill)} failed: ${failure.message}`
+              : `Couldn’t write the note: ${failure.message}`}
           </span>
           <button
-            onClick={syn.requestSynthesis}
+            onClick={() => (failure.skill ? runJob(failure.skill) : startGuide())}
+            title={failure.skill ? `Run ${jobTitle(failure.skill.skill)} again` : "Write the note again"}
             className="shrink-0 px-2 py-0.5 rounded-full font-medium bg-amber-500/15 hover:bg-amber-500/25 transition-colors"
           >
             Retry

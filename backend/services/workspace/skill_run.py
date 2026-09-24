@@ -236,5 +236,8 @@ def run_skill(note_id: str, user_id: str, skill_name: str,
         logger.info(f"note {note_id}: {skill.name} produced {len(html)} chars")
     except Exception as e:                          # noqa: BLE001
         logger.warning(f"note {note_id}: {skill.name} failed: {e}")
+        # Prefixed with the job, like the blocked path above: the row is shared
+        # with the study guide, and the client's Retry must rerun THIS job —
+        # it used to rerun the study guide, a different job at a different price.
         _write(note_id, user_id, {"status": "failed", "source_ids": source_ids,
-                                  "error": str(e)[:500]})
+                                  "error": f"{skill.name}: {e}"[:500]})
