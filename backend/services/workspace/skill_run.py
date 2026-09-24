@@ -261,12 +261,34 @@ def job_title(name: str) -> str:
     return name.replace("-", " ").capitalize()
 
 
+#: (note, user, ready source ids, skills) -> (jobs, when). Pricing reads every
+#: source's full text; the answer only changes when the ready sources or the
+#: skills do, so a workspace page load no longer pays that read each time.
+_CHAT_JOBS_CACHE: dict[tuple, tuple[list[dict], float]] = {}
+CHAT_JOBS_TTL = 600
+
+
 def chat_skills(note_id: str, user_id: str) -> list[dict]:
     """Every job the chat can run on this note, priced, best first."""
-    out = []
+    import time
     skills = sorted((s for s in registry().all()
                      if s.output and CHAT_SURFACES & set(s.surfaces)),
                     key=lambda s: (-s.priority, s.name))
+    ready_ids = tuple(sorted(str(r["id"]) for r in ready_sources(note_id)))
+    key = (note_id, user_id, ready_ids,
+           tuple((s.name, s.description, s.surfaces, s.output, s.priority) for s in skills))
+    hit = _CHAT_JOBS_CACHE.get(key)
+    if hit and time.time() - hit[1] < CHAT_JOBS_TTL:
+        return hit[0]
+    jobs = _price_chat_jobs(note_id, user_id, skills)
+    if len(_CHAT_JOBS_CACHE) > 200:
+        _CHAT_JOBS_CACHE.clear()
+    _CHAT_JOBS_CACHE[key] = (jobs, time.time())
+    return jobs
+
+
+def _price_chat_jobs(note_id: str, user_id: str, skills: list[Skill]) -> list[dict]:
+    out = []
     # The note's text is read ONCE and every job is priced from it (reading it
     # per job made the AI panel's list take seconds to appear).
     loaded = _blocks_for(note_id)

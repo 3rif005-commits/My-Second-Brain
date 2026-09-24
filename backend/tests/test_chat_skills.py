@@ -104,3 +104,19 @@ def test_the_study_guide_is_a_chat_job_and_uses_the_users_instructions():
     assert SYSTEM_PROMPT[:200] in prompt            # the HTML dialect, not the Markdown spec
     assert "exam focus" in prompt
     assert out["html"].startswith("<h1>Guide</h1>") and out["source_ids"] == ["s1"]
+
+
+def test_the_job_list_is_priced_once_until_sources_or_skills_change():
+    skill_run._CHAT_JOBS_CACHE.clear()
+    calls = []
+    def price(note_id, user_id, skills):
+        calls.append(1)
+        return [{"skill": s.name} for s in skills]
+    sources = [[{"id": "a"}], [{"id": "a"}], [{"id": "a"}, {"id": "b"}]]
+    with patch.object(skill_run, "_price_chat_jobs", side_effect=price), \
+         patch.object(skill_run, "ready_sources", side_effect=sources):
+        skill_run.chat_skills("n1", "u1")
+        skill_run.chat_skills("n1", "u1")          # same sources: no re-pricing
+        skill_run.chat_skills("n1", "u1")          # a source became ready: re-price
+    assert len(calls) == 2
+    skill_run._CHAT_JOBS_CACHE.clear()

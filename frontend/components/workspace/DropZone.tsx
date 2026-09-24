@@ -50,8 +50,9 @@ export function DropZone({ onAddFiles, onAddUrl, busy }: DropZoneProps) {
         </h1>
         <p className="mt-2 mx-auto max-w-md text-[13px] leading-relaxed text-gray-500 dark:text-gray-400">
           PDFs, notes, videos, YouTube links, articles — as many as you like.
-          They all feed <span className="text-gray-700 dark:text-gray-200 font-medium">one note</span>,
-          written for you the moment the last one finishes.
+          They all feed <span className="text-gray-700 dark:text-gray-200 font-medium">one note</span>.
+          Nothing is written until you ask — then use the AI panel to ask
+          questions or run a job like <span className="font-medium">/study-guide</span>.
         </p>
 
         <div className="mt-6 flex items-center justify-center gap-2">

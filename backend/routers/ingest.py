@@ -25,9 +25,38 @@ def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", str(uuid.uuid4())[:8])
 
 
+#: token digest -> (user_id, valid_until). Every request used to ask Supabase
+#: who the token belongs to — 2,399 round trips in one session, 150–400 ms each,
+#: queued behind each other under load (a workspace page makes ~6 requests).
+#: A token Supabase has confirmed is trusted for AUTH_CACHE_SECONDS, never past
+#: its own expiry.
+_AUTH_CACHE: dict[str, tuple[str, float]] = {}
+AUTH_CACHE_SECONDS = 120
+
+
+def _token_expiry(token: str) -> float | None:
+    """The `exp` claim, read without verifying — only to bound the cache;
+    the token itself was verified by Supabase before it was cached."""
+    import base64
+    import json as _json
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return float(_json.loads(base64.urlsafe_b64decode(payload))["exp"])
+    except Exception:
+        return None
+
+
 def get_user_id(authorization: str) -> str:
-    """Validate the Supabase JWT via the Supabase auth API."""
+    """Validate the Supabase JWT via the Supabase auth API (cached briefly)."""
+    import hashlib
+    import time
     token = authorization.removeprefix("Bearer ").strip()
+    key = hashlib.sha256(token.encode()).hexdigest()
+    now = time.time()
+    hit = _AUTH_CACHE.get(key)
+    if hit and hit[1] > now:
+        return hit[0]
     try:
         response = get_supabase().auth.get_user(token)
         if not response.user:
@@ -35,6 +64,11 @@ def get_user_id(authorization: str) -> str:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={"error": "Invalid or expired token.", "error_code": "AUTH_INVALID"},
             )
+        exp = _token_expiry(token)
+        until = min(now + AUTH_CACHE_SECONDS, exp) if exp else now + AUTH_CACHE_SECONDS
+        if len(_AUTH_CACHE) > 1000:
+            _AUTH_CACHE.clear()
+        _AUTH_CACHE[key] = (response.user.id, until)
         return response.user.id
     except HTTPException:
         raise
@@ -186,7 +220,7 @@ async def ingest_pdf(
 
 
 @router.post("/url")
-async def ingest_url(
+def ingest_url(
     request: Request,
     body: UrlIngestRequest,
     authorization: str = Header(),

@@ -36,7 +36,7 @@ def get_user_id(authorization: str = Header()) -> str:
 
 
 @router.get("/", response_model=list[NoteResponse])
-async def list_notes(authorization: str = Header()):
+def list_notes(authorization: str = Header()):
     user_id = get_user_id(authorization)
     db = get_supabase()
     result = (
@@ -51,7 +51,7 @@ async def list_notes(authorization: str = Header()):
 
 
 @router.get("/trash", response_model=list[NoteResponse])
-async def list_trash(authorization: str = Header()):
+def list_trash(authorization: str = Header()):
     user_id = get_user_id(authorization)
     db = get_supabase()
     result = (
@@ -66,7 +66,7 @@ async def list_trash(authorization: str = Header()):
 
 
 @router.post("/", response_model=NoteResponse, status_code=status.HTTP_201_CREATED)
-async def create_note(note: NoteCreate, authorization: str = Header()):
+def create_note(note: NoteCreate, authorization: str = Header()):
     user_id = get_user_id(authorization)
     db = get_supabase()
     result = (
@@ -78,7 +78,7 @@ async def create_note(note: NoteCreate, authorization: str = Header()):
 
 
 @router.get("/{note_id}", response_model=NoteResponse)
-async def get_note(note_id: str, authorization: str = Header()):
+def get_note(note_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     db = get_supabase()
     result = (
@@ -96,7 +96,7 @@ async def get_note(note_id: str, authorization: str = Header()):
 
 
 @router.patch("/{note_id}", response_model=NoteResponse)
-async def update_note(note_id: str, update: NoteUpdate, authorization: str = Header()):
+def update_note(note_id: str, update: NoteUpdate, authorization: str = Header()):
     user_id = get_user_id(authorization)
     db = get_supabase()
     payload = update.model_dump(exclude_none=True)
@@ -115,7 +115,7 @@ async def update_note(note_id: str, update: NoteUpdate, authorization: str = Hea
 
 
 @router.patch("/{note_id}/restore", response_model=NoteResponse)
-async def restore_note(note_id: str, authorization: str = Header()):
+def restore_note(note_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     db = get_supabase()
     result = (
@@ -131,7 +131,7 @@ async def restore_note(note_id: str, authorization: str = Header()):
 
 
 @router.delete("/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_note(note_id: str, authorization: str = Header()):
+def delete_note(note_id: str, authorization: str = Header()):
     """Soft delete — moves note to Trash."""
     user_id = get_user_id(authorization)
     db = get_supabase()
@@ -141,7 +141,7 @@ async def delete_note(note_id: str, authorization: str = Header()):
 
 
 @router.delete("/{note_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
-async def permanent_delete_note(note_id: str, authorization: str = Header()):
+def permanent_delete_note(note_id: str, authorization: str = Header()):
     """Hard delete — cannot be undone."""
     user_id = get_user_id(authorization)
     db = get_supabase()

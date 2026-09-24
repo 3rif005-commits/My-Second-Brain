@@ -37,10 +37,13 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // Refresh session — do not remove this call
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Refresh the session and establish who the user is. getClaims() verifies
+  // the JWT locally (only falling back to the Auth server when it must) and
+  // still refreshes an expired session — getUser() made a network round trip
+  // to Supabase on EVERY request, page and API alike: 200–1000 ms each, and
+  // the single largest cost of opening a workspace note.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims?.sub ? { id: data.claims.sub } : null;
 
   const { pathname } = request.nextUrl;
 

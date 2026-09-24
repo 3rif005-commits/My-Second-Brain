@@ -26,7 +26,7 @@ class RetrieveRequest(BaseModel):
 # ── Index a note ────────────────────────────────────────────────────────────
 
 @router.post("/index")
-async def index_note(body: IndexRequest, authorization: str = Header()):
+def index_note(body: IndexRequest, authorization: str = Header()):
     """Embed a note's text and upsert into note_index."""
     user_id = get_user_id(authorization)
 

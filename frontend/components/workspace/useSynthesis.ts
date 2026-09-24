@@ -95,26 +95,19 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
     refresh();
   }, [noteId, refresh]);
 
-  // Price the next run whenever the ready source set changes. Cheap by
-  // construction (the server reads chunk lengths, it does not call a model),
-  // and keyed on the source ids so adding a source re-prices it.
   const readyKey = readyIds.join(",");
-  useEffect(() => {
-    if (!noteId || readyKey === "") { setEstimate(null); return; }
-    let live = true;
-    wsApi.getSynthesisEstimate(noteId)
-      .then((e) => { if (live) setEstimate(e); })
-      .catch(() => { if (live) setEstimate(null); });
-    return () => { live = false; };
-  }, [noteId, readyKey]);
+  // No pre-run estimate fetch any more: the Generate button it priced is gone
+  // (jobs are priced in the AI panel), and the request averaged 5 s — the
+  // slowest thing the workspace page asked for.
 
-  // Poll while a source is still processing (the settle guard fires on the last
-  // one) or while a draft is being written.
+  // Poll only while a draft is being written or waiting to be applied. Polling
+  // through source processing existed for auto-generation, which no longer
+  // happens (the drop policy is "suggest").
   useEffect(() => {
-    if (!noteId || (!pending && !running && !unapplied)) return;
+    if (!noteId || (!running && !unapplied)) return;
     const timer = setInterval(refresh, 2500);
     return () => clearInterval(timer);
-  }, [noteId, pending, running, unapplied, refresh]);
+  }, [noteId, running, unapplied, refresh]);
 
   // Apply a ready, unapplied draft.
   useEffect(() => {

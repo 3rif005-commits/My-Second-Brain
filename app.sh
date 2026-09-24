@@ -37,10 +37,14 @@ kill_service() {
   local name=$1 pid_file=$2 port=$3
   if [[ -f "$pid_file" ]]; then
     local pid; pid=$(cat "$pid_file")
-    kill "$pid" 2>/dev/null && ok "Stopped $name (pid $pid)"
+    # Each service is started in its own process group (setsid), so stopping
+    # the group stops its children too — `npm run dev` leaves a next-server
+    # grandchild that outlived a plain `kill <pid>`.
+    kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null
+    ok "Stopped $name (pid $pid)"
     rm -f "$pid_file"
   fi
-  local leftover; leftover=$(lsof -ti ":$port" 2>/dev/null || true)
+  local leftover; leftover=$( (lsof -ti ":$port" 2>/dev/null; ss -ltnpH "sport = :$port" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2) | sort -u | tr '\n' ' ')
   if [[ -n "$leftover" ]]; then
     kill $leftover 2>/dev/null || true
     ok "Cleaned up port $port"
@@ -56,18 +60,32 @@ cmd_start() {
     warn "Backend already running on port $BACKEND_PORT"
   else
     info "Starting backend on port $BACKEND_PORT …"
-    (cd "$BACKEND_DIR" && source .venv/bin/activate && exec uvicorn main:app --port "$BACKEND_PORT" --reload) \
-      > "$BACKEND_LOG" 2>&1 &
-    echo $! > "$BACKEND_PID_FILE"
+    # The child writes its own pid: it is the new process group's leader, so
+    # stop can end the whole group (setsid may fork, making $! the wrong pid).
+    setsid bash -c "echo \$\$ > '$BACKEND_PID_FILE'; cd '$BACKEND_DIR' && source .venv/bin/activate && exec uvicorn main:app --port '$BACKEND_PORT' --reload" \
+      > "$BACKEND_LOG" 2>&1 < /dev/null &
+    sleep 0.5
     ok "Backend started (pid $(cat "$BACKEND_PID_FILE")) — logs: $BACKEND_LOG"
   fi
 
   if running "$FRONTEND_PID_FILE" "$FRONTEND_PORT"; then
     warn "Frontend already running on port $FRONTEND_PORT"
   else
-    info "Starting frontend on port $FRONTEND_PORT …"
-    (cd "$FRONTEND_DIR" && exec npm run dev) > "$FRONTEND_LOG" 2>&1 &
-    echo $! > "$FRONTEND_PID_FILE"
+    if [[ "$MODE" == "prod" ]]; then
+      # Production mode: build once, then serve the built app. Several times
+      # faster on this laptop than `next dev`, which compiles pages on the fly
+      # and runs React's slow development checks. Rebuild after code changes
+      # (./app.sh stop && ./app.sh start --prod).
+      info "Building the frontend (production) … this takes a few minutes"
+      (cd "$FRONTEND_DIR" && NODE_OPTIONS=--max-old-space-size=2048 npm run build) > "$FRONTEND_LOG" 2>&1 \
+        || { warn "Build failed — see $FRONTEND_LOG"; return 1; }
+      info "Starting frontend (production) on port $FRONTEND_PORT …"
+      setsid bash -c "echo \$\$ > '$FRONTEND_PID_FILE'; cd '$FRONTEND_DIR' && exec npm run start" >> "$FRONTEND_LOG" 2>&1 < /dev/null &
+    else
+      info "Starting frontend (dev) on port $FRONTEND_PORT …"
+      setsid bash -c "echo \$\$ > '$FRONTEND_PID_FILE'; cd '$FRONTEND_DIR' && exec npm run dev" > "$FRONTEND_LOG" 2>&1 < /dev/null &
+    fi
+    sleep 0.5
     ok "Frontend started (pid $(cat "$FRONTEND_PID_FILE")) — logs: $FRONTEND_LOG"
   fi
 
@@ -124,6 +142,9 @@ cmd_logs() {
   tail -f "$BACKEND_LOG" "$FRONTEND_LOG" 2>/dev/null || warn "No log files yet — start the app first"
 }
 
+MODE=dev
+[[ "${2:-}" == "--prod" ]] && MODE=prod
+
 case "${1:-help}" in
   start)  cmd_start  ;;
   stop)   cmd_stop   ;;
@@ -134,6 +155,7 @@ case "${1:-help}" in
     echo -e "${BLUE}Usage:${NC} ./app.sh <command>"
     echo ""
     echo "  start    Start backend + frontend + llama.cpp (if set up) in the background"
+    echo "           add --prod for a built, much faster frontend (rebuild after code changes)"
     echo "  stop     Kill everything"
     echo "  status   Show what's running"
     echo "  logs     Tail live logs from backend + frontend"

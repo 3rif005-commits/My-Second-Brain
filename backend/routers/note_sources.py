@@ -335,7 +335,7 @@ async def paste_image(note_id: str, body: PasteImageRequest,
 
 
 @router.get("/notes/{note_id}/sources")
-async def list_sources(note_id: str, authorization: str = Header()):
+def list_sources(note_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     _own_note(note_id, user_id)
     rows = (get_supabase().table("note_resources").select("*")
@@ -344,7 +344,7 @@ async def list_sources(note_id: str, authorization: str = Header()):
 
 
 @router.post("/notes/{note_id}/process-sources")
-async def process_queued_sources(note_id: str, background: BackgroundTasks,
+def process_queued_sources(note_id: str, background: BackgroundTasks,
                                  authorization: str = Header()):
     """Start processing every source on this note that is still queued — the
     second half of a deferred multi-source drop."""
@@ -358,7 +358,7 @@ async def process_queued_sources(note_id: str, background: BackgroundTasks,
 
 
 @router.delete("/sources/{source_id}")
-async def detach_source(source_id: str, authorization: str = Header()):
+def detach_source(source_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     r = _own_source(source_id, user_id)
     # best-effort storage cleanup; the note always survives
@@ -375,7 +375,7 @@ async def detach_source(source_id: str, authorization: str = Header()):
 # ── single source ────────────────────────────────────────────────────────────
 
 @router.get("/sources/{source_id}")
-async def get_source(source_id: str, authorization: str = Header()):
+def get_source(source_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     r = _own_source(source_id, user_id)
     elements = (get_supabase().table("resource_elements").select("*")
@@ -393,7 +393,7 @@ async def get_source(source_id: str, authorization: str = Header()):
 
 
 @router.get("/sources/{source_id}/file")
-async def source_file_url(source_id: str, authorization: str = Header()):
+def source_file_url(source_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     r = _own_source(source_id, user_id)
     if not r.get("storage_path"):
@@ -406,7 +406,7 @@ async def source_file_url(source_id: str, authorization: str = Header()):
 
 
 @router.post("/sources/{source_id}/reprocess")
-async def reprocess_source(source_id: str, background: BackgroundTasks,
+def reprocess_source(source_id: str, background: BackgroundTasks,
                            authorization: str = Header()):
     user_id = get_user_id(authorization)
     _own_source(source_id, user_id)
@@ -417,7 +417,7 @@ async def reprocess_source(source_id: str, background: BackgroundTasks,
 
 
 @router.post("/sources/{source_id}/capture")
-async def capture_media(source_id: str, body: CaptureRequest,
+def capture_media(source_id: str, body: CaptureRequest,
                         authorization: str = Header()):
     user_id = get_user_id(authorization)
     r = _own_source(source_id, user_id)
@@ -431,7 +431,7 @@ async def capture_media(source_id: str, body: CaptureRequest,
 
 
 @router.post("/sources/{source_id}/formula-latex")
-async def formula_latex(source_id: str, body: FormulaRequest,
+def formula_latex(source_id: str, body: FormulaRequest,
                         authorization: str = Header()):
     user_id = get_user_id(authorization)
     _own_source(source_id, user_id)
@@ -454,7 +454,7 @@ async def formula_latex(source_id: str, body: FormulaRequest,
 # ── synthesis ────────────────────────────────────────────────────────────────
 
 @router.post("/notes/{note_id}/synthesize")
-async def synthesize(note_id: str, body: SynthesizeRequest,
+def synthesize(note_id: str, body: SynthesizeRequest,
                      background: BackgroundTasks, authorization: str = Header()):
     user_id = get_user_id(authorization)
     _own_note(note_id, user_id)
@@ -471,7 +471,7 @@ async def synthesize(note_id: str, body: SynthesizeRequest,
 
 
 @router.get("/notes/{note_id}/skills")
-async def list_note_skills(note_id: str, authorization: str = Header()):
+def list_note_skills(note_id: str, authorization: str = Header()):
     """Every skill this workspace can offer for this note, priced.
 
     Each entry says what it would cost and, when it cannot run yet, why —
@@ -485,7 +485,7 @@ async def list_note_skills(note_id: str, authorization: str = Header()):
 
 
 @router.post("/notes/{note_id}/skills/{skill_name}/run")
-async def run_note_skill(note_id: str, skill_name: str,
+def run_note_skill(note_id: str, skill_name: str,
                          background: BackgroundTasks,
                          authorization: str = Header()):
     """Run one skill over this note's sources. The result lands in the same
@@ -502,7 +502,7 @@ async def run_note_skill(note_id: str, skill_name: str,
 
 
 @router.get("/notes/{note_id}/synthesis/estimate")
-async def get_synthesis_estimate(note_id: str, authorization: str = Header()):
+def get_synthesis_estimate(note_id: str, authorization: str = Header()):
     """Priced preview of the Generate action — computed from stored chunks, so
     asking what it would cost costs nothing. Also carries the current
     `on_drop` policy, so the client needs one round trip, not two."""
@@ -512,7 +512,7 @@ async def get_synthesis_estimate(note_id: str, authorization: str = Header()):
 
 
 @router.get("/notes/{note_id}/synthesis")
-async def get_synthesis(note_id: str, authorization: str = Header()):
+def get_synthesis(note_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     _own_note(note_id, user_id)
     rows = (get_supabase().table("note_synthesis").select("*")
@@ -531,7 +531,7 @@ async def get_synthesis(note_id: str, authorization: str = Header()):
 
 
 @router.post("/notes/{note_id}/synthesis/applied")
-async def mark_synthesis_applied(note_id: str, authorization: str = Header()):
+def mark_synthesis_applied(note_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     _own_note(note_id, user_id)
     now = datetime.now(timezone.utc).isoformat()
@@ -544,7 +544,7 @@ async def mark_synthesis_applied(note_id: str, authorization: str = Header()):
 # ── note anchors (note block ↔ source position sync) ─────────────────────────
 
 @router.put("/notes/{note_id}/anchors")
-async def put_anchors(note_id: str, body: list[AnchorRow],
+def put_anchors(note_id: str, body: list[AnchorRow],
                       authorization: str = Header()):
     user_id = get_user_id(authorization)
     _own_note(note_id, user_id)
@@ -574,7 +574,7 @@ async def put_anchors(note_id: str, body: list[AnchorRow],
 
 
 @router.get("/notes/{note_id}/anchors")
-async def get_anchors(note_id: str, authorization: str = Header()):
+def get_anchors(note_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     return (get_supabase().table("note_anchors").select("*")
             .eq("note_id", note_id).eq("user_id", user_id).execute().data or [])
@@ -597,7 +597,7 @@ async def note_chat(note_id: str, body: ChatRequest, authorization: str = Header
 
 
 @router.get("/notes/{note_id}/chat/skills")
-async def note_chat_skills(note_id: str, authorization: str = Header()):
+def note_chat_skills(note_id: str, authorization: str = Header()):
     """The jobs the chat offers as /commands on this note, each priced."""
     user_id = get_user_id(authorization)
     _own_note(note_id, user_id)
@@ -608,7 +608,7 @@ async def note_chat_skills(note_id: str, authorization: str = Header()):
 # ── recent sessions (the empty shell's recents strip) ────────────────────────
 
 @router.get("/sessions/recent")
-async def recent_sessions(authorization: str = Header(), limit: int = 12):
+def recent_sessions(authorization: str = Header(), limit: int = 12):
     user_id = get_user_id(authorization)
     db = get_supabase()
     srcs = (db.table("note_resources").select("note_id,kind,title,order_index")
@@ -638,7 +638,7 @@ async def recent_sessions(authorization: str = Header(), limit: int = 12):
 # ── AI providers ─────────────────────────────────────────────────────────────
 
 @router.get("/ai-providers")
-async def list_ai_providers(authorization: str = Header()):
+def list_ai_providers(authorization: str = Header()):
     user_id = get_user_id(authorization)
     rows = (get_supabase().table("ai_providers").select("*")
             .eq("user_id", user_id).order("created_at").execute().data or [])
@@ -649,7 +649,7 @@ async def list_ai_providers(authorization: str = Header()):
 
 
 @router.post("/ai-providers")
-async def create_ai_provider(body: ProviderCreate, authorization: str = Header()):
+def create_ai_provider(body: ProviderCreate, authorization: str = Header()):
     user_id = get_user_id(authorization)
     if body.provider not in ("gemini", "anthropic", "openai", "openai_compatible"):
         raise HTTPException(status_code=400, detail={"error": "Unknown provider"})
@@ -666,7 +666,7 @@ async def create_ai_provider(body: ProviderCreate, authorization: str = Header()
 
 
 @router.patch("/ai-providers/{provider_id}")
-async def patch_ai_provider(provider_id: str, body: ProviderPatch,
+def patch_ai_provider(provider_id: str, body: ProviderPatch,
                             authorization: str = Header()):
     user_id = get_user_id(authorization)
     patch = {k: v for k, v in body.model_dump().items() if v is not None}
@@ -682,7 +682,7 @@ async def patch_ai_provider(provider_id: str, body: ProviderPatch,
 
 
 @router.delete("/ai-providers/{provider_id}")
-async def delete_ai_provider(provider_id: str, authorization: str = Header()):
+def delete_ai_provider(provider_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     get_supabase().table("ai_providers").delete().eq("id", provider_id).eq(
         "user_id", user_id).execute()
