@@ -144,6 +144,11 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - Don't tell a model not to copy something — don't show it. "Never write the
   source's ID labels (DEF-01, INS-06)" changed nothing (1/5 leaked before and
   after); stripping the ID column from skill sources made it 0/5 (E14).
+- A prompt is edited in its skill folder, not in a Python string. The study
+  guide's two prompts moved to `skills/study-guide/` byte-for-byte (hash-checked).
+- Chat only pastes skills declared for chat (or for no surface). A workspace-
+  or selection-only skill in a chat prompt is instructions for a job chat
+  cannot do.
 - A skill reaches the workspace action bar only if it declares an `output`. No
   output means there is nowhere to put the result — those are agent
   instructions (cite-everything), not jobs.

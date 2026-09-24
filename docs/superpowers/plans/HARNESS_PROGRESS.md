@@ -36,7 +36,12 @@ live, and the selection menu shipped after fixing editor AI edits for everyone.
    remove it' or 'waiting for "Lecture 3" to finish processing'. Unit-tested;
    live pass (workspace-skills, 5/5) shows no regression, but the failed-source
    wording itself has not been seen in a browser (needs a source that fails).
-4. Study-guide migration — **unblocked** (your edit is committed, `1750ee3`).
+4. [x] **Study-guide migration** — done 2026-09-24: `skills/study-guide/`
+   holds both prompts (SKILL.md = Markdown path, reference/html-dialect.md =
+   HTML path); the Python modules read them byte-for-byte (hashes verified
+   identical). Offered on no menu. Chat now classifies only chat-surface
+   skills (agent family 9/9). Open: under AGENT_SKILL_DISCLOSURE=index the
+   catalogue still lists every skill.
 5. Run card (5.1 remainder).
 
 **Run the backend suite with `env -u PYTHONPATH`** — this machine's ROS install

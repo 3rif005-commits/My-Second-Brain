@@ -140,3 +140,23 @@ def test_chat_only_classifies_skills_it_may_use():
     assert "flashcards" in chat                 # used from chat (E7 case)
     assert "define-terms" not in chat           # selection only
     assert "compare-sources" not in chat        # needs attached sources
+
+
+def test_the_study_guide_is_a_skill_folder_that_no_menu_offers():
+    """The study guide's prompts live in skills/study-guide/ (SKILL.md = the
+    Markdown path, reference/html-dialect.md = the HTML path). It runs from
+    "Generate note" only — never as a second chip, a selection item or a
+    chat paste."""
+    from pathlib import Path
+    from services.agent.skills import SkillRegistry
+    from services.workspace import skill_run
+    from prompts.note_synthesis_md import MARKDOWN_SPEC
+    from prompts.mastery_guide import SYSTEM_PROMPT
+    root = Path(__file__).resolve().parent.parent / "skills" / "study-guide"
+    assert MARKDOWN_SPEC in (root / "SKILL.md").read_text(encoding="utf-8")
+    assert SYSTEM_PROMPT == (root / "reference" / "html-dialect.md").read_text(encoding="utf-8")[:-1]
+    reg = SkillRegistry.load([root.parent])
+    assert reg.get("study-guide") is not None
+    assert "study-guide" not in {s.name for s in reg.for_surface("chat")}
+    assert "study-guide" not in {s.name for s in skill_run.workspace_skills()}
+    assert "study-guide" not in {s.name for s in skill_run.selection_skills()}
