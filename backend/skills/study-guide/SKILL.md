@@ -55,6 +55,12 @@ plain grey and quietly destroys the colour coding:
 
 Close every callout with a bare `:::`.
 
+EVERY ### SECTION CONTAINS AT LEAST ONE CALLOUT — the coloured boxes are what
+the student revises from. Choose the type by what the content is (a mistake →
+:::caution, an exam point → :::exam, a formula → :::formula, an insight →
+:::tip, a rule → :::warning, a mechanism → :::note); a section with none has
+not finished being written.
+
 MATHS: a display formula goes on its own line between $$ … $$, LaTeX, no
 dollar signs inside, no code fences. Every :::formula callout is followed by one.
 

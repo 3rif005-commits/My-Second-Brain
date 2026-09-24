@@ -307,3 +307,20 @@ followed where they asked for quotes and formulas, at the callouts' expense.
 The gap looks like LENGTH, not rules: Markdown answers run ~6K output tokens
 against HTML's 13–15K, at the same instructions' intent. Richness costs
 tokens; −59% cost and HTML's colour density may simply not coexist.
+
+## E6g — "every ### section contains at least one callout" (2026-09-24, `iml-slides-app`, n=3)
+
+One rule added to the Markdown spec (E6f's full rule port was reverted):
+
+| | HTML | MD before | **MD + callout rule** |
+|---|---|---|---|
+| callouts | 31 · 35 · 45 | 14 · 15 · 15 | **19 · 28 · 28** |
+| callout types used | — | 6–7 | **8 · 8 · 8** |
+| tables | 30–35 | 24–27 | 24 · 26 · 23 |
+| text chars | 33–41K | 23–25K | 26–31K |
+| pass | 3/3 | 3/3 | 3/3 |
+| $/run | 0.093 | 0.039 | 0.043 |
+
+**KEEP** (the Markdown path only — it stays opt-in). Callouts nearly double
+at the same price, every type now appears; still below HTML (median 28 vs
+35). HTML stays the default.
