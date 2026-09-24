@@ -37,6 +37,18 @@ def marker(source_no: int, table_no: int) -> str:
     return f"[[TABLE {source_no}.{table_no}]]"
 
 
+_PAGE_TAG = re.compile(r"\[page (\d+)\]")
+
+class Tables(dict):
+    """{marker: table text}, plus `pages`: {marker: (source, page)} — carried
+    with the tables of ONE run. (A module-level map would mix two notes
+    generating at once: every note's first table is [[TABLE 1.1]].)"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.pages: dict[str, tuple[int, int]] = {}
+
+
 def label_tables(sources: list[dict]) -> tuple[list[dict], dict[str, str]]:
     """Put a marker line above every pipe table in every source.
 
@@ -44,22 +56,27 @@ def label_tables(sources: list[dict]) -> tuple[list[dict], dict[str, str]]:
     its table — the model has to read it to know where it belongs — it just
     never has to write it.
     """
-    tables: dict[str, str] = {}
+    tables = Tables()
     out: list[dict] = []
     for s_no, source in enumerate(sources, start=1):
         count = 0
 
+        text = source.get("text") or ""
+
         def _label(m: re.Match) -> str:
             nonlocal count
+            pages = _PAGE_TAG.findall(text, 0, m.start())
             parts = []
             for table in _split(m.group(1).rstrip()):
                 count += 1
                 key = marker(s_no, count)
                 tables[key] = table
+                if pages:
+                    tables.pages[key] = (s_no, int(pages[-1]))
                 parts.append(f"{key}\n{table}")
             return "\n\n".join(parts)
 
-        out.append({**source, "text": _TABLE.sub(_label, source.get("text") or "")})
+        out.append({**source, "text": _TABLE.sub(_label, text)})
     return out, tables
 
 
@@ -138,7 +155,48 @@ def carry_tables_html(html: str, tables: dict[str, str], offered: str = "") -> s
                    for t in _HTML_TABLE.findall(html)]
     missing = [k for k in tables if k not in placed and (not offered or k in offered)
                and not _already_there(tables[k], note_tables)]
+    html, missing = _place_by_page_html(html, missing, tables, markdown_to_html)
     if missing:
         html += "<h2>Tables from the slides</h2>" + "".join(
             markdown_to_html(tables[k]) for k in missing)
     return html
+
+
+_H3_ANCHOR = re.compile(r'<h3[^>]*data-anchor="(\d+):p:(\d+)"[^>]*>')
+_NEXT_SECTION = re.compile(r"<h[123][\s>]")
+
+
+def _home(key: str, sections: list[tuple[int, int, int]],
+          pages: dict[str, tuple[int, int]]) -> int | None:
+    """Index of the section for this table: same source, nearest page at or
+    before the table's page."""
+    where = pages.get(key)
+    if not where:
+        return None
+    src, page = where
+    best = None
+    for i, (s_no, p_no, _) in enumerate(sections):
+        if s_no == src and p_no <= page and (best is None or p_no >= sections[best][1]):
+            best = i
+    return best
+
+
+def _place_by_page_html(html: str, missing: list[str], tables: dict[str, str],
+                        render) -> tuple[str, list[str]]:
+    """An unplaced table goes at the end of the section anchored to its page
+    rather than into an appendix far from the text about it (E6d live: 15 of
+    32 tables ended up in the appendix)."""
+    sections = [(int(m.group(1)), int(m.group(2)), m.end())
+                for m in _H3_ANCHOR.finditer(html)]
+    inserts: dict[int, list[str]] = {}
+    left: list[str] = []
+    for key in missing:
+        i = _home(key, sections, getattr(tables, "pages", {}))
+        if i is None:
+            left.append(key)
+            continue
+        nxt = _NEXT_SECTION.search(html, sections[i][2])
+        inserts.setdefault(nxt.start() if nxt else len(html), []).append(render(tables[key]))
+    for pos in sorted(inserts, reverse=True):
+        html = html[:pos] + "".join(inserts[pos]) + html[pos:]
+    return html, left

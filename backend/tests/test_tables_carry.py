@@ -62,3 +62,30 @@ def test_a_table_the_model_retyped_is_not_appended_again():
     assert "Tables from the slides" not in out          # 2.1 is already there
     md = "# G\n\n|Bias|Source|\n|---|---|\n|proxy|data|\n"
     assert "Tables from the slides" not in carry_tables(md, tables, offered="[[TABLE 2.1]]")
+
+
+def test_an_unplaced_table_goes_to_the_section_about_its_page():
+    from services.workspace.tables import carry_tables_html
+    src = [{"text": "[page 2]\nintro\n[page 5]\n|Q|Left|\n|---|---|\n|s1|0.5|"}]
+    _, tables = label_tables(src)
+    html = ('<h1>G</h1><h2>RL</h2><h3 data-anchor="1:p:2">Intro</h3><p>a</p>'
+            '<h3 data-anchor="1:p:4">Q-values</h3><p>b</p>'
+            '<h3 data-anchor="1:p:9">Later</h3><p>c</p>')
+    out = carry_tables_html(html, tables)
+    assert "Tables from the slides" not in out
+    # after the p.4 section's text, before the p.9 section
+    assert out.index("<p>b</p>") < out.index("<table>") < out.index('data-anchor="1:p:9"')
+
+
+def test_a_table_with_no_matching_section_still_reaches_the_appendix():
+    from services.workspace.tables import carry_tables_html
+    src = [{"text": "[page 1]\n|A|B|\n|---|---|\n|1|2|"}]
+    _, tables = label_tables(src)
+    out = carry_tables_html('<h1>G</h1><h3 data-anchor="1:p:7">Late</h3>', tables)
+    assert "Tables from the slides" in out
+
+
+def test_two_runs_never_share_page_numbers():
+    a = label_tables([{"text": "[page 3]\n|A|B|\n|---|---|\n|1|2|"}])[1]
+    b = label_tables([{"text": "[page 8]\n|C|D|\n|---|---|\n|3|4|"}])[1]
+    assert a.pages["[[TABLE 1.1]]"] == (1, 3) and b.pages["[[TABLE 1.1]]"] == (1, 8)

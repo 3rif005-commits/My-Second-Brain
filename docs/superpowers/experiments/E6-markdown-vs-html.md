@@ -239,3 +239,12 @@ deterministically and replay-checked on that note:
   breaks as `<br>`; the converter escaped them). Now a space.
 
 **Decision: KEEP** — table carry-over on both paths; default stays HTML.
+
+**Placement (2026-09-24, offline replay on the live 11:33 note):** the live
+guide had 15 of its 32 tables in the end-of-note appendix — carried, but far
+from the text about them. Each labelled table now remembers the `[page N]` it
+came from, and an unplaced table goes to the end of the section anchored to
+the same source at that page (or the nearest earlier one); the appendix only
+takes tables no section covers. Replayed on that note: 15/15 placed beside
+their section, 0 in the appendix. HTML path only (the default); the opt-in
+Markdown path still appends.
