@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { Menu, PanelLeftOpen } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { Logo } from "@/components/brand/Logo";
@@ -25,6 +26,18 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   const [commandKStage, setCommandKStage] = useState<CommandKStage>("closed");
   const [searchOpen, setSearchOpen] = useState(false);
   const [ingestSource, setIngestSource] = useState<IngestSource | null>(null);
+  // One AI per screen (user decision, 2026-09-24): a workspace note has its
+  // own AI panel, which the app-wide side panel is merged into — so on those
+  // pages the side panel, its toggle and the ⌘K bubble step aside, and ⌘K
+  // focuses the workspace's AI instead. The workspace also owns file drops
+  // (they become sources), so the app-wide drop-to-import steps aside too.
+  const pathname = usePathname() ?? "";
+  const inWorkspaceNote = /^\/brain\/workspace\/[0-9a-f-]{36}/.test(pathname);
+  const inWorkspace = pathname.startsWith("/brain/workspace");
+  const inWorkspaceNoteRef = useRef(inWorkspaceNote);
+  inWorkspaceNoteRef.current = inWorkspaceNote;
+  const inWorkspaceRef = useRef(inWorkspace);
+  inWorkspaceRef.current = inWorkspace;
 
   useEffect(() => {
     const stored = localStorage.getItem("sidebar-open");
@@ -64,6 +77,10 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === "k") {
         e.preventDefault();
+        if (inWorkspaceNoteRef.current) {
+          window.dispatchEvent(new CustomEvent("workspace-ai-focus"));
+          return;
+        }
         setCommandKStage((prev) => prev === "closed" ? "compact" : "closed");
       }
       if (mod && e.key === "p") {
@@ -81,6 +98,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     }
     function onDrop(e: DragEvent) {
       e.preventDefault();
+      if (inWorkspaceRef.current) return;       // the workspace attaches it as a source
       const file = e.dataTransfer?.files?.[0];
       if (file) setIngestSource({ type: "file", file });
     }
@@ -115,7 +133,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   }
 
   const isOpen = open ?? true;
-  const isAiOpen = aiOpen ?? false;
+  const isAiOpen = (aiOpen ?? false) && !inWorkspaceNote;
 
   return (
     <AIThreadProvider>
@@ -181,20 +199,22 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
         </main>
 
         {/* AI side panel — fixed right, width matches content margin */}
-        <SidePanel
-          open={isAiOpen}
-          onToggle={toggleAi}
-          width={aiPanelWidth}
-          onWidthChange={handleAiWidthChange}
-        />
+        {!inWorkspaceNote && (
+          <SidePanel
+            open={isAiOpen}
+            onToggle={toggleAi}
+            width={aiPanelWidth}
+            onWidthChange={handleAiWidthChange}
+          />
+        )}
 
         {/* Floating reopen button for AI panel (desktop, when closed) */}
-        {!isAiOpen && <SidePanelToggleButton onClick={toggleAi} />}
+        {!isAiOpen && !inWorkspaceNote && <SidePanelToggleButton onClick={toggleAi} />}
 
         <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
 
-        <CommandK open={commandKStage} onOpen={setCommandKStage} />
-        <CommandKFAB onClick={() => setCommandKStage("compact")} />
+        {!inWorkspaceNote && <CommandK open={commandKStage} onOpen={setCommandKStage} />}
+        {!inWorkspaceNote && <CommandKFAB onClick={() => setCommandKStage("compact")} />}
       </div>
       <IngestStreamDialog
         source={ingestSource}

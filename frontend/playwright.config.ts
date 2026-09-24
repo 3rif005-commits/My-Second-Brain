@@ -54,7 +54,7 @@ export default defineConfig({
     //     never as part of a sweep. Needs LECTURE_A / LECTURE_B.
     {
       name: "skills-live",
-      testMatch: /(compare-sources|selection-skills|study-guide|undo-refusal|chat-job)-live\.spec\.ts/,
+      testMatch: /(compare-sources|selection-skills|study-guide|undo-refusal|chat-job|one-ai)-live\.spec\.ts/,
       dependencies: ["auth-setup"],
       use: { storageState: AUTH_FILE },
       timeout: 600_000,

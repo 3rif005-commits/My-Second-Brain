@@ -91,6 +91,8 @@ async def test_a_workspace_turn_reads_the_notes_sources_and_offers_the_jobs():
     embed.assert_not_called()                       # no brain-wide retrieval
     assert "[1] (Lecture 10, p. 3)" in seen["system"] or "[1] (Lecture 10" in seen["system"]
     assert "workspace.run_job" in seen["tools"]
+    assert "skill.load" in seen["tools"]           # skills by index, loaded on demand
+    assert not any(e["type"] == "skill_active" for e in events)   # nothing pasted in
     assert seen["kw"]["workspace_note"] == NOTE and seen["kw"]["untrusted_context"] is True
     ctx = next(e for e in events if e["type"] == "context")
     assert ctx["citations"][0]["resource_id"] == "r1"

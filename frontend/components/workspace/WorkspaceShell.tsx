@@ -129,6 +129,13 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const [sourcesOpen, setSourcesOpen] = useState(true);
   const [chatWidth, setChatWidth] = useState(340);
   const [jobRequest, setJobRequest] = useState<JobRequest | null>(null);
+  // ⌘K on a workspace note focuses this AI (the app-wide one steps aside here).
+  const [focusNonce, setFocusNonce] = useState(0);
+  useEffect(() => {
+    const onFocus = () => { setChatOpen(true); setFocusNonce(Date.now()); };
+    window.addEventListener("workspace-ai-focus", onFocus);
+    return () => window.removeEventListener("workspace-ai-focus", onFocus);
+  }, []);
   const [splitPct, setSplitPct] = useState(45);
 
   const seekRef = useRef<((value: number) => void) | null>(null);
@@ -526,7 +533,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
 
         <button
           onClick={() => setChatOpen((v) => !v)}
-          title={chatOpen ? "Collapse the AI panel" : "Open the AI panel"}
+          title={chatOpen ? "Collapse the AI panel (⌘K focuses it)" : "Open the AI panel (⌘K)"}
           className={`shrink-0 w-8 h-8 flex items-center justify-center rounded-xl transition-colors
             focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
             chatOpen
@@ -637,6 +644,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
                 onUndo={undoResult}
                 request={jobRequest}
                 jobs={chatJobs}
+                focusNonce={focusNonce}
               />
             </div>
           </>

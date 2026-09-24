@@ -258,7 +258,13 @@ async def run_turn(
 
     # 2. Skill activation. Under "index" disclosure nothing is pasted in: the
     #    prompt carries the catalogue and the model asks for what it needs.
-    by_index = settings.agent_skill_disclosure == "index"
+    # The workspace always discloses by index, Claude Code style: the model
+    # sees the catalogue and loads a skill when it needs one. Keyword pasting
+    # put "interactive-block-author" and "note-author" into a plain question
+    # about a lecture (seen live) — noise in the panel, tokens in the bill.
+    # E7 measured index disclosure loading the right skill 5/5.
+    by_index = settings.agent_skill_disclosure == "index" or (
+        request.surface == "workspace" and bool(request.current_note_id))
     # Only skills this surface may use: a workspace-only or selection-only skill
     # pasted into a chat turn is instructions for a job chat cannot do (E7
     # saw flashcards and note-author pasted into "delete my shopping list").

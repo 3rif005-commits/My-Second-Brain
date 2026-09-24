@@ -14,6 +14,10 @@ import { InteractiveFrame } from "@/components/interactive/InteractiveFrame";
 
 interface Props {
   children: string;
+  /** Per-use overrides (e.g. the workspace AI turns #cite-n links into
+   *  source chips); merged over the defaults below. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  components?: Record<string, any>;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,12 +78,12 @@ const components: any = {
   ),
 };
 
-export function Markdown({ children }: Props) {
+export function Markdown({ children, components: extra }: Props) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath, remarkCustomFences]}
       rehypePlugins={[rehypeKatex, [rehypePrism, { ignoreMissing: true }]]}
-      components={components}
+      components={extra ? { ...components, ...extra } : components}
     >
       {children}
     </ReactMarkdown>

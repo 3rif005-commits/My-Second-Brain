@@ -104,3 +104,30 @@ test.describe("workspace: sources · note · AI", () => {
     await ss(page, "06-offered-not-fired");
   });
 });
+
+test.describe("one AI per screen", () => {
+  test.setTimeout(120_000);
+
+  test("on a workspace note the side panel steps aside and ⌘K focuses the workspace AI", async ({ page }) => {
+    await openRecent(page, /2 sources/);
+    await expect(aiPanel(page)).toBeVisible({ timeout: 30_000 });
+    // The app-wide assistant and its buttons are not on this screen.
+    await expect(page.getByRole("button", { name: /thread history/i })).toHaveCount(0);
+    await expect(page.getByPlaceholder("Ask anything about your notes…")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Open AI panel", exact: true })).toHaveCount(0);
+    // ⌘K reaches the workspace AI, even when collapsed.
+    await page.getByTitle(/collapse the ai panel/i).first().click();
+    await expect(aiPanel(page)).toHaveCount(0);
+    await page.keyboard.press("Control+k");
+    await expect(aiPanel(page)).toBeFocused({ timeout: 10_000 });
+    await ss(page, "07-one-ai");
+  });
+
+  test("elsewhere the side panel is still there", async ({ page }) => {
+    await page.goto("/brain", { waitUntil: "networkidle" });
+    // Either the open panel or its reopen button is present on ordinary pages.
+    const panel = page.getByPlaceholder("Ask anything about your notes…");
+    const toggle = page.getByRole("button", { name: "Open AI panel", exact: true });
+    await expect(panel.or(toggle).first()).toBeVisible({ timeout: 30_000 });
+  });
+});
