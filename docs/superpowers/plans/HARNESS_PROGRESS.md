@@ -20,6 +20,27 @@ chat skills; run card (Retry the right job, job + elapsed, Undo).
 re-check E6b on real slides. **Your app.sh stack** is stopped (you stopped it
 at 06:43); nothing of mine is left running.
 **Next action, in order:**
+- [~] **One AI in the workspace (user, 2026-09-24)** — the app-wide side panel
+  (robot icon) is merged INTO the workspace AI panel; one engine (the agent,
+  surface "workspace", current_note_id). Decided cases:
+  1. The AI never writes the OPEN note through tools (it would fight the
+     editor's autosave): update/delete of current_note_id is denied with a
+     reason; every reply has "Insert into note" (+ Undo) instead.
+  2. Context = this note's sources as numbered [n] excerpts (page chips);
+     other notes only through brain.search_brain, cited as links.
+  3. On /brain/workspace/* the side panel + its toggle are hidden and ⌘K
+     focuses the workspace AI; elsewhere the side panel is unchanged.
+  4. Jobs: /name runs directly (no model); the agent may call
+     workspace.run_job only when the user asks for that output; the result is
+     a card (never fed back into the model), cost shown, budget applies.
+  5. Note switch mid-answer aborts the stream; a card inserts only into the
+     note it was made for.
+  6. Local mode + a job: the job runs on the cloud chain and says so.
+  7. Editor "/" while streaming: the job waits and runs after.
+  8. Approvals: same gate and Confirm button as the side panel; the note's
+     sources are untrusted text, so edits to existing notes need Confirm.
+  9. Conversations persist as chat_threads; each note remembers its thread
+     (browser storage), with history + new-thread in the panel.
 - [x] **Workspace redesign (user, 2026-09-24)** — three panels (sources · note ·
   AI); jobs run from the AI panel (/study-guide, /flashcards, /compare-sources,
   or the model picks one), results previewed then Insert / Replace / Undo; the
