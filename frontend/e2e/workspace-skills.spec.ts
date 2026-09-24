@@ -1,13 +1,9 @@
 /**
- * Workspace action bar — the live pass for "skills as jobs".
+ * The workspace's three panels and the jobs in its AI panel — free: nothing
+ * here runs a model (user decision, 2026-09-24: jobs moved from buttons into
+ * the AI panel, as /commands; results are previewed before they reach the note).
  *
- * Proves, against the running app: a note's jobs are offered with a price
- * before any click, and a skill that cannot run yet shows the reason instead
- * of sitting greyed out with no explanation.
- *
- * It deliberately does not RUN a skill. That needs model quota, and a test
- * whose result depends on a provider's daily limit is a test that lies on
- * Tuesdays.
+ *   npx playwright test --project=workspace-skills
  */
 import { test, expect, Page } from "@playwright/test";
 import path from "path";
@@ -28,81 +24,83 @@ async function openRecent(page: Page, match: RegExp) {
   await page.waitForURL(/\/brain\/workspace\/[0-9a-f-]{36}/, { timeout: 30_000 });
 }
 
-test.describe("workspace action bar", () => {
+const aiPanel = (page: Page) => page.getByRole("textbox", { name: /message the ai/i });
+
+test.describe("workspace: sources · note · AI", () => {
   test.setTimeout(120_000);
 
-  test("a note with several sources offers every job, priced", async ({ page }) => {
+  test("three panels, and the jobs live in the AI panel, priced", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
-
     await openRecent(page, /2 sources/);
-    await expect(page.getByText(/\d+ sources?/).first()).toBeVisible({ timeout: 30_000 });
-    await ss(page, "01-multi-source");
 
-    // Both shipped skills are offered as chips.
-    const compare = page.getByRole("button", { name: /compare sources/i });
-    const flashcards = page.getByRole("button", { name: /flashcards/i });
-    await expect(compare).toBeVisible({ timeout: 30_000 });
-    await expect(flashcards).toBeVisible();
+    // The old buttons are gone.
+    await expect(page.getByRole("button", { name: /generate note|re-synthesize/i })).toHaveCount(0);
+    await expect(aiPanel(page)).toBeVisible({ timeout: 30_000 });
 
-    // Two sources means comparing is possible, and the chip carries a price.
-    await expect(compare).toBeEnabled();
-    // "free · ≈12K tokens" on a free-tier model, "≈$0.05" on a paid one —
-    // never "$0.000", which reads as broken.
-    await expect(compare).toContainText(/free|\$\d|tokens/);
-    await expect(compare).not.toContainText("$0.000");
-    await ss(page, "02-chips-priced");
-
+    // Every job is offered in the empty AI panel with its price.
+    for (const job of ["/study-guide", "/flashcards", "/compare-sources"]) {
+      await expect(page.getByRole("button", { name: new RegExp(job) })).toBeVisible({ timeout: 30_000 });
+    }
+    await ss(page, "01-three-panels");
     expect(errors, `page errors: ${errors.join(" | ")}`).toHaveLength(0);
   });
 
-  test("a single-source note explains why comparing is unavailable", async ({ page }) => {
-    await openRecent(page, /1\s*source/);
+  test("typing / in the AI panel lists the jobs", async ({ page }) => {
+    await openRecent(page, /2 sources/);
+    await aiPanel(page).click();
+    await page.keyboard.type("/fl");
+    await expect(page.getByRole("option", { name: /\/flashcards/ })).toBeVisible({ timeout: 15_000 });
+    await ss(page, "02-slash-in-chat");
+    await page.keyboard.press("Tab");
+    await expect(aiPanel(page)).toHaveValue("/flashcards ");
+  });
 
-    const compare = page.getByRole("button", { name: /compare sources/i });
+  test("a job that cannot run says why", async ({ page }) => {
+    await openRecent(page, /1\s*source/);
+    const compare = page.getByRole("button", { name: /\/compare-sources/ });
     await expect(compare).toBeVisible({ timeout: 30_000 });
-    // The rule under test: say why, rather than greying out in silence.
     await expect(compare).toBeDisabled();
-    await expect(compare).toContainText(/two sources/i);
-    // Flashcards works on one source, so it stays available.
-    await expect(page.getByRole("button", { name: /flashcards/i })).toBeEnabled();
+    await expect(compare).toContainText(/two sources|failed|waiting/i);
     await ss(page, "03-blocked-with-reason");
+  });
+
+  test("both side panels collapse and come back; the note stays", async ({ page }) => {
+    await openRecent(page, /2 sources/);
+    await expect(aiPanel(page)).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".bn-editor").first()).toBeVisible({ timeout: 60_000 });
+    await page.getByTitle("Collapse the AI panel").first().click();
+    await expect(aiPanel(page)).toHaveCount(0);
+    // On a narrow screen the sources may already have stepped aside for the AI.
+    if (await page.getByTitle("Collapse the sources panel").count())
+      await page.getByTitle("Collapse the sources panel").click();
+    await expect(page.locator(".bn-editor").first()).toBeVisible();
+    await ss(page, "04-collapsed");
+    await page.getByTitle("Open the AI panel").first().click();
+    await page.getByTitle("Show the sources").click();
+    await expect(aiPanel(page)).toBeVisible();
   });
 
   test("the editor's slash menu offers the same jobs", async ({ page }) => {
     await openRecent(page, /2 sources/);
-    await expect(page.getByRole("button", { name: /flashcards/i }))
-      .toBeVisible({ timeout: 30_000 });
-
-    // Type "/" in the note and look for the Skills group.
+    await expect(aiPanel(page)).toBeVisible({ timeout: 30_000 });
     await page.locator(".bn-editor[contenteditable='true']").first().click();
     await page.keyboard.type("/flash");
-    const menuItem = page.getByText(/^Flashcards$/).first();
-    await expect(menuItem).toBeVisible({ timeout: 10_000 });
-    await ss(page, "06-slash-menu");
-
-    // Escape without running anything — this test spends no quota.
-    await page.keyboard.press("Escape");
+    await expect(page.getByText(/^Flashcards$/).first()).toBeVisible({ timeout: 10_000 });
+    await ss(page, "05-slash-menu");
+    await page.keyboard.press("Escape");        // runs nothing: free
   });
 
   test("dropping a source indexes it without generating anything", async ({ page }) => {
     await page.goto("/brain/workspace", { waitUntil: "networkidle" });
-
-    // Through the real control, not a stray input: the page has more than one
-    // file input and the first in the DOM belongs to the sidebar.
     const [chooser] = await Promise.all([
       page.waitForEvent("filechooser"),
       page.getByRole("button", { name: /choose files/i }).click(),
     ]);
     await chooser.setFiles(FIXTURE);
-
     await page.waitForURL(/\/brain\/workspace\/[0-9a-f-]{36}/, { timeout: 60_000 });
-    await ss(page, "04-dropped");
-
-    // The drop policy: indexing happens, generation does not.
-    await expect(page.getByText(/writing the note/i)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /generate note/i }))
-      .toBeVisible({ timeout: 90_000 });
-    await ss(page, "05-offered-not-fired");
+    await expect(page.getByRole("button", { name: /\/study-guide/ })).toBeEnabled({ timeout: 90_000 });
+    await expect(page.locator(".bn-editor h1")).toHaveCount(0);   // nothing was written
+    await ss(page, "06-offered-not-fired");
   });
 });

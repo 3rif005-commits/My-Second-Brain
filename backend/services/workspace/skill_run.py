@@ -133,9 +133,11 @@ def _blocks_for(note_id: str) -> tuple[list[dict], list[str]]:
     return blocks, [s["id"] for s in sources]
 
 
-def estimate(note_id: str, user_id: str, skill: Skill) -> dict:
-    """What this skill would cost on this note. No model call."""
-    blocks, source_ids = _blocks_for(note_id)
+def estimate(note_id: str, user_id: str, skill: Skill,
+             loaded: tuple[list[dict], list[str]] | None = None) -> dict:
+    """What this skill would cost on this note. No model call. `loaded` is the
+    note's (blocks, source_ids) when the caller already read them."""
+    blocks, source_ids = loaded or _blocks_for(note_id)
     prompt_chars = len(build_prompt(skill, blocks))
     # Skills that write a whole note produce far more than ones that answer a
     # question; the ceiling is the honest figure to show before the click.
@@ -265,17 +267,28 @@ def chat_skills(note_id: str, user_id: str) -> list[dict]:
     skills = sorted((s for s in registry().all()
                      if s.output and CHAT_SURFACES & set(s.surfaces)),
                     key=lambda s: (-s.priority, s.name))
+    # The note's text is read ONCE and every job is priced from it (reading it
+    # per job made the AI panel's list take seconds to appear).
+    loaded = _blocks_for(note_id)
+    blocks, source_ids = loaded
     for s in skills:
         if s.name == STUDY_GUIDE:
-            from services.workspace.synthesis import estimate_synthesis
-            e = estimate_synthesis(note_id, user_id)
-            runnable = None if e["ready_sources"] else "no sources are ready yet"
+            from services.workspace import synthesis
+            lengths = [len(b.get("text") or "") for b in blocks]
+            allotted = split_budget(lengths) if lengths else []
+            source_chars = sum(min(n, a) for n, a in zip(lengths, allotted))
+            input_tokens = tokens_from_chars(source_chars + synthesis._prompt_overhead_chars())
+            output_tokens = synthesis._expected_output_tokens(source_chars)
+            provider = pick("summarize_text", user_id)
+            model = provider.model if provider else None
             out.append({"skill": s.name, "title": job_title(s.name),
-                        "description": s.description, "usd": e["usd"],
-                        "input_tokens": e["input_tokens"],
-                        "output_tokens": e["output_tokens"], "runnable": runnable})
+                        "description": s.description,
+                        "usd": estimate_usd(model, input_tokens, output_tokens),
+                        "input_tokens": input_tokens, "output_tokens": output_tokens,
+                        "runnable": _runnable(s, len(source_ids),
+                                              _unready(note_id) if not source_ids else ())})
         else:
-            e = estimate(note_id, user_id, s)
+            e = estimate(note_id, user_id, s, loaded)
             out.append({**e, "title": job_title(s.name)})
     return out
 

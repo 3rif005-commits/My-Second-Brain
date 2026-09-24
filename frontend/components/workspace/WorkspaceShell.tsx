@@ -1,28 +1,43 @@
 "use client";
 
-// The compact workspace shell: one note, the sources attached to it, and every
-// tool that acts on them — in one tight layout. Left column = source rail +
-// viewer (resizable, remembered); right column = the note in the ordinary block
-// editor; chat is a drawer over the note, never a third column.
+// The workspace: three panels side by side — the sources, the note, and the AI
+// (user decision, 2026-09-24). Sources and AI each collapse to a thin bar and
+// resize by dragging; the note is always there. Jobs (study guide, flashcards,
+// compare sources…) run from the AI panel as /commands or by asking; their
+// results are previewed there and reach the note only on Insert / Replace.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  AlertTriangle, ArrowLeft, Check, ExternalLink, MessageSquare, Pencil,
-  RefreshCw, Sparkles, Upload, X,
+  ArrowLeft, Check, ExternalLink, MessageSquare, PanelLeftClose, PanelLeftOpen,
+  Pencil, Sparkles, Upload,
 } from "lucide-react";
 import { useToast } from "@/app/providers";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { SkillBar } from "./SkillBar";
-import { useNoteSkills } from "./useNoteSkills";
-import { failedJob, formatElapsed, formatEstimate, formatLastRun, jobTitle, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSkill, type NoteSource, type SendAction } from "@/lib/workspace";
+import { formatElapsed, jobTitle, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
+import type { ChatJob } from "@/lib/chatJobs";
 import { DropZone } from "./DropZone";
 import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
 import { SourceRail } from "./SourceRail";
 import { SourceViewer } from "./SourceViewer";
 import { useSynthesis } from "./useSynthesis";
-import { WorkspaceChat } from "./WorkspaceChat";
+import { WorkspaceChat, type JobRequest } from "./WorkspaceChat";
 
 const SPLIT_KEY = "workspace:splitPct";
+const PANELS_KEY = "workspace:panels";
+const CHAT_MIN = 300, CHAT_MAX = 640;
+
+function readPanels(): { sources: boolean; chat: boolean; chatWidth: number } {
+  const fallback = { sources: true, chat: true, chatWidth: 340 };
+  try {
+    const v = JSON.parse(window.localStorage.getItem(PANELS_KEY) ?? "null");
+    if (!v) return fallback;
+    return { sources: v.sources !== false, chat: v.chat !== false,
+             chatWidth: Math.min(CHAT_MAX, Math.max(CHAT_MIN, Number(v.chatWidth) || 340)) };
+  } catch { return fallback; }
+}
+
+function savePanels(p: { sources: boolean; chat: boolean; chatWidth: number }) {
+  try { window.localStorage.setItem(PANELS_KEY, JSON.stringify(p)); } catch { /* private mode */ }
+}
 
 interface WorkspaceShellProps {
   noteId: string | null;
@@ -110,7 +125,10 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const [savedFlash, setSavedFlash] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(true);
+  const [sourcesOpen, setSourcesOpen] = useState(true);
+  const [chatWidth, setChatWidth] = useState(340);
+  const [jobRequest, setJobRequest] = useState<JobRequest | null>(null);
   const [splitPct, setSplitPct] = useState(45);
 
   const seekRef = useRef<((value: number) => void) | null>(null);
@@ -119,36 +137,60 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const applyRef = useRef<NoteApplyApi | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
+  const draggingChatRef = useRef(false);
   // dragenter/dragleave fire for every child element the pointer crosses, so a
   // plain boolean makes the drop overlay strobe. Count the depth instead.
   const dragDepth = useRef(0);
 
+  // Kept for the note pane's apply/undo plumbing; the synthesis buttons that
+  // drove it are gone (jobs run from the AI panel now).
   const syn = useSynthesis({ noteId, sources, applyRef });
-  const estimateText = formatEstimate(syn.estimate);
-  // What the last run cost. Shown once a draft exists, where the estimate used
-  // to be — the promise, then the receipt.
-  const lastRunText = formatLastRun(syn.synthesis?.last_run);
-  // One source of jobs for both the action bar and the editor's slash menu:
-  // two lists that could drift is two lists that will.
-  const jobs = useNoteSkills(noteId, syn.readyKey, syn.running, syn.refreshAfterStart);
-  // The job this page last started, so a failure's Retry reruns that job
-  // rather than whichever one the button happens to be wired to.
-  const [lastJob, setLastJob] = useState<string | null>(null);
-  useEffect(() => { setLastJob(null); }, [noteId]);
-  const runJob = useCallback((s: NoteSkill) => { setLastJob(s.skill); jobs.run(s); }, [jobs]);
-  const startGuide = useCallback(() => { setLastJob("study-guide"); syn.requestSynthesis(); }, [syn]);
-  const failure = failedJob(syn.synthesis?.error, jobs.skills, lastJob);
+
+  // The jobs the AI panel offers — also the editor's "/" menu, which hands the
+  // chosen job to the AI panel so its result arrives as a preview card too.
+  // Fetched once here and handed to the AI panel (two fetches of the same
+  // list, each thrown away whenever a source finished, took 27 s to show).
+  // A newer answer replaces an older one; no answer is ever discarded unless
+  // the note itself changed.
+  const [chatJobs, setChatJobs] = useState<ChatJob[]>([]);
+  const jobsFor = useRef<string | null>(null);
+  useEffect(() => { jobsFor.current = noteId; setChatJobs([]); }, [noteId]);
+  useEffect(() => {
+    if (!noteId) return;
+    const forNote = noteId;
+    fetch(`/api/ws/notes/${forNote}/chat/skills`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && jobsFor.current === forNote) setChatJobs(d.skills ?? []); })
+      .catch(() => {});
+  }, [noteId, syn.readyKey]);
+  const askChat = useCallback((skill: string) => {
+    setChatOpen(true);
+    setJobRequest({ skill, nonce: Date.now() });
+  }, []);
   const slashItems = useMemo(
-    () => jobs.skills.filter((s) => !s.runnable).map((s) => ({
-      title: jobTitle(s.skill),
+    () => chatJobs.filter((j) => !j.runnable).map((j) => ({
+      title: jobTitle(j.skill),
       group: "Skills",
-      subtext: s.description,
-      aliases: [s.skill, "skill"],
+      subtext: j.description,
+      aliases: [j.skill, "skill"],
       icon: "✨",
-      onItemClick: () => runJob(s),
+      onItemClick: () => askChat(j.skill),
     })),
-    [jobs, runJob],
+    [chatJobs, askChat],
   );
+
+  const insertResult = useCallback((html: string, sourceIds: string[], mode: "append" | "replace") => {
+    const api = applyRef.current;
+    if (!api) return;
+    // "Insert" into an empty note is a replace: appending left an empty line
+    // above the title. A note with anything in it gets the result at the end.
+    api.apply(html, sourceIds, mode === "append" && !api.hasUserEdits() ? "replace" : mode);
+  }, []);
+  const undoResult = useCallback(() => {
+    const ok = applyRef.current?.undoApply() ?? false;
+    if (!ok) showToast("You've edited the note since — use Ctrl+Z to step back.", "info");
+    return ok;
+  }, [showToast]);
 
   // ── load ──────────────────────────────────────────────────────────────────
   const loadSources = useCallback(async () => {
@@ -185,14 +227,6 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     setActiveId(firstReady?.id ?? null);
   }, [sources, activeId]);
 
-  // the note's title can be upgraded server-side when the draft lands
-  useEffect(() => {
-    if (!noteId || syn.synthesis?.status !== "ready") return;
-    fetch(`/api/notes/${noteId}`).then((r) => r.ok ? r.json() : null).then((n) => {
-      if (n?.title) setNote((prev) => prev ? { ...prev, title: n.title } : prev);
-    }).catch(() => {});
-  }, [noteId, syn.synthesis?.status]);
-
   // A brief "Saved" after every autosave settles — otherwise the header goes
   // silent the moment the work finishes and the save reads as never happening.
   const wasSaving = useRef(false);
@@ -209,16 +243,50 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   useEffect(() => {
     const stored = Number(window.localStorage.getItem(SPLIT_KEY));
     if (stored >= 25 && stored <= 70) setSplitPct(stored);
+    const p = readPanels();
+    setSourcesOpen(p.sources); setChatOpen(p.chat); setChatWidth(p.chatWidth);
   }, []);
+  useEffect(() => { savePanels({ sources: sourcesOpen, chat: chatOpen, chatWidth }); },
+    [sourcesOpen, chatOpen, chatWidth]);
+
+  // Three panels need room. When they would leave the note narrower than it
+  // can be read at, the sources step aside (one click brings them back) —
+  // the note in the middle is never the panel that gets squeezed.
+  // Once the user reopens the sources themselves, that choice wins until the
+  // AI panel is opened again.
+  const userWantsSources = useRef(false);
+  useEffect(() => { if (chatOpen) userWantsSources.current = false; }, [chatOpen]);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const check = () => {
+      if (chatOpen && sourcesOpen && !userWantsSources.current
+          && el.clientWidth - chatWidth < 760) setSourcesOpen(false);
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [chatOpen, sourcesOpen, chatWidth, note]);
 
   useEffect(() => {
     function onMove(e: MouseEvent) {
+      if (draggingChatRef.current && containerRef.current) {
+        const box = containerRef.current.getBoundingClientRect();
+        setChatWidth(Math.min(CHAT_MAX, Math.max(CHAT_MIN, box.right - e.clientX)));
+        return;
+      }
       if (!draggingRef.current || !containerRef.current) return;
       const box = containerRef.current.getBoundingClientRect();
       const pct = ((e.clientX - box.left) / box.width) * 100;
       setSplitPct(Math.min(70, Math.max(25, pct)));
     }
     function onUp() {
+      if (draggingChatRef.current) {
+        draggingChatRef.current = false;
+        document.body.style.cursor = "";
+        return;
+      }
       if (!draggingRef.current) return;
       draggingRef.current = false;
       document.body.style.cursor = "";
@@ -452,66 +520,13 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
             <span className="shrink-0">
               {sources.length} source{sources.length === 1 ? "" : "s"}
             </span>
-            {/* The first run is the user's decision, so its price is on screen,
-                not hidden in a tooltip no touch device can open. */}
-            {syn.neverGenerated && !syn.running && estimateText && (
-              <span className="shrink-0 hidden sm:inline">
-                · {estimateText} to generate
-              </span>
-            )}
-            {!syn.neverGenerated && !syn.running && lastRunText && (
-              <span className="shrink-0 hidden sm:inline" title="What the last run cost">
-                · {lastRunText}
-              </span>
-            )}
-            {/* The receipt and the way back, side by side: a draft lands on
-                its own, so the undo belongs where the user sees it land. */}
-            {syn.justApplied && !syn.running && (
-              <button
-                onClick={() => {
-                  if (!syn.undoApply()) {
-                    showToast("You've edited the note since — use Ctrl+Z to step back.", "info");
-                  }
-                }}
-                title="Put the note back as it was before this draft"
-                className="shrink-0 px-1.5 rounded-full text-indigo-500 hover:bg-indigo-500/10 transition-colors"
-              >
-                Undo
-              </button>
-            )}
-            <StatusNote saving={saving} saved={savedFlash} synthesizing={syn.running}
-              job={lastJob} startedAt={syn.synthesis?.updated_at} />
+            <StatusNote saving={saving} saved={savedFlash} synthesizing={false} />
           </div>
         </div>
 
         <button
-          onClick={startGuide}
-          disabled={syn.running || syn.readyCount === 0}
-          title={syn.neverGenerated
-            ? `Write this note from ${syn.readyCount} source${syn.readyCount === 1 ? "" : "s"}`
-              + (estimateText ? ` — ${estimateText}` : "")
-              + (syn.estimate?.model ? ` (${syn.estimate.model})` : "")
-            : "Rewrite the note from the current sources"}
-          className={`shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12px] font-medium
-            transition-all duration-150 active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100
-            focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
-            syn.stale || syn.neverGenerated
-              ? "ws-accent"
-              : "text-gray-500 dark:text-gray-400 border border-gray-200/80 dark:border-white/10 hover:bg-white dark:hover:bg-white/5 hover:text-gray-800 dark:hover:text-gray-100"
-          }`}
-        >
-          {syn.running
-            ? <RefreshCw size={12} className="animate-spin" />
-            : syn.stale || syn.neverGenerated ? <Sparkles size={12} /> : <RefreshCw size={12} />}
-          {syn.neverGenerated
-            ? "Generate note"
-            : syn.stale
-              ? `Re-synthesize · ${syn.readyCount}`
-              : "Re-synthesize"}
-        </button>
-        <button
           onClick={() => setChatOpen((v) => !v)}
-          title="Ask about these sources"
+          title={chatOpen ? "Collapse the AI panel" : "Open the AI panel"}
           className={`shrink-0 w-8 h-8 flex items-center justify-center rounded-xl transition-colors
             focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
             chatOpen
@@ -531,79 +546,63 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
         </a>
       </header>
 
-      {/* The workspace's other jobs. Nothing here runs on its own — every chip
-          shows its price first, and a skill that cannot run yet says why. */}
-      <SkillBar
-        skills={jobs.skills}
-        starting={jobs.starting}
-        busy={syn.running}
-        onRun={runJob}
-      />
-
-      {/* synthesis failure banner */}
-      {syn.synthesis?.status === "failed" && syn.synthesis.error && (
-        <div className="ws-rise mx-2 mb-2 flex items-center gap-2 px-3 py-2 rounded-xl text-[12px]
-          bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200
-          ring-1 ring-amber-200 dark:ring-amber-900/60 shrink-0">
-          <AlertTriangle size={14} className="shrink-0 text-amber-500" />
-          <span className="flex-1 min-w-0 truncate">
-            {failure.skill
-              ? `${jobTitle(failure.skill.skill)} failed: ${failure.message}`
-              : `Couldn’t write the note: ${failure.message}`}
-          </span>
-          <button
-            onClick={() => (failure.skill ? runJob(failure.skill) : startGuide())}
-            title={failure.skill ? `Run ${jobTitle(failure.skill.skill)} again` : "Write the note again"}
-            className="shrink-0 px-2 py-0.5 rounded-full font-medium bg-amber-500/15 hover:bg-amber-500/25 transition-colors"
-          >
-            Retry
+      {/* body: sources · note · AI */}
+      <div ref={containerRef} className="flex-1 min-h-0 flex px-2 pb-2 gap-0">
+        {sourcesOpen ? (
+          <>
+            <div
+              className="ws-panel flex flex-col min-w-0 rounded-2xl overflow-hidden"
+              // With the AI panel open the note is the middle of three: the
+              // sources give way so it is never the one squeezed.
+              style={{ width: `${splitPct}%`, maxWidth: chatOpen ? "32%" : undefined }}
+            >
+              <div className="flex items-center justify-end px-1.5 pt-1.5 -mb-1 shrink-0">
+                <button onClick={() => setSourcesOpen(false)} title="Collapse the sources panel"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400
+                    hover:text-gray-800 dark:hover:text-gray-100 hover:bg-black/5 dark:hover:bg-white/5">
+                  <PanelLeftClose size={14} />
+                </button>
+              </div>
+              <SourceRail
+                sources={sources}
+                activeId={activeId}
+                onSelect={setActiveId}
+                onAddFiles={addFiles}
+                onAddUrl={addUrl}
+                onRemove={removeSource}
+                onRetry={retrySource}
+                busy={busy}
+              />
+              <div className="flex-1 min-h-0 flex flex-col">
+                <SourceViewer
+                  source={activeSource}
+                  onPosition={(v) => positionSinkRef.current?.(v)}
+                  onAction={(a) => actionSinkRef.current?.(a)}
+                  seekRef={seekRef}
+                />
+              </div>
+            </div>
+            <div
+              onMouseDown={() => { draggingRef.current = true; document.body.style.cursor = "col-resize"; }}
+              className="group/split w-2 shrink-0 cursor-col-resize flex items-center justify-center"
+              title="Drag to resize"
+            >
+              <span className="w-[3px] h-8 rounded-full bg-gray-300/0 dark:bg-white/0
+                group-hover/split:bg-indigo-400 dark:group-hover/split:bg-indigo-500 transition-colors" />
+            </div>
+          </>
+        ) : (
+          <button onClick={() => { userWantsSources.current = true; setSourcesOpen(true); }} title="Show the sources"
+            className="ws-panel w-10 shrink-0 mr-2 rounded-2xl flex flex-col items-center gap-2 pt-3
+              text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 transition-colors">
+            <PanelLeftOpen size={15} />
+            {sources.slice(0, 8).map((s) => (
+              <span key={s.id} className="w-2 h-2 rounded-full" style={{ backgroundColor: sourceColor(s.order_index) }} />
+            ))}
           </button>
-          <button
-            onClick={syn.dismissError}
-            title="Dismiss"
-            className="shrink-0 w-5 h-5 flex items-center justify-center rounded-full hover:bg-amber-500/20 transition-colors"
-          >
-            <X size={12} />
-          </button>
-        </div>
-      )}
+        )}
 
-      {/* body */}
-      <div ref={containerRef} className="flex-1 min-h-0 flex px-2 pb-2">
-        <div
-          className="ws-panel flex flex-col min-w-0 rounded-2xl overflow-hidden"
-          style={{ width: `${splitPct}%` }}
-        >
-          <SourceRail
-            sources={sources}
-            activeId={activeId}
-            onSelect={setActiveId}
-            onAddFiles={addFiles}
-            onAddUrl={addUrl}
-            onRemove={removeSource}
-            onRetry={retrySource}
-            busy={busy}
-          />
-          <div className="flex-1 min-h-0 flex flex-col">
-            <SourceViewer
-              source={activeSource}
-              onPosition={(v) => positionSinkRef.current?.(v)}
-              onAction={(a) => actionSinkRef.current?.(a)}
-              seekRef={seekRef}
-            />
-          </div>
-        </div>
-
-        <div
-          onMouseDown={() => { draggingRef.current = true; document.body.style.cursor = "col-resize"; }}
-          className="group/split w-2 shrink-0 cursor-col-resize flex items-center justify-center"
-          title="Drag to resize"
-        >
-          <span className="w-[3px] h-8 rounded-full bg-gray-300/0 dark:bg-white/0
-            group-hover/split:bg-indigo-400 dark:group-hover/split:bg-indigo-500 transition-colors" />
-        </div>
-
-        <div className="ws-panel relative flex-1 min-w-0 rounded-2xl overflow-hidden">
+        <div className="ws-panel relative flex-1 min-w-[320px] rounded-2xl overflow-hidden">
           <NotePane
             extraSlashItems={slashItems}
             note={note}
@@ -616,33 +615,42 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
             onApplied={syn.markApplied}
             onSavingChange={setSaving}
           />
-          {chatOpen && (
-            <WorkspaceChat
-              noteId={note.id}
-              colorIndex={colorIndex}
-              onCitation={handleCitation}
-              onClose={() => setChatOpen(false)}
-            />
-          )}
         </div>
+
+        {chatOpen ? (
+          <>
+            <div
+              onMouseDown={() => { draggingChatRef.current = true; document.body.style.cursor = "col-resize"; }}
+              className="group/split w-2 shrink-0 cursor-col-resize flex items-center justify-center"
+              title="Drag to resize"
+            >
+              <span className="w-[3px] h-8 rounded-full bg-gray-300/0 dark:bg-white/0
+                group-hover/split:bg-indigo-400 dark:group-hover/split:bg-indigo-500 transition-colors" />
+            </div>
+            <div className="shrink-0 min-w-0" style={{ width: chatWidth }}>
+              <WorkspaceChat
+                noteId={note.id}
+                colorIndex={colorIndex}
+                onCitation={handleCitation}
+                onClose={() => setChatOpen(false)}
+                onInsert={insertResult}
+                onUndo={undoResult}
+                request={jobRequest}
+                jobs={chatJobs}
+              />
+            </div>
+          </>
+        ) : (
+          <button onClick={() => setChatOpen(true)} title="Open the AI panel"
+            className="ws-panel w-10 shrink-0 ml-2 rounded-2xl flex flex-col items-center pt-3
+              text-gray-400 hover:text-indigo-600 transition-colors">
+            <Sparkles size={15} />
+          </button>
+        )}
       </div>
 
       <DropOverlay show={dragOver} />
 
-      {/* ConfirmDialog fires onCancel for both its cancel button and a backdrop
-          click, so "add at the end" is also what a dismissal does. That is the
-          non-destructive branch, which is the important half; a true third
-          "do nothing" exit would need a variant of the shared dialog. */}
-      <ConfirmDialog
-        open={syn.askMode}
-        title="This note has your own edits in it"
-        description="Replace everything with the new draft, or keep what you wrote and add the new draft at the end? Closing this leaves your note untouched."
-        confirmLabel="Replace everything"
-        cancelLabel="Keep my note, add at the end"
-        danger
-        onConfirm={() => syn.chooseMode("replace")}
-        onCancel={() => syn.chooseMode("append")}
-      />
     </div>
   );
 }
