@@ -251,7 +251,9 @@
         "grounding_min": 0.8,
         "anchor_validity_min": 1.0,
         "sources_cited_min": 2,
-        "must_mention_rate_min": 1.0
+        "must_mention_rate_min": 1.0,
+        "anchors_min": 12,
+        "text_chars_min": 22000
       },
       "must_mention": [
         "passive",
@@ -260,7 +262,7 @@
         "NDVI"
       ],
       "must_not_mention": [],
-      "why": "The first REAL case: two consecutive Remote Sensing lectures from one course (Al-Aqsa University), text extracted per page with [page N] tags. panchromatic lives only in lecture 2, geostationary and NDVI only in lecture 3, so a note that reads one source fails. The PDFs stay local (sources/pdf/, gitignored)."
+      "why": "The first REAL case: two consecutive Remote Sensing lectures from one course (Al-Aqsa University), text extracted per page with [page N] tags. panchromatic lives only in lecture 2, geostationary and NDVI only in lecture 3, so a note that reads one source fails. The PDFs stay local (sources/pdf/, gitignored). Depth floors (anchors 12, text 22K chars) were set at ~2/3 of the thinnest 32K HTML run BEFORE the E6b Markdown arm ran."
     },
     {
       "id": "compare-rs-lectures",

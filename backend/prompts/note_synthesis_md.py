@@ -68,6 +68,18 @@ dollar signs inside, no code fences. Every :::formula callout is followed by one
 TABLES: standard Markdown pipes. Three or more things compared on two or more
 attributes belong in a table, not in prose and not in a callout.
 
+SOURCE COVERAGE — the two things notes silently lose. Count them in the source
+before writing: TABLES (lines of |pipe|cells|) and EQUATIONS (a "=" between
+mathematical symbols, a Greek letter, a ratio like (NIR − Red)/(NIR + Red)).
+EVERY source table becomes a Markdown table — never bullets, never prose. EVERY
+distinct equation becomes a $$ block, preceded by a :::formula callout naming
+what it is for. Not usually: every one.
+
+CALLOUTS ARE THE STUDY LAYER: an exam rule → :::warning, a common mistake →
+:::caution, a non-obvious insight → :::tip, the lecturer's analogy → :::analogy.
+A section of plain bullets with none of these has lost what the student
+revises from.
+
 ANCHORS
 Every ### heading ends with {SOURCE:TYPE:VALUE} where
   SOURCE is the 1-based number of the source the section came from,

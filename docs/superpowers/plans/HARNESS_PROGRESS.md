@@ -24,7 +24,7 @@ live, and the selection menu shipped after fixing editor AI edits for everyone.
    ID column is stripped from skill sources; leaks 1/5 → 0/5, pass 4/5 → 5/5.
    Open: "Contradiction" still appears in 3/5 runs — read them and judge;
    the study-guide synthesis still receives the IDs (unmeasured there).
-2. **E6b** — format vs spec length, with `anchors` and `text_chars` floors
+2. [~] **E6b** — format vs spec length, with `anchors` and `text_chars` floors
    added to the manifest first (the pass-rate guardrail cannot see a thin note).
 3. [x] **Blocked reason names the source** — done 2026-09-24: a chip blocked
    for want of sources now says '"Lecture 3" failed to process — retry or

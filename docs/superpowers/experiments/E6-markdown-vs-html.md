@@ -129,3 +129,36 @@ was a dropped math block on the case that needs one.
 **Ratchet line added:** a pass-rate guardrail is blind to a note that got
 shorter; a token saving must be checked against content density before it is
 called a saving.
+
+## E6b — on the real lectures, with depth floors (2026-09-24, Claude, `rs-lectures-two`)
+
+Floors added to the case BEFORE the Markdown arm ran: anchors ≥ 12, text ≥ 22K
+chars (~2/3 of the thinnest 32K HTML run). HTML arm = `e13-cap32k` (n=3).
+
+| median | HTML | MD (shipped variant) n=3 | **MD + coverage rule** n=6 |
+|---|---|---|---|
+| pass | 3/3 | 3/3 | 5/6 (miss: two `#` titles) |
+| text chars | 39.2K | 34.4K | **39.7K** |
+| math blocks | 4 | 2 (one run: 0) | **5** |
+| tables | 5 | 3 | **4.5** |
+| anchors | 19 | 29 | **18.5** |
+| callouts | 37 | 18 | **29** |
+| $/run | 0.110 | 0.058 | **0.065 (−41%)** |
+| latency | 175 s | 90 s | ~100 s |
+
+**What moved it:** the MD prompt lacked the HTML spec's SOURCE COVERAGE rule
+(every source table → a table, every equation → a math block) and any push
+toward callouts. Porting those two paragraphs (+690 chars; still ~4× smaller
+than the HTML spec) took math from 2 → 5 and callouts from 18 → 29.
+
+**Guardrail (synthetic cases, MD+coverage, n=3):** 11/12 — the same as the MD
+arm's earlier Claude run; the miss is `md-bias-variance` (two `#` titles, one
+math block short).
+
+So on real lectures the E6 thin-note objection is answered: at depth parity
+(text, math, tables, anchors) the Markdown path costs 41% less and takes ~40%
+less time. Remaining gaps: callouts (29 vs 37) and the double-title defect.
+
+**Decision:** KEEP the coverage rule in the MD prompt. Next: fix the double
+title deterministically in the converter, then wire Markdown into the app's
+synthesis behind a setting and verify one real generation live.

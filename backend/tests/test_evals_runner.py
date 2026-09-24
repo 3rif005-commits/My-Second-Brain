@@ -116,3 +116,12 @@ def test_a_skill_case_fails_on_a_leaked_extractor_label(monkeypatch):
     result = evals_run.run_case(case, "test", 0, dry_run=False, retries=0)
     assert any("INS-06" in f for f in result.failures), result.failures
     assert result.score["count:Contradiction"] == 0
+
+
+def test_depth_floors_fail_a_thin_note():
+    """E6: the Markdown arm tied on pass rate while writing 44% less. A floor
+    on anchors and text is how a real case says how deep is enough."""
+    thin = score_note("<h1>T</h1><h2>A</h2><p>short</p>", source_count=1)
+    failures = evals_run.check(thin, {"anchors_min": 12, "text_chars_min": 22000}, 1)
+    assert any(f.startswith("anchors ") for f in failures)
+    assert any(f.startswith("text_chars ") for f in failures)

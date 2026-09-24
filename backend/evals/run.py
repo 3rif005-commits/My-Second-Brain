@@ -113,6 +113,10 @@ def check(score, expect: dict, source_count: int) -> list[str]:
                 "anchor_validity": d["anchor_validity"],
                 "must_mention_rate": d["must_mention_rate"],
                 "sources_cited": len({a.split(":")[0] for a in score.anchors}),
+                # Depth floors (E6b): a pass-rate guardrail cannot see a note
+                # that got shorter, so the real cases say how deep is enough.
+                "anchors": d["anchors"],
+                "text_chars": d["text_chars"],
             }.get(name)
             if actual is None:
                 out.append(f"unknown expectation {key}")
