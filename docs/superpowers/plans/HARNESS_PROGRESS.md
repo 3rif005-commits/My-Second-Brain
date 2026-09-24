@@ -20,6 +20,11 @@ chat skills; run card (Retry the right job, job + elapsed, Undo).
 re-check E6b on real slides. **Your app.sh stack** is stopped (you stopped it
 at 06:43); nothing of mine is left running.
 **Next action, in order:**
+- [x] **Markdown anchor repair (E6e)** — done 2026-09-24: 9/9 on real slides,
+  one live slip repaired. **Open product call:** Markdown is now −59% cost
+  with tables/anchors at parity, but callouts at less than half (11–21 vs
+  31–45). HTML stays default until someone decides callouts vs cost — or a
+  callout experiment closes the gap.
 - [x] **Tables (E6d)** — done 2026-09-24: source tables carried verbatim on
   both paths (default HTML: 9–14 → 30–35 of 23 source tables, 3/3, +14%
   cost), duplicates skipped, `<br>` fixed, unplaced tables placed beside the
@@ -264,3 +269,4 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - 2026-09-24 · 06:40 session: Undo beside the receipt, morning smoke all green · `2e2793d`
 - 2026-09-24 · E6c on real slides: Markdown default reverted to HTML (tables) · see next commit
 - 2026-09-24 · late morning: E6c (MD default reverted), E6d table carry-over + placement, run-card failure path live · `d9ce49f`…`ab23878`
+- 2026-09-24 · afternoon: Markdown anchor repair + row-exact table dedupe · `74dff6e`

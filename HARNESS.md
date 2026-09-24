@@ -156,6 +156,13 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   On real slides the model kept 9–14 of 23; labelled markers + exact
   substitution keep all of them (E6d). Unplaced ones are appended — unless the
   model already retyped them, or the reader gets the same table twice.
+- A section anchor is checked against the source pages, not trusted. The
+  Markdown path sometimes pointed a whole lecture's sections at the other
+  lecture; a deterministic word-overlap check moves them (E6e), and changes
+  nothing on a correct note.
+- "Is this table already in the note?" compares data rows exactly. Sets of
+  cells called 11 of 23 slide tables copies of each other and dropped real
+  ones; a table shown twice is the lesser harm.
 - A skill reaches the workspace action bar only if it declares an `output`. No
   output means there is nowhere to put the result — those are agent
   instructions (cite-everything), not jobs.
