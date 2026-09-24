@@ -103,15 +103,21 @@ export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspac
   );
 }
 
-/** Floating reopen button shown when panel is collapsed on desktop */
+/** The AI button while the panel is closed — bottom-right, on every page,
+ *  like Notion AI's. An app-wide control, so it lives apart from the page's
+ *  own actions at the top (user decision, 2026-09-24). */
 export function SidePanelToggleButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       aria-label="Open AI panel"
-      className="fixed top-3 right-3 z-30 hidden md:flex items-center justify-center w-8 h-8 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-gray-700 shadow-sm transition-colors"
+      title="Ask AI (⌘K)"
+      className="no-print fixed bottom-5 right-5 z-30 flex items-center justify-center w-11 h-11 rounded-full
+        bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-indigo-500
+        shadow-lg shadow-indigo-500/10 hover:shadow-xl hover:scale-105 active:scale-95
+        transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
     >
-      <Bot size={16} />
+      <Bot size={20} />
     </button>
   );
 }

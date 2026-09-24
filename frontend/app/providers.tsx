@@ -33,7 +33,7 @@ export function useToast() {
 function ToastStack({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: (id: number) => void }) {
   if (typeof document === "undefined" || toasts.length === 0) return null;
   return createPortal(
-    <div className="fixed bottom-4 right-4 z-[10000] flex flex-col gap-2 max-w-sm">
+    <div className="fixed bottom-20 right-4 z-[10000] flex flex-col gap-2 max-w-sm">
       {toasts.map((t) => (
         <div
           key={t.id}

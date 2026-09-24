@@ -151,7 +151,7 @@ test.describe("one AI for the whole app", () => {
   });
 });
 
-test.describe("the floating AI button covers nothing", () => {
+test.describe("the AI button: bottom-right, covering nothing", () => {
   test.setTimeout(120_000);
   type Box = { x: number; y: number; width: number; height: number };
   const overlaps = (a: Box, b: Box) =>
@@ -162,6 +162,11 @@ test.describe("the floating AI button covers nothing", () => {
     await page.getByRole("button", { name: "Close AI panel" }).click();
     const ai = page.getByRole("button", { name: "Open AI panel", exact: true });
     await expect(ai).toBeVisible();
+    // Notion-style: bottom-right, away from the page's own actions at the top.
+    const vp = page.viewportSize()!;
+    const b = (await ai.boundingBox())!;
+    expect(b.y).toBeGreaterThan(vp.height / 2);
+    expect(b.x).toBeGreaterThan(vp.width / 2);
     const own = page.getByTitle("Open this note on its own page");
     expect(overlaps((await ai.boundingBox())!, (await own.boundingBox())!)).toBe(false);
     await own.click();                                  // reachable, not under the AI button

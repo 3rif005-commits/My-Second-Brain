@@ -496,7 +496,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   return (
     <div className="ws-canvas relative h-full flex flex-col" {...dragProps}>
       {/* header */}
-      <header className="flex items-center gap-2 pl-3 pr-3 h-[52px] shrink-0 group-data-[sidebar=collapsed]/shell:pl-12 md:group-data-[ai=closed]/shell:pr-12">
+      <header className="flex items-center gap-2 pl-3 pr-3 h-[52px] shrink-0 group-data-[sidebar=collapsed]/shell:pl-12">
         <button
           onClick={() => router.push("/brain/workspace")}
           title="Start a new session"

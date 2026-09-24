@@ -192,9 +192,6 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
         <main
           className="print-main group/shell flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden"
           data-sidebar={isOpen ? "open" : "collapsed"}
-          // The floating AI button sits top-right while the panel is closed;
-          // page headers leave room for it (group-data-[ai=closed]/shell:pr-12).
-          data-ai={isAiOpen ? "open" : "closed"}
           style={{
             marginRight: isAiOpen && isDesktop ? aiPanelWidth : 0,
             transition: "margin-right 200ms ease-in-out",
@@ -227,7 +224,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
           focusNonce={focusNonce}
         />
 
-        {/* Floating reopen button for AI panel (desktop, when closed) */}
+        {/* The AI button, bottom-right, while the panel is closed */}
         {!isAiOpen && <SidePanelToggleButton onClick={toggleAi} />}
 
         <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />

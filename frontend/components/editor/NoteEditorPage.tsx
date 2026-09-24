@@ -296,7 +296,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
     <>
       <div className="print-scroll flex flex-col h-full bg-white dark:bg-gray-900 transition-colors">
         {/* Toolbar */}
-        <div className="no-print flex items-center justify-between px-5 py-2.5 md:group-data-[ai=closed]/shell:pr-14 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
+        <div className="no-print flex items-center justify-between px-5 py-2.5 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
           {/* Left: back (mobile) + save status */}
           <div className="flex items-center gap-3">
             <button
