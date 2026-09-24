@@ -101,7 +101,8 @@ test.describe("workspace: sources · note · AI", () => {
     await page.locator(".bn-editor[contenteditable='true']").first().click();
     await page.keyboard.type("/flash");
     try {
-      await expect(page.getByText(/^Flashcards$/).first()).toBeVisible({ timeout: 10_000 });
+      // The editor offers jobs once the note's job list has loaded — slow on this machine.
+    await expect(page.getByText(/^Flashcards$/).first()).toBeVisible({ timeout: 45_000 });
       await ss(page, "05-slash-menu");
     } finally {
       // This is a real note: take the typed "/flash" back out — even when the

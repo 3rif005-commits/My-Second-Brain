@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Send, History, SquarePen, X, Smartphone, Cloud, Check, SlidersHorizontal, Sparkles,
-  Paperclip, FileText, FilePlus2, Link2, Upload,
+  Paperclip, FileText, FilePlus2, Link2, Upload, Settings2,
 } from "lucide-react";
 import { MessageList, type StreamItem } from "./MessageList";
 import { ThreadHistory } from "./ThreadHistory";
@@ -56,6 +56,8 @@ interface ChatProps {
   workspace?: WorkspaceBinding;
   /** Bumped by ⌘K: focus the input. */
   focusNonce?: number;
+  /** Text to put in the input (a new nonce each time). */
+  prefill?: { text: string; nonce: number } | null;
 }
 
 
@@ -66,7 +68,7 @@ const MODEL_OPTIONS: { value: Mode; label: string; desc: string; icon: React.Rea
   { value: "api",   label: "Cloud", desc: "Faster · smarter",    icon: <Cloud size={14} /> },
 ];
 
-export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, workspace, focusNonce }: ChatProps = {}) {
+export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, workspace, focusNonce, prefill }: ChatProps = {}) {
   const [items, setItems] = useState<StreamItem[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -86,8 +88,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   const pageNoteId = workspace ? workspace.noteId : ctx.pageNoteId;
   const pageSources = workspace ? workspace.jobs.length : ctx.pageSources;
   const setPageSources = ctx.setPageSources;
-  const jobs = workspace ? workspace.jobs : ctx.jobs;
-  const ensureJobs = async () => (workspace ? workspace.jobs : ctx.ensureJobs());
+  // The note's own (priced, with reasons) list once it has arrived; the app's
+  // list until then — an empty list in between made "/" flicker away.
+  const jobs = workspace?.jobs.length ? workspace.jobs : ctx.jobs;
+  const ensureJobs = async () => (workspace?.jobs.length ? workspace.jobs : ctx.ensureJobs());
   const fixedScope: PanelScope | null = workspace ? { noteId: workspace.noteId, title: workspace.title } : null;
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
@@ -179,10 +183,24 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
     if (id) onThreadIdChange?.(id);
   }
 
+  // Someone handed the AI a starting point ("Try it"): it goes in the input,
+  // cursor at the end, nothing sent until the user says so.
+  useEffect(() => {
+    if (!prefill) return;
+    setInput(prefill.text);
+    setCaret(prefill.text.length);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?.nonce]);
+
   // ⌘K: the panel is opening — put the cursor in the input once it is there.
   useEffect(() => {
     if (!focusNonce) return;
-    const t = setTimeout(() => inputRef.current?.focus(), 220);
+    const t = setTimeout(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);   // after any prefilled text
+    }, 220);
     return () => clearTimeout(t);
   }, [focusNonce]);
 
@@ -718,6 +736,12 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                 Skills run on the cloud model, even in Local mode.
               </p>
             )}
+            <button type="button"
+              onMouseDown={(e) => { e.preventDefault(); router.push("/brain/settings/skills"); }}
+              className="w-full flex items-center gap-1.5 px-3 h-8 text-left text-[12px] text-gray-500
+                hover:text-indigo-600 hover:bg-gray-50 dark:hover:bg-white/5 border-t border-gray-100 dark:border-gray-700">
+              <Settings2 size={12} /> Manage skills
+            </button>
           </div>
         )}
         {attachments.length > 0 && (

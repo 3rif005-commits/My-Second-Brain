@@ -53,6 +53,8 @@ class Skill:
     confirm: bool = False
     #: folder skills only — the directory holding SKILL.md and references/
     folder: Path | None = None
+    #: an emoji for Settings → Skills and the menus; display only
+    icon: str | None = None
 
     def reference(self, relative: str) -> str:
         """Read one reference file, on demand.
@@ -116,6 +118,7 @@ def parse_frontmatter(raw: str, source_path: Path,
         auto=bool(meta.get("auto", False)),
         confirm=bool(meta.get("confirm", False)),
         folder=folder,
+        icon=meta.get("icon"),
     )
 
 

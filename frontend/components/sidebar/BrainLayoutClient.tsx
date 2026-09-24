@@ -37,6 +37,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   inWorkspaceRef.current = inWorkspace;
   const [workspaceBinding, setWorkspaceBinding] = useState<Omit<WorkspaceBinding, "focusNonce"> | null>(null);
   const [focusNonce, setFocusNonce] = useState(0);
+  const [prefill, setPrefill] = useState<{ text: string; nonce: number } | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem("sidebar-open");
@@ -138,6 +139,11 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   }, []);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const focusAi = useCallback(() => { openAi(); setFocusNonce(Date.now()); }, [openAi]);
+  const askAi = useCallback((text: string) => {
+    openAi();
+    setPrefill({ text, nonce: Date.now() });
+    setFocusNonce(Date.now());
+  }, [openAi]);
 
   function handleAiWidthChange(width: number) {
     const clamped = Math.max(AI_PANEL_MIN_WIDTH, Math.min(AI_PANEL_MAX_WIDTH, Math.round(width)));
@@ -154,9 +160,10 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     open: openAi,
     toggle: toggleAi,
     focus: focusAi,
+    ask: askAi,
     bindWorkspace: setWorkspaceBinding,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [isAiOpen, isDesktop, aiPanelWidth, openAi, focusAi]);
+  }), [isAiOpen, isDesktop, aiPanelWidth, openAi, focusAi, askAi]);
 
   return (
     <AIThreadProvider>
@@ -231,6 +238,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
           workspace={workspaceBinding && pathname.startsWith("/brain/workspace/")
             ? { ...workspaceBinding, focusNonce } : undefined}
           focusNonce={focusNonce}
+          prefill={prefill}
         />
 
         {/* The AI button, bottom-right, while the panel is closed */}

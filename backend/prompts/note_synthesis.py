@@ -11,7 +11,7 @@ Still built on the app's canonical note style (prompts/mastery_guide).
 """
 from __future__ import annotations
 
-from prompts.mastery_guide import SYSTEM_PROMPT as MASTERY_SYSTEM_PROMPT
+from prompts._skill_text import skill_body
 
 # Characters of source text sent per synthesis, split across all sources.
 #
@@ -156,7 +156,9 @@ def build_note_synthesis_prompt(sources: list[dict],
     blocks = [_source_block(i, s, b)
               for i, (s, b) in enumerate(zip(sources, budgets), start=1)]
     figures = FIGURE_EXTENSION if has_figures else ""
-    return f"""{MASTERY_SYSTEM_PROMPT}
+    # Read now, not at import: the user's edit in Settings → Skills applies
+    # to the next run without a restart.
+    return f"""{skill_body("study-guide")}
 
 {SYNTHESIS_EXTENSION}
 

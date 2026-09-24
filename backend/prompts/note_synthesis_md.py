@@ -18,7 +18,8 @@ from prompts._skill_text import skill_reference
 
 from prompts.note_synthesis import TOTAL_SOURCE_BUDGET, _source_block, split_budget
 
-# The text lives in skills/study-guide/reference/markdown-variant.md.
+# The text lives in skills/study-guide/reference/markdown-variant.md; the
+# constant is the text at import, prompts read it fresh (see mastery_guide).
 MARKDOWN_SPEC = skill_reference("study-guide", "markdown-variant.md")
 
 
@@ -30,7 +31,7 @@ def build_markdown_synthesis_prompt(
                            total_budget)
     blocks = [_source_block(i, s, b)
               for i, (s, b) in enumerate(zip(sources, budgets), start=1)]
-    return f"""{MARKDOWN_SPEC}
+    return f"""{skill_reference("study-guide", "markdown-variant.md")}
 
 ---
 SOURCE MATERIAL — {len(sources)} source(s) attached to this note:

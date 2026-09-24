@@ -14,9 +14,11 @@ interface SidePanelProps {
   workspace?: WorkspaceBinding;
   /** Bumped by ⌘K: focus the input. */
   focusNonce?: number;
+  /** Text to put in the input (a new nonce each time). */
+  prefill?: { text: string; nonce: number } | null;
 }
 
-export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspace, focusNonce }: SidePanelProps) {
+export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspace, focusNonce, prefill }: SidePanelProps) {
   const { activeThreadId, setActiveThreadId } = useAIThread();
   const startX = useRef(0);
   const startWidth = useRef(width);
@@ -97,6 +99,7 @@ export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspac
           onClose={onToggle}
           workspace={workspace}
           focusNonce={focusNonce}
+          prefill={prefill}
         />
       </div>
     </>

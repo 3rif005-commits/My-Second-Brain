@@ -18,6 +18,7 @@ import {
   DatabaseIcon,
   FileUp,
   Table2,
+  Settings,
 } from "lucide-react";
 import { useTheme, useToast } from "@/app/providers";
 import { createClient } from "@/lib/supabase/client";
@@ -302,7 +303,7 @@ export function Sidebar({
           onClick={() => onSearchOpen?.()}
           trailing={
             <kbd className="text-[10px] font-mono bg-white/[0.07] text-slate-500 px-1.5 py-px rounded border border-white/[0.05]">
-              ⌘K
+              ⌘P
             </kbd>
           }
         />
@@ -314,6 +315,12 @@ export function Sidebar({
           icon={LayoutGrid}
           active={pathname?.startsWith("/brain/workspace") ?? false}
           onClick={() => navigate("/brain/workspace")}
+        />
+        <NavItem
+          label="Settings"
+          icon={Settings}
+          active={pathname?.startsWith("/brain/settings") ?? false}
+          onClick={() => navigate("/brain/settings")}
         />
       </nav>
 

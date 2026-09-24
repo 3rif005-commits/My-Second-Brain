@@ -18,13 +18,17 @@ export interface AIPanelControls {
   toggle: () => void;
   /** Open the panel and put the cursor in its input. */
   focus: () => void;
+  /** Open the panel with this text in its input, ready to send or edit —
+   *  "Try it" in Settings → Skills; anything that wants to hand the AI a
+   *  starting point. */
+  ask: (text: string) => void;
   /** A workspace note binds the panel to itself; null when it unmounts. */
   bindWorkspace: (b: Omit<WorkspaceBinding, "focusNonce"> | null) => void;
 }
 
 const noop = () => {};
 export const AIPanelControlsContext = createContext<AIPanelControls>({
-  isOpen: false, width: 0, open: noop, toggle: noop, focus: noop, bindWorkspace: noop,
+  isOpen: false, width: 0, open: noop, toggle: noop, focus: noop, ask: noop, bindWorkspace: noop,
 });
 
 export function useAIPanel(): AIPanelControls {

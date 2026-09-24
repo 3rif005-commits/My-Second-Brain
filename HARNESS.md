@@ -204,3 +204,8 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   job and its cards survive closing it.
 - No prices in the UI: the model can be any provider or a local one, so a
   dollar figure is meaningless. Cost stays in ai_runs for measurement only.
+- An edited study guide said "Saved" but ran the old text until a restart:
+  the prompt builders used constants read at import, and the user's copies
+  live outside the reload watcher. They now read the skill at call time.
+- A skills editor shows only what the runtime honours. `model_tier` and
+  `confirm` are stored but unused, so they are not offered.

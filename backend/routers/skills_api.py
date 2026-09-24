@@ -33,6 +33,12 @@ from prompts._skill_text import USER_SKILLS_DIR as _USER_SKILLS_DIR  # noqa: E40
 
 _SAFE_NAME = re.compile(r"^[a-z0-9][a-z0-9\-]{1,62}$")
 WHERE = ("chat", "selection", "assistant")
+#: what a selection skill may do with its result — the only kind that has a
+#: choice (a job always drafts a note; an assistant rule only shapes replies)
+SELECTION_OUTPUTS = ("insert_below", "rewrite_selection")
+#: where a skill keeps its reference files (both spellings exist on disk)
+REF_DIRS = ("reference", "references")
+_SAFE_FILE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-]{0,80}\.(md|txt)$")
 
 
 def _where(s: Skill) -> str:
@@ -43,9 +49,12 @@ def _where(s: Skill) -> str:
     return "assistant"
 
 
-def _surfaces_for(where: str, current: Skill | None) -> tuple[list[str], str | None]:
+def _surfaces_for(where: str, current: Skill | None,
+                  output: str | None = None) -> tuple[list[str], str | None]:
     if where == "selection":
-        out = current.output if current and current.output in ("insert_below", "rewrite_selection") else "insert_below"
+        if output in SELECTION_OUTPUTS:
+            return ["selection"], output
+        out = current.output if current and current.output in SELECTION_OUTPUTS else "insert_below"
         return ["selection"], out
     if where == "chat":
         return ["workspace"], (current.output if current and current.output == "draft_note" else "draft_note")
@@ -63,8 +72,36 @@ def _raw_body(path: Path) -> str:
     return body[:-1] if body.endswith("\n") else body
 
 
+def _files(name: str) -> list[str]:
+    """Reference files of a skill, built-in and edited copies together."""
+    found: set[str] = set()
+    for root in (_BUNDLED_SKILLS_DIR / name, _USER_SKILLS_DIR / name):
+        for d in REF_DIRS:
+            if (root / d).is_dir():
+                found |= {f"{d}/{p.name}" for p in (root / d).iterdir()
+                          if p.is_file() and _SAFE_FILE.match(p.name)}
+    return sorted(found)
+
+
+def _file_path(name: str, rel: str) -> tuple[Path, Path]:
+    """(where it is read from, where an edit is written). Only a reference
+    file the skill already has — the runtime reads those by name, so a new
+    file would be one nothing uses."""
+    if not _SAFE_NAME.match(name):
+        raise HTTPException(400, detail="bad skill name")
+    parts = rel.split("/")
+    if len(parts) != 2 or parts[0] not in REF_DIRS or not _SAFE_FILE.match(parts[1]):
+        raise HTTPException(400, detail="not a reference file of this skill")
+    if rel not in _files(name):
+        raise HTTPException(404, detail=f"'{rel}' is not a file of '{name}'")
+    user = _USER_SKILLS_DIR / name / rel
+    return (user if user.exists() else _BUNDLED_SKILLS_DIR / name / rel), user
+
+
 def _json(s: Skill, bundled: set[str], user: set[str]) -> dict:
-    if s.name in user and s.name in bundled:
+    # A built-in counts as edited when the user's folder holds anything of it:
+    # its instructions or only one of its reference files.
+    if s.name in bundled and (s.name in user or (_USER_SKILLS_DIR / s.name).exists()):
         source = "edited"
     elif s.name in user:
         source = "user"
@@ -77,6 +114,8 @@ def _json(s: Skill, bundled: set[str], user: set[str]) -> dict:
         "body": _raw_body(s.source_path),
         "where": _where(s),
         "output": s.output,
+        "icon": s.icon,
+        "files": _files(s.name),
         "source": source,
         "can_reset": source == "edited",
         "can_delete": source == "user",
@@ -95,9 +134,13 @@ def _state() -> tuple[SkillRegistry, set[str], set[str]]:
 
 
 def _write_user_skill(name: str, description: str, body: str, where: str,
-                      base: Skill | None) -> None:
-    surfaces, output = _surfaces_for(where, base)
+                      base: Skill | None, icon: str | None = None,
+                      output: str | None = None) -> None:
+    surfaces, output = _surfaces_for(where, base, output)
     meta: dict = {"name": name, "description": description.strip()}
+    icon = icon if icon is not None else (base.icon if base else None)
+    if icon:
+        meta["icon"] = icon
     if surfaces:
         meta["surfaces"] = surfaces
     if base and base.inputs:
@@ -128,6 +171,9 @@ class SkillPayload(BaseModel):
     description: str
     body: str
     where: str | None = None
+    icon: str | None = None
+    #: selection skills only: "insert_below" or "rewrite_selection"
+    output: str | None = None
     # Accepted from old clients, ignored.
     tools: list[str] | None = None
     priority: int = 0
@@ -135,6 +181,19 @@ class SkillPayload(BaseModel):
 
 class CreateSkillPayload(SkillPayload):
     name: str
+
+
+def _check_output(where: str, output: str | None) -> None:
+    """A result the skill's kind cannot have is refused, not silently stored."""
+    if output is None:
+        return
+    allowed = SELECTION_OUTPUTS if where == "selection" else ("draft_note",) if where == "chat" else ()
+    if output not in allowed:
+        raise HTTPException(400, detail=f"a '{where}' skill cannot have the result '{output}'")
+
+
+class FilePayload(BaseModel):
+    content: str
 
 
 @router.get("")
@@ -158,6 +217,36 @@ def list_selection_skills(authorization: str = Header()):
                        for s in selection_skills()]}
 
 
+@router.get("/{name}/original")
+def get_original(name: str, authorization: str = Header()):
+    """The built-in version of an edited skill, to compare against."""
+    get_user_id(authorization)
+    _, bundled, _ = _state()
+    if name not in bundled or not (_USER_SKILLS_DIR / name).exists():
+        raise HTTPException(404, detail=f"'{name}' has no edited version to compare")
+    orig = SkillRegistry.load([_BUNDLED_SKILLS_DIR]).get(name)
+    return {"name": name, "description": orig.description,
+            "body": _raw_body(orig.source_path), "output": orig.output}
+
+
+@router.get("/{name}/files/{rel:path}")
+def read_file(name: str, rel: str, authorization: str = Header()):
+    get_user_id(authorization)
+    src, _ = _file_path(name, rel)
+    return {"path": rel, "content": src.read_text(encoding="utf-8")}
+
+
+@router.put("/{name}/files/{rel:path}")
+def write_file(name: str, rel: str, payload: FilePayload, authorization: str = Header()):
+    """Save the user's copy of a reference file; the built-in stays as it is
+    and Reset (DELETE /skills/{name}) brings it back."""
+    get_user_id(authorization)
+    _, dest = _file_path(name, rel)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(payload.content, encoding="utf-8")
+    return {"path": rel, "content": payload.content}
+
+
 @router.get("/{name}")
 def get_skill(name: str, authorization: str = Header()):
     get_user_id(authorization)
@@ -179,7 +268,9 @@ def create_skill(payload: CreateSkillPayload, authorization: str = Header()):
     reg, bundled, user = _state()
     if reg.get(payload.name) is not None:
         raise HTTPException(409, detail=f"Skill '{payload.name}' already exists")
-    _write_user_skill(payload.name, payload.description, payload.body, where, None)
+    _check_output(where, payload.output)
+    _write_user_skill(payload.name, payload.description, payload.body, where, None,
+                      icon=payload.icon, output=payload.output)
     reg, bundled, user = _state()
     return _json(reg.get(payload.name), bundled, user)
 
@@ -198,7 +289,9 @@ def update_skill(name: str, payload: SkillPayload, authorization: str = Header()
     where = payload.where or _where(current)
     if where not in WHERE:
         raise HTTPException(400, detail=f"where must be one of {', '.join(WHERE)}")
-    _write_user_skill(name, payload.description, payload.body, where, current)
+    _check_output(where, payload.output)
+    _write_user_skill(name, payload.description, payload.body, where, current,
+                      icon=payload.icon, output=payload.output)
     reg, bundled, user = _state()
     return _json(reg.get(name), bundled, user)
 
