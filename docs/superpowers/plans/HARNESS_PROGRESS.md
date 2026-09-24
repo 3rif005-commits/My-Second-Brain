@@ -25,7 +25,7 @@ at 06:43); nothing of mine is left running.
   cost), duplicates skipped, `<br>` fixed, unplaced tables placed beside the
   section about their page. Live on real slides: 32 tables, 0 duplicates.
 - [x] Markdown path places unplaced tables by page too — 2026-09-24.
-- Undo's refusal after an edit — not yet seen in a browser (needs a paid draft).
+- [x] Undo refuses after an edit, live (`undo-refusal-live`, ~$0.03) — 2026-09-24.
 - [x] **E6c on real slides** — done 2026-09-24: Markdown lost tables (1/3 vs 3/3); **default reverted to HTML**. Opt-in `SYNTHESIS_FORMAT=md` remains. Next try: deterministic table carry-over, measured on `iml-slides-two`.
 - [x] Run card failure path, live and free (`run-card` project, MAX_USD_PER_RUN=0.001): banner names the job, Retry reruns it — 2026-09-24.
 - "Contradiction" usage in compare-sources: read the runs that use it and judge.
