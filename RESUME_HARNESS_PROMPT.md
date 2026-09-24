@@ -60,7 +60,8 @@ extension and NOT by reading many screenshots:
   Backend runs from .venv (runtime); tests use venv. Never `next dev`.
   Record each pid as you start it ($!) and stop exactly those — never by
   port, never pkill a pattern in your own command line. npm leaves a
-  next-server behind: `pkill -P <pid>; kill <pid>`, then check :3000 is free.
+  next-server grandchild behind: start with `setsid nohup npm run start … &`
+  and stop with `kill -- -<pid>` (the group), then check :3000 is free.
 - Free specs (no model call): npx playwright test --project=workspace-skills
 - Paid specs, one call each, only after a change they cover:
     npx playwright test --project=skills-live e2e/selection-skills-live.spec.ts
