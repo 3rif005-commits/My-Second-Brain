@@ -41,16 +41,6 @@ export function matchJobs(input: string, jobs: ChatJob[]): ChatJob[] {
   return jobs.filter((j) => j.skill.startsWith(q) || j.title.toLowerCase().includes(q));
 }
 
-/** "≈$0.09", "free", or "" — what a job will cost, before the click. */
-export function jobPrice(job: Pick<ChatJob, "usd" | "input_tokens" | "output_tokens">): string {
-  if (job.usd === null || job.usd === undefined) {
-    const t = job.input_tokens + job.output_tokens;
-    return t ? `≈${Math.round(t / 1000)}K tokens` : "";
-  }
-  if (job.usd === 0) return "free";
-  return `≈$${job.usd < 0.01 ? job.usd.toFixed(3) : job.usd.toFixed(2)}`;
-}
-
 /** "3 chapters · 24 boxes · 6 tables" — what a result holds, at a glance. */
 export function resultSummary(html: string): string {
   const count = (re: RegExp) => (html.match(re) ?? []).length;

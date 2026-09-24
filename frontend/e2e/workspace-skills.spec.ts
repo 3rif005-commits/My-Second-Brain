@@ -8,6 +8,7 @@
 import { test, expect, Page } from "@playwright/test";
 import path from "path";
 import fs from "fs";
+import { openPanel } from "./helpers/panel";
 
 const SCREENSHOT_DIR = path.join(process.cwd(), "e2e/screenshots/workspace-skills");
 const FIXTURE = path.join(process.cwd(), "e2e/fixtures/test.pdf");
@@ -21,11 +22,17 @@ async function ss(page: Page, name: string) {
  *  not clicked on the landing strip: the strip shows only the 12 most recent,
  *  and every live run adds a one-source "test" note that pushes older ones off. */
 async function openRecent(page: Page, match: RegExp) {
-  const res = await page.request.get("/api/ws/sessions/recent?limit=200");
-  const rows: { note_id: string; source_count: number }[] = await res.json();
+  // The first request after login can come back as an error body: ask again.
+  let rows: { note_id: string; source_count: number }[] = [];
+  for (let i = 0; i < 3 && !rows.length; i++) {
+    const body = await (await page.request.get("/api/ws/sessions/recent?limit=200")).json().catch(() => null);
+    if (Array.isArray(body)) rows = body;
+    else await page.waitForTimeout(1500);
+  }
   const hit = rows.find((r) => match.test(`${r.source_count} source${r.source_count === 1 ? "" : "s"}`));
   expect(hit, `no workspace session with ${match}`).toBeTruthy();
   await page.goto(`/brain/workspace/${hit!.note_id}`, { waitUntil: "domcontentloaded" });
+  await openPanel(page);           // the app's one AI panel, bound to this note
 }
 
 const aiPanel = (page: Page) => page.getByRole("textbox", { name: /message the ai/i });
@@ -33,7 +40,7 @@ const aiPanel = (page: Page) => page.getByRole("textbox", { name: /message the a
 test.describe("workspace: sources · note · AI", () => {
   test.setTimeout(120_000);
 
-  test("three panels, and the jobs live in the AI panel, priced", async ({ page }) => {
+  test("sources · note, and the jobs live in the app's AI panel", async ({ page }) => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await openRecent(page, /2 sources/);
@@ -73,14 +80,14 @@ test.describe("workspace: sources · note · AI", () => {
     await openRecent(page, /2 sources/);
     await expect(aiPanel(page)).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".bn-editor").first()).toBeVisible({ timeout: 60_000 });
-    await page.getByTitle("Collapse the AI panel").first().click();
+    await page.getByRole("button", { name: "Close AI panel" }).click();
     await expect(aiPanel(page)).toHaveCount(0);
     // On a narrow screen the sources may already have stepped aside for the AI.
     if (await page.getByTitle("Collapse the sources panel").count())
       await page.getByTitle("Collapse the sources panel").click();
     await expect(page.locator(".bn-editor").first()).toBeVisible();
     await ss(page, "04-collapsed");
-    await page.getByTitle("Open the AI panel").first().click();
+    await page.getByTitle(/open the ai panel/i).first().click();
     await page.getByTitle("Show the sources").click();
     await expect(aiPanel(page)).toBeVisible();
   });
@@ -105,36 +112,34 @@ test.describe("workspace: sources · note · AI", () => {
     ]);
     await chooser.setFiles(FIXTURE);
     await page.waitForURL(/\/brain\/workspace\/[0-9a-f-]{36}/, { timeout: 60_000 });
+    await openPanel(page);
     await expect(page.getByRole("button", { name: /\/study-guide/ })).toBeEnabled({ timeout: 90_000 });
     await expect(page.locator(".bn-editor h1")).toHaveCount(0);   // nothing was written
     await ss(page, "06-offered-not-fired");
   });
 });
 
-test.describe("one AI per screen", () => {
+test.describe("one AI for the whole app", () => {
   test.setTimeout(120_000);
 
-  test("on a workspace note the side panel steps aside and ⌘K focuses the workspace AI", async ({ page }) => {
+  test("the workspace uses the app's own AI panel; ⌘K opens and focuses it", async ({ page }) => {
     await openRecent(page, /2 sources/);
-    await expect(aiPanel(page)).toBeVisible({ timeout: 30_000 });
-    // One panel: the workspace's is the app's own, and the app-wide one steps aside.
-    await expect(page.getByRole("complementary", { name: "AI assistant panel" })).toHaveCount(0);
-    await expect(page.getByRole("textbox", { name: /message the ai/i })).toHaveCount(1);
-    await expect(page.getByRole("button", { name: /thread history/i })).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Open AI panel", exact: true })).toHaveCount(0);
-    // ⌘K reaches the workspace AI, even when collapsed.
-    await page.getByTitle(/collapse the ai panel/i).first().click();
+    // Exactly one AI: the app panel. The workspace draws none of its own.
+    await expect(page.getByRole("complementary", { name: "AI assistant panel" })).toHaveCount(1);
+    await expect(aiPanel(page)).toHaveCount(1);
+    // No prices: the model may be any provider, or a local one.
+    await expect(page.getByRole("log").getByText(/\$\d/)).toHaveCount(0);
+    await page.getByRole("button", { name: "Close AI panel" }).click();
     await expect(aiPanel(page)).toHaveCount(0);
     await page.keyboard.press("Control+k");
     await expect(aiPanel(page)).toBeFocused({ timeout: 10_000 });
     await ss(page, "07-one-ai");
   });
 
-  test("elsewhere the side panel is still there", async ({ page }) => {
+  test("elsewhere ⌘K opens the same panel — no separate quick-ask box", async ({ page }) => {
     await page.goto("/brain", { waitUntil: "networkidle" });
-    // Either the open panel or its reopen button is present on ordinary pages.
-    const panel = page.getByPlaceholder("Ask anything about your notes…");
-    const toggle = page.getByRole("button", { name: "Open AI panel", exact: true });
-    await expect(panel.or(toggle).first()).toBeVisible({ timeout: 30_000 });
+    await page.keyboard.press("Control+k");
+    await expect(aiPanel(page)).toBeFocused({ timeout: 10_000 });
+    await expect(page.getByRole("complementary", { name: "AI assistant panel" })).toHaveCount(1);
   });
 });

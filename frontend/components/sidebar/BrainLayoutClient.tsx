@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { Menu, PanelLeftOpen } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { Logo } from "@/components/brand/Logo";
 import { SearchModal } from "@/components/search/SearchModal";
 import { SidePanel, SidePanelToggleButton } from "@/components/ai/SidePanel";
-import { CommandK, CommandKFAB, type CommandKStage } from "@/components/ai/CommandK";
 import { AIThreadProvider } from "@/context/AIThreadContext";
+import { AIPanelControlsContext, type AIPanelControls } from "@/context/AIPanelContext";
+import type { WorkspaceBinding } from "@/components/ai/Chat";
 import { IngestStreamDialog } from "@/components/ingestion/IngestStreamDialog";
 import type { IngestSource } from "@/components/ingestion/IngestDropzone";
 
@@ -23,21 +24,19 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth >= 768 : true
   );
-  const [commandKStage, setCommandKStage] = useState<CommandKStage>("closed");
   const [searchOpen, setSearchOpen] = useState(false);
   const [ingestSource, setIngestSource] = useState<IngestSource | null>(null);
-  // One AI per screen (user decision, 2026-09-24): a workspace note has its
-  // own AI panel, which the app-wide side panel is merged into — so on those
-  // pages the side panel, its toggle and the ⌘K bubble step aside, and ⌘K
-  // focuses the workspace's AI instead. The workspace also owns file drops
-  // (they become sources), so the app-wide drop-to-import steps aside too.
+  // One AI for the whole app (user decision, 2026-09-24): this layout mounts
+  // the only AI panel. Every page — the workspace included — uses it; a
+  // workspace note binds it to itself (AIPanelContext). ⌘K opens and focuses
+  // it everywhere. The workspace owns file drops (they become sources), so
+  // the app-wide drop-to-import steps aside there.
   const pathname = usePathname() ?? "";
-  const inWorkspaceNote = /^\/brain\/workspace\/[0-9a-f-]{36}/.test(pathname);
   const inWorkspace = pathname.startsWith("/brain/workspace");
-  const inWorkspaceNoteRef = useRef(inWorkspaceNote);
-  inWorkspaceNoteRef.current = inWorkspaceNote;
   const inWorkspaceRef = useRef(inWorkspace);
   inWorkspaceRef.current = inWorkspace;
+  const [workspaceBinding, setWorkspaceBinding] = useState<Omit<WorkspaceBinding, "focusNonce"> | null>(null);
+  const [focusNonce, setFocusNonce] = useState(0);
 
   useEffect(() => {
     const stored = localStorage.getItem("sidebar-open");
@@ -77,11 +76,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === "k") {
         e.preventDefault();
-        if (inWorkspaceNoteRef.current) {
-          window.dispatchEvent(new CustomEvent("workspace-ai-focus"));
-          return;
-        }
-        setCommandKStage((prev) => prev === "closed" ? "compact" : "closed");
+        focusAi();
       }
       if (mod && e.key === "p") {
         e.preventDefault();
@@ -128,6 +123,13 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     });
   }
 
+  const openAi = useCallback(() => {
+    setAiOpen(true);
+    localStorage.setItem("ai-panel-open", "true");
+  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const focusAi = useCallback(() => { openAi(); setFocusNonce(Date.now()); }, [openAi]);
+
   function handleAiWidthChange(width: number) {
     const clamped = Math.max(AI_PANEL_MIN_WIDTH, Math.min(AI_PANEL_MAX_WIDTH, Math.round(width)));
     setAiPanelWidth(clamped);
@@ -135,10 +137,21 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   }
 
   const isOpen = open ?? true;
-  const isAiOpen = (aiOpen ?? false) && !inWorkspaceNote;
+  const isAiOpen = aiOpen ?? false;
+
+  const controls = useMemo<AIPanelControls>(() => ({
+    isOpen: isAiOpen,
+    width: isAiOpen && isDesktop ? aiPanelWidth : 0,
+    open: openAi,
+    toggle: toggleAi,
+    focus: focusAi,
+    bindWorkspace: setWorkspaceBinding,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [isAiOpen, isDesktop, aiPanelWidth, openAi, focusAi]);
 
   return (
     <AIThreadProvider>
+    <AIPanelControlsContext.Provider value={controls}>
       <div className="print-layout flex h-screen overflow-hidden bg-white dark:bg-gray-900">
 
         {/* Mobile backdrop for notes sidebar */}
@@ -200,28 +213,27 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
           {children}
         </main>
 
-        {/* AI side panel — fixed right, width matches content margin */}
-        {!inWorkspaceNote && (
-          <SidePanel
-            open={isAiOpen}
-            onToggle={toggleAi}
-            width={aiPanelWidth}
-            onWidthChange={handleAiWidthChange}
-          />
-        )}
+        {/* THE AI panel — fixed right, width matches content margin */}
+        <SidePanel
+          open={isAiOpen}
+          onToggle={toggleAi}
+          width={aiPanelWidth}
+          onWidthChange={handleAiWidthChange}
+          workspace={workspaceBinding && pathname.startsWith("/brain/workspace/")
+            ? { ...workspaceBinding, focusNonce } : undefined}
+          focusNonce={focusNonce}
+        />
 
         {/* Floating reopen button for AI panel (desktop, when closed) */}
-        {!isAiOpen && !inWorkspaceNote && <SidePanelToggleButton onClick={toggleAi} />}
+        {!isAiOpen && <SidePanelToggleButton onClick={toggleAi} />}
 
         <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
-
-        {!inWorkspaceNote && <CommandK open={commandKStage} onOpen={setCommandKStage} />}
-        {!inWorkspaceNote && <CommandKFAB onClick={() => setCommandKStage("compact")} />}
       </div>
       <IngestStreamDialog
         source={ingestSource}
         onClose={() => setIngestSource(null)}
       />
+    </AIPanelControlsContext.Provider>
     </AIThreadProvider>
   );
 }

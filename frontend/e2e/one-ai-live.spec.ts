@@ -7,6 +7,7 @@
 import { test, expect, Page } from "@playwright/test";
 import path from "path";
 import fs from "fs";
+import { openPanel } from "./helpers/panel";
 
 const OUT = path.join(process.cwd(), "e2e/screenshots/one-ai-live");
 const FIXTURE = path.join(process.cwd(), "e2e/fixtures/test.pdf");
@@ -19,6 +20,7 @@ async function freshNote(page: Page): Promise<string> {
   ]);
   await chooser.setFiles(FIXTURE);
   await page.waitForURL(/\/brain\/workspace\/[0-9a-f-]{36}/, { timeout: 60_000 });
+  await openPanel(page);           // the app's one AI panel
   await expect(page.getByRole("button", { name: /\/study-guide/ })).toBeEnabled({ timeout: 120_000 });
   await expect(page.locator(".bn-editor").first()).toBeVisible({ timeout: 60_000 });
   return page.url().split("/").pop()!;

@@ -4,14 +4,15 @@
 // decision, 2026-09-24: one AI, one look). Besides answering from the brain,
 // it runs skills on files or links attached right here: attach, type
 // `/study-guide …`, and the result comes back as a card to put in a note.
-// In the workspace (`workspace` prop) it is bound to that note: answers cite
-// its sources as chips that jump to the page, attachments become its sources,
-// and results go into its editor.
+// It is mounted once, by the app layout. On a workspace note (`workspace`
+// prop) it is bound to that note: answers cite its sources as chips that jump
+// to the page, attachments become its sources, results go into its editor.
+// One conversation follows the user across pages.
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Send, History, SquarePen, X, Smartphone, Cloud, Check, SlidersHorizontal, Sparkles,
-  Paperclip, FileText, FilePlus2, Link2, Upload, PanelRightClose, ChevronRight,
+  Paperclip, FileText, FilePlus2, Link2, Upload, ChevronRight,
 } from "lucide-react";
 import { MessageList, type StreamItem } from "./MessageList";
 import { ThreadHistory } from "./ThreadHistory";
@@ -22,7 +23,7 @@ import {
   type Attachment, type PanelScope,
 } from "./panelSources";
 import {
-  jobPrice, matchJobs, parseCommand, type ChatJob, type JobRequest, type JobResult,
+  matchJobs, parseCommand, type ChatJob, type JobRequest, type JobResult,
 } from "@/lib/chatJobs";
 import { ACCEPTED_WORKSPACE_FILES, jobTitle, type Citation } from "@/lib/workspace";
 import { answerToHtml } from "@/lib/answerToHtml";
@@ -51,9 +52,10 @@ export interface WorkspaceBinding {
 interface ChatProps {
   threadId?: string | null;
   onThreadIdChange?: (id: string) => void;
-  initialQuery?: string;
   onClose?: () => void;
   workspace?: WorkspaceBinding;
+  /** Bumped by ⌘K: focus the input. */
+  focusNonce?: number;
 }
 
 /** Openers for an empty conversation about sources — one tap, not a blank page. */
@@ -63,14 +65,14 @@ const STARTERS = [
   "Explain the hardest part simply",
 ];
 
-const WS_THREAD_KEY = (noteId: string) => `workspace:thread:${noteId}`;
+
 
 const MODEL_OPTIONS: { value: Mode; label: string; desc: string; icon: React.ReactNode }[] = [
   { value: "local", label: "Local", desc: "On-device · private", icon: <Smartphone size={14} /> },
   { value: "api",   label: "Cloud", desc: "Faster · smarter",    icon: <Cloud size={14} /> },
 ];
 
-export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQuery, onClose, workspace }: ChatProps = {}) {
+export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, workspace, focusNonce }: ChatProps = {}) {
   const [items, setItems] = useState<StreamItem[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -81,7 +83,6 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
   const threadId = controlledThreadId !== undefined ? controlledThreadId : internalThreadId;
   const [mode, setMode] = useMode();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const didAutoSend = useRef(false);
   // The question an approval replays. Set on every send, never from a tool arg.
   const lastQueryRef = useRef<string>("");
   const modeMenuRef = useRef<HTMLDivElement>(null);
@@ -182,32 +183,14 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
   function setThreadId(id: string | null) {
     setInternalThreadId(id);
     if (id) onThreadIdChange?.(id);
-    // In the workspace each note keeps its own conversation.
-    if (workspace) {
-      try {
-        if (id) localStorage.setItem(WS_THREAD_KEY(workspace.noteId), id);
-        else localStorage.removeItem(WS_THREAD_KEY(workspace.noteId));
-      } catch { /* private mode */ }
-    }
   }
 
-  // Switching notes in the workspace: stop the answer for the old one, and
-  // bring back the new note's own conversation.
-  const wsNoteId = workspace?.noteId;
+  // ⌘K: the panel is opening — put the cursor in the input once it is there.
   useEffect(() => {
-    if (!wsNoteId) return;
-    abortRef.current?.abort();
-    adoptedThreadRef.current = null;
-    setItems([]);
-    setAttachments([]);
-    setHistoryOpen(false);
-    let saved: string | null = null;
-    try { saved = localStorage.getItem(WS_THREAD_KEY(wsNoteId)); } catch { /* private mode */ }
-    setInternalThreadId(saved);
-  }, [wsNoteId]);
-
-  const focusNonce = workspace?.focusNonce;
-  useEffect(() => { if (focusNonce) inputRef.current?.focus(); }, [focusNonce]);
+    if (!focusNonce) return;
+    const t = setTimeout(() => inputRef.current?.focus(), 220);
+    return () => clearTimeout(t);
+  }, [focusNonce]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -232,14 +215,6 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
     })();
   }, [threadId]);
 
-  // Auto-send initialQuery when CommandK expands into full chat
-  useEffect(() => {
-    if (initialQuery && !threadId && !didAutoSend.current) {
-      didAutoSend.current = true;
-      setInput(initialQuery);
-      setTimeout(() => send(), 50);
-    }
-  }, [initialQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Re-run the last question, this time carrying the user's approval for one
    * specific action. The key never comes from the model — it is minted by the
@@ -647,11 +622,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
           {onClose && (
             <button
               onClick={onClose}
-              aria-label={workspace ? "Collapse the AI panel" : "Close AI panel"}
-              title={workspace ? "Collapse the AI panel" : undefined}
+              aria-label="Close AI panel"
               className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
-              {workspace ? <PanelRightClose size={15} /> : <X size={15} />}
+              <X size={15} />
             </button>
           )}
         </div>
@@ -683,7 +657,6 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
                       dark:hover:border-indigo-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                     <span className="text-[12.5px] font-medium text-gray-800 dark:text-gray-100">/{j.skill}</span>
                     <span className="text-[11px] text-gray-400 truncate flex-1">{j.runnable ?? j.description}</span>
-                    <span className="text-[11px] text-gray-400 shrink-0">{jobPrice(j)}</span>
                     <ChevronRight size={12} className="text-gray-300 shrink-0" />
                   </button>
                 ))}
@@ -766,7 +739,6 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
                 className={`w-full text-left px-3 py-2 ${i === menuIndex
                   ? "bg-indigo-50 dark:bg-indigo-950/40" : "hover:bg-gray-50 dark:hover:bg-white/5"}`}>
                 <span className="text-[13px] font-medium text-gray-800 dark:text-gray-100">/{j.skill}</span>
-                {jobPrice(j) && <span className="ml-1.5 text-[11px] text-gray-400">{jobPrice(j)}</span>}
                 <span className="block text-[11.5px] text-gray-500 dark:text-gray-400 line-clamp-1">{j.runnable ?? j.description}</span>
               </button>
             ))}

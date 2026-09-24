@@ -81,7 +81,6 @@ export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, onApply, onUn
         {job.focus && <span className="text-[11px] text-gray-400 truncate">· {job.focus}</span>}
         <span className="ml-auto text-[11px] text-gray-400 shrink-0">
           {!r && !job.error && <>Writing… <Elapsed since={job.startedAt} /></>}
-          {r && r.usd != null && `$${r.usd.toFixed(3)}`}
         </span>
         {r && (
           <button onClick={() => { void copyResult(r.html); setCopied(true); setTimeout(() => setCopied(false), 1500); }}

@@ -197,3 +197,10 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   files (📎 → Add a link, or drop one).
 - A free e2e typed "/flash" into a real note's title four times before anyone
   noticed. A test that types into a user's note must take it back out.
+- One AI, one instance (user, 2026-09-24): the app layout mounts the only AI
+  panel; the workspace binds it to its note through AIPanelContext instead of
+  drawing a copy. ⌘K opens and focuses it everywhere; the ⌘K quick-ask box
+  and its bubble are gone. The panel stays mounted while closed, so a running
+  job and its cards survive closing it.
+- No prices in the UI: the model can be any provider or a local one, so a
+  dollar figure is meaningless. Cost stays in ai_runs for measurement only.

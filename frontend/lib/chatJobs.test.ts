@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { jobPrice, matchJobs, parseCommand, resultSummary, type ChatJob } from "./chatJobs";
+import { matchJobs, parseCommand, resultSummary, type ChatJob } from "./chatJobs";
 
 const J = (skill: string, title: string): ChatJob =>
   ({ skill, title, description: "", usd: 0.05, input_tokens: 1, output_tokens: 1, runnable: null });
@@ -18,12 +18,6 @@ describe("chat jobs", () => {
     expect(matchJobs("/fl", JOBS).map((j) => j.skill)).toEqual(["flashcards"]);
     expect(matchJobs("/flashcards now", JOBS)).toEqual([]);   // past the name: no menu
     expect(matchJobs("hello", JOBS)).toEqual([]);
-  });
-
-  it("prices a job honestly", () => {
-    expect(jobPrice({ usd: 0.093, input_tokens: 0, output_tokens: 0 })).toBe("≈$0.09");
-    expect(jobPrice({ usd: 0, input_tokens: 5, output_tokens: 5 })).toBe("free");
-    expect(jobPrice({ usd: null, input_tokens: 9000, output_tokens: 3000 })).toBe("≈12K tokens");
   });
 
   it("summarises a result", () => {

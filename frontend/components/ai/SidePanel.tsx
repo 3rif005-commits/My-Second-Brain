@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { Bot } from "lucide-react";
-import { Chat } from "./Chat";
+import { Chat, type WorkspaceBinding } from "./Chat";
 import { useAIThread } from "@/context/AIThreadContext";
 
 interface SidePanelProps {
@@ -10,9 +10,13 @@ interface SidePanelProps {
   onToggle: () => void;
   width?: number;
   onWidthChange?: (w: number) => void;
+  /** Set on a workspace note: the panel works on that note. */
+  workspace?: WorkspaceBinding;
+  /** Bumped by ⌘K: focus the input. */
+  focusNonce?: number;
 }
 
-export function SidePanel({ open, onToggle, width = 360, onWidthChange }: SidePanelProps) {
+export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspace, focusNonce }: SidePanelProps) {
   const { activeThreadId, setActiveThreadId } = useAIThread();
   const startX = useRef(0);
   const startWidth = useRef(width);
@@ -58,8 +62,10 @@ export function SidePanel({ open, onToggle, width = 360, onWidthChange }: SidePa
           "fixed inset-y-0 right-0 z-40 flex flex-col",
           // Distinct background: light lavender in light mode, deep blue-black in dark
           "bg-[#eeeefc] dark:bg-[#0f0f1a]",
-          "transition-transform duration-200 ease-in-out",
-          open ? "translate-x-0" : "translate-x-full",
+          "transition-[transform,visibility] duration-200 ease-in-out",
+          // Invisible once slid away: still mounted, but out of reach of Tab
+          // and of screen readers.
+          open ? "translate-x-0 visible" : "translate-x-full invisible",
         ].join(" ")}
         style={{ width }}
         aria-label="AI assistant panel"
@@ -83,14 +89,15 @@ export function SidePanel({ open, onToggle, width = 360, onWidthChange }: SidePa
         {/* Indigo gradient accent at the top */}
         <div className="h-[3px] w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-400 shrink-0" />
 
-        {/* Chat — only mounted when open */}
-        {open && (
-          <Chat
-            threadId={activeThreadId}
-            onThreadIdChange={setActiveThreadId}
-            onClose={onToggle}
-          />
-        )}
+        {/* Chat — stays mounted while closed, so a running job, its cards and
+            the conversation survive closing and reopening the panel. */}
+        <Chat
+          threadId={activeThreadId}
+          onThreadIdChange={setActiveThreadId}
+          onClose={onToggle}
+          workspace={workspace}
+          focusNonce={focusNonce}
+        />
       </div>
     </>
   );

@@ -161,31 +161,6 @@ export function jobTitle(name: string): string {
   return name.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
 
-/** A skill's price for a chip: "≈$0.05" or "≈12K tokens" when unpriced. */
-export function formatSkillCost(skill: NoteSkill): string {
-  const tokens = skill.input_tokens + skill.output_tokens;
-  const short = tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : `${tokens}`;
-  // A free-tier model is priced at exactly zero, and "≈$0.000" reads as
-  // broken rather than free. Say the word, and still say the size — free of
-  // price is not free of time.
-  if (skill.usd === 0) return `free · ≈${short} tokens`;
-  if (skill.usd === null) return `≈${short} tokens`;
-  return `≈$${skill.usd < 0.01 ? skill.usd.toFixed(3) : skill.usd.toFixed(2)}`;
-}
-
-/** Short form for a button or meta line: "≈45K tokens · ≈$0.07".
- * Returns null when there is nothing to price, and omits the money entirely
- * when the model has no published price. */
-export function formatEstimate(est: SynthesisEstimate | null): string | null {
-  if (!est || est.ready_sources === 0) return null;
-  const tokens = est.input_tokens + est.output_tokens;
-  const t = tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : `${tokens}`;
-  if (est.usd === null) return `≈${t} tokens`;
-  if (est.usd === 0) return `≈${t} tokens · free`;
-  const usd = est.usd < 0.01 ? est.usd.toFixed(3) : est.usd.toFixed(2);
-  return `≈${t} tokens · ≈$${usd}`;
-}
-
 /** One skill the workspace can run over this note's sources, already priced.
  * `runnable` is null when it can run, otherwise the reason it cannot — which
  * is what the UI shows instead of an unexplained disabled button. */

@@ -151,7 +151,7 @@ type AnyBlock = any;
 
 // Cmd+K with text selected inside the editor → open inline AI.
 // Cmd+K with no selection → falls through to BrainLayoutClient's bubble-phase
-// handler which opens the CommandK chat modal.
+// handler, which opens and focuses the app's AI panel.
 //
 // Runs in capture phase so stopPropagation() prevents BrainLayoutClient from
 // seeing the event when we handle it here.

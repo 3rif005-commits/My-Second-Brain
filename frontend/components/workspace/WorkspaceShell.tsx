@@ -19,24 +19,19 @@ import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
 import { SourceRail } from "./SourceRail";
 import { SourceViewer } from "./SourceViewer";
 import { useSynthesis } from "./useSynthesis";
-import { Chat } from "@/components/ai/Chat";
+import { useAIPanel } from "@/context/AIPanelContext";
 import { DRAFT_EVENT, UNDO_EVENT, type NoteDraft, type UndoOutcome } from "@/lib/noteDraft";
 
 const SPLIT_KEY = "workspace:splitPct";
 const PANELS_KEY = "workspace:panels";
-const CHAT_MIN = 300, CHAT_MAX = 640;
-
-function readPanels(): { sources: boolean; chat: boolean; chatWidth: number } {
-  const fallback = { sources: true, chat: true, chatWidth: 340 };
+function readPanels(): { sources: boolean } {
   try {
     const v = JSON.parse(window.localStorage.getItem(PANELS_KEY) ?? "null");
-    if (!v) return fallback;
-    return { sources: v.sources !== false, chat: v.chat !== false,
-             chatWidth: Math.min(CHAT_MAX, Math.max(CHAT_MIN, Number(v.chatWidth) || 340)) };
-  } catch { return fallback; }
+    return { sources: v?.sources !== false };
+  } catch { return { sources: true }; }
 }
 
-function savePanels(p: { sources: boolean; chat: boolean; chatWidth: number }) {
+function savePanels(p: { sources: boolean }) {
   try { window.localStorage.setItem(PANELS_KEY, JSON.stringify(p)); } catch { /* private mode */ }
 }
 
@@ -126,17 +121,12 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const [savedFlash, setSavedFlash] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [chatOpen, setChatOpen] = useState(true);
   const [sourcesOpen, setSourcesOpen] = useState(true);
-  const [chatWidth, setChatWidth] = useState(340);
   const [jobRequest, setJobRequest] = useState<JobRequest | null>(null);
-  // ⌘K on a workspace note focuses this AI (the app-wide one steps aside here).
-  const [focusNonce, setFocusNonce] = useState(0);
-  useEffect(() => {
-    const onFocus = () => { setChatOpen(true); setFocusNonce(Date.now()); };
-    window.addEventListener("workspace-ai-focus", onFocus);
-    return () => window.removeEventListener("workspace-ai-focus", onFocus);
-  }, []);
+  // The AI is the app's one panel (context/AIPanelContext): the workspace
+  // binds it to this note and opens it; it draws no AI of its own.
+  const ai = useAIPanel();
+  const chatOpen = ai.isOpen;
   const [splitPct, setSplitPct] = useState(45);
 
   const seekRef = useRef<((value: number) => void) | null>(null);
@@ -145,7 +135,6 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const applyRef = useRef<NoteApplyApi | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
-  const draggingChatRef = useRef(false);
   // dragenter/dragleave fire for every child element the pointer crosses, so a
   // plain boolean makes the drop overlay strobe. Count the depth instead.
   const dragDepth = useRef(0);
@@ -171,10 +160,11 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       .then((d) => { if (d && jobsFor.current === forNote) setChatJobs(d.skills ?? []); })
       .catch(() => {});
   }, [noteId, syn.readyKey]);
+  const openAi = ai.open;
   const askChat = useCallback((skill: string) => {
-    setChatOpen(true);
+    openAi();
     setJobRequest({ skill, nonce: Date.now() });
-  }, []);
+  }, [openAi]);
   const slashItems = useMemo(
     () => chatJobs.filter((j) => !j.runnable).map((j) => ({
       title: jobTitle(j.skill),
@@ -269,10 +259,9 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     const stored = Number(window.localStorage.getItem(SPLIT_KEY));
     if (stored >= 25 && stored <= 70) setSplitPct(stored);
     const p = readPanels();
-    setSourcesOpen(p.sources); setChatOpen(p.chat); setChatWidth(p.chatWidth);
+    setSourcesOpen(p.sources);
   }, []);
-  useEffect(() => { savePanels({ sources: sourcesOpen, chat: chatOpen, chatWidth }); },
-    [sourcesOpen, chatOpen, chatWidth]);
+  useEffect(() => { savePanels({ sources: sourcesOpen }); }, [sourcesOpen]);
 
   // Three panels need room. When they would leave the note narrower than it
   // can be read at, the sources step aside (one click brings them back) —
@@ -285,33 +274,24 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     const el = containerRef.current;
     if (!el) return;
     const check = () => {
+      // The AI panel sits outside this container: its width is already gone.
       if (chatOpen && sourcesOpen && !userWantsSources.current
-          && el.clientWidth - chatWidth < 760) setSourcesOpen(false);
+          && el.clientWidth < 760) setSourcesOpen(false);
     };
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [chatOpen, sourcesOpen, chatWidth, note]);
+  }, [chatOpen, sourcesOpen, note]);
 
   useEffect(() => {
     function onMove(e: MouseEvent) {
-      if (draggingChatRef.current && containerRef.current) {
-        const box = containerRef.current.getBoundingClientRect();
-        setChatWidth(Math.min(CHAT_MAX, Math.max(CHAT_MIN, box.right - e.clientX)));
-        return;
-      }
       if (!draggingRef.current || !containerRef.current) return;
       const box = containerRef.current.getBoundingClientRect();
       const pct = ((e.clientX - box.left) / box.width) * 100;
       setSplitPct(Math.min(70, Math.max(25, pct)));
     }
     function onUp() {
-      if (draggingChatRef.current) {
-        draggingChatRef.current = false;
-        document.body.style.cursor = "";
-        return;
-      }
       if (!draggingRef.current) return;
       draggingRef.current = false;
       document.body.style.cursor = "";
@@ -380,6 +360,22 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     await wsApi.reprocessSource(s.id).catch(() => {});
     await loadSources();
   }, [loadSources]);
+
+  // ── the one AI panel, bound to this note ─────────────────────────────────
+  const bindWorkspace = ai.bindWorkspace;
+  // Read at bind time; set during render below, where they are defined.
+  const colorIndexRef = useRef<Map<string, number>>(new Map());
+  const citationRef = useRef<(c: Citation) => void>(() => {});
+  const noteTitle = note?.title;
+  useEffect(() => {
+    if (!noteId || !noteTitle) return;
+    bindWorkspace({
+      noteId, title: noteTitle, jobs: chatJobs, colorIndex: colorIndexRef.current,
+      onCitation: (c) => citationRef.current(c), onSourcesAdded: () => void loadSources(),
+      request: jobRequest,
+    });
+  }, [noteId, noteTitle, chatJobs, jobRequest, sources, bindWorkspace, loadSources]);
+  useEffect(() => () => bindWorkspace(null), [bindWorkspace]);
 
   // ── whole-shell drag & drop ───────────────────────────────────────────────
   const onDrop = useCallback((e: React.DragEvent) => {
@@ -477,6 +473,8 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const activeSource = sources.find((s) => s.id === activeId) ?? null;
   const colorIndex = useMemo(
     () => new Map(sources.map((s) => [s.id, s.order_index])), [sources]);
+  colorIndexRef.current = colorIndex;
+  citationRef.current = handleCitation;
 
   // ── empty shell ───────────────────────────────────────────────────────────
   if (!noteId || !note) {
@@ -555,8 +553,8 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
         </div>
 
         <button
-          onClick={() => setChatOpen((v) => !v)}
-          title={chatOpen ? "Collapse the AI panel (⌘K focuses it)" : "Open the AI panel (⌘K)"}
+          onClick={ai.toggle}
+          title={chatOpen ? "Close the AI panel" : "Open the AI panel (⌘K)"}
           className={`shrink-0 w-8 h-8 flex items-center justify-center rounded-xl transition-colors
             focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
             chatOpen
@@ -647,44 +645,6 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
           />
         </div>
 
-        {chatOpen ? (
-          <>
-            <div
-              onMouseDown={() => { draggingChatRef.current = true; document.body.style.cursor = "col-resize"; }}
-              className="group/split w-2 shrink-0 cursor-col-resize flex items-center justify-center"
-              title="Drag to resize"
-            >
-              <span className="w-[3px] h-8 rounded-full bg-gray-300/0 dark:bg-white/0
-                group-hover/split:bg-indigo-400 dark:group-hover/split:bg-indigo-500 transition-colors" />
-            </div>
-            {/* The app's AI panel, the same component and look as on every page. */}
-            <div className="shrink-0 min-w-0 flex flex-col rounded-2xl overflow-hidden ring-1 ring-gray-200/70
-              dark:ring-white/10 bg-[#eeeefc] dark:bg-[#0f0f1a]" style={{ width: chatWidth }}>
-              <div className="h-[3px] w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-400 shrink-0" />
-              <div className="flex-1 min-h-0">
-                <Chat
-                  onClose={() => setChatOpen(false)}
-                  workspace={{
-                    noteId: note.id,
-                    title: note.title,
-                    jobs: chatJobs,
-                    colorIndex,
-                    onCitation: handleCitation,
-                    onSourcesAdded: loadSources,
-                    request: jobRequest,
-                    focusNonce,
-                  }}
-                />
-              </div>
-            </div>
-          </>
-        ) : (
-          <button onClick={() => setChatOpen(true)} title="Open the AI panel"
-            className="ws-panel w-10 shrink-0 ml-2 rounded-2xl flex flex-col items-center pt-3
-              text-gray-400 hover:text-indigo-600 transition-colors">
-            <Sparkles size={15} />
-          </button>
-        )}
       </div>
 
       <DropOverlay show={dragOver} />
