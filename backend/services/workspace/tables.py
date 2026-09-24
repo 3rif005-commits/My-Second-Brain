@@ -126,6 +126,7 @@ def carry_tables(md: str, tables: dict[str, str], offered: str = "") -> str:
     note_tables = [_cells_md(m.group(1)) for m in _TABLE.finditer(md)]
     missing = [k for k in tables if k not in placed and (not offered or k in offered)
                and not _already_there(tables[k], note_tables)]
+    md, missing = _place_by_page_md(md, missing, tables)
     if missing:
         md = md.rstrip() + "\n\n## Tables from the slides\n\n" + "\n\n".join(
             tables[k] for k in missing) + "\n"
@@ -200,3 +201,27 @@ def _place_by_page_html(html: str, missing: list[str], tables: dict[str, str],
     for pos in sorted(inserts, reverse=True):
         html = html[:pos] + "".join(inserts[pos]) + html[pos:]
     return html, left
+
+
+_MD_SECTION = re.compile(r"(?m)^###[ \t]+.*\{(\d+):p:(\d+)\}[ \t]*$")
+_MD_NEXT = re.compile(r"(?m)^#{1,3}[ \t]")
+
+
+def _place_by_page_md(md: str, missing: list[str],
+                      tables: dict[str, str]) -> tuple[str, list[str]]:
+    """The Markdown twin of `_place_by_page_html`: an unplaced table goes at
+    the end of the `### … {s:p:N}` section for its page."""
+    sections = [(int(m.group(1)), int(m.group(2)), m.end()) for m in _MD_SECTION.finditer(md)]
+    inserts: dict[int, list[str]] = {}
+    left: list[str] = []
+    for key in missing:
+        i = _home(key, sections, getattr(tables, "pages", {}))
+        if i is None:
+            left.append(key)
+            continue
+        nxt = _MD_NEXT.search(md, sections[i][2] + 1)
+        inserts.setdefault(nxt.start() if nxt else len(md), []).append(tables[key])
+    for pos in sorted(inserts, reverse=True):
+        block = "\n\n" + "\n\n".join(inserts[pos]) + "\n\n"
+        md = md[:pos].rstrip("\n") + block + md[pos:]
+    return md, left

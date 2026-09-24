@@ -89,3 +89,14 @@ def test_two_runs_never_share_page_numbers():
     a = label_tables([{"text": "[page 3]\n|A|B|\n|---|---|\n|1|2|"}])[1]
     b = label_tables([{"text": "[page 8]\n|C|D|\n|---|---|\n|3|4|"}])[1]
     assert a.pages["[[TABLE 1.1]]"] == (1, 3) and b.pages["[[TABLE 1.1]]"] == (1, 8)
+
+
+def test_the_markdown_path_places_by_page_too():
+    src = [{"text": "[page 5]\n|Q|Left|\n|---|---|\n|s1|0.5|"}]
+    _, tables = label_tables(src)
+    md = "# G\n\n### Q-values {1:p:4}\nText b.\n\n### Later {1:p:9}\nText c.\n"
+    out = carry_tables(md, tables)
+    assert "Tables from the slides" not in out
+    assert out.index("Text b.") < out.index("|Q|Left|") < out.index("### Later")
+    from services.workspace.md_to_blocks import markdown_to_html
+    assert markdown_to_html(out).count("<table>") == 1
