@@ -76,7 +76,10 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === "k") {
         e.preventDefault();
-        focusAi();
+        // A toggle: open (cursor in the input), or close if it is open. Closing
+        // only hides it, so the conversation is there when it opens again.
+        if (aiOpenRef.current) closeAi();
+        else focusAi();
       }
       if (mod && e.key === "p") {
         e.preventDefault();
@@ -123,6 +126,12 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     });
   }
 
+  const aiOpenRef = useRef(false);
+  aiOpenRef.current = aiOpen ?? false;
+  const closeAi = useCallback(() => {
+    setAiOpen(false);
+    localStorage.setItem("ai-panel-open", "false");
+  }, []);
   const openAi = useCallback(() => {
     setAiOpen(true);
     localStorage.setItem("ai-panel-open", "true");

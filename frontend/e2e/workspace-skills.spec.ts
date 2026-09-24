@@ -149,6 +149,20 @@ test.describe("one AI for the whole app", () => {
     await expect(aiPanel(page)).toBeFocused({ timeout: 10_000 });
     await expect(page.getByRole("complementary", { name: "AI assistant panel" })).toHaveCount(1);
   });
+
+  test("⌘K toggles: open, close, and open again just as it was", async ({ page }) => {
+    await page.goto("/brain", { waitUntil: "networkidle" });
+    await page.keyboard.press("Control+k");
+    await expect(aiPanel(page)).toBeFocused({ timeout: 10_000 });
+    await page.keyboard.type("half a question");
+    await page.keyboard.press("Control+k");                    // closes
+    await expect(aiPanel(page)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Open AI panel", exact: true })).toBeVisible();
+    await page.keyboard.press("Control+k");                    // opens again
+    await expect(aiPanel(page)).toBeFocused({ timeout: 10_000 });
+    await expect(aiPanel(page)).toHaveValue("half a question");  // nothing lost
+    await aiPanel(page).fill("");
+  });
 });
 
 test.describe("the AI button: bottom-right, covering nothing", () => {
