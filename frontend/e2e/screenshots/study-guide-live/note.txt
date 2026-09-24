@@ -1,0 +1,919 @@
+http://localhost:3000/brain/workspace/ddd5277e-2b4c-4ac8-904e-db03f391e384
+
+Reinforcement Learning & Fairness in Machine Learning
+
+Source: IML Lecture 10 & 11
+
+Topic: Foundations of value-based reinforcement learning through Q-learning, and the sources, types, and mitigation of algorithmic bias in machine learning systems.
+
+Reinforcement Learning Fundamentals
+
+Q-Learning and Value Functions
+
+Bias and Fairness in Machine Learning
+
+Reinforcement Learning Fundamentals
+📋
+
+Overview
+
+Three branches of machine learning
+Supervised Learning
+Unsupervised Learning
+Reinforcement Learning
+Core components and the "no teacher" principle
+The five core components
+The "no teacher" principle
+When to use reinforcement learning
+Applications suited to RL
+The exploration-exploitation dilemma
+Q-Learning and Value Functions
+📋
+
+Overview
+
+Value functions and Q-values
+Value function V(s)
+State-action value function Q(s,a)
+The Bellman equation and observed Q-value
+Bellman equation
+Discount factor γ
+Worked example: S5 → S6 with γ = 0.1 vs γ = 0.9
+Temporal difference error and the update rule
+Temporal difference error (TDE)
+Learning rate α and the update rule
+Worked example: S1 → S4 with α = 0.1, γ = 0.1
+Worked example: S4 → S5 with α = 0.1, γ = 0.1
+Worked example: S5 → S6 with α = 0.1, γ = 0.1
+Episodes and convergence
+Episode definition
+Why one episode is insufficient
+Multiple episodes and convergence
+Bias and Fairness in Machine Learning
+📋
+
+Overview
+
+Why fairness matters
+ML is not neutral
+High-stakes applications
+Definition of algorithmic bias
+The four types of bias
+Historical bias
+Representation bias
+Measurement bias
+Aggregation bias
+Quick reference: identifying bias types
+Case studies of real systems
+Case Study 1: Amazon Hiring (Historical Bias)
+Case Study 2: Optum Healthcare (Measurement Bias)
+Case Study 3: Gender Shades (Representation Bias)
+Case Study 4: COMPAS (Fairness Trade-offs)
+Fairness metrics and mathematical trade-offs
+Definition of fairness: no single answer
+Why metrics conflict when base rates differ
+Intervention strategies and mitigation
+The bias pipeline: where intervention is possible
+Pre-processing: reweighting
+Post-processing: threshold adjustment
+Deployment checklist
+Five questions before and after deployment
+Tables from the slides
+
+S1
+
+	
+
+S2 -1
+
+	
+
+S3 -2
+
+
+
+
+S4 -1
+
+	
+
+S5 -2
+
+	
+
+S6 -1
+
+
+
+
+S7 -3
+
+	
+
+S8 -10
+
+	
+
+S9 +10
+
+S1
+
+	
+
+S2 -1
+
+	
+
+S3 -2
+
+
+
+
+S4 -1
+
+	
+
+S5 -2
+
+	
+
+S6 -1
+
+
+
+
+S7 -3
+
+	
+
+S8 -10
+
+	
+
+S9 +10
+
+Q
+
+	
+
+Left
+
+	
+
+Right
+
+	
+
+Up
+
+	
+
+Down
+
+
+
+
+S1
+
+	
+
+0.5
+
+	
+
+-1.0
+
+	
+
+2.1
+
+	
+
+0.75
+
+
+
+
+S4
+
+	
+
+0.5
+
+	
+
+0.75
+
+	
+
+-0.5
+
+	
+
+1.5
+
+
+
+
+S5
+
+	
+
+-1.2
+
+	
+
+1.2
+
+	
+
+0.7
+
+	
+
+1.7
+
+S1
+
+	
+
+S2 -1
+
+	
+
+S3 -2
+
+
+
+
+S4 -1
+
+	
+
+S5 -2
+
+	
+
+S6 -1
+
+
+
+
+S7 -3
+
+	
+
+S8 -10
+
+	
+
+S9 +10
+
+S1 -1
+
+	
+
+S2 -1
+
+	
+
+S3 -2
+
+
+
+
+S4 -1
+
+	
+
+S5 -2
+
+	
+
+S6 -1
+
+
+
+
+S7 -3
+
+	
+
+S8 -10
+
+	
+
+S9 +10
+
+Q
+
+	
+
+Left
+
+	
+
+Right
+
+	
+
+Up
+
+	
+
+Down
+
+	
+
+Col6
+
+
+
+
+Q
+
+	
+
+Left
+
+	
+
+Right
+
+	
+
+Up
+
+	
+
+
+
+
+	
+
+
+
+
+
+
+
+S1
+
+	
+
+0.5
+
+	
+
+-1.0
+
+	
+
+2.1
+
+	
+
+0.75
+
+	
+
+
+
+
+
+
+
+S4
+
+	
+
+0.5
+
+	
+
+0.75
+
+	
+
+-0.5
+
+	
+
+1.5
+
+	
+
+
+
+
+
+
+
+S4
+
+	
+
+0.5
+
+	
+
+0.75
+
+	
+
+-0.5
+
+	
+
+
+
+
+	
+
+
+
+
+Q
+
+	
+
+Left
+
+	
+
+Right
+
+	
+
+Up
+
+	
+
+Down
+
+
+
+
+S1
+
+	
+
+0.5
+
+	
+
+-1.0
+
+	
+
+2.1
+
+	
+
+0.59
+
+
+
+
+S4
+
+	
+
+0.5
+
+	
+
+0.75
+
+	
+
+-0.5
+
+	
+
+1.5
+
+
+
+
+S5
+
+	
+
+-1.2
+
+	
+
+1.2
+
+	
+
+0.7
+
+	
+
+1.7
+
+S1 -1
+
+	
+
+S2 -1
+
+	
+
+S3 -2
+
+
+
+
+S4 -1
+
+	
+
+S5 -2
+
+	
+
+S6 -1
+
+
+
+
+S7 -3
+
+	
+
+S8 -10
+
+	
+
+S9 +10
+
+Q
+
+	
+
+Left
+
+	
+
+Right
+
+	
+
+Up
+
+	
+
+Down
+
+
+
+
+S1
+
+	
+
+0.5
+
+	
+
+-1.0
+
+	
+
+2.1
+
+	
+
+0.59
+
+
+
+
+S4
+
+	
+
+0.5
+
+	
+
+0.49
+
+	
+
+-0.5
+
+	
+
+1.5
+
+
+
+
+S5
+
+	
+
+-1.2
+
+	
+
+1.2
+
+	
+
+0.7
+
+	
+
+1.7
+
+S1 -1
+
+	
+
+S2 -1
+
+	
+
+S3 -2
+
+
+
+
+S4 -1
+
+	
+
+S5 -2
+
+	
+
+S6 -1
+
+
+
+
+S7 -3
+
+	
+
+S8 -10
+
+	
+
+S9 +10
+
+Q
+
+	
+
+Left
+
+	
+
+Right
+
+	
+
+Up
+
+	
+
+Down
+
+
+
+
+S1
+
+	
+
+0.5
+
+	
+
+-1.0
+
+	
+
+2.1
+
+	
+
+0.59
+
+
+
+
+S4
+
+	
+
+0.5
+
+	
+
+0.49
+
+	
+
+-0.5
+
+	
+
+1.5
+
+
+
+
+S5
+
+	
+
+-1.2
+
+	
+
+1.2
+
+	
+
+0.7
+
+	
+
+1.7
+
+
+
+
+S6
+
+	
+
+0.8
+
+	
+
+1.4
+
+	
+
+2.0
+
+	
+
+0.5
+
+Q
+
+	
+
+Left
+
+	
+
+Right
+
+	
+
+Up
+
+	
+
+Down
+
+
+
+
+S1
+
+	
+
+0.5
+
+	
+
+-1.0
+
+	
+
+2.1
+
+	
+
+0.59
+
+
+
+
+S4
+
+	
+
+0.5
+
+	
+
+0.49
+
+	
+
+-0.5
+
+	
+
+1.5
+
+
+
+
+S5
+
+	
+
+-1.2
+
+	
+
+1.0
+
+	
+
+0.7
+
+	
+
+1.7
+
+
+
+
+S6
+
+	
+
+0.8
+
+	
+
+1.4
+
+	
+
+2.0
+
+	
+
+0.5
+
+TP
+
+	
+
+45%
+
+
+
+
+28%
+
+	
+
+TN
+
+TP
+
+	
+
+28%
+
+
+
+
+48%
+
+	
+
+TN
+
+Fairness metric What it measures
+
+	
+
+COMPAS performance
+
+
+
+
+Fails (45% vs 28%) False positive rates equal across groups Equalized odds Passes Same risk score = same likelihood of re-offending, regardless of race Calibration
+
+	
+
+Fails (45% vs 28%) False positive rates equal across groups Equalized odds Passes Same risk score = same likelihood of re-offending, regardless of race Calibration
+
+

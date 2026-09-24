@@ -1,707 +1,914 @@
-<h1>Remote Sensing: Data Collection, Sensors, and Earth Observation Platforms</h1>
-<h2>Data Collection Methods and Sensor Fundamentals</h2>
-<div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
+<h1>Reinforcement Learning & Fairness in Machine Learning</h1>
+<p><strong>Source:</strong> IML Lecture 10 & 11</p>
+<p><strong>Topic:</strong> Foundations of value-based reinforcement learning through Q-learning, and the sources, types, and mitigation of algorithmic bias in machine learning systems.</p>
 <ul>
-<li>Three approaches to acquiring geographic data: field-based, office-based, and remote sensing</li>
-<li>Remote sensing detects electromagnetic energy without physical contact with targets</li>
-<li>Sensors are devices that detect and respond to physical phenomena, recording either reflected solar energy or thermal radiation</li>
+  <li>Reinforcement Learning Fundamentals</li>
+  <li>Q-Learning and Value Functions</li>
+  <li>Bias and Fairness in Machine Learning</li>
 </ul>
-</details>
+
+<h2>Reinforcement Learning Fundamentals</h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> Establishing the core principle that agents learn optimal behavior through interaction with an environment, using only reward signals—no labeled answers.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>Three branches of machine learning</strong> — how RL differs from supervised and unsupervised learning</li>
+          <li><strong>Core components and the "no teacher" principle</strong> — what makes RL unique and what defines the learning problem</li>
+          <li><strong>When to use RL</strong> — applications where the exploration-exploitation trade-off matters</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> RL is the only branch where the agent must discover the right answer by trial and error; this freedom from a labeled ground truth is both its defining feature and its core challenge.</li>
+    </ul>
+  </details>
 </div>
-<h3 data-anchor="1:p:1">Ground-Based versus Remote Survey Methods</h3>
-<details><summary><h5>Ground-based data collection</h5></summary>
-<p>Ground-based methods acquire geographic data from Earth's surface through direct measurement or digital processing. These split into two subcategories: field survey involves on-ground measurement using instruments like levels, theodolites, total stations, and GPS; office survey transfers existing data via internet download, paper map digitization, and digital scanning. Both are collectively called ground-based methods because they operate from the surface.</p>
+
+<h3 data-anchor="1:p:2">Three branches of machine learning</h3>
+
+<details>
+  <summary><h5>Supervised Learning</h5></summary>
+  <blockquote><p><strong>Supervised Learning:</strong> Learning to map input to output using labeled examples (answer key provided).</p></blockquote>
+  <p>The learner receives correct labels paired with inputs and learns to predict outputs for new inputs. Analogous to a student with an answer key.</p>
 </details>
-<details><summary><h5>Remote survey data acquisition</h5></summary>
-<p>Remote survey acquires data from distance using airborne sensors mounted on aircraft or drones, or spaceborne platforms such as satellites. The sensor may be positioned on a tower, crane, aircraft, or satellite, making these methods distance-based rather than surface-based. This approach enables coverage of large areas without physical access to the target.</p>
+
+<details>
+  <summary><h5>Unsupervised Learning</h5></summary>
+  <blockquote><p><strong>Unsupervised Learning:</strong> Learning hidden patterns in data without labels.</p></blockquote>
+  <p>The learner finds structure and clusters in data with no ground truth guidance. Analogous to an explorer finding tribes by observing the landscape.</p>
 </details>
-<details><summary><h5>Procedural comparison of collection methods</h5></summary>
-<table><thead><tr><th>Method</th><th>Steps</th></tr></thead><tbody>
-<tr><td>Field Survey</td><td>(1) Set up instrument (level/theodolite); (2) Measure distances with tape/laser; (3) Record coordinates; (4) Verify measurements</td></tr>
-<tr><td>Office Survey</td><td>(1) Access online sources; (2) Download maps/data; (3) Digitize paper maps via scanner; (4) Process in GIS software</td></tr>
-<tr><td>Remote Survey</td><td>(1) Mount sensor on airborne/spaceborne platform; (2) Image target area; (3) Transmit data; (4) Process imagery</td></tr>
+
+<details>
+  <summary><h5>Reinforcement Learning</h5></summary>
+  <blockquote><p><strong>Reinforcement Learning:</strong> Learning what action to take in order to maximize cumulative reward, using only reward and punishment feedback.</p></blockquote>
+  <p>The learner receives sparse, delayed feedback signals (rewards or penalties) and must discover which actions lead to better long-term outcomes. Analogous to a pet learning tricks for treats—no map, no instructions, only reinforcement.</p>
+</details>
+
+<h3 data-anchor="1:p:3">Core components and the "no teacher" principle</h3>
+
+<details>
+  <summary><h5>The five core components</h5></summary>
+  <blockquote><p><strong>RL System:</strong> An agent, environment, actions, states, and rewards that form a complete feedback loop.</p></blockquote>
+  <ul>
+    <li><strong>Agent:</strong> The learner that makes decisions and learns from experience.</li>
+    <li><strong>Environment:</strong> The world the agent interacts with; it responds to actions and produces rewards.</li>
+    <li><strong>Action:</strong> A decision the agent can take (e.g., move up, down, left, right).</li>
+    <li><strong>State:</strong> A snapshot of the environment describing where the agent is and what it perceives.</li>
+    <li><strong>Reward:</strong> A feedback signal indicating how good or bad an outcome is; R(s) is the reward received for arriving in state s.</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>The "no teacher" principle</h5></summary>
+  <blockquote><p><strong>No Teacher:</strong> Unlike supervised learning, no external agent provides correct answers; the agent learns only from reward and penalty signals as it explores.</p></blockquote>
+  <ul>
+    <li><strong>Exploration scenario:</strong> The agent takes actions in an unknown environment with no map or instructions.</li>
+    <li><strong>Feedback signals:</strong> Small incremental signals (warmer → +1, colder → −1) guide exploration; large signals mark major outcomes (candy → large +, lemon → large −).</li>
+    <li><strong>Learning mechanism:</strong> The agent accumulates rewards over time and gradually learns which actions lead to better outcomes, with no correct path given in advance.</li>
+    <li><strong>Core insight:</strong> The agent improves by experience and feedback, not by following a provided solution.</li>
+  </ul>
+</details>
+
+<h3 data-anchor="1:p:5">When to use reinforcement learning</h3>
+
+<details>
+  <summary><h5>Applications suited to RL</h5></summary>
+  <blockquote><p><strong>RL applicability:</strong> RL is the right choice when no fixed "correct" label exists, outcomes depend on sequential decisions, or the environment is adaptive or unknown.</p></blockquote>
+  <table><thead><tr><th>Application</th><th>Why RL?</th></tr></thead><tbody>
+<tr><td>Self-driving cars</td><td>No "correct" steering label for every situation</td></tr>
+<tr><td>Game AI (AlphaGo, Chess)</td><td>Opponent adapts, no fixed answer key</td></tr>
+<tr><td>Robot navigation</td><td>Environment is unknown or changing</td></tr>
+<tr><td>Recommendation systems</td><td>User feedback is sequential, not one-shot</td></tr>
 </tbody></table>
 </details>
-<h3 data-anchor="1:p:2">Sensor Definition and Remote Sensing Principles</h3>
-<details><summary><h5>What is a sensor</h5></summary>
-<p>A sensor is a device that detects and responds to physical stimuli such as motion, light, or heat. Examples include motion sensors at bank doors and light sensors in classrooms. In remote sensing, sensors detect electromagnetic energy reflected or emitted from Earth's surface without requiring physical contact with target objects.</p>
+
+<details>
+  <summary><h5>The exploration-exploitation dilemma</h5></summary>
+  <blockquote><p><strong>Exploration-Exploitation Trade-off:</strong> The fundamental tension between trying new actions that might be better (exploration) and repeating actions known to work (exploitation).</p></blockquote>
+  <ul>
+    <li><strong>Exploitation:</strong> Choosing the action with the highest known Q-value (greedy choice based on current knowledge).</li>
+    <li><strong>Exploration:</strong> Choosing a random action to discover potentially better paths not yet discovered.</li>
+    <li><strong>The dilemma:</strong> Too much exploitation means missing better strategies; too much exploration means wasting time on suboptimal actions.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>In practice, early episodes favor exploration (random choices) to discover the landscape; later episodes favor exploitation (greedy choices) to maximize reward using learned knowledge.</p>
+  </div>
 </details>
-<details><summary><h5>Remote sensing as a science</h5></summary>
-<p>Remote sensing is the science of obtaining information about Earth's surface without direct contact by detecting reflected or emitted electromagnetic energy. Human vision exemplifies remote sensing: through your eyes, you observe distant objects and gather information without touching them. Vision is the only human sense that functions as a true remote sensing system—it captures data from objects at a distance with no physical contact.</p>
-</details>
-<details><summary><h5>Contact-free principle</h5></summary>
-<p>Information is gathered from a distance; no direct physical contact occurs between sensor and target object. This principle distinguishes remote sensing from in-situ measurement and enables rapid, large-scale Earth observation.</p>
-</details>
-<h3 data-anchor="1:p:3">Energy Sources: Reflected and Emitted Radiation</h3>
-<details><summary><h5>Electromagnetic energy in remote sensing</h5></summary>
-<p>Remote sensing depends on two energy sources: reflected solar energy and thermal energy emitted by all objects above 0 Kelvin. The sensor records and processes these energies to extract environmental data. This dual-source approach allows both passive sensing (using external energy) and active sensing (using internally generated energy).</p>
-</details>
-<details><summary><h5>Reflected solar energy mechanism</h5></summary>
-<p>Electromagnetic waves from the sun strike Earth; a portion reflects back toward the sensor. Passive remote sensing systems record this reflected energy. The fraction of incident energy reflected depends on the physical and chemical properties of the surface material.</p>
-</details>
-<details><summary><h5>Thermal emission and the Stefan-Boltzmann condition</h5></summary>
-<p>Any object with temperature greater than 0 Kelvin (−273°C) emits electromagnetic energy continuously. This thermal radiation is detected and recorded by infrared (IR) sensors on satellites and aircraft. This principle ensures that thermal remote sensing is always theoretically possible, regardless of solar illumination.</p>
-<div data-type="callout" data-callout-type="FORMULA">
-<p>Stefan-Boltzmann condition for thermal emission</p>
-<div data-type="math">T &gt; 0 \text{ K}</div>
-</div>
-<details><summary><h6>Key radiometric variables</h6></summary>
-<p>Three fundamental variables describe electromagnetic energy: temperature (T) measured in Kelvin or Celsius; wavelength (λ) of electromagnetic radiation in micrometers or nanometers; and reflected or emitted energy (E) in Joules or Watts.</p>
-</details>
-<h2 data-anchor="1:p:4">Sensor Types and Classification</h2>
+
+<h2><span data-style-type="backgroundColor" data-value="red">Q-Learning and Value Functions</span></h2>
 <div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Two sensor classes based on energy source: passive and active</li>
-<li>Passive sensors rely on external energy (sun, natural thermal emission)</li>
-<li>Active sensors emit their own energy and detect the return signal</li>
-<li>Understanding sensor type determines which phenomena can be observed</li>
-</ul>
-</details>
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> Building a memory system (Q-table) that stores the long-term value of state-action pairs, and using the Bellman equation to learn those values iteratively.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>Value functions and Q-values</strong> — what the agent learns to store and why</li>
+          <li><strong>The Bellman equation and observed Q-value</strong> — how to compute the ground-truth value of a state-action pair</li>
+          <li><strong>Temporal difference error and the update rule</strong> — how to close the gap between current estimate and observed value</li>
+          <li><strong>Learning parameters</strong> — discount factor γ and learning rate α</li>
+          <li><strong>Episodes and convergence</strong> — why one episode is not enough and when learning is complete</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> Q-learning works by repeatedly observing transitions, computing what the value "should" be, comparing it to what the agent thought, and adjusting incrementally toward truth—a process that converges to the optimal policy only with multiple episodes of experience.</li>
+    </ul>
+  </details>
 </div>
-<h3 data-anchor="1:p:4">Passive Remote Sensing Systems</h3>
-<details><summary><h6>How passive sensors work</h6></summary>
-<p>Passive sensors rely on external energy sources—primarily the sun for visible and near-infrared wavelengths, and natural thermal emission from Earth's surface for thermal infrared. They do not emit energy themselves. The procedure is: (1) solar radiation strikes Earth; (2) the object reflects a portion; (3) the sensor captures reflected energy; (4) the signal is converted to digital data.</p>
+
+<h3 data-anchor="1:p:6">Value functions and Q-values</h3>
+
+<details>
+  <summary><h5>Value function V(s)</h5></summary>
+  <blockquote><p><strong>State Value Function V(s):</strong> A scalar estimate of how good it is to be in state s, considering all possible future rewards from that state onward.</p></blockquote>
+  <ul>
+    <li>Input: A state s.</li>
+    <li>Output: A number indicating the total expected reward if the agent is in state s and acts optimally from that point.</li>
+    <li>Use: Evaluates the state alone, without reference to the action that led there.</li>
+  </ul>
 </details>
-<details><summary><h6>Passive sensor examples</h6></summary>
-<p>Optical satellites and thermal infrared cameras are common passive remote sensing instruments. They can only operate during daylight for visible/near-infrared sensing or during any period for thermal sensing.</p>
-</details>
-<h3 data-anchor="1:p:4">Active Remote Sensing Systems</h3>
-<details><summary><h6>How active sensors work</h6></summary>
-<p>Active sensors emit their own electromagnetic energy and detect the return signal reflected or scattered from the target. The procedure is: (1) sensor emits EM waves; (2) waves strike target; (3) energy reflects back; (4) sensor detects return; (5) time-of-flight or frequency shift calculations measure distance or velocity.</p>
-</details>
-<details><summary><h6>Radar as an active sensor example</h6></summary>
-<p>Radar exemplifies active remote sensing: (1) radar emits electromagnetic waves toward a vehicle; (2) waves strike the vehicle and reflect back; (3) radar receives the return signal; (4) time delay and Doppler shift measure vehicle velocity. Radar operates independently of sunlight and can penetrate clouds.</p>
-</details>
-<h3 data-anchor="1:p:4">Comparison of Passive and Active Approaches</h3>
-<details><summary><h6>Energy source distinction</h6></summary>
-<table><thead><tr><th>Type</th><th>Energy Source</th><th>Example</th></tr></thead><tbody>
-<tr><td>Passive</td><td>Sun; natural thermal emission</td><td>Optical satellites, thermal infrared cameras</td></tr>
-<tr><td>Active</td><td>Sensor itself (transmitter)</td><td>Radar, LIDAR, Sonar</td></tr>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">State-action value function Q(s,a)</span></h5></summary>
+  <blockquote><p><strong>Q-value (state-action value):</strong> A scalar estimate of how good it is to take action a in state s, considering all possible future rewards from that transition onward.</p></blockquote>
+  <ul>
+    <li>Input: A state s and an action a.</li>
+    <li>Output: A number indicating the total expected reward if the agent takes action a in state s and acts optimally thereafter.</li>
+    <li>Representation: Stored in a table with rows = states, columns = actions, cells = Q-values.</li>
+    <li>Goal: Q-learning seeks to learn Q-values that maximize total cumulative reward.</li>
+  </ul>
+  <table><thead><tr><th>Q</th><th>A1</th><th>A2</th><th>A3</th><th>A4</th></tr></thead><tbody>
+<tr><td><strong>S1</strong></td><td>Q(S1,A1)</td><td>Q(S1,A2)</td><td>Q(S1,A3)</td><td>Q(S1,A4)</td></tr>
+<tr><td><strong>S2</strong></td><td>Q(S2,A1)</td><td>Q(S2,A2)</td><td>Q(S2,A3)</td><td>Q(S2,A4)</td></tr>
+<tr><td><strong>S3</strong></td><td>Q(S3,A1)</td><td>Q(S3,A2)</td><td>Q(S3,A3)</td><td>Q(S3,A4)</td></tr>
+<tr><td><strong>S4</strong></td><td>Q(S4,A1)</td><td>Q(S4,A2)</td><td>Q(S4,A3)</td><td>Q(S4,A4)</td></tr>
 </tbody></table>
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>Q(s,a) is the primary data structure in Q-learning. The agent stores and updates Q-values for every (state, action) pair it experiences. The final learned Q-table encodes the optimal policy: from any state, choose the action with the highest Q-value.</p>
+  </div>
 </details>
-<h2 data-anchor="1:p:5">Photographic Film Types for Remote Sensing</h2>
+
+<h3 data-anchor="1:p:8">The Bellman equation and observed Q-value</h3>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">Bellman equation</span></h5></summary>
+  <blockquote><p><strong>Bellman Equation:</strong> A recursive formula that expresses the value of a state-action pair as the immediate reward plus the discounted value of the best action in the next state.</p></blockquote>
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Observed Q-value (Bellman form)</p>
+    <div data-type="math">Q_{\text{observed}}(s, a) = R(s') + \gamma \max_{a'} Q(s', a')</div>
+    <ul>
+      <li><strong>s:</strong> Current state.</li>
+      <li><strong>a:</strong> Action taken in state s.</li>
+      <li><strong>s':</strong> Next state (the state the agent arrives in after taking action a).</li>
+      <li><strong>R(s'):</strong> Immediate reward received for arriving in state s'.</li>
+      <li><strong>γ (gamma):</strong> Discount factor; controls how much the agent values future rewards relative to immediate rewards.</li>
+      <li><strong>max<sub>a'</sub> Q(s', a'):</strong> The maximum Q-value available in the next state (the best action the agent can take from s').</li>
+    </ul>
+  </div>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>The Bellman equation decomposes the total future reward into two parts: what you get right now (R) and what you'll get later (discounted by γ and the next state's best option). This recursive structure is the foundation of all value-based learning.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">Discount factor γ</span></summary>
+  <blockquote><p><strong>Discount Factor γ (gamma):</strong> A parameter (0 ≤ γ ≤ 1) that controls how much the agent values future rewards compared to immediate rewards.</p></blockquote>
+  <ul>
+    <li><strong>γ = 0:</strong> Robot cares only about immediate reward; future is irrelevant.</li>
+    <li><strong>γ = 0.5:</strong> Future rewards matter half as much as immediate rewards.</li>
+    <li><strong>γ = 0.9:</strong> Future rewards matter, but slightly less than today's rewards (realistic for most problems).</li>
+    <li><strong>γ = 1:</strong> Robot values future rewards equally to immediate rewards (only valid for finite-horizon problems).</li>
+  </ul>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>A higher γ makes the agent more tolerant of short-term negative rewards when future rewards are promising. This allows the agent to persist through costs to reach a valuable goal. Lower γ makes the agent myopic, prioritizing immediate gains.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h6>Worked example: S5 → S6 with γ = 0.1 vs γ = 0.9</h6></summary>
+  <p>Both transitions use the same state pair and reward but show how γ changes the interpretation of future value.</p>
+  <table>
+    <tr>
+      <th>Parameter</th>
+      <th>γ = 0.1 (myopic)</th>
+      <th>γ = 0.9 (future-aware)</th>
+    </tr>
+    <tr>
+      <td><strong>R(S6)</strong></td>
+      <td>−1</td>
+      <td>−1</td>
+    </tr>
+    <tr>
+      <td><strong>max Q(S6, a)</strong></td>
+      <td>2.0</td>
+      <td>2.0</td>
+    </tr>
+    <tr>
+      <td><strong>γ × max Q(S6, a)</strong></td>
+      <td>0.1 × 2.0 = 0.2</td>
+      <td>0.9 × 2.0 = 1.8</td>
+    </tr>
+    <tr>
+      <td><strong>Q_observed(S5, right)</strong></td>
+      <td>−1 + 0.2 = −0.8</td>
+      <td>−1 + 1.8 = 0.8</td>
+    </tr>
+  </table>
+  <p>With γ = 0.1, the negative immediate cost dominates, yielding a negative Q-value. With γ = 0.9, the strong future reward outweighs the immediate cost, yielding a positive Q-value. The same transition is interpreted very differently based on how much the agent cares about the future.</p>
+</details>
+
+<h3 data-anchor="1:p:10">Temporal difference error and the update rule</h3>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">Temporal difference error (TDE)</span></h5></summary>
+  <blockquote><p><strong>Temporal Difference Error:</strong> The gap between what the agent predicted the value would be and what it actually observed; the prediction error that drives learning.</p></blockquote>
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Temporal Difference Error</p>
+    <div data-type="math">\text{TDE} = Q_{\text{observed}}(s, a) - Q_{\text{expected}}(s, a)</div>
+    <ul>
+      <li><strong>Q_observed:</strong> The true value computed using the Bellman equation.</li>
+      <li><strong>Q_expected:</strong> The value currently stored in the Q-table for (s, a).</li>
+      <li><strong>Positive TDE:</strong> The true value is higher than expected; the agent was too pessimistic.</li>
+      <li><strong>Negative TDE:</strong> The true value is lower than expected; the agent was too optimistic.</li>
+    </ul>
+  </div>
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>TDE is the signal that drives all updates in Q-learning. The update rule uses TDE to move the stored Q-value toward the observed value. No prediction error → no learning.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">Learning rate α and the update rule</span></h5></summary>
+  <blockquote><p><strong>Update Rule:</strong> A formula that adjusts the Q-value by moving it incrementally toward the observed value, scaled by a learning rate.</p></blockquote>
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Q-value update</p>
+    <div data-type="math">Q(s, a) \leftarrow Q(s, a) + \alpha \times \text{TDE}</div>
+    <ul>
+      <li><strong>Q(s, a):</strong> The Q-value to update.</li>
+      <li><strong>α (alpha):</strong> Learning rate; controls the size of the update step (0 < α ≤ 1).</li>
+      <li><strong>TDE:</strong> Temporal Difference Error (observed − expected).</li>
+    </ul>
+  </div>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p><strong>Learning rate α tuning:</strong></p>
+    <ul>
+      <li><strong>α too small:</strong> Learning is slow; many episodes needed for convergence.</li>
+      <li><strong>α too large:</strong> Updates overshoot; Q-values oscillate and may not converge.</li>
+      <li><strong>Typical α:</strong> 0.1 balances steady learning with stability.</li>
+    </ul>
+  </div>
+</details>
+
+<details>
+  <summary><h6>Worked example: S1 → S4 with α = 0.1, γ = 0.1</h6></summary>
+  <table>
+    <tr>
+      <th>Step</th>
+      <th>Value</th>
+    </tr>
+    <tr>
+      <td><strong>Q_expected(S1, down)</strong></td>
+      <td>0.75 (from table)</td>
+    </tr>
+    <tr>
+      <td><strong>R(S4)</strong></td>
+      <td>−1 (immediate reward for arriving at S4)</td>
+    </tr>
+    <tr>
+      <td><strong>max Q(S4, a)</strong></td>
+      <td>1.5 (best action in S4)</td>
+    </tr>
+    <tr>
+      <td><strong>Q_observed(S1, down)</strong></td>
+      <td>−1 + 0.1 × 1.5 = −0.85</td>
+    </tr>
+    <tr>
+      <td><strong>TDE</strong></td>
+      <td>−0.85 − 0.75 = −1.6</td>
+    </tr>
+    <tr>
+      <td><strong>Q_new(S1, down)</strong></td>
+      <td>0.75 + 0.1 × (−1.6) = 0.59</td>
+    </tr>
+  </table>
+  <p>The agent expected this transition to have value 0.75 but observed it to be worth only −0.85. The TDE of −1.6 signals disappointment. The update moves the Q-value down by 0.16 (10% of the error), yielding the new estimate 0.59. On the next visit to this transition, the prediction error will be smaller.</p>
+</details>
+
+<details>
+  <summary><h6>Worked example: S4 → S5 with α = 0.1, γ = 0.1</h6></summary>
+  <table>
+    <tr>
+      <th>Step</th>
+      <th>Value</th>
+    </tr>
+    <tr>
+      <td><strong>Q_expected(S4, right)</strong></td>
+      <td>0.75 (from table)</td>
+    </tr>
+    <tr>
+      <td><strong>R(S5)</strong></td>
+      <td>−2</td>
+    </tr>
+    <tr>
+      <td><strong>max Q(S5, a)</strong></td>
+      <td>1.7</td>
+    </tr>
+    <tr>
+      <td><strong>Q_observed(S4, right)</strong></td>
+      <td>−2 + 0.1 × 1.7 = −1.83</td>
+    </tr>
+    <tr>
+      <td><strong>TDE</strong></td>
+      <td>−1.83 − 0.75 = −2.58</td>
+    </tr>
+    <tr>
+      <td><strong>Q_new(S4, right)</strong></td>
+      <td>0.75 + 0.1 × (−2.58) = 0.49</td>
+    </tr>
+  </table>
+</details>
+
+<details>
+  <summary><h6>Worked example: S5 → S6 with α = 0.1, γ = 0.1</h6></summary>
+  <table>
+    <tr>
+      <th>Step</th>
+      <th>Value</th>
+    </tr>
+    <tr>
+      <td><strong>Q_expected(S5, right)</strong></td>
+      <td>1.2 (from table)</td>
+    </tr>
+    <tr>
+      <td><strong>R(S6)</strong></td>
+      <td>−1</td>
+    </tr>
+    <tr>
+      <td><strong>max Q(S6, a)</strong></td>
+      <td>2.0</td>
+    </tr>
+    <tr>
+      <td><strong>Q_observed(S5, right)</strong></td>
+      <td>−1 + 0.1 × 2.0 = −0.8</td>
+    </tr>
+    <tr>
+      <td><strong>TDE</strong></td>
+      <td>−0.8 − 1.2 = −2.0</td>
+    </tr>
+    <tr>
+      <td><strong>Q_new(S5, right)</strong></td>
+      <td>1.2 + 0.1 × (−2.0) = 1.0</td>
+    </tr>
+  </table>
+</details>
+
+<h3 data-anchor="1:p:16">Episodes and convergence</h3>
+
+<details>
+  <summary><h5>Episode definition</h5></summary>
+  <blockquote><p><strong>Episode:</strong> One complete run from a starting state to a terminal state (goal, failure, or timeout).</p></blockquote>
+  <ul>
+    <li>An episode represents a single trial or game.</li>
+    <li>Examples: one playthrough of a game, one run of a robot from start to target.</li>
+    <li>Within one episode, the agent takes a sequence of actions and receives rewards.</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>Why one episode is insufficient</h5></summary>
+  <blockquote><p><strong>Single-episode limitation:</strong> After just one episode, the Q-values are unstable and far from optimal because the agent has only limited experience.</p></blockquote>
+  <ul>
+    <li>The agent has seen only one sequence of transitions and rewards.</li>
+    <li>It may not have discovered the path to the best goal yet.</li>
+    <li>It has no basis to distinguish between unlucky and genuinely bad actions.</li>
+    <li>Q-values reflect noise and the specific random choices made in that episode, not the true value.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>Q-learning requires many episodes to converge. After one episode, the Q-table is unreliable. Convergence occurs when Q-values stabilize across episodes, meaning the agent has explored enough to learn a robust estimate of true value.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Multiple episodes and convergence</h5></summary>
+  <blockquote><p><strong>Convergence through repetition:</strong> With each additional episode, the agent explores different paths, updates Q-values, and gradually approaches the true optimal values.</p></blockquote>
+  <ul>
+    <li><strong>Episode 1–N (exploration phase):</strong> Agent tries different actions and discoveries. Q-values shift significantly with each update.</li>
+    <li><strong>Discovery:</strong> With enough episodes, the agent will find high-reward paths and update Q-values accordingly.</li>
+    <li><strong>Stabilization:</strong> As more episodes occur, Q-values stop changing much because the estimates are already close to truth.</li>
+    <li><strong>Convergence criterion:</strong> Learning is complete when Q-values stabilize (changes fall below a threshold) across episodes.</li>
+    <li><strong>Learned policy:</strong> Once converged, the agent has learned the optimal policy: from any state, pick the action with the highest Q-value.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>Convergence is not guaranteed in all settings (e.g., if the environment is non-stationary or the agent never explores crucial states). However, in well-behaved finite-state, finite-action environments with proper exploration, Q-learning is guaranteed to converge to the optimal Q-values.</p>
+  </div>
+</details>
+
+<h2>Bias and Fairness in Machine Learning</h2>
 <div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Traditional photographic sources remain widely used for aerial information</li>
-<li>Capture images by recording electromagnetic reflections (visible or near-infrared)</li>
-<li>Five main film categories serve different applications</li>
-<li>Each film type reveals different spectral information</li>
-</ul>
-</details>
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> Understanding how human biases encoded in data are amplified by machine learning models, and how to identify, measure, and mitigate unfair outcomes across population groups.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>Why fairness matters</strong> — high-stakes impact and why ML is not neutral</li>
+          <li><strong>The four types of bias</strong> — where bias enters the ML pipeline and what each looks like</li>
+          <li><strong>Case studies of real systems</strong> — Amazon hiring, Optum healthcare, Gender Shades, COMPAS</li>
+          <li><strong>Fairness metrics and trade-offs</strong> — why no single definition of fairness works for all cases</li>
+          <li><strong>Intervention strategies</strong> — pre-processing, in-processing, and post-processing techniques to reduce bias</li>
+          <li><strong>Deployment checklist</strong> — questions to ask before and after release</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> Fairness is not a one-time fix to the model; bias enters at every stage of the data pipeline, and no algorithm can simultaneously satisfy all fairness metrics when base rates differ. Mitigation requires auditing, choosing a metric aligned with values, intervening at the right stage, and monitoring continuously.</li>
+    </ul>
+  </details>
 </div>
-<h3 data-anchor="1:p:5">Panchromatic (Normal Black &amp; White) Films</h3>
-<details><summary><h6>Wavelength range and sensitivity</h6></summary>
-<p>Panchromatic films are sensitive to the entire visible light spectrum, approximately 0.4 to 0.7 micrometers. This broad visible sensitivity produces black and white images.</p>
-<div data-type="callout" data-callout-type="FORMULA">
-<p>Visible spectrum wavelength range</p>
-<div data-type="math">0.4 \leq \lambda \leq 0.7 \text{ μm}</div>
-</div>
-<details><summary><h6>Key advantages of panchromatic film</h6></summary>
-<p>Panchromatic film is widely available and low cost. It offers excellent spatial resolution and geometric accuracy, making it ideal for engineering applications and map production. Common uses include urban planning, crop identification, mapping sand dunes, and studying soil erosion.</p>
+
+<h3 data-anchor="2:p:2">Why fairness matters</h3>
+
+<details>
+  <summary><h5>ML is not neutral</h5></summary>
+  <blockquote><p><strong>ML amplifies human bias:</strong> Models trained on human-generated data automatically inherit and automate the biases embedded in past decisions.</p></blockquote>
+  <ul>
+    <li>Human decisions are shaped by societal prejudices, historical inequities, and incomplete information.</li>
+    <li>When this biased data is used to train ML models, the model learns to replicate and often amplify those patterns.</li>
+    <li>The result appears objective (it is "just math") but systematically disadvantages certain groups.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="ANALOGY">
+    <p>Think of the pipeline as a photocopier: if you photocopy a biased document and then use that copy as the original for the next copy, the bias gets clearer with each iteration. A model trained on biased historical decisions is like the second and third photocopy—the unfairness is both preserved and sharpened.</p>
+  </div>
 </details>
-<h3 data-anchor="1:p:6">Black &amp; White Infrared Films</h3>
-<details><summary><h6>Wavelength range and atmospheric properties</h6></summary>
-<p>Black &amp; white infrared films operate in the non-visible spectrum, sensitive up to about 1.0 micrometer in the near-infrared region. They penetrate atmospheric haze and fog better than standard panchromatic films.</p>
-<div data-type="callout" data-callout-type="FORMULA">
-<p>Near-infrared spectrum wavelength range</p>
-<div data-type="math">\lambda \approx 0.7 \text{ to } 1.0 \text{ μm}</div>
-</div>
-<details><summary><h6>Spectral signatures in infrared film</h6></summary>
-<p>Healthy vegetation reflects infrared light highly and appears bright or shiny in black &amp; white infrared images. Water strongly absorbs infrared light and appears very dark or black. This contrast makes infrared film useful for shoreline mapping, water body identification, and crop health assessment.</p>
+
+<details>
+  <summary><h5>High-stakes applications</h5></summary>
+  <blockquote><p><strong>Fairness is critical where decisions affect lives and opportunities.</strong></p></blockquote>
+  <table>
+    <tr>
+      <th>Domain</th>
+      <th>Consequence of Bias</th>
+    </tr>
+    <tr>
+      <td><strong>Employment</strong></td>
+      <td>Qualified candidates filtered out based on protected attributes (gender, race); job market access denied.</td>
+    </tr>
+    <tr>
+      <td><strong>Healthcare</strong></td>
+      <td>Patients systematically under- or over-triaged; certain groups denied care or resources they need.</td>
+    </tr>
+    <tr>
+      <td><strong>Criminal justice</strong></td>
+      <td>Risk scores influence bail, sentencing, and parole; biased predictions lock certain groups in cycles of incarceration.</td>
+    </tr>
+  </table>
+  <div data-type="callout" data-callout-type="WARNING">
+    <p>In high-stakes domains, algorithmic bias is not just a technical problem—it is a civil rights and public health issue. It can perpetuate and scale discrimination at a speed and scale humans never could.</p>
+  </div>
 </details>
-<details><summary><h6>Applications for infrared detection</h6></summary>
-<p>Black &amp; white infrared film is used for mapping shorelines, identifying water bodies, analyzing soil moisture, and detecting diseased crops, which reflect less infrared than healthy vegetation. The ability to distinguish water from land and healthy from stressed vegetation makes this film type valuable for environmental monitoring.</p>
+
+<details>
+  <summary><h5>Definition of algorithmic bias</h5></summary>
+  <blockquote><p><strong>Algorithmic bias:</strong> Systematic, unfair discrimination in model outputs that creates different outcomes for different groups, where group membership should not matter.</p></blockquote>
+  <ul>
+    <li><strong>Key distinction:</strong> Not all differences in model output across groups are bias. Bias = (difference) + (unjustified) + (harmful).</li>
+    <li><strong>Unjustified:</strong> The difference does not follow from valid differences in the underlying task (e.g., if a job requires physical strength, a height difference in hiring may be justified; a gender difference is not).</li>
+    <li><strong>Harmful:</strong> The difference disadvantages one group relative to another.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>A model may show different accuracy across groups without being biased in the fairness sense. Example: a model that classifies diseases based on visual symptoms may have different accuracy on people with different skin tones if the training data was imbalanced—this is a bias problem (representation bias, specifically). But a model that performs better on taller people for a height-prediction task may not be a fairness issue (the difference is justified by the task).</p>
+  </div>
 </details>
-<h3 data-anchor="1:p:7">Normal Color (True Color) Films</h3>
-<details><summary><h6>Mechanism of true color imaging</h6></summary>
-<p>True color films use the three primary colors of the visible spectrum—blue, green, and red—ordered from shortest to longest wavelength. This arrangement produces images exactly as the human eye sees them.</p>
+
+<h3 data-anchor="2:p:4">The four types of bias</h3>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">Historical bias</span></h5></summary>
+  <blockquote><p><strong>Historical bias:</strong> Past social inequalities and unfair patterns in the world are reflected in historical data, and the model learns to replicate them.</p></blockquote>
+  <ul>
+    <li><strong>Source:</strong> The data itself contains real-world injustice from the past.</li>
+    <li><strong>Example:</strong> A loan approval model trained on historical lending decisions learns that applicants from historically redlined zip codes have higher default rates. But that higher rate was caused by systematic denial of credit, not lack of creditworthiness. The model perpetuates this injustice.</li>
+    <li><strong>Challenge:</strong> The bias is not in the model logic; it is in the ground truth that the model is trying to learn from.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="CAUTION">
+    <p>Historical bias is often the hardest to fix because the training labels themselves (which were supposed to be ground truth) encode historical unfairness. Simply training accurately on biased data produces a fair-seeming but unfair model.</p>
+  </div>
 </details>
-<details><summary><h6>Advantages and limitations</h6></summary>
-<p>True color film is highly useful when differentiating between objects that look identical in black &amp; white. However, it is more expensive than panchromatic films. Common uses include agriculture, geological mapping, estimating water depth, and urban studies.</p>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">Representation bias</span></summary>
+  <blockquote><p><strong>Representation bias:</strong> The training data does not reflect the diversity of the real-world population, so the model learns patterns from only a subset and fails on underrepresented groups.</p></blockquote>
+  <ul>
+    <li><strong>Source:</strong> Imbalanced or non-representative data collection.</li>
+    <li><strong>Example:</strong> A medical image classification model trained primarily on images of fair-skinned patients learns features optimized for that skin tone and performs poorly on darker skin tones.</li>
+    <li><strong>Mechanism:</strong> The model is not explicitly penalizing underrepresented groups; it simply has not learned their patterns because they are rare in training.</li>
+  </ul>
 </details>
-<h3 data-anchor="1:p:8">Color Infrared (False Color) Films</h3>
-<details><summary><h6>False color band reassignment mechanism</h6></summary>
-<p>Color infrared film drops the blue layer and shifts visible bands to create "false colors." Green light (0.5–0.6 μm) is recorded on a blue layer; red light (0.6–0.7 μm) is recorded on a green layer; near-infrared light (0.7–1.0 μm) is recorded on a red layer. This reassignment reveals features invisible in natural color.</p>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">Measurement bias</span></h5></summary>
+  <blockquote><p><strong>Measurement bias:</strong> The features or labels used in the model are systematically different across groups, causing the model to learn spurious or unfair correlations.</p></blockquote>
+  <ul>
+    <li><strong>Source:</strong> A proxy variable that does not mean the same thing for all groups.</li>
+    <li><strong>Example:</strong> Using past healthcare costs as a proxy for "health need." In a population with unequal access to care, this proxy is corrupted: lower access → lower costs → model thinks group needs less care (even if medical need is high).</li>
+    <li><strong>The proxy problem:</strong> The label itself is biased; the model accurately learns the biased label, producing unfair predictions.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>Measurement bias often hides in the labels. Before training, ask: "Does this label mean the same thing for every group?" If the answer is no, you have a measurement bias problem that no amount of model tuning can fix—you must change the label.</p>
+  </div>
 </details>
-<details><summary><h6>Vegetation signature in false color</h6></summary>
-<p>Because vegetation highly reflects near-infrared light, plants appear red in color infrared images. This makes healthy vegetation immediately apparent and distinguishable from non-vegetation features.</p>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">Aggregation bias</span></h5></summary>
+  <blockquote><p><strong>Aggregation bias:</strong> Forcing a single model to serve groups with different base rates or characteristics, even when a stratified approach (separate models per group) would be more accurate and fair.</p></blockquote>
+  <ul>
+    <li><strong>Source:</strong> Over-simplification; treating a heterogeneous population as homogeneous.</li>
+    <li><strong>Example:</strong> A single recidivism model applied to two neighborhoods with different crime rates and policing intensity. The "one-size-fits-all" model may appear accurate in aggregate but be systematically wrong for both neighborhoods when used in isolation.</li>
+    <li><strong>Trade-off:</strong> Building separate models increases complexity but may reduce unfairness if groups have genuinely different base rates.</li>
+  </ul>
 </details>
-<details><summary><h6>Military origins and camouflage detection</h6></summary>
-<p>Color infrared film was developed during World War II to detect camouflaged military assets. Natural grass appears red because it reflects infrared light strongly. Artificial green camouflage or artificial turf appears dark or blue because it does not reflect infrared light like real plants do. This difference allows detection of hidden military positions beneath visual camouflage.</p>
-<div data-type="callout" data-callout-type="ANALOGY">
-<p>The instructor compared false-color infrared to a "fingerprint detector" for vegetation: natural plants have a unique infrared signature that artificial materials cannot mimic, making concealment visible to the trained analyst.</p>
-</div>
-<details><summary><h6>Standard color infrared interpretation</h6></summary>
-<p>Red areas indicate high near-infrared reflectance and represent vegetation (healthy plants, forests). Dark blue or black areas indicate low near-infrared reflectance and represent built-up areas (urban zones, camouflaged objects, water). Green areas represent mixed reflectance from crops and transitional zones. Brown or orange areas indicate moderate near-infrared but high visible reflectance from soil and exposed earth.</p>
+
+<details>
+  <summary><h5>Quick reference: identifying bias types</h5></summary>
+  <table>
+    <tr>
+      <th>Question</th>
+      <th>Bias Type</th>
+    </tr>
+    <tr>
+      <td>Is past unfairness in my training data?</td>
+      <td>Historical</td>
+    </tr>
+    <tr>
+      <td>Does my data look like the real world?</td>
+      <td>Representation</td>
+    </tr>
+    <tr>
+      <td>Are my labels valid across groups?</td>
+      <td>Measurement</td>
+    </tr>
+    <tr>
+      <td>Should I split into multiple models?</td>
+      <td>Aggregation</td>
+    </tr>
+  </table>
 </details>
-<h3 data-anchor="1:p:9">Multispectral Photography</h3>
-<details><summary><h6>Mechanism of multispectral capture</h6></summary>
-<p>Multispectral photography uses multiple cameras or lenses pointed at the same target, with each camera capturing a different specific wavelength band. For example, combining panchromatic, true color, and infrared data simultaneously.</p>
+
+<h3 data-anchor="2:p:8">Case studies of real systems</h3>
+
+<details>
+  <summary><h5>Case Study 1: Amazon Hiring (Historical Bias)</h5></summary>
+  <blockquote><p><strong>Problem:</strong> Amazon's automated resume screening system learned to discriminate against women by replicating historical hiring patterns.</p></blockquote>
+  <h4>Timeline and Discovery</h4>
+  <ul>
+    <li><strong>2014:</strong> Amazon begins building a machine-learning tool to automatically screen resumes at scale (millions per year).</li>
+    <li><strong>2015:</strong> Internal team discovers the model is systematically downrating resumes from women.</li>
+    <li><strong>2017:</strong> Amazon discontinues the tool.</li>
+  </ul>
+  <h4>The mechanism</h4>
+  <ul>
+    <li><strong>Training data:</strong> Historical resumes and hiring decisions. Most people already hired in tech were men.</li>
+    <li><strong>What the model learned:</strong> "Male-associated patterns → higher hire rate." Not because men were inherently better, but because hiring historically favored men.</li>
+    <li><strong>Biased decisions:</strong>
+      <ul>
+        <li>Penalized resumes with the word "women."</li>
+        <li>Downgraded graduates from all-women's colleges.</li>
+        <li>Assigned lower scores to female-associated activities (e.g., women's chess club vs. men's chess club).</li>
+      </ul>
+    </li>
+  </ul>
+  <h4>Why it happened</h4>
+  <p>The model did not learn discrimination because engineers programmed it to. It learned discrimination because the training data encoded it: the ground truth showed men were hired more often, and the model replicated that pattern.</p>
+  <h4>Why fixing it was hard</h4>
+  <ul>
+    <li>Engineers tried to remove gender-related words from the input.</li>
+    <li>Bias kept reappearing through hidden correlations (e.g., gender-associated college names, gender-associated activities).</li>
+    <li>Eventually, Amazon abandoned the approach rather than chase every proxy.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="CAUTION">
+    <p>Removing gender as a feature is not enough when gender correlates with many other features in the training data. Bias hides in indirect proxies and is hard to eliminate by feature selection alone.</p>
+  </div>
 </details>
-<details><summary><h6>Analytical advantages</h6></summary>
-<p>Multispectral approaches allow analysts to compare how the same object looks across different spectral bands, enabling highly accurate identifications. Side-by-side comparison of standard panchromatic with infrared imagery easily reveals differences like natural grass versus artificial turf.</p>
-</details>
-<h2 data-anchor="2:p:1">Photographic and Non-Photographic Sensor Technologies</h2>
-<div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Photographic sensors are limited to visible and near-infrared wavelengths</li>
-<li>Non-photographic sensors extend coverage to thermal infrared and microwave bands</li>
-<li>Analog film records continuous data; digital sensors record discrete pixels</li>
-<li>Choice of sensor technology determines which phenomena can be observed</li>
-</ul>
-</details>
-</div>
-<h3 data-anchor="2:p:2">Photographic Sensors (Analog Systems)</h3>
-<details><summary><h6>Physical mechanism of photographic film</h6></summary>
-<p>Photographic sensors are traditional chemical-based systems, typically aerial cameras. They use a lens to focus light onto light-sensitive chemical film. Data is recorded as a continuous "analog" image that must be scanned into a computer for digital processing.</p>
-</details>
-<details><summary><h6>Wavelength limitations</h6></summary>
-<p>Photographic sensors are usually limited to the visible spectrum (0.4 μm to 0.7 μm) and near-infrared (0.7 μm to 0.9 μm) portions of the electromagnetic spectrum. This constraint restricts their ability to detect thermal infrared or microwave phenomena.</p>
-</details>
-<h3 data-anchor="2:p:2">Non-Photographic Sensors (Digital/Electronic Systems)</h3>
-<details><summary><h6>Electronic detection mechanisms</h6></summary>
-<p>Non-photographic sensors use electronic detectors such as CCDs (charge-coupled devices) or CMOS (complementary metal-oxide-semiconductor) sensors in digital cameras, satellites, or radar systems. They convert incoming electromagnetic energy into electrical signals.</p>
-</details>
-<details><summary><h6>Digital data recording</h6></summary>
-<p>Data is recorded directly as digital pixels called discrete numbers (DNs), making it immediately ready for computer processing. Unlike film, which requires scanning, digital sensors produce data already in a format suitable for analysis.</p>
-</details>
-<details><summary><h6>Extended spectral coverage</h6></summary>
-<p>Non-photographic sensors can "see" much further than photographic film, including thermal infrared wavelengths and microwave bands such as radar. This extended range enables detection of phenomena invisible to photographic systems.</p>
-</details>
-<h2 data-anchor="2:p:2">Airborne and Spaceborne Platforms</h2>
-<div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Airborne platforms provide high-resolution data over smaller areas</li>
-<li>Spaceborne platforms enable massive geographical coverage</li>
-<li>Different sensor types are mounted based on mission requirements</li>
-<li>Platform altitude and velocity determine spatial resolution and revisit time</li>
-</ul>
-</details>
-</div>
-<h3 data-anchor="2:p:2">Airborne Platforms and Sensors</h3>
-<details><summary><h6>Operational characteristics of aircraft</h6></summary>
-<p>Aircraft operate at relatively low altitudes, yielding high-resolution data over smaller areas. This makes them suitable for detailed local studies and rapid response to events.</p>
-</details>
-<details><summary><h6>Sensor types on airborne platforms</h6></summary>
-<p>Multispectral scanners capture data across multiple spectral bands. Thermal infrared line scanners detect heat radiation. Microwave sensors (radar and radiometers) operate independently of sunlight and clouds. These diverse sensor types allow selection based on the specific phenomenon being studied.</p>
-</details>
-<h3 data-anchor="2:p:3">Spaceborne Platforms and Key Sensors</h3>
-<details><summary><h6>Satellite platform characteristics</h6></summary>
-<p>Satellites and spacecraft operate at very high altitudes, capable of covering massive geographical areas. They can be manned, like space shuttles, or unmanned, like most Earth observation satellites.</p>
-</details>
-<details><summary><h6>Multispectral Scanner (MSS)</h6></summary>
-<p>The Multispectral Scanner records data across four distinct spectral bands: green, red, near-infrared, and shortwave infrared. It helps identify Earth features based on their unique spectral signatures. This four-band approach provides enough spectral information for many land cover classification tasks.</p>
-</details>
-<details><summary><h6>Thematic Mapper (TM)</h6></summary>
-<p>The Thematic Mapper is a more advanced sensor used on Landsat satellites that records across seven or more spectral bands. It offers higher spatial and radiometric resolution than standard MSS sensors. The additional spectral bands enable finer discrimination between land cover types and improved detection of subtle surface changes.</p>
-</details>
-<h2 data-anchor="2:p:4">Satellite Orbits and Orbital Mechanics</h2>
-<div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Three primary orbit types serve different remote sensing missions</li>
-<li>Orbital mechanics follow Kepler's laws</li>
-<li>Satellite deployment requires multi-stage launch sequences</li>
-<li>Space debris presents a growing operational challenge</li>
-</ul>
-</details>
-</div>
-<h3 data-anchor="2:p:4">Geostationary Orbits (GEO)</h3>
-<details><summary><h6>Fixed-position characteristic</h6></summary>
-<p>In a geostationary orbit, the satellite travels at the exact same rotational speed as the Earth. As a result, it remains completely fixed over one specific geographic location. This allows continuous observation of the same ground area.</p>
-</details>
-<details><summary><h6>Operational parameters and altitude</h6></summary>
-<p>Geostationary orbits operate at approximately 36,000 km altitude. The high altitude provides a wide view of the Earth but at lower spatial resolution than lower-altitude orbits. The fixed ground position is ideal for weather monitoring and continuous observation of persistent phenomena.</p>
-</details>
-<h3 data-anchor="2:p:4">Low Earth Orbits (LEO)</h3>
-<details><summary><h6>Orbital characteristics and altitude range</h6></summary>
-<p>Low Earth Orbits are circular orbits located relatively close to Earth's surface, at altitudes ranging from 200 km to 1,000 km. Because the satellite is closer to Earth, it must travel much faster than Earth's rotation to maintain its orbit. Therefore, it does not stay over one spot but instead moves across the ground with each pass.</p>
-</details>
-<details><summary><h6>Applications and advantages</h6></summary>
-<p>This orbit is ideal for Earth observation, high-resolution imaging, and surveillance (espionage). The lower altitude provides better spatial resolution than geostationary satellites, but with reduced temporal continuity—the satellite revisits any given location less frequently.</p>
-</details>
-<h3 data-anchor="2:p:4">Elliptical Orbits</h3>
-<details><summary><h6>Orbital geometry and distance variation</h6></summary>
-<p>In an elliptical orbit, the Earth sits at one of the focal points. The satellite's distance from Earth varies drastically—it can dip as close as 200 km at its nearest point (perigee) and swing out to tens of thousands of kilometers at its furthest point (apogee).</p>
-</details>
-<details><summary><h6>Strategic use for distant observation</h6></summary>
-<p>This orbit enables prolonged observation of distant targets. The extended apogee allows the satellite to remain in view of a high-latitude or distant region for extended periods, useful for detailed study of specific areas.</p>
-</details>
-<h3 data-anchor="2:p:4">Multi-Stage Satellite Launch Process</h3>
-<details><summary><h6>Stage 1: Vertical ascent and atmospheric penetration</h6></summary>
-<p>The rocket is launched vertically to punch through the thickest parts of the Earth's atmosphere. Once clear, the massive initial fuel tanks detach and fall back to Earth, typically landing in the ocean. This stage provides the raw propulsive force to escape the densest atmospheric layers.</p>
-</details>
-<details><summary><h6>Stage 2: Directional alignment toward equator</h6></summary>
-<p>The control center directs the rocket eastward toward the equator. A second large portion of the rocket (about a third of its remaining length) detaches and also falls into the ocean. This stage redirects momentum for orbital insertion.</p>
-</details>
-<details><summary><h6>Stage 3: Orbital insertion and velocity matching</h6></summary>
-<p>The final launch vehicle reaches its target destination in space. A final propulsion sequence carefully pushes the satellite payload into its specific, pre-calculated orbit. This stage requires precision to match the target orbital velocity exactly.</p>
-</details>
-<details><summary><h6>Role of Kepler's Laws in orbit calculation</h6></summary>
-<p>The specific orbit is mathematically determined using Kepler's laws of planetary motion. Planners must calculate the exact trajectory based on the satellite's weight and mission, while critically ensuring it does not cross paths with the estimated 2,000+ other active (and sometimes secret) satellites currently orbiting the planet.</p>
-</details>
-<h3 data-anchor="2:p:4">Space Debris and End-of-Life Disposal</h3>
-<details><summary><h6>Point Nemo: The spacecraft cemetery</h6></summary>
-<p>For large satellites that will not completely burn up upon re-entry into the atmosphere, space agencies use controlled crash procedures. They aim for "Point Nemo," the most remote location on Earth, situated in the South Pacific Ocean between Australia and South America. It is about 2,500 km away from any human settlement. Since 1971, over 260 large spacecraft pieces (mostly Russian) have been safely deposited in this oceanic graveyard to protect populated areas.</p>
-</details>
-<details><summary><h6>Space debris crisis and collision risk</h6></summary>
-<p>There are currently an estimated 170 million pieces of "space junk" orbiting the Earth. This debris presents a cascading collision risk: each impact generates additional debris, which can collide with other objects, creating an exponential proliferation hazard. Active satellites must perform collision avoidance maneuvers to prevent catastrophic encounters.</p>
-<div data-type="callout" data-callout-type="WARNING">
-<p>Space debris is a hard constraint on long-term satellite operations. Each collision generates fragments that threaten other missions. Satellites must maintain collision-avoidance corridors and perform active tracking and evasive maneuvers.</p>
-</div>
-<details><summary><h6>Satellite collision avoidance procedure</h6></summary>
-<p>(1) Compute predicted orbital positions for all tracked satellites (2-week forecast); (2) for each new satellite, identify conjunction events (closest approach &lt; 100 m); (3) if collision risk threshold is exceeded, plan and execute avoidance maneuver; (4) coordinate with other space agencies to prevent cascading debris.</p>
-</details>
-<h2 data-anchor="2:p:5">The Seven-Stage Remote Sensing Process</h2>
-<div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Remote sensing is a sequential workflow from energy source to applied product</li>
-<li>Each stage introduces potential error sources that must be understood and corrected</li>
-<li>Atmospheric, radiometric, and geometric corrections are essential prerequisites for thematic analysis</li>
-<li>The complete workflow transforms raw sensor data into actionable geographic information</li>
-</ul>
-</details>
-</div>
-<h3 data-anchor="2:p:5">Stage 1: Energy Source or Illumination</h3>
-<details><summary><h6>Source of electromagnetic energy</h6></summary>
-<p>The origin of the electromagnetic energy is either the sun (for passive systems) or the sensor itself (for active systems). This energy initiates the remote sensing chain. In passive systems, solar energy must reach the target; in active systems, the sensor's own energy is independent of illumination conditions.</p>
-</details>
-<h3 data-anchor="2:p:5">Stage 2: Radiation and the Atmosphere</h3>
-<details><summary><h6>Atmospheric interaction mechanisms</h6></summary>
-<p>As energy travels through the atmosphere, it interacts with atmospheric constituents through scattering and absorption. Water vapor, dust, ozone, and aerosols deflect radiation by scattering or absorb it, reducing the signal reaching the target and the signal returning to the sensor.</p>
-</details>
-<details><summary><h6>Atmospheric scattering and its effects</h6></summary>
-<p>Atmospheric scattering deflects radiation from its original path, caused by particles (dust, water vapor, aerosols) in the atmosphere. This effect causes image blur and reduces contrast. Corrections must account for both downward-path scattering (affecting illumination) and upward-path scattering (affecting received signal).</p>
-<div data-type="callout" data-callout-type="IMPORTANT">
-<p>Atmospheric correction vs. ignoring atmosphere</p>
-<table><thead><tr><th>Aspect</th><th>With Atmospheric Correction</th><th>Without Correction</th></tr></thead><tbody>
-<tr><td>Spectral accuracy</td><td>Ground-level reflectance values accurate for comparison</td><td>Sensor-measured values confounded with atmospheric effects</td></tr>
-<tr><td>Multi-temporal analysis</td><td>Data from different dates comparable</td><td>Temporal changes confused with atmospheric variation</td></tr>
-<tr><td>Classification reliability</td><td>Consistent spectral signatures across dates</td><td>False spectral variation from atmospheric differences</td></tr>
+
+<details>
+  <summary><h5>Case Study 2: Optum Healthcare (Measurement Bias)</h5></summary>
+  <blockquote><p><strong>Problem:</strong> Optum's patient risk-stratification algorithm used healthcare costs as a proxy for health need, but this proxy meant something different for different racial groups.</p></blockquote>
+  <h4>The system</h4>
+  <ul>
+    <li><strong>Goal:</strong> Identify high-risk patients who need extra care management (nurses, check-ins, proactive interventions).</li>
+    <li><strong>Approach:</strong> Predict future healthcare costs. High predicted cost = high risk = send extra resources.</li>
+    <li><strong>Justification:</strong> Sicker patients should cost more and need more resources.</li>
+  </ul>
+  <h4>The bias</h4>
+  <table><thead><tr><th>White patients</th><th>Black patients</th></tr></thead><tbody>
+<tr><td><strong>Less likely to be</strong> <strong>identified</strong> <strong>Identified as high-</strong> <strong>risk</strong> Same illness severity <strong>Received less</strong> <strong>Received more</strong> Extra care resources</td><td><strong>Less likely to be</strong> <strong>identified</strong> <strong>Identified as high-</strong> <strong>risk</strong> Same illness severity <strong>Received less</strong> <strong>Received more</strong> Extra care resources</td></tr>
 </tbody></table>
-</div>
-<details><summary><h6>Atmospheric correction procedure</h6></summary>
-<p>(1) Measure or model atmospheric transmittance τ(λ) for each spectral band; (2) for each pixel, compute top-of-atmosphere (TOA) radiance from digital numbers; (3) divide TOA radiance by τ(λ) to estimate ground-level radiance; (4) validate with ground-truth measurements.</p>
+  <p>At the same level of illness severity, Black patients were <strong>half as likely</strong> to be flagged for extra care. Why?</p>
+  <ul>
+    <li><strong>Root cause:</strong> Black patients historically had lower access to healthcare.</li>
+    <li><strong>Result:</strong> Their past healthcare costs were lower (they received fewer services, not because they were healthier, but because they had less access).</li>
+    <li><strong>Model learned:</strong> "Low costs → low need," even when the low costs resulted from barriers to access, not actual low need.</li>
+  </ul>
+  <h4>The fix</h4>
+  <ul>
+    <li>Instead of historical costs, use a label less correlated with access: "number of chronic conditions."</li>
+    <li>Adjust for access barriers explicitly in the model.</li>
+    <li>Result: More accurate and fairer identification of high-need patients across groups.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>Measurement bias often hides in the choice of label. The label appeared to measure "health need" but actually measured "historical healthcare access." Always ask: does this label mean the same thing for every demographic group?</p>
+  </div>
 </details>
-<h3 data-anchor="2:p:5">Stage 3: Interaction with the Target</h3>
-<details><summary><h6>Energy-matter interaction at Earth's surface</h6></summary>
-<p>Energy reaches the Earth's surface and is either absorbed, transmitted, or reflected depending on the physical and chemical properties of the target. The fraction of energy in each category defines the spectral signature of the material. Three complementary variables describe these interactions: reflectance (R), transmittance (T), and absorption (A), with R + T + A = 1 for any material at any wavelength.</p>
-</details>
-<details><summary><h6>Spectral signature concept</h6></summary>
-<p>Every material on Earth has a unique spectral signature—a "fingerprint" across the electromagnetic spectrum. Different materials absorb, reflect, and emit electromagnetic radiation differently at different wavelengths. Remote sensing exploits this uniqueness to identify, classify, and monitor materials.</p>
-</details>
-<h3 data-anchor="2:p:5">Stage 4: Recording of Energy by the Sensor</h3>
-<details><summary><h6>Sensor-based signal capture</h6></summary>
-<p>The reflected or emitted energy is captured and recorded by the sensor on the satellite or aircraft. The sensor converts electromagnetic energy into electrical signals and quantizes them into discrete pixel values (digital numbers, or DNs). This digitization makes the data ready for computer processing.</p>
-</details>
-<h3 data-anchor="2:p:5">Stage 5: Transmission, Reception, and Processing</h3>
-<details><summary><h6>Data flow from sensor to ground station</h6></summary>
-<p>The recorded data is transmitted back to ground receiving stations on Earth and converted into digital data and images. Raw data undergoes preprocessing to correct for instrumental, atmospheric, and geometric errors before analysis can proceed.</p>
-</details>
-<details><summary><h6>Essential preprocessing corrections</h6></summary>
-<p>Raw satellite data is useless without preprocessing. Atmospheric, radiometric, and geometric corrections are not optional—they are the foundation of all downstream thematic analysis and change detection.</p>
-<div data-type="callout" data-callout-type="FORMULA">
-<p>Radiometric correction from digital numbers to radiance</p>
-<div data-type="math">L = \text{gain} \times \text{DN} + \text{offset}</div>
-</div>
-<details><summary><h6>Radiometric correction procedure</h6></summary>
-<p>(1) Measure or model atmospheric transmittance for each band; (2) convert raw digital numbers to top-of-atmosphere radiance using sensor calibration coefficients; (3) divide by atmospheric transmittance to estimate ground-level radiance; (4) validate against ground-based spectral measurements.</p>
-</details>
-<details><summary><h6>Geometric correction and image registration</h6></summary>
-<p>Preprocessing step that registers image coordinates to map projection (latitude/longitude) using ground control points (GCPs).</p>
-<details><summary><h6>Geometric correction procedure</h6></summary>
-<p>(1) Identify 5–10 ground control points with known lat/lon coordinates that are visible in the image; (2) manually mark GCP locations in image coordinates; (3) fit a polynomial (typically order 2–3) relating image to map coordinates; (4) resample the image to the map grid using nearest-neighbor or bilinear interpolation; (5) validate alignment with independent checkpoints.</p>
-</details>
-<h3 data-anchor="2:p:5">Stage 6: Interpretation and Analysis</h3>
-<details><summary><h6>Visual and digital analysis methods</h6></summary>
-<p>The processed images are analyzed visually or digitally to extract meaningful information about the target. Visual interpretation relies on human pattern recognition; digital analysis uses algorithms to classify pixels based on their spectral signatures.</p>
-</details>
-<details><summary><h6>Supervised classification procedure</h6></summary>
-<p>(1) Operator manually labels 50–200 sample pixels, assigning each a class label (e.g., "forest", "water", "urban"); (2) extract spectral vector (all bands) for each labeled pixel; (3) train classifier (e.g., maximum-likelihood, random forest) to learn decision boundary; (4) apply classifier to all unlabeled pixels; (5) generate thematic map; (6) validate with independent test set (accuracy assessment matrix).</p>
-</details>
-<details><summary><h6>Unsupervised clustering procedure</h6></summary>
-<p>(1) Select number of clusters k; (2) initialize cluster centers randomly or via k-means++; (3) assign each pixel to nearest cluster center; (4) recompute cluster centers as mean of assigned pixels; (5) repeat until convergence; (6) interpret clusters manually and assign class labels.</p>
-</details>
-<h3 data-anchor="2:p:5">Stage 7: Application</h3>
-<details><summary><h6>Real-world problem solving</h6></summary>
-<p>The final interpreted data is applied to solve real-world problems such as creating a land-use map, assessing crop health, monitoring urban expansion, or detecting environmental change. This stage translates analysis products into actionable information for decision-makers.</p>
-</details>
-<details><summary><h6>Broad application fields</h6></summary>
-<p>Agriculture, forestry, urban monitoring, insurance underwriting, oceanography, oil and gas exploration, renewable energy planning, and air quality management all rely heavily on remote sensing data. Each field extracts different information from the same raw satellite imagery.</p>
-</details>
-<h2 data-anchor="2:p:13">Spectral Indices and Vegetation Analysis</h2>
-<div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Spectral indices combine multiple bands to extract specific information</li>
-<li>NDVI is the most widely used vegetation index</li>
-<li>Indices compress multidimensional spectral data into interpretable single-band products</li>
-<li>Calibration to ground-truth data enables quantitative assessment</li>
-</ul>
-</details>
-</div>
-<h3 data-anchor="2:p:13">Normalized Difference Vegetation Index (NDVI)</h3>
-<details><summary><h6>NDVI formula and interpretation</h6></summary>
-<p>The Normalized Difference Vegetation Index is calculated as (NIR − Red) / (NIR + Red). It ranges from −1 to +1. Dense vegetation with high near-infrared reflectance yields NDVI values 0.7–1.0. Moderate vegetation yields 0.3–0.7. Sparse vegetation or non-vegetation yields NDVI &lt; 0.3.</p>
-<div data-type="callout" data-callout-type="FORMULA">
-<p>Normalized Difference Vegetation Index calculation</p>
-<div data-type="math">\text{NDVI} = \frac{\text{NIR} - \text{Red}}{\text{NIR} + \text{Red}}</div>
-</div>
-<details><summary><h6>NDVI computation procedure</h6></summary>
-<p>(1) Extract NIR and Red bands from multispectral image; (2) for each pixel, compute NDVI = (NIR − Red) / (NIR + Red); (3) scale to 0–255 by multiplying by 127.5 and adding 127.5; (4) display as single-band image; (5) interpret based on threshold ranges for vegetation health assessment.</p>
-</details>
-<details><summary><h6>Vegetation health interpretation</h6></summary>
-<p>Healthy vegetation shows high NDVI (bright) because it reflects much near-infrared light and absorbs much visible red light for photosynthesis. Stressed or diseased vegetation shows lower NDVI (darker) because the plant tissues are damaged and reflect less infrared while potentially reflecting more visible light. This relationship allows remote detection of crop diseases and water stress.</p>
-</details>
-<details><summary><h6>Soil moisture classification application</h6></summary>
-<p>Wet soil absorbs more water and therefore reflects less visible light overall; dry soil reflects more light. By acquiring multispectral imagery and computing NDVI or related indices, analysts can correlate index values with soil moisture field measurements, then classify pixels into wet or dry categories for irrigation scheduling.</p>
-</details>
-<h2 data-anchor="1:p:12">Spectral Signatures and Object Identification</h2>
-<div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Every material has a unique spectral signature across the electromagnetic spectrum</li>
-<li>Spectral signatures serve as fingerprints for identification and classification</li>
-<li>Comparing spectral signatures across multiple images enables change detection</li>
-<li>Ground-truth validation is essential to avoid false interpretations</li>
-</ul>
-</details>
-</div>
-<h3 data-anchor="1:p:12">Vegetation Spectral Signature</h3>
-<details><summary><h6>Visible and infrared reflectance patterns</h6></summary>
-<p>Vegetation appears green in visible light because it absorbs red and blue light for photosynthesis while reflecting green light. In the near-infrared, healthy vegetation reflects strongly because leaf cells have high infrared reflectivity. This combined signature—low red reflectance and high NIR reflectance—is diagnostic of living vegetation.</p>
-</details>
-<details><summary><h6>Health-based signature variation</h6></summary>
-<p>Healthy vegetation has high near-infrared reflectance (&gt; 0.4 in normalized units). Diseased or stressed vegetation shows lower near-infrared reflectance (&lt; 0.2) due to damage to the photosynthetic tissues. This difference makes health assessment possible through spectral analysis.</p>
-</details>
-<details><summary><h6>Thermal signature of vegetation</h6></summary>
-<p>Vegetation typically shows moderate thermal signatures because the evapotranspiration of water keeps plants cooler than their surroundings. This thermal moderating effect is another diagnostic feature.</p>
-</details>
-<h3 data-anchor="1:p:12">Water Spectral Signature</h3>
-<details><summary><h6>Visible and infrared reflectance</h6></summary>
-<p>Water appears blue or cyan in visible light because it reflects blue wavelengths while absorbing red and longer visible wavelengths. Water strongly absorbs infrared light and appears very dark or black in near-infrared imagery. This absorption is so strong that water is easily distinguished from land in color infrared false-color images, where water appears dark blue or black while vegetation appears red.</p>
-</details>
-<details><summary><h6>Thermal properties</h6></summary>
-<p>Water typically shows a cool thermal signature relative to surrounding land, especially during the day when water's high heat capacity moderates temperature rise.</p>
-</details>
-<h3 data-anchor="1:p:12">Soil Spectral Signature</h3>
-<details><summary><h6>Reflectance patterns across spectrum</h6></summary>
-<p>Soil appears brown in visible light because it reflects light across the visible spectrum without strong preference. In near-infrared, soil shows moderate reflectance, but dry soil is brighter than wet soil. This inverse relationship (opposite to vegetation) allows differentiation.</p>
-</details>
-<details><summary><h6>Moisture sensitivity</h6></summary>
-<p>Wet soil absorbs water, which reduces reflectance across most wavelengths. Dry soil reflects more light. This moisture sensitivity makes soil moisture detection possible through spectral analysis.</p>
-</details>
-<details><summary><h6>Thermal properties</h6></summary>
-<p>Soil typically shows warm thermal signatures, especially dry soil. The thermal response depends on surface moisture content and mineral composition.</p>
-</details>
-<h3 data-anchor="1:p:12">Urban/Asphalt Spectral Signature</h3>
-<details><summary><h6>Built environment characteristics</h6></summary>
-<p>Urban surfaces, particularly asphalt, show dark gray reflectance in visible light because they absorb much incident light. In near-infrared, asphalt and concrete show low reflectance. In thermal infrared, urban materials show very warm signatures due to their high thermal mass and low evaporative cooling.</p>
-</details>
-<details><summary><h6>Imperviousness and thermal effects</h6></summary>
-<p>Asphalt and concrete are impervious surfaces that prevent water infiltration. This imperviousness, combined with dark coloring and high thermal mass, creates strong thermal signatures and the "urban heat island" effect observed in satellite thermal imagery.</p>
-</details>
-<h3 data-anchor="1:p:12">Cloud Spectral Signature</h3>
-<details><summary><h6>Reflectance and blocking effects</h6></summary>
-<p>Clouds appear white because they reflect strongly across the entire visible spectrum due to their high water content. In near-infrared, clouds show very high reflectance. In thermal infrared, clouds appear cold because the cloud tops are at high altitude where temperatures are low.</p>
-</details>
-<details><summary><h6>Signal obstruction</h6></summary>
-<p>Clouds obstruct underlying features in both visible and near-infrared imagery, making optical remote sensing impossible through cloud cover. This is a major constraint for passive optical sensors in tropical and cloudy regions.</p>
-</details>
-<h2 data-anchor="1:p:14">Worked Examples: Spectral Analysis Applications</h2>
-<div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Real-world applications demonstrate how spectral signatures enable detection and monitoring</li>
-<li>Change detection requires baseline data for comparison</li>
-<li>Multiple sensors often provide more robust interpretations than single sensors</li>
-<li>Ground truth validation is essential for confidence in results</li>
-</ul>
-</details>
-</div>
-<h3 data-anchor="1:p:14">Oil Spill Detection</h3>
-<details><summary><h6>Detection procedure through spectral change</h6></summary>
-<p>(1) Establish pristine water baseline reflectance in infrared bands; (2) observe oil-covered water, which shows anomalous reflectance (typically lower than baseline); (3) compare baseline versus observed reflectance; (4) identify contaminated areas. Oil-covered water has a different spectral signature than clean water because the oil film absorbs infrared light differently.</p>
-</details>
-<details><summary><h6>Spectral contrast principle</h6></summary>
-<p>Change in spectral signature indicates pollution. The oil layer creates a thin film that modifies the reflectance properties, making the contamination visible to infrared sensors.</p>
-</details>
-<h3 data-anchor="1:p:14">Vegetation Health Assessment</h3>
-<details><summary><h6>Field-level diagnosis</h6></summary>
-<p>(1) Acquire color infrared image of agricultural field; (2) measure pixel brightness in red channel (equivalent to near-infrared reflectance); (3) bright red indicates healthy vegetation; dark red indicates stressed or diseased plants; (4) generate health map showing spatial distribution of problems.</p>
-</details>
-<details><summary><h6>Quantitative thresholds</h6></summary>
-<p>Healthy vegetation has NIR reflectance &gt; 0.4; diseased vegetation has NIR reflectance &lt; 0.2. This quantitative criterion allows automated classification and targeting of treatment efforts.</p>
-</details>
-<details><summary><h6>Precision agriculture application</h6></summary>
-<p>By identifying diseased plants at the pixel level, farmers can apply targeted treatment only where needed, reducing pesticide use and improving economic efficiency. This targeted approach is the foundation of precision agriculture.</p>
-</details>
-<h3 data-anchor="1:p:14">Soil Moisture Classification</h3>
-<details><summary><h6>Multi-spectral methodology</h6></summary>
-<p>(1) Acquire multispectral imagery covering NIR and red bands; (2) compute vegetation index (such as NDVI) from NIR and red bands; (3) correlate index values with soil moisture field measurements taken at the same locations; (4) classify pixels into wet or dry categories based on calibrated thresholds.</p>
-</details>
-<details><summary><h6>Irrigation scheduling output</h6></summary>
-<p>Result is an irrigation scheduling map showing which fields or field sections require watering. This application directly supports irrigation management and water conservation in agriculture.</p>
-</details>
-<h3 data-anchor="1:p:14">Camouflage Detection (Military Application)</h3>
-<details><summary><h6>Detection principle through infrared contrast</h6></summary>
-<p>(1) Acquire color infrared imagery over suspected military positions; (2) observe false-color map; (3) natural vegetation appears red due to high NIR reflectance; (4) identify blue features among red areas—these represent objects with low NIR reflectance, inconsistent with natural vegetation.</p>
-</details>
-<details><summary><h6>Camouflage versus natural vegetation</h6></summary>
-<p>Green paint reflects low near-infrared light (designed for visual camouflage). Natural vegetation reflects high near-infrared light (inherent property of chlorophyll). This spectral difference, invisible to human eyes, is obvious in false-color infrared imagery.</p>
-</details>
-<details><summary><h6>Target identification</h6></summary>
-<p>Blue features among dominant red vegetation indicate camouflaged targets despite visual concealment. This application demonstrates how remote sensing can reveal hidden objects by exploiting spectral differences invisible to visual inspection.</p>
-</details>
-<h2 data-anchor="2:p:3">Resolution Types and Sensor Tradeoffs</h2>
-<div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Four resolution dimensions define remote sensing data: spatial, spectral, radiometric, and temporal</li>
-<li>These resolutions are interdependent and cannot be simultaneously maximized</li>
-<li>Sensor design involves tradeoff decisions based on mission priorities</li>
-<li>Understanding these tradeoffs is essential for selecting appropriate data sources</li>
-</ul>
-</details>
-</div>
-<h3 data-anchor="2:p:3">Spatial Resolution</h3>
-<details><summary><h6>Pixel size and ground coverage</h6></summary>
-<p>Spatial resolution is the pixel size on the ground; smaller pixels provide higher detail. A 1-meter pixel shows individual buildings; a 30-meter pixel shows blocks of buildings but not individual structures. Airborne platforms achieve finer spatial resolution than spaceborne platforms due to lower altitude.</p>
-</details>
-<details><summary><h6>Tradeoff with spectral resolution</h6></summary>
-<p>Satellites optimized for high spatial resolution (&lt; 1 meter) typically have fewer spectral bands and lower temporal resolution. This inverse relationship reflects fundamental constraints in sensor design and data transmission bandwidth.</p>
-</details>
-<h3 data-anchor="2:p:3">Spectral Resolution</h3>
-<details><summary><h6>Band number and discrimination capability</h6></summary>
-<p>Spectral resolution is the ability to distinguish between different wavelengths. Multispectral sensors typically have 3–8 bands. Thematic Mapper has 7 bands. Each additional band provides finer discrimination between materials with similar but not identical reflectance spectra.</p>
-</details>
-<details><summary><h6>Hyperspectral extension</h6></summary>
-<p>Hyperspectral sensors extend this concept to hundreds of bands, capturing the complete reflectance spectrum in fine detail. This enables detection of subtle spectral signatures but at the cost of higher data volume and processing complexity.</p>
-</details>
-<h3 data-anchor="2:p:3">Radiometric Resolution</h3>
-<details><summary><h6>Bit depth and measurement precision</h6></summary>
-<p>Radiometric resolution is the sensitivity to differences in intensity. Most satellite data is 8-bit (256 levels) or 12-bit (4,096 levels). Higher radiometric resolution allows detection of subtle brightness differences, particularly important for thermal infrared where small temperature differences are diagnostically significant.</p>
-</details>
-<h3 data-anchor="2:p:3">Temporal Resolution</h3>
-<details><summary><h6>Revisit frequency and monitoring capability</h6></summary>
-<p>Temporal resolution is how frequently a satellite revisits the same location. Geostationary satellites provide continuous observation (temporal resolution = minutes to hours). Polar-orbiting satellites revisit typically every 10–16 days (temporal resolution = days). More frequent revisits enable detection of rapid changes but require more satellite resources.</p>
-</details>
-<details><summary><h6>Geostationary versus polar orbit tradeoff</h6></summary>
-<p>Geostationary satellites sacrifice spatial resolution for temporal continuity. Polar-orbiting satellites provide better spatial resolution but less frequent coverage of any single location.</p>
-<div data-type="callout" data-callout-type="IMPORTANT">
-<p>Resolution tradeoff matrix</p>
-<table><thead><tr><th>Optimization</th><th>Spatial</th><th>Spectral</th><th>Radiometric</th><th>Temporal</th></tr></thead><tbody>
-<tr><td>High spatial</td><td>↑</td><td>↓</td><td>↓</td><td>↓</td></tr>
-<tr><td>High spectral</td><td>↓</td><td>↑</td><td>↓</td><td>↓</td></tr>
-<tr><td>High temporal</td><td>↓</td><td>↓</td><td>↓</td><td>↑</td></tr>
-<tr><td>Balanced</td><td>↔</td><td>↔</td><td>↔</td><td>↔</td></tr>
+
+<details>
+  <summary><h5>Case Study 3: Gender Shades (Representation Bias)</h5></summary>
+  <blockquote><p><strong>Problem:</strong> Commercial facial recognition systems (IBM, Microsoft, Face++) were trained on datasets that were 80–86% light-skinned faces, causing massive accuracy gaps for darker-skinned people, especially women.</p></blockquote>
+  <h4>The discovery</h4>
+  <ul>
+    <li><strong>2015:</strong> MIT graduate student Joy Buolamwini encountered a face-tracking system that could not detect her face but worked perfectly for her light-skinned classmates.</li>
+    <li><strong>Hypothesis:</strong> The system was trained on unrepresentative data dominated by light-skinned faces.</li>
+  </ul>
+  <h4>The experiment (2018, published in PNAS as "Gender Shades")</h4>
+  <ul>
+    <li>Created a balanced dataset of 1,270 faces from 3 African countries and 3 European countries.</li>
+    <li>Balanced by gender and skin tone.</li>
+    <li>Tested three commercial gender classification systems: IBM Watson, Microsoft, and Face++.</li>
+  </ul>
+  <h4>The results</h4>
+  <table><thead><tr><th>Dataset Light-skinned</th><th>Darker-skinned</th></tr></thead><tbody>
+<tr><td>20.4% 79.6% IJB-A 13.8% 86.2% Adience</td><td>20.4% 79.6% IJB-A 13.8% 86.2% Adience</td></tr>
 </tbody></table>
-</div>
-<h2 data-anchor="2:p:2">Active Sensor Technologies</h2>
-<div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Active sensors emit energy independently and measure return signals</li>
-<li>Three main active sensor types: radar, LIDAR, and sonar</li>
-<li>Active sensors operate independent of sunlight and often penetrate clouds</li>
-<li>Each technology is optimized for specific environmental and measurement contexts</li>
-</ul>
+  <table>
+    <tr>
+      <th>Demographic Group</th>
+      <th>Error Rate (Worst Performer)</th>
+    </tr>
+    <tr>
+      <td>Lighter-skinned males</td>
+      <td>0.3% (best)</td>
+    </tr>
+    <tr>
+      <td>Lighter-skinned females</td>
+      <td>~7%</td>
+    </tr>
+    <tr>
+      <td>Darker-skinned males</td>
+      <td>~12%</td>
+    </tr>
+    <tr>
+      <td>Darker-skinned females</td>
+      <td>34.7% (worst)</td>
+    </tr>
+  </table>
+  <ul>
+    <li><strong>Intersectional gap:</strong> Darker-skinned females were misgendered at rates 100× higher than lighter-skinned males.</li>
+    <li><strong>By company:</strong>
+      <ul>
+        <li>Microsoft: 93% of mislabeled faces were darker-skinned subjects.</li>
+        <li>Face++: 95% of mislabeled faces were female subjects.</li>
+        <li>IBM: 34.4% gap (largest between lighter male and darker female).</li>
+      </ul>
+    </li>
+  </ul>
+  <h4>Industry response</h4>
+  <ul>
+    <li><strong>2018 (immediate):</strong> IBM, Microsoft, and Face++ announced audits and began retraining.</li>
+    <li><strong>2019 (one year later):</strong>
+      <ul>
+        <li>Microsoft: 19.28% error reduction for darker females.</li>
+        <li>IBM: 17.73% error reduction.</li>
+        <li>Face++: 30.4% error reduction (biggest improvement).</li>
+      </ul>
+    </li>
+  </ul>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>Gender Shades shows that representation bias can be measured and improved. The key is collecting balanced evaluation data and testing performance on underrepresented groups before deployment. Academic scrutiny and public disclosure accelerated industry fix.</p>
+  </div>
 </details>
-</div>
-<h3 data-anchor="2:p:2">Radar Technology</h3>
-<details><summary><h6>Radio Detection and Ranging principle</h6></summary>
-<p>Radar (Radio Detection and Ranging) emits radio waves (microwave frequencies) toward targets. These waves bounce off objects and return to the radar receiver. The time delay between transmission and reception indicates distance; frequency shift (Doppler effect) indicates velocity or motion.</p>
+
+<details>
+  <summary><h5>Case Study 4: COMPAS (Fairness Trade-offs)</h5></summary>
+  <blockquote><p><strong>Problem:</strong> COMPAS, a recidivism prediction tool used in US courts, showed different error rates across racial groups—but which fairness metric to use was controversial and unresolvable.</p></blockquote>
+  <h4>The system</h4>
+  <ul>
+    <li><strong>Developer:</strong> Northpointe.</li>
+    <li><strong>Use:</strong> Over 1 million cases in dozens of US states.</li>
+    <li><strong>Task:</strong> Predict whether a defendant will re-offend (commit another crime) within 2 years.</li>
+    <li><strong>Impact:</strong> Risk scores (1–10) influence bail amounts, sentencing decisions, and parole eligibility.</li>
+  </ul>
+  <h4>The investigation (ProPublica, 2016)</h4>
+  <ul>
+    <li>Obtained COMPAS scores for 7,000+ defendants in Broward County, Florida (2013–2014).</li>
+    <li>Tracked actual re-offense within 2 years.</li>
+    <li>Compared performance across racial groups (White and Black defendants).</li>
+  </ul>
+  <h4>The findings</h4>
+  <table><thead><tr><th>White defendants</th><th>Black defendants</th></tr></thead><tbody>
+<tr><td>56% 46% % labeled "high risk" 52% 35% % who actually re- offended</td><td>56% 46% % labeled "high risk" 52% 35% % who actually re- offended</td></tr>
+</tbody></table>
+  <p>Both groups showed similar overall accuracy (~60% labeled high-risk, ~50% actually re-offended). But the errors were distributed differently:</p>
+  <table><thead><tr><th>White defendants</th><th>Black defendants</th></tr></thead><tbody>
+<tr><td>45% 28% False Positive Rate</td><td>45% 28% False Positive Rate</td></tr>
+</tbody></table> <table><thead><tr><th>White defendants</th><th>Black defendants</th></tr></thead><tbody>
+<tr><td>28% 48% False Negative Rate</td><td>28% 48% False Negative Rate</td></tr>
+</tbody></table>
+  <ul>
+    <li><strong>False Positive Rate (labeled high-risk but did NOT re-offend):</strong> 45% for White defendants, 28% for Black defendants. → Black defendants were more likely to be correctly identified as low-risk.</li>
+    <li><strong>False Negative Rate (labeled low-risk but DID re-offend):</strong> 28% for White defendants, 48% for Black defendants. → Black defendants labeled low-risk were more likely to actually re-offend.</li>
+  </ul>
+  <h4>The conflict</h4>
+  <ul>
+    <li><strong>ProPublica's claim:</strong> COMPAS is racially biased (higher false positive rate for Black defendants).</li>
+    <li><strong>Northpointe's defense:</strong> COMPAS is equally accurate across groups (same risk score means same likelihood of re-offense, regardless of race—this is "calibration").</li>
+  </ul>
+  <table>
+    <tr>
+      <th>Fairness Metric</th>
+      <th>Definition</th>
+      <th>COMPAS Performance</th>
+    </tr>
+    <tr>
+      <td><strong>Equalized odds</strong></td>
+      <td>False positive rates equal across groups</td>
+      <td><strong>Fails</strong> (45% vs 28%)</td>
+    </tr>
+    <tr>
+      <td><strong>Calibration</strong></td>
+      <td>Same score → same likelihood of outcome, regardless of race</td>
+      <td><strong>Passes</strong></td>
+    </tr>
+  </table>
+  <h4>The deeper problem</h4>
+  <p>Both metrics cannot be satisfied simultaneously when base rates differ. In this case:</p>
+  <ul>
+    <li><strong>Base rate for White defendants:</strong> ~35% re-offend.</li>
+    <li><strong>Base rate for Black defendants:</strong> ~52% re-offend.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>Mathematical impossibility: When two groups have different base rates (proportions with the outcome), no classifier can simultaneously have equal false positive rates AND equal false negative rates across groups. Choosing equalized odds means accepting unequal false negative rates; choosing calibration means accepting unequal false positive rates.</p>
+  </div>
+  <h4>The takeaway</h4>
+  <p>COMPAS illustrates that fairness is not a property of the algorithm alone—it is a choice about whose errors you prioritize.</p>
+  <div data-type="callout" data-callout-type="WARNING">
+    <p>No single definition of fairness works for all cases. Equalized odds protects against false accusations; calibration protects against misjudgment of risk for those who are flagged. Choosing between them is a values decision, not a technical one.</p>
+  </div>
 </details>
-<details><summary><h6>Operating wavelength and cloud penetration</h6></summary>
-<p>Radar operates in the microwave portion of the spectrum (wavelengths &gt; 1 mm), which penetrates clouds and fog that block visible and infrared sensors. This makes radar invaluable for tropical regions with persistent cloud cover and for all-weather monitoring.</p>
+
+<h3 data-anchor="2:p:23">Fairness metrics and mathematical trade-offs</h3>
+
+<details>
+  <summary><h5>Definition of fairness: no single answer</h5></summary>
+  <blockquote><p><strong>Fairness in ML:</strong> There is no single universally accepted definition. Different stakeholders prioritize different error types and outcomes.</p></blockquote>
+  <ul>
+    <li><strong>Equalized odds:</strong> False positive and false negative rates are equal across groups. Protects against false accusations but can mask different error burdens.</li>
+    <li><strong>Calibration:</strong> A given risk score means the same probability of outcome for all groups. Ensures consistency but can allow unequal false positive rates.</li>
+    <li><strong>Demographic parity:</strong> The proportion predicted positive is the same across groups. Ignores accuracy but ensures resource allocation is balanced.</li>
+    <li><strong>Individual fairness:</strong> Similar individuals receive similar decisions. Hard to define "similar" and check in practice.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>Choosing a fairness metric is not a technical question; it is a values and policy question. It reflects what kind of errors society finds more acceptable and whom the system is primarily accountable to.</p>
+  </div>
 </details>
-<details><summary><h6>Velocity measurement application</h6></summary>
-<p>Radar gun measures vehicle speed by emitting waves toward a vehicle, detecting the return, and measuring the Doppler frequency shift caused by vehicle motion. This demonstrates radar's ability to detect both position and velocity.</p>
+
+<details>
+  <summary><h5>Why metrics conflict when base rates differ</h5></summary>
+  <blockquote><p><strong>Base rate:</strong> The proportion of the population for which the outcome is true (e.g., re-offending, loan default, disease presence).</p></blockquote>
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>Mathematical impossibility (when base rates differ): It is impossible to simultaneously have equal false positive rates AND equal false negative rates across two groups if the base rates are different. At least one group will experience higher error on one error type.</p>
+  </div>
+  <ul>
+    <li>If group A has a higher base rate (more individuals with the outcome), a classifier that achieves equal false positive rates will necessarily have unequal false negative rates.</li>
+    <li>This is not a failure of the algorithm; it is a mathematical constraint.</li>
+    <li>Choosing equalized odds means accepting unequal false negatives; choosing to minimize false negatives means accepting unequal false positives.</li>
+  </ul>
 </details>
-<details><summary><h6>Advantages in remote sensing</h6></summary>
-<p>Radar can image at night and through clouds, enabling continuous monitoring in regions or seasons with limited daylight or persistent clouds. Radar provides information about surface roughness and moisture content in addition to reflectivity.</p>
+
+<h3 data-anchor="2:p:24">Intervention strategies and mitigation</h3>
+
+<details>
+  <summary><h5>The bias pipeline: where intervention is possible</h5></summary>
+  <blockquote><p><strong>Bias pipeline:</strong> Bias enters before the model; it is baked into the data and labels. Intervention can occur at three stages.</p></blockquote>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>Three places to intervene on bias, in order of difficulty and impact:</p>
+  </div>
+  <table>
+    <tr>
+      <th>Stage</th>
+      <th>Name</th>
+      <th>Difficulty</th>
+      <th>Example</th>
+    </tr>
+    <tr>
+      <td><strong>Before training</strong></td>
+      <td>Pre-processing (fix data)</td>
+      <td>Medium</td>
+      <td>Reweight samples; collect more data from underrepresented groups; audit training data for missing voices.</td>
+    </tr>
+    <tr>
+      <td><strong>During training</strong></td>
+      <td>In-processing (fix model)</td>
+      <td>Hard</td>
+      <td>Add fairness constraints to the objective; penalize unequal error rates during optimization.</td>
+    </tr>
+    <tr>
+      <td><strong>After training</strong></td>
+      <td>Post-processing (fix outputs)</td>
+      <td>Easy</td>
+      <td>Adjust decision thresholds per group; calibrate scores; modify predictions after model evaluation.</td>
+    </tr>
+  </table>
 </details>
-<h3 data-anchor="2:p:2">LIDAR Technology</h3>
-<details><summary><h6>Light Detection and Ranging principle</h6></summary>
-<p>LIDAR (Light Detection and Ranging) emits laser pulses (infrared or visible light) and measures the time for the signal to return. This time-of-flight measurement directly provides the distance to each object, enabling precise 3D mapping.</p>
+
+<details>
+  <summary><h5>Pre-processing: reweighting</h5></summary>
+  <blockquote><p><strong>Reweighting:</strong> Assigning higher weight to underrepresented or historically disadvantaged groups during training, so the model "cares more" about getting those examples correct.</p></blockquote>
+  <ul>
+    <li><strong>Mechanism:</strong> During training, the loss for a sample from an underrepresented group contributes more to the total loss, pulling the model toward better performance on that group.</li>
+    <li><strong>Example (Amazon hiring):</strong> Give female resumes 2× the weight during training. The model will optimize to minimize errors on female examples, counteracting the historical bias.</li>
+    <li><strong>Advantage:</strong> Simple to implement; does not require changing the model architecture.</li>
+    <li><strong>Limitation:</strong> Does not fix the underlying data if the label itself is biased (measurement bias).</li>
+  </ul>
 </details>
-<details><summary><h6>High-precision mapping applications</h6></summary>
-<p>LIDAR provides the highest spatial resolution of any remote sensing technology and creates detailed digital elevation models. Its accuracy makes it ideal for topographic mapping, forest structure analysis, and detecting small-scale surface features.</p>
+
+<details>
+  <summary><h5>Post-processing: threshold adjustment</h5></summary>
+  <blockquote><p><strong>Threshold adjustment:</strong> After training, use different decision thresholds for different groups to achieve fairness metrics.</p></blockquote>
+  <ul>
+    <li><strong>Mechanism:</strong> A classifier outputs a probability or score. The decision threshold (e.g., "if score > 0.5, classify positive") can be different per group.</li>
+    <li><strong>Example:</strong> To equalize false positive rates, lower the threshold for the group that currently has a high false positive rate, so more members are classified as negative.</li>
+    <li><strong>Advantage:</strong> Does not require retraining; can be applied after any model.</li>
+    <li><strong>Limitation:</strong> Can reduce overall accuracy; thresholds must be chosen carefully to balance fairness and performance.</li>
+  </ul>
 </details>
-<details><summary><h6>Limitations and operational constraints</h6></summary>
-<p>LIDAR operates best during daytime or in clear conditions, though some systems can operate at night. The high cost of LIDAR systems and their power requirements limit their deployment primarily to airborne platforms rather than satellites.</p>
-</details>
-<h3 data-anchor="2:p:2">Sonar Technology</h3>
-<details><summary><h6>Sound Navigation and Ranging principle</h6></summary>
-<p>Sonar (Sound Navigation and Ranging) emits acoustic waves (sound) and measures the return. This technology is optimized for underwater use where electromagnetic waves are rapidly attenuated.</p>
-</details>
-<details><summary><h6>Underwater remote sensing</h6></summary>
-<p>Sonar enables mapping of seafloor bathymetry, detection of underwater objects, and characterization of water mass properties. It is the primary remote sensing tool for oceanographic applications where visible and infrared light penetrate only tens of meters at best.</p>
-</details>
-<h2 data-anchor="1:p:10">Key Constraints and Failure Modes</h2>
-<div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Each remote sensing application faces specific hard constraints</li>
-<li>Violating constraints produces characteristic failure modes</li>
-<li>Understanding constraints enables selection of appropriate sensors and methods</li>
-<li>Atmospheric effects are universal constraints affecting all sensors</li>
-</ul>
-</details>
-</div>
-<div data-type="callout" data-callout-type="WARNING">
-<p>A constraint is a hard limit on what a sensor or method can achieve. Violating a constraint does not degrade performance—it makes the task impossible.</p>
-</div>
-<h3 data-anchor="1:p:10">Photographic Film Constraints</h3>
-<details><summary><h6>Visible spectrum constraint on panchromatic film</h6></summary>
-<p>Constraint: Panchromatic film is sensitive only to visible light (0.4–0.7 μm).</p>
-<p>Consequence if violated: Cannot detect infrared or ultraviolet phenomena; vegetation discrimination is limited because healthy and diseased plants appear similar in visible light.</p>
-</details>
-<details><summary><h6>False color interpretation training requirement</h6></summary>
-<p>Constraint: False color images require training to interpret correctly because colors do not match human intuition.</p>
-<p>Consequence if violated: Untrained analysts misinterpret colors, leading to classification errors where red vegetation appears as "some colored thing" without recognition as healthy plants.</p>
-</details>
-<h3 data-anchor="1:p:10">Solar Illumination Constraints</h3>
-<details><summary><h6>Daylight requirement for passive sensors</h6></summary>
-<p>Constraint: Passive optical sensors require solar radiation to reach the target during daylight.</p>
-<p>Consequence if violated: Cannot acquire visible or near-infrared data at night. Thermal infrared and active microwave are the only alternatives for nighttime sensing.</p>
-</details>
-<details><summary><h6>Cloud cover requirement for optical sensors</h6></summary>
-<p>Constraint: Clear-sky or reduced-cloud conditions are required for optical (visible, near-infrared, shortwave-infrared, thermal) remote sensing.</p>
-<p>Consequence if violated: Cloud cover blocks the signal, causes data loss or severely reduced contrast, making classification difficult or impossible. Microwave radar penetrates clouds and is the only viable option for tropical regions with persistent cloud cover.</p>
-</details>
-<h3 data-anchor="1:p:10">Spectral Contrast Constraint</h3>
-<details><summary><h6>Material differentiation requirement</h6></summary>
-<p>Constraint: The target materials must have sufficient spectral contrast (different reflectance or emittance at the sensor's wavelengths).</p>
-<p>Consequence if violated: Spectrally identical materials cannot be distinguished. For example, artificial grass and natural grass appear identical in panchromatic imagery; color infrared is required to differentiate them based on infrared reflectance.</p>
-</details>
-<h3 data-anchor="1:p:10">Thermal Sensor Constraints</h3>
-<details><summary><h6>Emissivity variation constraint</h6></summary>
-<p>Constraint: Different materials emit thermal radiation at different rates (emissivity varies from 0 to 1), even if they are the same temperature.</p>
-<p>Consequence if violated: Same temperature ≠ same thermal signature across materials. Wet sand and dry sand at the same temperature show different thermal signatures because water has higher emissivity than quartz. Thermal signatures must be interpreted with knowledge of material emissivity.</p>
-</details>
-<h3 data-anchor="1:p:10">Atmospheric Effects as Universal Constraints</h3>
-<details><summary><h6>Atmospheric interference on all sensors</h6></summary>
-<p>Constraint: Water vapor, dust, ozone, and aerosols absorb and scatter electromagnetic radiation.</p>
-<p>Consequence if violated: Atmospheric effects degrade signal across all wavelength bands used by all sensors. Water vapor absorbs thermal infrared strongly; dust reduces visible light transmission. These effects accumulate along the path from sun through atmosphere to target and back through atmosphere to sensor.</p>
-</details>
-<h3 data-anchor="1:p:10">Sensor Calibration Requirement</h3>
-<details><summary><h6>Calibration as a fundamental prerequisite</h6></summary>
-<p>Constraint: Every sensor must be calibrated using known standards before data can be interpreted quantitatively.</p>
-<p>Consequence if violated: Uncalibrated data produces inaccurate reflectance and temperature values. Spectral signatures become unreliable, and multi-temporal comparison becomes impossible because data from different dates have different radiometric biases.</p>
-</details>
-<h3 data-anchor="2:p:13">Ground Control Point Accuracy Constraint</h3>
-<details><summary><h6>GCP location precision requirement</h6></summary>
-<p>Constraint: Ground control points used for geometric correction must be accurately located and stable over time.</p>
-<p>Consequence if violated: Location errors propagate to all downstream analysis. GCP error &gt; 1 pixel causes map misalignment that compounds downstream in any GIS analysis using the corrected image.</p>
-</details>
-<h3 data-anchor="2:p:4">Satellite Collision Avoidance Constraint</h3>
-<details><summary><h6>Orbital corridor requirement</h6></summary>
-<p>Constraint: Satellite orbits must remain within established collision-avoidance corridors and not intersect with other active satellites or known debris.</p>
-<p>Consequence if violated: Collision with debris or other satellites leads to mission failure and generates additional debris, exacerbating the space debris crisis.</p>
-</details>
-<h2 data-anchor="1:p:13">Critical Insights and Non-Obvious Principles</h2>
-<div data-type="callout" data-callout-type="OVERVIEW">
-<details><summary>Overview</summary>
-<ul>
-<li>Spectral signatures are material fingerprints—the foundation of remote sensing</li>
-<li>False-color images reveal hidden features by exploiting infrared sensitivity</li>
-<li>Passive sensors face hard daylight constraints; active sensors overcome them</li>
-<li>Temporal change detection requires multi-date imagery and careful atmospheric correction</li>
-</ul>
-</details>
-</div>
-<h3 data-anchor="1:p:13">Spectral Fingerprinting</h3>
-<details><summary><h6>Material identification through spectral uniqueness</h6></summary>
-<p>Different materials have distinct electromagnetic reflectance and emittance patterns. These spectral signatures serve as fingerprints—unique identifiers across the electromagnetic spectrum. Remote sensing exploitation of these signatures is the core scientific principle underlying all image interpretation and classification.</p>
-</details>
-<h3>False-Color Intelligence Gathering {{1:p:13}}</h3>
-<details><summary><h6>Counter-intuitive but information-rich imagery</h6></summary>
-<p>False-color images are counter-intuitive but reveal hidden features invisible in natural color. The rearrangement of spectral bands to different color channels allows visualization of infrared information that human eyes cannot perceive. This was developed militarily during World War II to detect camouflaged targets and remains a foundational technique in environmental monitoring.</p>
-</details>
-<h3>Day-Night and Weather Limitations {{1:p:13}}</h3>
-<details><summary><h6>Passive sensor constraints overcome by active sensors</h6></summary>
-<p>Passive sensors cannot image at night or reliably through clouds. Active sensors (radar, LIDAR) are weather-independent and can operate at night. This complementarity means that optimal Earth observation requires multiple sensor types: optical for daytime detail, radar for all-weather coverage.</p>
-</details>
-<h3>Human Vision as Remote Sensing {{1:p:13}}</h3>
-<details><summary><h6>Visual perception as the archetypal remote sensing system</h6></summary>
-<p>The only human sense functioning as true remote sensing is vision (contact-free detection). Hearing, smell, taste, and touch all require proximity or contact. This observation explains why early remote sensing terminology borrowed from visual imagery concepts (false color, natural color, transparency).</p>
-</details>
-<h3>Military Technology Drives Innovation {{1:p:13}}</h3>
-<details><summary><h6>Evolutionary pressure from camouflage detection</h6></summary>
-<p>Military technology drives remote sensing innovation. Camouflage development creates a pressure to detect concealed objects; this pressure spawned infrared detection during WWII. The resulting technology (color infrared film) became indispensable for environmental monitoring decades later. This pattern—military innovation becoming civilian infrastructure—recurs throughout remote sensing history (radar, LIDAR, satellite systems).</p>
-</details>
-<h3>Temporal Change Detection {{1:p:13}}</h3>
-<details><summary><h6>Multi-date comparison as a verification method</h6></summary>
-<p>Temporal comparison (multi-date imagery) reveals change. Spatial comparison (multi-source data) verifies detection. The combination is more powerful than either alone. For example, a land-cover change detected in satellite data can be confirmed by comparing optical and radar data from the same date, or by comparing optical data from multiple dates.</p>
-</details>
-<h3>Ground Truth Validation {{1:p:13}}</h3>
-<details><summary><h6>Essential control on spectral interpretation</h6></summary>
-<p>Ground truth validation is essential. Spectral signatures alone can produce false interpretations. For example, certain types of dense urban development can have similar reflectance patterns to natural vegetation in some bands. Field validation is required to confirm interpretations and build confidence in classification accuracy.</p>
-</details>
-<h3>Atmosphere is Not Transparent</h3>
-<details><summary><h6>Pervasive signal degradation from atmosphere</h6></summary>
-<p>Atmosphere is not transparent—it scatters, absorbs, and attenuates radiation. Atmospheric correction is essential for accurate spectral analysis and must account for both upward-traveling signal (target to sensor) and downward atmospheric path (sun to target). This bidirectional atmospheric effect is why atmospheric correction is mathematically complex and cannot be neglected.</p>
-<div data-type="callout" data-callout-type="TIP">
-<p>Atmospheric correction is not optional preprocessing—it is the difference between useful data and noise. Without correction, spectral signatures are dominated by atmospheric artifacts rather than surface properties.</p>
-</div>
-<h3>Spectral Band Selection for Phenomena</h3>
-<details><summary><h6>Phenomenon-specific wavelength requirements</h6></summary>
-<p>The choice of sensor determines which parts of the electromagnetic spectrum are measured. Different phenomena are visible in different wavelength bands; no single sensor measures everything. Vegetation health requires near-infrared; thermal features require thermal infrared; buried objects require radar. Sensor selection is application-driven.</p>
-</details>
-<h3>Microwave Penetration Advantage</h3>
-<details><summary><h6>Cloud-penetrating capability of radar</h6></summary>
-<p>Microwave sensors (radar) are superior for cloud-covered regions because microwaves penetrate clouds while optical sensors cannot. This is why radar is critical for tropical and polar regions where clouds are persistent. The tradeoff is that radar measures surface roughness and moisture content rather than reflectance in discrete spectral bands.</p>
-</details>
-<h3>Polar versus Geostationary Resolution-Continuity Tradeoff</h3>
-<details><summary><h6>Orbital type determines coverage characteristics</h6></summary>
-<p>Satellites in polar orbit view different ground locations with each pass, enabling global coverage over time but preventing continuous observation of one location. Geostationary satellites sacrifice resolution for temporal continuity. This fundamental tradeoff shapes mission design and application suitability.</p>
-</details>
-<h3>Resolution Interdependence</h3>
-<details><summary><h6>Fundamental tradeoff among four resolution dimensions</h6></summary>
-<p>Spatial, spectral, radiometric, and temporal resolution are interdependent. Satellites optimized for high spatial resolution (&lt; 1 m) typically have fewer spectral bands and lower temporal resolution. A tradeoff is inherent to sensor design—a satellite cannot simultaneously achieve 1-meter spatial resolution, 200 spectral bands, revisit every day, and operate within weight and power budgets.</p>
-</details>
-<h3>Preprocessing as Foundation</h3>
-<details><summary><h6>Data cleaning as prerequisite for analysis</h6></summary>
-<p>Raw satellite data is useless without preprocessing. Atmospheric, radiometric, and geometric corrections are not optional—they are the foundation of all downstream thematic analysis and change detection. A correction error of 10% in atmospheric correction propagates as 10% error in all downstream products.</p>
-</details>
-<h2 data-anchor="1:p:17">Summary and Exam-Critical Concepts</h2>
-<div data-type="callout" data-callout-type="EXAM">
-<p><strong>Core Concepts for Examination:</strong></p>
-<p>1. <strong>Three data collection methods exist:</strong> Ground-based (field/office) and remote (airborne/spaceborne). Ground-based methods operate from Earth's surface; remote methods operate from distance.</p>
-<p>2. <strong>Two energy sources:</strong> Reflected solar energy (passive systems) and emitted thermal energy (active systems and thermal sensors). Stefan-Boltzmann law ensures all objects &gt; 0K emit thermal radiation.</p>
-<p>3. <strong>Two sensor classes:</strong> Passive sensors rely on external energy; active sensors emit their own energy. This distinction determines whether sensing can occur at night and through clouds.</p>
-<p>4. <strong>Five photographic film types:</strong> Each reveals different spectral information. Color infrared (false color) is most powerful for distinguishing vegetation from artificial materials due to infrared sensitivity.</p>
-<p>5. <strong>Spectral signatures are unique:</strong> Different materials absorb/reflect/emit electromagnetic radiation differently. This uniqueness is the foundation of remote sensing interpretation.</p>
-<p>6. <strong>False-color imaging is powerful:</strong> Natural color cannot distinguish artificial grass from natural grass; color infrared reveals the difference instantly through infrared reflectance.</p>
-<p>7. <strong>Four satellite orbit types:</strong> Geostationary (fixed over one location), polar (global coverage, varying ground location), and elliptical (prolonged distant observation). Each has distinct revisit characteristics.</p>
-<p>8. <strong>Seven-stage remote sensing process:</strong> Energy source → Atmosphere → Target interaction → Sensor recording → Transmission/reception → Analysis → Application. Each stage introduces error sources.</p>
-<p>9. <strong>Atmospheric correction is essential:</strong> Atmosphere scatters and absorbs radiation. Uncorrected data contains systematic bias unsuitable for analysis. Correction must account for both downward and upward paths.</p>
-<p>10. <strong>NDVI formula:</strong> (NIR − Red) / (NIR + Red). Values 0.7–1.0 = dense vegetation; 0.3–0.7 = moderate; &lt; 0.3 = sparse/none. This index compresses multispectral data into single meaningful measure.</p>
-<p>11. <strong>Resolution tradeoff:</strong> High spatial resolution ↔ fewer spectral bands; high temporal resolution ↔ coarser spatial resolution. These tradeoffs are fundamental to sensor design.</p>
-<p>12. <strong>Ground truth is non-negotiable:</strong> Spectral signatures alone can produce false interpretations. Field validation confirms accuracy and builds confidence in results.</p>
-</div>
-<div data-type="callout" data-callout-type="FORMULA">
-<p>Wavelength ranges for common remote sensing applications</p>
-<div data-type="math">\text{Visible: } 0.4 \text{ to } 0.7 \text{ μm}</div>
-<div data-type="math">\text{Near-Infrared: } 0.7 \text{ to } 1.0 \text{ μm}</div>
-<div data-type="math">\text{Thermal Infrared: } 3 \text{ to } 14 \text{ μm}</div>
-<div data-type="math">\text{Microwave (Radar): } &gt; 1 \text{ mm}</div>
-</div>
-</details>
-</details>
-</details>
-</details>
-</details>
-</details>
-</details>
-</details>
-</details>
-</details>
-</details>
+
+<h3 data-anchor="2:p:25">Deployment checklist</h3>
+
+<details>
+  <summary><h5>Five questions before and after deployment</h5></summary>
+  <blockquote><p><strong>Fairness is an ongoing process, not a one-time fix.</strong> Bias can enter at every stage (data collection → labeling → modeling → deployment → feedback loops). Regular auditing and monitoring are essential.</p></blockquote>
+  <table><thead><tr><th># Question</th><th>If "no" or "I don't know" →</th></tr></thead><tbody>
+<tr><td>Collect more data or reweight Have you<strong> audited your data</strong> for missing groups? 1 Pick one Have you<strong> chosen a fairness metric</strong>? 2 Run the numbers Have you<strong> measured that metric</strong> across groups? 3 Reweight, threshold adjust, or constrain Have you<strong> tried at least one mitigation</strong>? 4 Set up regular audits Will you<strong> monitor after deployment</strong>? 5</td><td>Collect more data or reweight Have you<strong> audited your data</strong> for missing groups? 1 Pick one Have you<strong> chosen a fairness metric</strong>? 2 Run the numbers Have you<strong> measured that metric</strong> across groups? 3 Reweight, threshold adjust, or constrain Have you<strong> tried at least one mitigation</strong>? 4 Set up regular audits Will you<strong> monitor after deployment</strong>? 5</td></tr>
+</tbody></table>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>If you answer "no" or "I don't know" to any question:</p>
+    <ul>
+      <li><strong>Question 1 (data audit):</strong> Collect more data or reweight to balance missing groups.</li>
+      <li><strong>Question 2 (fairness metric):</strong> Pick one metric aligned with your values and the stakeholders' priorities.</li>
+      <li><strong>Question 3 (measurement):</strong> Run the numbers; calculate the metric across groups.</li>
+      <li><strong>Question 4 (mitigation):</strong> Reweight, adjust thresholds, or add fairness constraints; try at least one.</li>
+      <li><strong>Question 5 (monitoring):</strong> Set up regular audits; track performance and fairness metrics after deployment.</li>
+    </ul>
+  </div>
+  <div data-type="callout" data-callout-type="WARNING">
+    <p>Fairness does not end at deployment. Feedback loops can introduce new biases over time. Monitoring must be continuous.</p>
+  </div>
+</details><h2>Tables from the slides</h2><table><thead><tr><th>S1</th><th>S2 -1</th><th>S3 -2</th></tr></thead><tbody>
+<tr><td>S4 <strong>-1</strong></td><td>S5 <strong>-2</strong></td><td>S6 <strong>-1</strong></td></tr>
+<tr><td>S7 <strong>-3</strong></td><td>S8 <strong>-10</strong></td><td>S9 <strong>+10</strong></td></tr>
+</tbody></table><table><thead><tr><th>S1</th><th>S2 -1</th><th>S3 -2</th></tr></thead><tbody>
+<tr><td>S4 <strong>-1</strong></td><td>S5 <strong>-2</strong></td><td>S6 <strong>-1</strong></td></tr>
+<tr><td>S7 <strong>-3</strong></td><td>S8 <strong>-10</strong></td><td>S9 <strong>+10</strong></td></tr>
+</tbody></table><table><thead><tr><th>Q</th><th>Left</th><th>Right</th><th>Up</th><th>Down</th></tr></thead><tbody>
+<tr><td><strong>S1</strong></td><td>0.5</td><td>-1.0</td><td>2.1</td><td>0.75</td></tr>
+<tr><td><strong>S4</strong></td><td>0.5</td><td>0.75</td><td>-0.5</td><td>1.5</td></tr>
+<tr><td><strong>S5</strong></td><td>-1.2</td><td>1.2</td><td>0.7</td><td>1.7</td></tr>
+</tbody></table><table><thead><tr><th>S1</th><th>S2 -1</th><th>S3 -2</th></tr></thead><tbody>
+<tr><td>S4 <strong>-1</strong></td><td>S5 <strong>-2</strong></td><td>S6 <strong>-1</strong></td></tr>
+<tr><td>S7 <strong>-3</strong></td><td>S8 <strong>-10</strong></td><td>S9 <strong>+10</strong></td></tr>
+</tbody></table><table><thead><tr><th>S1 -1</th><th>S2 -1</th><th>S3 -2</th></tr></thead><tbody>
+<tr><td>S4 <strong>-1</strong></td><td>S5 <strong>-2</strong></td><td>S6 <strong>-1</strong></td></tr>
+<tr><td>S7 <strong>-3</strong></td><td>S8 <strong>-10</strong></td><td>S9 <strong>+10</strong></td></tr>
+</tbody></table><table><thead><tr><th>Q</th><th>Left</th><th>Right</th><th>Up</th><th>Down</th><th>Col6</th></tr></thead><tbody>
+<tr><td><strong>Q</strong></td><td><strong>Left</strong></td><td><strong>Right</strong></td><td><strong>Up</strong></td></tr>
+<tr><td><strong>S1</strong></td><td>0.5</td><td>-1.0</td><td>2.1</td><td>0.75</td></tr>
+<tr><td><strong>S4</strong></td><td>0.5</td><td>0.75</td><td>-0.5</td><td>1.5</td></tr>
+<tr><td><strong>S4</strong></td><td>0.5</td><td>0.75</td><td>-0.5</td></tr>
+</tbody></table><table><thead><tr><th>Q</th><th>Left</th><th>Right</th><th>Up</th><th>Down</th></tr></thead><tbody>
+<tr><td><strong>S1</strong></td><td>0.5</td><td>-1.0</td><td>2.1</td><td><strong>0.59</strong></td></tr>
+<tr><td><strong>S4</strong></td><td>0.5</td><td>0.75</td><td>-0.5</td><td>1.5</td></tr>
+<tr><td><strong>S5</strong></td><td>-1.2</td><td>1.2</td><td>0.7</td><td>1.7</td></tr>
+</tbody></table><table><thead><tr><th>S1 -1</th><th>S2 -1</th><th>S3 -2</th></tr></thead><tbody>
+<tr><td>S4 <strong>-1</strong></td><td>S5 <strong>-2</strong></td><td>S6 <strong>-1</strong></td></tr>
+<tr><td>S7 <strong>-3</strong></td><td>S8 <strong>-10</strong></td><td>S9 <strong>+10</strong></td></tr>
+</tbody></table><table><thead><tr><th>Q</th><th>Left</th><th>Right</th><th>Up</th><th>Down</th></tr></thead><tbody>
+<tr><td><strong>S1</strong></td><td>0.5</td><td>-1.0</td><td>2.1</td><td><strong>0.59</strong></td></tr>
+<tr><td><strong>S4</strong></td><td>0.5</td><td><strong>0.49</strong></td><td>-0.5</td><td>1.5</td></tr>
+<tr><td><strong>S5</strong></td><td>-1.2</td><td>1.2</td><td>0.7</td><td>1.7</td></tr>
+</tbody></table><table><thead><tr><th>S1 -1</th><th>S2 -1</th><th>S3 -2</th></tr></thead><tbody>
+<tr><td>S4 <strong>-1</strong></td><td>S5 <strong>-2</strong></td><td>S6 <strong>-1</strong></td></tr>
+<tr><td>S7 <strong>-3</strong></td><td>S8 <strong>-10</strong></td><td>S9 <strong>+10</strong></td></tr>
+</tbody></table><table><thead><tr><th>Q</th><th>Left</th><th>Right</th><th>Up</th><th>Down</th></tr></thead><tbody>
+<tr><td><strong>S1</strong></td><td>0.5</td><td>-1.0</td><td>2.1</td><td><strong>0.59</strong></td></tr>
+<tr><td><strong>S4</strong></td><td>0.5</td><td><strong>0.49</strong></td><td>-0.5</td><td>1.5</td></tr>
+<tr><td><strong>S5</strong></td><td>-1.2</td><td>1.2</td><td>0.7</td><td>1.7</td></tr>
+<tr><td><strong>S6</strong></td><td>0.8</td><td>1.4</td><td>2.0</td><td>0.5</td></tr>
+</tbody></table><table><thead><tr><th>Q</th><th>Left</th><th>Right</th><th>Up</th><th>Down</th></tr></thead><tbody>
+<tr><td><strong>S1</strong></td><td>0.5</td><td>-1.0</td><td>2.1</td><td><strong>0.59</strong></td></tr>
+<tr><td><strong>S4</strong></td><td>0.5</td><td><strong>0.49</strong></td><td>-0.5</td><td>1.5</td></tr>
+<tr><td><strong>S5</strong></td><td>-1.2</td><td><strong>1.0</strong></td><td>0.7</td><td>1.7</td></tr>
+<tr><td><strong>S6</strong></td><td>0.8</td><td>1.4</td><td>2.0</td><td>0.5</td></tr>
+</tbody></table><table><thead><tr><th>TP</th><th>45%</th></tr></thead><tbody>
+<tr><td><strong>28%</strong></td><td><strong>TN</strong></td></tr>
+</tbody></table><table><thead><tr><th>TP</th><th>28%</th></tr></thead><tbody>
+<tr><td><strong>48%</strong></td><td><strong>TN</strong></td></tr>
+</tbody></table><table><thead><tr><th>Fairness metric What it measures</th><th>COMPAS performance</th></tr></thead><tbody>
+<tr><td>Fails (45% vs 28%) False positive rates equal across groups <strong>Equalized odds</strong> Passes Same risk score = same likelihood of re-offending, regardless of race <strong>Calibration</strong></td><td>Fails (45% vs 28%) False positive rates equal across groups <strong>Equalized odds</strong> Passes Same risk score = same likelihood of re-offending, regardless of race <strong>Calibration</strong></td></tr>
+</tbody></table>

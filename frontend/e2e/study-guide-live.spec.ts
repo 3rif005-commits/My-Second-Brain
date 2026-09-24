@@ -47,13 +47,20 @@ test("a study guide is written from two real lectures, whole", async ({ page }) 
     .toBeGreaterThan(3);
   await ss(page, "01-guide");
 
-  const text = await editor.innerText();
+  // textContent, not innerText: chapter bodies sit in collapsed toggles, and
+  // innerText skips hidden text (a 41K-char guide read as 4K).
+  const text = await editor.evaluate((el) => el.textContent ?? "");
   fs.writeFileSync(path.join(OUT, "note.txt"), `${page.url()}\n\n${text}`);
   expect(await editor.locator("h1").count()).toBe(1);
   expect(text.length).toBeGreaterThan(15_000);
   expect(text).not.toMatch(/was cut off/);                       // E13
   expect(text).not.toMatch(/\b(?:DEF|INS|EQ|PROC)-\d{2}\b/);     // E14 (synthesis still sees IDs)
-  for (const term of ["passive", "panchromatic", "geostationary", "NDVI"]) {
+  expect(text).not.toMatch(/\[\[TABLE/);                        // every marker replaced (E6d)
+  expect(text).not.toMatch(/<br>/);                              // cell breaks rendered (E6d)
+  fs.writeFileSync(path.join(OUT, "tables.txt"),
+    String(await editor.locator("table").count()));
+  const terms = (process.env.TERMS ?? "passive,panchromatic,geostationary,NDVI").split(",");
+  for (const term of terms) {
     expect(text.toLowerCase()).toContain(term.toLowerCase());
   }
 });
