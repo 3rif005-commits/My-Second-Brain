@@ -8,16 +8,21 @@
 **Status legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (say why + what's needed)
 
 **Branch:** `feat/ai-harness`
-**Last session:** 2026-09-24 night (unattended, ~$2.00 of $3 spent). Shipped:
-truncation warning + 32K cap (E13), estimate follows sources, compare-sources
-label leak fixed (E14), chip names failed sources, **study guides now default
-to Markdown** (E6b, −41% cost, verified live on two sources), study-guide
-prompts moved into `skills/study-guide/`, chat only pastes chat skills, Retry
-reruns the failed job. **Caveat:** the `rs-*` "lectures" are AI-generated
-study guides, not slides — E6b must be re-checked on real slides.
-**Your app.sh stack:** a night run stopped it by mistake at ~01:07 and
-restored it (dev frontend + --reload backend); both running at 03:55.
+**Last session:** 2026-09-24, overnight + 06:40 (~$2.06 of the $3 night
+budget). **Morning smoke pass (06:5x, own production stack): workspace-skills
+5/5, selection skill 1/1, compare-sources + Undo live — the app works.**
+Shipped overnight: cut-off guides flagged + 32K cap (E13); estimate follows
+sources; compare-sources label leak fixed (E14, confirmed in-app); chip names
+failed sources; **study guides default to Markdown** (E6b, −41% cost, live on
+two sources); study-guide prompts in `skills/study-guide/`; chat pastes only
+chat skills; run card (Retry the right job, job + elapsed, Undo).
+**Caveat:** the `rs-*` PDFs are AI-generated study guides, not slides —
+re-check E6b on real slides. **Your app.sh stack** is stopped (you stopped it
+at 06:43); nothing of mine is left running.
 **Next action, in order:**
+- **Re-run E6b on real lecture slides** (needs the user's OK for a slide pair) — the Markdown default rests on AI-generated study guides only.
+- The failure path of the run card, live (needs a run that fails — e.g. a budget cap set below the estimate).
+- "Contradiction" usage in compare-sources: read the runs that use it and judge.
 0. [x] **Truncation on real lectures** — done 2026-09-24: detection + UI
    warning (`1b5c095`), cap raised to 32K on evidence (E13: 1/3 → 3/3, 0
    truncated, +8% cost).
@@ -46,11 +51,10 @@ restored it (dev frontend + --reload backend); both running at 03:55.
    identical). Offered on no menu. Chat now classifies only chat-surface
    skills (agent family 9/9). Open: under AGENT_SKILL_DISCLOSURE=index the
    catalogue still lists every skill.
-5. [~] **Run card** — first piece done 2026-09-24 (`efca17a`): a failed run
-   names its job and Retry reruns THAT job (it always restarted the study
-   guide). Second piece (05:2x): the running status names the job and counts
-   up ("Compare sources… 0:42"), verified live. Still to do: Apply/Discard
-   and the receipt in the same place; a live check of the failure path.
+5. [x] **Run card** — done 2026-09-24: Retry reruns the failed job
+   (`efca17a`), the running status names the job and counts up (`e6d22a3`),
+   and Undo sits beside the receipt (`2e2793d`) — all but the failure path
+   verified live.
 
 **Run the backend suite with `env -u PYTHONPATH`** — this machine's ROS install
 puts `/opt/ros/jazzy` on PYTHONPATH and its pytest plugins crash collection:
@@ -251,3 +255,4 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - 2026-09-24 · night run 1: truncation flagged + cap 32K (E13), estimate follows sources, compare-sources label leak fixed (E14), chip names failed sources; ~$1.11 spent · `1b5c095`…see log
 - 2026-09-24 · night run 2 (03:17): Markdown default wired + live 2-source guide, source-type correction, study-guide skill folder, chat surface filter, Retry fix · `63f5c5e`…`efca17a`
 - 2026-09-24 · night run 3 (05:17): running status names the job + elapsed, verified live; E14 confirmed in-app · see git log
+- 2026-09-24 · 06:40 session: Undo beside the receipt, morning smoke all green · `2e2793d`

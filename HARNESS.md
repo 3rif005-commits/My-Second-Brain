@@ -159,7 +159,9 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   Say "free", and still say the token count — free of price is not free of time.
   (Caught by the first live pass, not by any unit test.)
 - Stop only the processes you started, by the pid you recorded. Stopping
-  "whatever listens on :3000" killed the user's own app.sh frontend.
+  "whatever listens on :3000" killed the user's own app.sh frontend. And
+  `npm run start|dev` spawns a `next-server` that outlives its parent: stop
+  the children (`pkill -P <pid>`) before the pid, then check the port.
 - Never `pkill -f <pattern>` where the pattern appears in your own command line:
   it kills the shell running it. Use `pgrep -f "[l]lama-server"` or kill by pid.
   (Cost three dead shells before it was written down.)

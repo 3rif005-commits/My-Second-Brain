@@ -59,7 +59,8 @@ extension and NOT by reading many screenshots:
     (cd frontend && NODE_OPTIONS=--max-old-space-size=2048 npm run build > $S/build.log 2>&1 && npm run start > $S/frontend.log 2>&1 &)
   Backend runs from .venv (runtime); tests use venv. Never `next dev`.
   Record each pid as you start it ($!) and stop exactly those — never by
-  port, never pkill a pattern in your own command line.
+  port, never pkill a pattern in your own command line. npm leaves a
+  next-server behind: `pkill -P <pid>; kill <pid>`, then check :3000 is free.
 - Free specs (no model call): npx playwright test --project=workspace-skills
 - Paid specs, one call each, only after a change they cover:
     npx playwright test --project=skills-live e2e/selection-skills-live.spec.ts
