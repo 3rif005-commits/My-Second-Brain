@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 
 from core.config import settings
 from prompts.note_synthesis import build_note_synthesis_prompt, split_budget
+from prompts.note_synthesis_md import build_markdown_synthesis_prompt
 from services.ai.client import complete, last_call_truncated
 from services.ai import budget as budget_guard
 from services.ai import usage as usage_log
@@ -27,7 +28,7 @@ from services.ai.router import complete_with_fallback, pick
 from services.database import get_supabase
 from services.workspace.dbretry import with_retry
 from services.workspace.figures import figure_parts
-from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML
+from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML, markdown_to_html
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 #: 14.7K–25.6K tokens, 3/3 pass, +8% cost. The cap bills nothing unused.
 OUTPUT_CAP = 32000
 
-_FENCE = re.compile(r"^```(?:html)?\s*|\s*```$", re.MULTILINE)
+_FENCE = re.compile(r"^```(?:html|markdown|md)?\s*|\s*```$", re.MULTILINE)
 _H1 = re.compile(r"<h1[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
 _TAGS = re.compile(r"<[^>]+>")
 _PENDING = ("queued", "processing")
@@ -158,14 +159,30 @@ def maybe_synthesize(note_id: str) -> bool:
 _MIN_OUTPUT_TOKENS = 3_000
 
 
-def _expected_output_tokens(source_chars: int) -> int:
-    return min(OUTPUT_CAP, max(_MIN_OUTPUT_TOKENS, tokens_from_chars(source_chars)))
+#: Markdown says the same in about half the tokens (E6b on two real lectures:
+#: median 9.2K vs 17.6K output tokens at equal text length).
+_MARKDOWN_OUTPUT_RATIO = 0.55
 
 
-def _prompt_overhead_chars() -> int:
+def _uses_markdown(figures: list | None = None, video_urls: list | None = None) -> bool:
+    """Markdown for text runs when configured; the figure and video paths
+    were only ever written and measured for the HTML dialect."""
+    return settings.synthesis_format == "md" and not figures and not video_urls
+
+
+def _expected_output_tokens(source_chars: int, markdown: bool = False) -> int:
+    tokens = tokens_from_chars(source_chars)
+    if markdown:
+        tokens = int(tokens * _MARKDOWN_OUTPUT_RATIO)
+    return min(OUTPUT_CAP, max(_MIN_OUTPUT_TOKENS, tokens))
+
+
+def _prompt_overhead_chars(markdown: bool = False) -> int:
     """Size of the static part of the prompt — measured, not hardcoded, so it
-    cannot drift away from prompts/note_synthesis.py."""
+    cannot drift away from the prompt files."""
     try:
+        if markdown:
+            return len(build_markdown_synthesis_prompt([]))
         return len(build_note_synthesis_prompt([], has_figures=False))
     except Exception:
         return 8_000
@@ -184,8 +201,9 @@ def estimate_synthesis(note_id: str, user_id: str) -> dict:
     allotted = split_budget(lengths) if lengths else []
     source_chars = sum(min(length, allot)
                        for length, allot in zip(lengths, allotted))
-    input_tokens = tokens_from_chars(source_chars + _prompt_overhead_chars())
-    output_tokens = _expected_output_tokens(source_chars)
+    md = _uses_markdown()
+    input_tokens = tokens_from_chars(source_chars + _prompt_overhead_chars(md))
+    output_tokens = _expected_output_tokens(source_chars, markdown=md)
     provider = pick("summarize_text", user_id)
     model = provider.model if provider else None
     return {
@@ -235,7 +253,8 @@ def _inherited_titles(note: dict, first_source: dict) -> set[str]:
 
 
 def _complete(prompt: str, video_urls: list[str], has_text: bool,
-              user_id: str, figures: list[dict] | None = None) -> str:
+              user_id: str, figures: list[dict] | None = None,
+              markdown: bool = False) -> str:
     """Text path, or the Gemini-native video path when a source has no
     transcript (same capability routing the per-resource summary used)."""
     if video_urls:
@@ -267,6 +286,15 @@ def _complete(prompt: str, video_urls: list[str], has_text: bool,
         except Exception as e:
             logger.warning(f"vision synthesis failed, retrying without the "
                            f"{len(figures) // 2} figure(s): {e}")
+    if markdown:
+        # Validate what the editor will receive, not the raw Markdown: the
+        # same "has a title, has chapters, has length" check as the HTML path.
+        md = complete_with_fallback(
+            "summarize_text", user_id, [{"role": "user", "content": prompt}],
+            max_tokens=OUTPUT_CAP,
+            validate=lambda text: _looks_like_a_mastery_guide(
+                markdown_to_html(_strip_fences(text))))
+        return markdown_to_html(_strip_fences(md))
     return _strip_fences(complete_with_fallback(
         "summarize_text", user_id, [{"role": "user", "content": prompt}],
         max_tokens=OUTPUT_CAP, validate=_looks_like_a_mastery_guide))
@@ -329,7 +357,9 @@ def run_synthesis(note_id: str, mode: str = "replace",
         figures = (figure_parts(source_ids)
                    if not video_urls and (settings.workspace_synthesis_vision or not has_text)
                    else [])
-        prompt = build_note_synthesis_prompt(blocks, has_figures=bool(figures))
+        use_md = _uses_markdown(figures, video_urls)
+        prompt = (build_markdown_synthesis_prompt(blocks) if use_md
+                  else build_note_synthesis_prompt(blocks, has_figures=bool(figures)))
         with usage_log.annotate(surface="workspace", job="synthesis",
                                 trigger=trigger, note_id=note_id,
                                 user_id=user_id), \
@@ -338,7 +368,8 @@ def run_synthesis(note_id: str, mode: str = "replace",
             # from the same chunks and the same budget split the run will use.
             budget_guard.check(estimate_synthesis(note_id, user_id)["usd"],
                                what="Writing this note", setting="MAX_USD_PER_RUN")
-            html = _complete(prompt, video_urls, has_text, user_id, figures)
+            html = _complete(prompt, video_urls, has_text, user_id, figures,
+                             markdown=use_md)
             if last_call_truncated():
                 # Say so in the note itself: a guide that stops mid-section
                 # with no explanation reads as the whole lecture.

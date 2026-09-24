@@ -18,6 +18,15 @@ def _auto_on_drop(monkeypatch):
     monkeypatch.setattr(synthesis.settings, "workspace_on_drop", "auto")
 
 
+@pytest.fixture(autouse=True)
+def _html_dialect(monkeypatch):
+    """The model answers below are written in the HTML dialect, so these tests
+    pin that path. It still ships — figure and video runs always use it, and
+    SYNTHESIS_FORMAT=html restores it for text. The Markdown path (the text
+    default since E6b) has its own test at the end of this file."""
+    monkeypatch.setattr(synthesis.settings, "synthesis_format", "html")
+
+
 def _db(sources, synth_rows, note_rows):
     """get_supabase() double: one MagicMock per table, chains pre-wired."""
     tables: dict = {}
@@ -340,3 +349,21 @@ def test_textless_source_without_a_video_provider_fails_with_a_clear_message():
     writes = [c.args[0] for c in db.tables["note_synthesis"].upsert.call_args_list]
     assert writes[-1]["status"] == "failed"
     assert "video-capable" in writes[-1]["error"]
+
+
+def test_run_synthesis_on_the_markdown_path_writes_the_html_dialect(monkeypatch):
+    monkeypatch.setattr(synthesis.settings, "synthesis_format", "md")
+    md = "# Backprop\n\n## Why\n\n### Chain rule {1:p:1}\n" + "Gradients flow back. " * 40
+    db = _run_db(SRC_ROWS)
+    with patch.object(synthesis, "get_supabase", return_value=db), \
+         patch.object(synthesis, "source_text_from_chunks", return_value="[page 1]\ntext"), \
+         patch.object(synthesis, "complete_with_fallback", return_value=md) as ai:
+        synthesis.run_synthesis("n1")
+
+    prompt = ai.call_args[0][2][0]["content"]
+    assert "OUTPUT: Markdown" in prompt or "Markdown" in prompt[:2000]
+    writes = [c.args[0] for c in db.tables["note_synthesis"].upsert.call_args_list]
+    assert writes[-1]["status"] == "ready"
+    assert writes[-1]["html"].startswith("<h1>Backprop</h1>")
+    assert 'data-anchor="1:p:1"' in writes[-1]["html"]
+    assert writes[-1]["title_suggestion"] == "Backprop"
