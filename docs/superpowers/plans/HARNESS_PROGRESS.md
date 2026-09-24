@@ -20,8 +20,14 @@ chat skills; run card (Retry the right job, job + elapsed, Undo).
 re-check E6b on real slides. **Your app.sh stack** is stopped (you stopped it
 at 06:43); nothing of mine is left running.
 **Next action, in order:**
+- [x] **Tables (E6d)** — done 2026-09-24: source tables carried verbatim on
+  both paths (default HTML: 9–14 → 30–35 of 23 source tables, 3/3, +14%
+  cost), duplicates skipped, `<br>` fixed, unplaced tables placed beside the
+  section about their page. Live on real slides: 32 tables, 0 duplicates.
+- Markdown path: place unplaced tables by page too (HTML-only so far).
+- Undo's refusal after an edit — not yet seen in a browser (needs a paid draft).
 - [x] **E6c on real slides** — done 2026-09-24: Markdown lost tables (1/3 vs 3/3); **default reverted to HTML**. Opt-in `SYNTHESIS_FORMAT=md` remains. Next try: deterministic table carry-over, measured on `iml-slides-two`.
-- The failure path of the run card, live (needs a run that fails — e.g. a budget cap set below the estimate).
+- [x] Run card failure path, live and free (`run-card` project, MAX_USD_PER_RUN=0.001): banner names the job, Retry reruns it — 2026-09-24.
 - "Contradiction" usage in compare-sources: read the runs that use it and judge.
 0. [x] **Truncation on real lectures** — done 2026-09-24: detection + UI
    warning (`1b5c095`), cap raised to 32K on evidence (E13: 1/3 → 3/3, 0
@@ -257,3 +263,4 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - 2026-09-24 · night run 3 (05:17): running status names the job + elapsed, verified live; E14 confirmed in-app · see git log
 - 2026-09-24 · 06:40 session: Undo beside the receipt, morning smoke all green · `2e2793d`
 - 2026-09-24 · E6c on real slides: Markdown default reverted to HTML (tables) · see next commit
+- 2026-09-24 · late morning: E6c (MD default reverted), E6d table carry-over + placement, run-card failure path live · `d9ce49f`…`ab23878`
