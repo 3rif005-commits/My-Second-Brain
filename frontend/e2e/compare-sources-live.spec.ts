@@ -43,8 +43,14 @@ test("compare-sources writes a note from two real lectures", async ({ page }) =>
   await ss(page, "01-ready");
 
   await compare.click();
-  await expect(page.getByText(/writing the note/i)).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText(/writing the note/i)).toHaveCount(0, { timeout: 420_000 });
+  // The status names the job and counts up (run card, 2026-09-24).
+  const running = page.getByText(/^Compare sources…$/);
+  await expect(running).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/^\d+:\d{2}$/).first()).toBeVisible({ timeout: 10_000 });
+  await ss(page, "01b-running");
+  await expect(running).toHaveCount(0, { timeout: 420_000 });
+  const editorH1 = page.locator(".bn-editor h1");
+  await expect(editorH1).toHaveCount(1, { timeout: 60_000 });
   await ss(page, "02-note");
 
   const text = await page.locator(".bn-editor").first().innerText();

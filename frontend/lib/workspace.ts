@@ -149,6 +149,13 @@ export function failedJob(
   return { skill, message };
 }
 
+/** "0:42", "3:05" — how long a run has been going. Negative or unknown → null. */
+export function formatElapsed(ms: number | null | undefined): string | null {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return null;
+  const total = Math.floor(ms / 1000);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
 /** "compare-sources" → "Compare sources". */
 export function jobTitle(name: string): string {
   return name.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());

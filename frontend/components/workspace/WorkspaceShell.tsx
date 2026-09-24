@@ -14,7 +14,7 @@ import { useToast } from "@/app/providers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { SkillBar } from "./SkillBar";
 import { useNoteSkills } from "./useNoteSkills";
-import { failedJob, formatEstimate, formatLastRun, jobTitle, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSkill, type NoteSource, type SendAction } from "@/lib/workspace";
+import { failedJob, formatElapsed, formatEstimate, formatLastRun, jobTitle, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSkill, type NoteSource, type SendAction } from "@/lib/workspace";
 import { DropZone } from "./DropZone";
 import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
 import { SourceRail } from "./SourceRail";
@@ -29,15 +29,29 @@ interface WorkspaceShellProps {
 }
 
 /** What the shell is doing right now, in the header's meta line. */
-function StatusNote({ saving, saved, synthesizing }: {
+function StatusNote({ saving, saved, synthesizing, job, startedAt }: {
   saving: boolean; saved: boolean; synthesizing: boolean;
+  /** The skill this page started; null = the study guide or unknown. */
+  job?: string | null;
+  startedAt?: string | null;
 }) {
+  // Which job, and for how long: a two-minute run with a bare spinner reads
+  // as hung, and "Writing the note…" was shown for every job alike.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!synthesizing) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [synthesizing]);
   if (synthesizing) {
+    const elapsed = formatElapsed(startedAt ? now - Date.parse(startedAt) : null);
+    const label = job && job !== "study-guide" ? `${jobTitle(job)}…` : "Writing the note…";
     return (
       <span className="flex items-center gap-1 shrink-0 text-indigo-500 dark:text-indigo-400">
         <span className="text-gray-300 dark:text-gray-700">·</span>
         <Sparkles size={10} className="animate-pulse" />
-        <span className="ws-shimmer font-medium">Writing the note…</span>
+        <span className="ws-shimmer font-medium">{label}</span>
+        {elapsed && <span className="tabular-nums text-indigo-400/80">{elapsed}</span>}
       </span>
     );
   }
@@ -450,7 +464,8 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
                 · {lastRunText}
               </span>
             )}
-            <StatusNote saving={saving} saved={savedFlash} synthesizing={syn.running} />
+            <StatusNote saving={saving} saved={savedFlash} synthesizing={syn.running}
+              job={lastJob} startedAt={syn.synthesis?.updated_at} />
           </div>
         </div>
 

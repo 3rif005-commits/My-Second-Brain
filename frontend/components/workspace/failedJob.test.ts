@@ -26,3 +26,17 @@ describe("which job a failed run belongs to", () => {
     expect(jobTitle("compare-sources")).toBe("Compare sources");
   });
 });
+
+import { formatElapsed } from "@/lib/workspace";
+
+describe("how long a run has been going", () => {
+  it("reads as minutes and seconds", () => {
+    expect(formatElapsed(42_000)).toBe("0:42");
+    expect(formatElapsed(185_400)).toBe("3:05");
+  });
+  it("says nothing rather than something wrong", () => {
+    expect(formatElapsed(null)).toBeNull();
+    expect(formatElapsed(-5)).toBeNull();
+    expect(formatElapsed(Number.NaN)).toBeNull();
+  });
+});
