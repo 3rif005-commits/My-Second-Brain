@@ -70,10 +70,7 @@ attributes belong in a table, not in prose and not in a callout.
 SOURCE COVERAGE — the two things notes silently lose. Count them in the source
 before writing: TABLES (lines of |pipe|cells|) and EQUATIONS (a "=" between
 mathematical symbols, a Greek letter, a ratio like (NIR − Red)/(NIR + Red)).
-EVERY source table goes into the notes — never bullets, never prose. Tables in
-the source are labelled like [[TABLE 1.3]]: to include one, write that marker
-alone on its own line where the table belongs, and it is inserted exactly as
-the source has it. Never retype a labelled table. EVERY
+EVERY source table becomes a Markdown table — never bullets, never prose. EVERY
 distinct equation becomes a $$ block, preceded by a :::formula callout naming
 what it is for. Not usually: every one.
 

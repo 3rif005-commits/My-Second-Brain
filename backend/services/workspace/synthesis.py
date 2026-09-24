@@ -19,9 +19,7 @@ from datetime import datetime, timezone
 
 from core.config import settings
 from prompts.note_synthesis import build_note_synthesis_prompt, split_budget
-from prompts.note_synthesis_md import (
-    build_markdown_synthesis_prompt, build_markdown_synthesis_prompt_with_tables,
-)
+from prompts.note_synthesis_md import build_markdown_synthesis_prompt
 from services.ai.client import complete, last_call_truncated
 from services.ai import budget as budget_guard
 from services.ai import usage as usage_log
@@ -32,7 +30,6 @@ from services.workspace.dbretry import with_retry
 from services.workspace.figures import figure_parts
 from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML, markdown_to_html
 from services.workspace.anchors import repair_anchors
-from services.workspace.tables import carry_tables, carry_tables_html, label_tables
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +256,6 @@ def _inherited_titles(note: dict, first_source: dict) -> set[str]:
 def _complete(prompt: str, video_urls: list[str], has_text: bool,
               user_id: str, figures: list[dict] | None = None,
               markdown: bool = False,
-              tables: dict[str, str] | None = None,
               sources: list[dict] | None = None) -> str:
     """Text path, or the Gemini-native video path when a source has no
     transcript (same capability routing the per-resource summary used)."""
@@ -301,7 +297,7 @@ def _complete(prompt: str, video_urls: list[str], has_text: bool,
             validate=lambda text: _looks_like_a_mastery_guide(
                 markdown_to_html(_strip_fences(text))))
         # Source tables go in verbatim, where the model put their markers.
-        html = markdown_to_html(carry_tables(_strip_fences(md), tables or {}, offered=prompt))
+        html = markdown_to_html(_strip_fences(md))
         # The Markdown path sometimes points every section at source 1; the
         # note is right, the pointers are not (E6d). Checked against the pages.
         html, fixed = repair_anchors(html, sources or [])
@@ -371,14 +367,10 @@ def run_synthesis(note_id: str, mode: str = "replace",
                    if not video_urls and (settings.workspace_synthesis_vision or not has_text)
                    else [])
         use_md = _uses_markdown(figures, video_urls)
-        tables: dict[str, str] = {}
-        if use_md:
-            prompt, tables = build_markdown_synthesis_prompt_with_tables(blocks)
-        else:
-            # Source tables are labelled here and put back verbatim below: the
-            # HTML path kept 9–14 of a slide pair's 23 tables when retyping them.
-            labelled, tables = label_tables(blocks)
-            prompt = build_note_synthesis_prompt(labelled, has_figures=bool(figures))
+        # Which tables go into the notes is the model's choice (user decision,
+        # 2026-09-24): source tables are not force-copied.
+        prompt = (build_markdown_synthesis_prompt(blocks) if use_md
+                  else build_note_synthesis_prompt(blocks, has_figures=bool(figures)))
         with usage_log.annotate(surface="workspace", job="synthesis",
                                 trigger=trigger, note_id=note_id,
                                 user_id=user_id), \
@@ -388,9 +380,7 @@ def run_synthesis(note_id: str, mode: str = "replace",
             budget_guard.check(estimate_synthesis(note_id, user_id)["usd"],
                                what="Writing this note", setting="MAX_USD_PER_RUN")
             html = _complete(prompt, video_urls, has_text, user_id, figures,
-                             markdown=use_md, tables=tables, sources=blocks)
-            if not use_md:
-                html = carry_tables_html(html, tables, offered=prompt)
+                             markdown=use_md, sources=blocks)
             if last_call_truncated():
                 # Say so in the note itself: a guide that stops mid-section
                 # with no explanation reads as the whole lecture.

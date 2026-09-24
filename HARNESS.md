@@ -147,22 +147,18 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - Don't tell a model not to copy something — don't show it. "Never write the
   source's ID labels (DEF-01, INS-06)" changed nothing (1/5 leaked before and
   after); stripping the ID column from skill sources made it 0/5 (E14).
+- The study-guide instructions are the user's pre-harness text, byte for byte
+  (restored 2026-09-24). Engine work does not rewrite them: tuning the prompt
+  for the scoreboard made notes plainer, and the scoreboard did not see it.
 - A prompt is edited in its skill folder, not in a Python string. The study
   guide's two prompts moved to `skills/study-guide/` byte-for-byte (hash-checked).
 - Chat only pastes skills declared for chat (or for no surface). A workspace-
   or selection-only skill in a chat prompt is instructions for a job chat
   cannot do.
-- Source tables are carried into a note verbatim, never retyped by a model.
-  On real slides the model kept 9–14 of 23; labelled markers + exact
-  substitution keep all of them (E6d). Unplaced ones are appended — unless the
-  model already retyped them, or the reader gets the same table twice.
 - A section anchor is checked against the source pages, not trusted. The
   Markdown path sometimes pointed a whole lecture's sections at the other
   lecture; a deterministic word-overlap check moves them (E6e), and changes
   nothing on a correct note.
-- "Is this table already in the note?" compares data rows exactly. Sets of
-  cells called 11 of 23 slide tables copies of each other and dropped real
-  ones; a table shown twice is the lesser harm.
 - A skill reaches the workspace action bar only if it declares an `output`. No
   output means there is nowhere to put the result — those are agent
   instructions (cite-everything), not jobs.

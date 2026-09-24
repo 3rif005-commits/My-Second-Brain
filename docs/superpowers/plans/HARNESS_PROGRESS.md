@@ -85,6 +85,9 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 | User skills storage | Bundled skills stay files. User-authored skills deferred to H3 — do not build now. |
 | Framework adoption | None. No CrewAI/LangGraph/Temporal. Plain Python in `services/`. |
 | Subagents | Do not spawn Claude Code subagents for execution. Work inline, write to disk as you go. |
+| Study-guide instructions (user, 2026-09-24) | The pre-harness HTML instructions, byte for byte, are the standard (the level the user confirmed on a live note). Engine work does not edit them. |
+| Tables (user, 2026-09-24) | The model chooses which tables to include; no forced copying of source tables (E6d carry-over removed). |
+| Collapsed boxes (user) | Callouts sit inside collapsed toggles by design — compact notes. Not a defect. |
 | E6 outcome (2026-09-24) | Synthesis default is HTML. Markdown was default overnight (E6b) and reverted on real slides (E6c: tables 1/3 vs 3/3); opt-in `SYNTHESIS_FORMAT=md`. Skills keep writing Markdown. |
 | E7 outcome (2026-09-23) | `AGENT_SKILL_DISCLOSURE` stays `inline` until the catalogue grows; `index` is proven safe (loads the right skill 5/5). |
 | Supabase transport (2026-09-23) | PostgREST over HTTP/1.1 — reversible in `services/database.py`; h2 GOAWAY killed two live runs. |
@@ -270,3 +273,4 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - 2026-09-24 · E6c on real slides: Markdown default reverted to HTML (tables) · see next commit
 - 2026-09-24 · late morning: E6c (MD default reverted), E6d table carry-over + placement, run-card failure path live · `d9ce49f`…`ab23878`
 - 2026-09-24 · afternoon: Markdown anchor repair + row-exact table dedupe · `74dff6e`
+- 2026-09-24 · user review: old instructions restored byte-for-byte, forced table copying removed · see next commit

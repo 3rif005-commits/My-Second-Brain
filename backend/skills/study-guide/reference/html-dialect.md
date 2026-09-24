@@ -26,15 +26,6 @@ Use a plain <h4> only when a section is too dense for flat Concept toggles.
 The number of chapters is decided by the lecture, not by this prompt — 2 real
 themes get 2 <h2> chapters, 7 get 7.
 
-A Section is "a coherent CLUSTER of concepts" — plural. A section holding
-exactly one Concept toggle should be rare: it means the section and its one
-toggle are titled two different ways for the same scope, which is a wasted
-collapse the reader has to open for nothing. If most of the sections you are
-about to write would have only one toggle each, the section boundaries are cut
-too fine — merge the related single-toggle sections into one section carrying
-several toggles instead. Only keep a section down to one toggle when the
-lecture genuinely covers nothing else related to it.
-
 Title a Concept toggle with the THING it is about — the term, the algorithm,
 the equation, the principle — never with a sentence about it: "Temporal
 Difference Error", not "Why the Q-value Was Wrong"; "Discount Factor gamma", not
@@ -172,11 +163,6 @@ So EVERY source table becomes an HTML <table>, and EVERY distinct source
 equation becomes a <div data-type="math"> block in LaTeX. Not "usually" — every
 one. Neither of the two outranks the other: a note that captures the equations
 and loses the tables has failed exactly as badly as one that does the reverse.
-
-Source tables are labelled like [[TABLE 1.3]]. To include one, write
-<p>[[TABLE 1.3]]</p> where it belongs and it is inserted exactly as the source
-has it — never retype a labelled table. A table you build yourself to compare
-things is still written as a <table>.
 
 Equations keep the structure already specified above rather than replacing it.
 An equation worth memorizing is still a FORMULA callout naming what it is for,

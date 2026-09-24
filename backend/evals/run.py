@@ -161,7 +161,6 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
 
     blocks = _source_blocks(case)
     skill = None
-    tables: dict[str, str] = {}
     if case.get("skill"):
         # A skill case runs the skill's own prompt over the same source blocks
         # the app builds, and its Markdown is converted exactly as the app does.
@@ -171,12 +170,9 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
             raise SystemExit(f"case {case['id']}: no skill named {case['skill']!r}")
         prompt = skill_run.build_prompt(skill, blocks)
     elif variant == "md":
-        from prompts.note_synthesis_md import build_markdown_synthesis_prompt_with_tables
-        prompt, tables = build_markdown_synthesis_prompt_with_tables(blocks)
+        prompt = build_markdown_synthesis_prompt(blocks)
     else:
-        from services.workspace.tables import label_tables
-        labelled, tables = label_tables(blocks)
-        prompt = build_note_synthesis_prompt(labelled)
+        prompt = build_note_synthesis_prompt(blocks)
     prompt_chars = len(prompt)
     mark = len(usage_log.RECENT)
     started = time.monotonic()
@@ -214,17 +210,10 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
                     continue
                 break
 
-    if variant == "html" and skill is None and html and not dry_run:
-        from services.workspace.tables import carry_tables_html
-        html = carry_tables_html(html, tables, offered=prompt)
-
     if (variant == "md" or skill is not None) and html and not dry_run:
         # The editor is not part of the question: the variant is converted to
         # the same HTML the note pane parses, and scored by the same scorer.
         from services.workspace.md_to_blocks import markdown_to_html
-        if variant == "md" and skill is None:
-            from services.workspace.tables import carry_tables
-            html = carry_tables(html, tables, offered=prompt)
         html = markdown_to_html(html)
         if variant == "md" and skill is None:
             from services.workspace.anchors import repair_anchors
