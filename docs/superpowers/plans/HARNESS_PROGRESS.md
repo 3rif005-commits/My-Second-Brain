@@ -8,11 +8,15 @@
 **Status legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (say why + what's needed)
 
 **Branch:** `feat/ai-harness`
-**Last session:** 2026-09-23 (evening) — the measurement queue ran on Claude.
-E6 decided (keep HTML), E4 measured 5/5 after fixing three defects under a green
-suite, E7 decided (keep inline), the first compare-sources note was written
-live, and the selection menu shipped after fixing editor AI edits for everyone.
-
+**Last session:** 2026-09-24 night (unattended, ~$2.00 of $3 spent). Shipped:
+truncation warning + 32K cap (E13), estimate follows sources, compare-sources
+label leak fixed (E14), chip names failed sources, **study guides now default
+to Markdown** (E6b, −41% cost, verified live on two sources), study-guide
+prompts moved into `skills/study-guide/`, chat only pastes chat skills, Retry
+reruns the failed job. **Caveat:** the `rs-*` "lectures" are AI-generated
+study guides, not slides — E6b must be re-checked on real slides.
+**Your app.sh stack:** a night run stopped it by mistake at ~01:07 and
+restored it (dev frontend + --reload backend); both running at 03:55.
 **Next action, in order:**
 0. [x] **Truncation on real lectures** — done 2026-09-24: detection + UI
    warning (`1b5c095`), cap raised to 32K on evidence (E13: 1/3 → 3/3, 0
@@ -42,7 +46,10 @@ live, and the selection menu shipped after fixing editor AI edits for everyone.
    identical). Offered on no menu. Chat now classifies only chat-surface
    skills (agent family 9/9). Open: under AGENT_SKILL_DISCLOSURE=index the
    catalogue still lists every skill.
-5. Run card (5.1 remainder).
+5. [~] **Run card** — first piece done 2026-09-24 (`efca17a`): a failed run
+   names its job and Retry reruns THAT job (it always restarted the study
+   guide). Still to do: one card per run with job, elapsed time, tokens/cost
+   and Apply/Discard in one place; a live check of the failure path.
 
 **Run the backend suite with `env -u PYTHONPATH`** — this machine's ROS install
 puts `/opt/ros/jazzy` on PYTHONPATH and its pytest plugins crash collection:
@@ -241,3 +248,4 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
   API vs chat/completions), selection kept across menu open · `6695e84`, `4dc8da3`
 - 2026-09-24 · first real corpus case (two RS lectures); Claude baseline finds every note truncated at 16K tokens · see next commit
 - 2026-09-24 · night run 1: truncation flagged + cap 32K (E13), estimate follows sources, compare-sources label leak fixed (E14), chip names failed sources; ~$1.11 spent · `1b5c095`…see log
+- 2026-09-24 · night run 2 (03:17): Markdown default wired + live 2-source guide, source-type correction, study-guide skill folder, chat surface filter, Retry fix · `63f5c5e`…`efca17a`
