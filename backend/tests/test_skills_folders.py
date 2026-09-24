@@ -142,11 +142,11 @@ def test_chat_only_classifies_skills_it_may_use():
     assert "compare-sources" not in chat        # needs attached sources
 
 
-def test_the_study_guide_is_a_skill_folder_that_no_menu_offers():
+def test_the_study_guide_is_a_skill_folder_offered_as_a_chat_job():
     """The study guide's prompts live in skills/study-guide/ (SKILL.md = the
-    Markdown path, reference/html-dialect.md = the HTML path). It runs from
-    "Generate note" only — never as a second chip, a selection item or a
-    chat paste."""
+    Markdown path, reference/html-dialect.md = the user's HTML instructions).
+    It runs as a chat job (/study-guide, user decision 2026-09-24) — never
+    pasted into the chat assistant's own prompt, never in the selection menu."""
     from pathlib import Path
     from services.agent.skills import SkillRegistry
     from services.workspace import skill_run
@@ -158,8 +158,9 @@ def test_the_study_guide_is_a_skill_folder_that_no_menu_offers():
     reg = SkillRegistry.load([root.parent])
     assert reg.get("study-guide") is not None
     assert "study-guide" not in {s.name for s in reg.for_surface("chat")}
-    assert "study-guide" not in {s.name for s in skill_run.workspace_skills()}
     assert "study-guide" not in {s.name for s in skill_run.selection_skills()}
+    chat_jobs = {s.name for s in reg.all() if s.output and skill_run.CHAT_SURFACES & set(s.surfaces)}
+    assert "study-guide" in chat_jobs
 
 
 def test_the_chat_catalogue_lists_only_chat_skills():
