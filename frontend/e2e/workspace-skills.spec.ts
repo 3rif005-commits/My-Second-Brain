@@ -8,7 +8,7 @@
 import { test, expect, Page } from "@playwright/test";
 import path from "path";
 import fs from "fs";
-import { openPanel } from "./helpers/panel";
+import { openPanel, waitSourcesReady } from "./helpers/panel";
 
 const SCREENSHOT_DIR = path.join(process.cwd(), "e2e/screenshots/workspace-skills");
 const FIXTURE = path.join(process.cwd(), "e2e/fixtures/test.pdf");
@@ -49,9 +49,11 @@ test.describe("workspace: sources · note · AI", () => {
     await expect(page.getByRole("button", { name: /generate note|re-synthesize/i })).toHaveCount(0);
     await expect(aiPanel(page)).toBeVisible({ timeout: 30_000 });
 
-    // Every job is offered in the empty AI panel with its price.
+    // The empty panel is just the question; "/" lists every job.
+    await aiPanel(page).click();
+    await page.keyboard.type("/");
     for (const job of ["/study-guide", "/flashcards", "/compare-sources"]) {
-      await expect(page.getByRole("button", { name: new RegExp(job) })).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole("option", { name: new RegExp(job) })).toBeVisible({ timeout: 30_000 });
     }
     await ss(page, "01-three-panels");
     expect(errors, `page errors: ${errors.join(" | ")}`).toHaveLength(0);
@@ -69,9 +71,10 @@ test.describe("workspace: sources · note · AI", () => {
 
   test("a job that cannot run says why", async ({ page }) => {
     await openRecent(page, /1\s*source/);
-    const compare = page.getByRole("button", { name: /\/compare-sources/ });
+    await aiPanel(page).click();
+    await page.keyboard.type("/comp");
+    const compare = page.getByRole("option", { name: /\/compare-sources/ });
     await expect(compare).toBeVisible({ timeout: 30_000 });
-    await expect(compare).toBeDisabled();
     await expect(compare).toContainText(/two sources|failed|waiting/i);
     await ss(page, "03-blocked-with-reason");
   });
@@ -87,7 +90,7 @@ test.describe("workspace: sources · note · AI", () => {
       await page.getByTitle("Collapse the sources panel").click();
     await expect(page.locator(".bn-editor").first()).toBeVisible();
     await ss(page, "04-collapsed");
-    await page.getByTitle(/open the ai panel/i).first().click();
+    await page.getByRole("button", { name: "Open AI panel", exact: true }).click();
     await page.getByTitle("Show the sources").click();
     await expect(aiPanel(page)).toBeVisible();
   });
@@ -112,10 +115,10 @@ test.describe("workspace: sources · note · AI", () => {
     ]);
     await chooser.setFiles(FIXTURE);
     await page.waitForURL(/\/brain\/workspace\/[0-9a-f-]{36}/, { timeout: 60_000 });
-    await openPanel(page);
-    await expect(page.getByRole("button", { name: /\/study-guide/ })).toBeEnabled({ timeout: 90_000 });
+    await waitSourcesReady(page, page.url().split("/").pop()!, 90_000);
     await expect(page.locator(".bn-editor h1")).toHaveCount(0);   // nothing was written
     await ss(page, "06-offered-not-fired");
+    await page.request.delete(`/api/notes/${page.url().split("/").pop()}`);   // its own note
   });
 });
 

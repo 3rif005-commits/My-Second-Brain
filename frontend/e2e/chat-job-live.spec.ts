@@ -8,7 +8,7 @@
 import { test, expect } from "@playwright/test";
 import path from "path";
 import fs from "fs";
-import { openPanel } from "./helpers/panel";
+import { openPanel, waitSourcesReady } from "./helpers/panel";
 
 const OUT = path.join(process.cwd(), "e2e/screenshots/chat-job-live");
 const FIXTURE = path.join(process.cwd(), "e2e/fixtures/test.pdf");
@@ -24,7 +24,7 @@ test("/study-guide in the AI panel: preview, insert, undo", async ({ page }) => 
   await chooser.setFiles(FIXTURE);
   await page.waitForURL(/\/brain\/workspace\/[0-9a-f-]{36}/, { timeout: 60_000 });
   await openPanel(page);           // the app's one AI panel
-  await expect(page.getByRole("button", { name: /\/study-guide/ })).toBeEnabled({ timeout: 120_000 });
+  await waitSourcesReady(page, page.url().split("/").pop()!, 120_000);
   await expect(page.locator(".bn-editor").first()).toBeVisible({ timeout: 60_000 });
 
   const box = page.getByRole("textbox", { name: /message the ai/i });

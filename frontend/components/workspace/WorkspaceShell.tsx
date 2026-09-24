@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft, Check, ExternalLink, MessageSquare, PanelLeftClose, PanelLeftOpen,
+  ArrowLeft, Check, ExternalLink, PanelLeftClose, PanelLeftOpen,
   Pencil, Sparkles, Upload,
 } from "lucide-react";
 import { useToast } from "@/app/providers";
@@ -552,18 +552,6 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
           </div>
         </div>
 
-        <button
-          onClick={ai.toggle}
-          title={chatOpen ? "Close the AI panel" : "Open the AI panel (⌘K)"}
-          className={`shrink-0 w-8 h-8 flex items-center justify-center rounded-xl transition-colors
-            focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
-            chatOpen
-              ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 ring-1 ring-indigo-500/25"
-              : "text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 hover:bg-black/5 dark:hover:bg-white/5"
-          }`}
-        >
-          <MessageSquare size={15} />
-        </button>
         <a
           href={`/brain/${note.id}`}
           title="Open this note on its own page"

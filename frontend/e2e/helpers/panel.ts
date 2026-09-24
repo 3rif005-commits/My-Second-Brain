@@ -26,3 +26,11 @@ export async function attachFixture(page: Page): Promise<string> {
   return created.then(async (r) => (await r.json()).note_id as string);
 }
 
+
+/** Wait until every source of a note is processed (ready or failed). */
+export async function waitSourcesReady(page: Page, noteId: string, timeout = 180_000) {
+  await expect.poll(async () => {
+    const rows = await (await page.request.get(`/api/ws/notes/${noteId}/sources`)).json().catch(() => null);
+    return Array.isArray(rows) && rows.length > 0 && rows.every((r: { status: string }) => r.status === "ready");
+  }, { timeout, intervals: [2000] }).toBe(true);
+}

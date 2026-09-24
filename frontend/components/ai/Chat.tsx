@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Send, History, SquarePen, X, Smartphone, Cloud, Check, SlidersHorizontal, Sparkles,
-  Paperclip, FileText, FilePlus2, Link2, Upload, ChevronRight,
+  Paperclip, FileText, FilePlus2, Link2, Upload,
 } from "lucide-react";
 import { MessageList, type StreamItem } from "./MessageList";
 import { ThreadHistory } from "./ThreadHistory";
@@ -58,12 +58,6 @@ interface ChatProps {
   focusNonce?: number;
 }
 
-/** Openers for an empty conversation about sources — one tap, not a blank page. */
-const STARTERS = [
-  "Summarise the key ideas",
-  "What should I remember first?",
-  "Explain the hardest part simply",
-];
 
 
 
@@ -117,8 +111,6 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
     : workspace ? "this note's sources"
     : scope ? `“${scope.title}”`
     : pageNoteId && pageSources ? "this note's sources" : null;
-  // The empty panel offers the jobs when there are sources to run them on.
-  const offerJobs = !!(workspace || scope || (pageNoteId && pageSources)) && jobs.length > 0;
 
   function addFiles(list: FileList | File[] | null | undefined) {
     const files = Array.from(list ?? []);
@@ -646,32 +638,6 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                 ? "Ask about this note's sources — answers cite the exact page — or anything in your brain."
                 : "Ask anything — answers are grounded in your notes."}
             </p>
-            {offerJobs && (
-              <div className="mt-5 w-full max-w-[300px] flex flex-col gap-1.5 text-left">
-                {jobs.map((j) => (
-                  <button key={j.skill} disabled={!!j.runnable || loading}
-                    onClick={() => void send(undefined, { query: `/${j.skill}` })}
-                    title={j.runnable ?? j.description}
-                    className="group flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-gray-800/60
-                      border border-gray-100 dark:border-gray-700/50 shadow-sm hover:border-indigo-300
-                      dark:hover:border-indigo-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                    <span className="text-[12.5px] font-medium text-gray-800 dark:text-gray-100">/{j.skill}</span>
-                    <span className="text-[11px] text-gray-400 truncate flex-1">{j.runnable ?? j.description}</span>
-                    <ChevronRight size={12} className="text-gray-300 shrink-0" />
-                  </button>
-                ))}
-                <div className="flex flex-wrap justify-center gap-1.5 mt-2">
-                  {STARTERS.map((q) => (
-                    <button key={q} disabled={loading} onClick={() => void send(undefined, { query: q })}
-                      className="px-2.5 h-7 rounded-full text-[12px] text-gray-600 dark:text-gray-300
-                        bg-white dark:bg-gray-800/60 border border-gray-100 dark:border-gray-700/50
-                        hover:text-indigo-600 transition-colors">
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         ) : (
           <MessageList
