@@ -71,6 +71,10 @@ def markdown_to_html(md: str) -> str:
     open_toggles = 0
     bullets_open = False
     table: list[list[str]] = []
+    # A note has one title. A second `#` is a chapter written a level too
+    # high (E6b: 2 of 9 Markdown runs), so it becomes an <h2> instead of a
+    # second <h1> the editor would render as another document title.
+    seen_title = False
 
     def close_bullets() -> None:
         nonlocal bullets_open
@@ -148,6 +152,9 @@ def markdown_to_html(md: str) -> str:
         if heading:
             close_bullets()
             level = len(heading.group(1))
+            if level == 1:
+                level = 2 if seen_title else 1
+                seen_title = True
             out.append(f"<h{level}{_anchor_attr(heading.group(3))}>"
                        f"{_inline(heading.group(2))}</h{level}>")
             continue

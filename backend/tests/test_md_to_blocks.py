@@ -104,3 +104,11 @@ def test_an_unrecognised_line_becomes_a_paragraph():
 
 def test_empty_input_is_empty_output():
     assert markdown_to_html("") == ""
+
+
+def test_a_note_has_one_title_and_a_second_one_becomes_a_chapter():
+    """E6b: 2 of 9 Markdown runs wrote a second `#`, failing h1 == 1."""
+    out = markdown_to_html("# Remote Sensing\n\n## Sensors\n\n# Orbits\n\ntext")
+    assert out.count("<h1>") == 1
+    assert "<h1>Remote Sensing</h1>" in out
+    assert "<h2>Orbits</h2>" in out
