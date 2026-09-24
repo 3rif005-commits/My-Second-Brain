@@ -42,7 +42,9 @@ test("a study guide is written from two real lectures, whole", async ({ page }) 
   // Wait for the draft itself, not for a spinner to disappear.
   const editor = page.locator(".bn-editor").first();
   await expect(editor.locator("h1")).toHaveCount(1, { timeout: 600_000 });
-  await expect(editor.locator("h2").nth(3)).toBeVisible({ timeout: 60_000 });
+  // Counted, not "visible": chapters can sit inside collapsed toggles.
+  await expect.poll(() => editor.locator("h2").count(), { timeout: 60_000 })
+    .toBeGreaterThan(3);
   await ss(page, "01-guide");
 
   const text = await editor.innerText();
