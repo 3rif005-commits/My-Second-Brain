@@ -99,6 +99,8 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     function onDrop(e: DragEvent) {
       e.preventDefault();
       if (inWorkspaceRef.current) return;       // the workspace attaches it as a source
+      // Dropped on the AI panel: it attaches the file to the conversation.
+      if ((e.target as Element | null)?.closest?.("[data-ai-panel]")) return;
       const file = e.dataTransfer?.files?.[0];
       if (file) setIngestSource({ type: "file", file });
     }

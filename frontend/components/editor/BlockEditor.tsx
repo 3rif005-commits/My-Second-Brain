@@ -200,6 +200,9 @@ export interface BlockEditorHandle {
    *  Used by workspace synthesis in "append" mode (the `ingestHtml` prop is
    *  the replace path and rewrites the whole document). */
   insertHtmlAtEnd: (html: string) => Promise<AnyBlock[]>;
+  /** Swap the whole document for this HTML and save — a draft going into an
+   *  empty note, where appending would leave an empty line above the title. */
+  replaceWithHtml: (html: string) => Promise<AnyBlock[]>;
   /** Ids of the top-level blocks currently in the document. Used to prune
    *  anchors whose block the user has since deleted. */
   blockIds: () => string[];
@@ -391,6 +394,18 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       } as Parameters<typeof useCreateBlockNote>[0]
     );
 
+    // A generated draft → blocks, with the callout bodies BlockNote's own
+    // parser would drop (see calloutChildren.ts).
+    const parseDraftHtml = async (html: string): Promise<AnyBlock[]> => {
+      const doc = new window.DOMParser().parseFromString(html, "text/html");
+      const { strippedHtml, calloutChildren } = await extractCalloutChildren(
+        mergeRedundantToggleHeadings(inlineMathInTableCells(doc.body.innerHTML)),
+        async (h: string) => (await editor.tryParseHTMLToBlocks(h)) as AnyBlock[]
+      );
+      const rawParsed = await editor.tryParseHTMLToBlocks(strippedHtml);
+      return attachCalloutChildren(rawParsed as AnyBlock[], calloutChildren);
+    };
+
     useImperativeHandle(ref, () => ({
       getDocument() {
         return editor.document as AnyBlock[];
@@ -446,14 +461,16 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         el.style.backgroundColor = "rgba(99,102,241,0.18)";
         setTimeout(() => { el.style.backgroundColor = ""; }, 1400);
       },
+      async replaceWithHtml(html: string) {
+        const parsed = await parseDraftHtml(html);
+        editor.replaceBlocks(editor.document, parsed);
+        const now = editor.document as AnyBlock[];
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        onSave?.(now, getPlainText(now));
+        return now;
+      },
       async insertHtmlAtEnd(html: string) {
-        const doc = new window.DOMParser().parseFromString(html, "text/html");
-        const { strippedHtml, calloutChildren } = await extractCalloutChildren(
-          mergeRedundantToggleHeadings(inlineMathInTableCells(doc.body.innerHTML)),
-          async (h: string) => (await editor.tryParseHTMLToBlocks(h)) as AnyBlock[]
-        );
-        const rawParsed = await editor.tryParseHTMLToBlocks(strippedHtml);
-        const parsed = attachCalloutChildren(rawParsed as AnyBlock[], calloutChildren);
+        const parsed = await parseDraftHtml(html);
         const before = (editor.document as AnyBlock[]).length;
         const last = (editor.document as AnyBlock[])[before - 1];
         if (last) editor.insertBlocks(parsed, last.id, "after");

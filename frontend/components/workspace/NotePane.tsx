@@ -12,10 +12,10 @@ import dynamic from "next/dynamic";
 import { Link2 } from "lucide-react";
 import type { BlockEditorHandle, ExtraSlashItem } from "@/components/editor/BlockEditor";
 import {
-  anchorLabel, parseSourceAnchor, sourceColor, wsApi,
-  type AnchorType, type NoteAnchor, type NoteSource, type SendAction,
+  anchorLabel, sourceColor, wsApi,
+  type NoteAnchor, type NoteSource, type SendAction,
 } from "@/lib/workspace";
-import { findLevelHeadings } from "./anchorHeadings";
+import { anchorRows, findLevelHeadings, readDraftAnchors, type DraftAnchor } from "./anchorHeadings";
 
 const BlockEditor = dynamic(
   () => import("@/components/editor/BlockEditor").then((m) => m.BlockEditor),
@@ -47,7 +47,7 @@ export interface NoteApplyApi {
   undoApply: () => boolean;
 }
 
-interface PendingAnchor { sourceIndex: number; type: AnchorType; value: number }
+type PendingAnchor = DraftAnchor;
 
 interface NotePaneProps {
   note: NoteData;
@@ -149,17 +149,7 @@ export function NotePane({
         `vs ${headings.length} level-3 heading blocks — anchoring the first ` +
         `${Math.min(headings.length, pending.anchors.length)} only`);
     }
-    const rows: NoteAnchor[] = [];
-    headings.forEach((h: AnyBlock, i: number) => {
-      const p = pending.anchors[i];
-      if (!p) return;                          // that <h3> carried no anchor
-      const rid = pending.sourceIds[p.sourceIndex - 1];
-      if (!rid) return;                        // model invented a source index
-      rows.push({
-        block_id: h.id, resource_id: rid, anchor_type: p.type,
-        anchor_start: p.value, anchor_end: p.value,
-      });
-    });
+    const rows = anchorRows(blocks, pending.anchors, pending.sourceIds);
     if (rows.length === 0) return;
     // Read through the ref, not state: two appends can land before React
     // re-renders, and PUT replaces every row, so a stale list would erase the
@@ -222,16 +212,7 @@ export function NotePane({
 
   // ── synthesis apply API (used by useSynthesis) ─────────────────────────────
   const collect = useCallback((html: string, sourceIds: string[]) => {
-    // Read anchors in document order BEFORE BlockNote parsing strips unknown
-    // attributes. One entry per <h3> — null where that heading carried none —
-    // so the zip against parsed heading blocks stays aligned.
-    const doc = new window.DOMParser().parseFromString(html, "text/html");
-    const list: (PendingAnchor | null)[] = [];
-    doc.querySelectorAll("h3").forEach((h) => {
-      const raw = h.getAttribute("data-anchor");
-      list.push(raw ? parseSourceAnchor(raw) : null);
-    });
-    pendingRef.current = { anchors: list, sourceIds };
+    pendingRef.current = { anchors: readDraftAnchors(html), sourceIds };
   }, []);
 
   // Close the apply window on a later tick: BlockNote's change events for the

@@ -8,6 +8,11 @@ import { ChevronRight, Link, Check, Layers } from "lucide-react";
 import type { Note } from "@/lib/types/database";
 import { Button } from "@/components/ui/button";
 import { wsApi } from "@/lib/workspace";
+import { getPlainText } from "@/lib/blockText";
+import {
+  DRAFT_EVENT, UNDO_EVENT, takeStagedDraft, type NoteDraft, type UndoOutcome,
+} from "@/lib/noteDraft";
+import { anchorRows, readDraftAnchors } from "@/components/workspace/anchorHeadings";
 import { NoteProperties } from "./NoteProperties";
 import { DatabaseRowProperties } from "../database/DatabaseRowProperties";
 import { BacklinksPanel } from "./BacklinksPanel";
@@ -108,6 +113,71 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
       setIngestHtml(html);
     }
   }, [note.id]);
+
+  // ── drafts from the AI side panel (lib/noteDraft.ts) ─────────────────────
+  // The last applied draft, so Undo can take it back — but only while the
+  // document is still exactly what the draft left.
+  const lastDraftRef = useRef<{ before: AnyBlock[]; after: string } | null>(null);
+
+  const applyDraft = useCallback(async (d: NoteDraft): Promise<boolean> => {
+    // The editor is loaded lazily: a draft staged before navigation waits for it.
+    for (let i = 0; i < 100 && !editorRef.current; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const ed = editorRef.current;
+    if (!ed) return false;
+    const before = ed.getDocument();
+    // "replace" is only for an empty note. Checked again here: the note may
+    // have been typed into since the panel looked.
+    const empty = getPlainText(before).trim() === "";
+    const blocks = d.mode === "replace" && empty
+      ? await ed.replaceWithHtml(d.html)
+      : await ed.insertHtmlAtEnd(d.html);
+    lastDraftRef.current = { before, after: JSON.stringify(ed.getDocument()) };
+    const rows = anchorRows(blocks, readDraftAnchors(d.html), d.sourceIds);
+    if (rows.length) {
+      const live = new Set(ed.blockIds());
+      const kept = (await wsApi.getAnchors(note.id).catch(() => []))
+        .filter((a) => live.has(a.block_id));
+      wsApi.putAnchors(note.id, [...kept, ...rows]).catch(() => {});
+    }
+    wsApi.listSources(note.id).then((r) => setSourceCount(r.length)).catch(() => {});
+    return true;
+  }, [note.id]);
+
+  useEffect(() => {
+    const staged = takeStagedDraft(note.id);
+    if (staged) void applyDraft(staged);
+
+    function onDraft(e: Event) {
+      const { draft, respond } = (e as CustomEvent<{ draft: NoteDraft; respond: (ok: boolean) => void }>).detail;
+      if (draft.noteId !== note.id) return;
+      // Claim it at once: the editor may still be loading, and a late answer
+      // would make the panel stage it too — applying it twice.
+      respond(true);
+      void applyDraft(draft);
+    }
+    function onUndo(e: Event) {
+      const { noteId, respond } = (e as CustomEvent<{ noteId: string; respond: (o: UndoOutcome) => void }>).detail;
+      if (noteId !== note.id) return;
+      const ed = editorRef.current;
+      const last = lastDraftRef.current;
+      if (!ed || !last) return respond("gone");
+      if (JSON.stringify(ed.getDocument()) !== last.after) return respond("edited");
+      ed.replaceDocument(last.before);
+      lastDraftRef.current = null;
+      const doc = ed.getDocument();
+      void handleSaveContent(doc, getPlainText(doc));
+      respond("undone");
+    }
+    window.addEventListener(DRAFT_EVENT, onDraft);
+    window.addEventListener(UNDO_EVENT, onUndo);
+    return () => {
+      window.removeEventListener(DRAFT_EVENT, onDraft);
+      window.removeEventListener(UNDO_EVENT, onUndo);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.id, applyDraft]);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -249,10 +319,10 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
               <button
                 onClick={() => router.push(`/brain/workspace/${note.id}`)}
                 className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                title="Open this note beside its sources"
+                title={`Open this note beside its ${sourceCount} source${sourceCount === 1 ? "" : "s"}`}
               >
                 <Layers size={12} />
-                Open sources ({sourceCount})
+                Open in workspace
               </button>
             )}
           </div>
