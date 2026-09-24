@@ -42,8 +42,9 @@ WORKSPACE_SURFACE = "workspace"
 
 
 def registry() -> SkillRegistry:
-    user_dir = Path.home() / ".secondbrain" / "skills"
-    return SkillRegistry.load([SKILLS_DIR, user_dir])
+    # The user's copies (Settings → Skills) override the built-ins.
+    from prompts import _skill_text
+    return SkillRegistry.load([_skill_text.SKILLS_DIR, _skill_text.USER_SKILLS_DIR])
 
 
 def workspace_skills() -> list[Skill]:

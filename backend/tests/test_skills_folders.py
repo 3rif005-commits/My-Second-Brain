@@ -144,7 +144,7 @@ def test_chat_only_classifies_skills_it_may_use():
 
 def test_the_study_guide_is_a_skill_folder_offered_as_a_chat_job():
     """The study guide's prompts live in skills/study-guide/ (SKILL.md = the
-    Markdown path, reference/html-dialect.md = the user's HTML instructions).
+    user's HTML instructions, reference/markdown-variant.md = the opt-in path).
     It runs as a chat job (/study-guide, user decision 2026-09-24) — never
     pasted into the chat assistant's own prompt, never in the selection menu."""
     from pathlib import Path
@@ -153,8 +153,8 @@ def test_the_study_guide_is_a_skill_folder_offered_as_a_chat_job():
     from prompts.note_synthesis_md import MARKDOWN_SPEC
     from prompts.mastery_guide import SYSTEM_PROMPT
     root = Path(__file__).resolve().parent.parent / "skills" / "study-guide"
-    assert MARKDOWN_SPEC in (root / "SKILL.md").read_text(encoding="utf-8")
-    assert SYSTEM_PROMPT == (root / "reference" / "html-dialect.md").read_text(encoding="utf-8")[:-1]
+    assert SYSTEM_PROMPT in (root / "SKILL.md").read_text(encoding="utf-8")
+    assert MARKDOWN_SPEC == (root / "reference" / "markdown-variant.md").read_text(encoding="utf-8")[:-1]
     reg = SkillRegistry.load([root.parent])
     assert reg.get("study-guide") is not None
     assert "study-guide" not in {s.name for s in reg.for_surface("chat")}

@@ -14,12 +14,12 @@ The source blocks are identical to the HTML variant's — same budget split, sam
 """
 from __future__ import annotations
 
-from prompts._skill_text import skill_body
+from prompts._skill_text import skill_reference
 
 from prompts.note_synthesis import TOTAL_SOURCE_BUDGET, _source_block, split_budget
 
-# The text lives in skills/study-guide/SKILL.md — edit it there.
-MARKDOWN_SPEC = skill_body("study-guide")
+# The text lives in skills/study-guide/reference/markdown-variant.md.
+MARKDOWN_SPEC = skill_reference("study-guide", "markdown-variant.md")
 
 
 def build_markdown_synthesis_prompt(
