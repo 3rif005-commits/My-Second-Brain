@@ -118,3 +118,13 @@ def test_a_line_break_inside_a_table_cell_is_not_shown_as_text():
     out = markdown_to_html("|S1|S2<br>-1|\n|---|---|\n|a<br/>b|c|")
     assert "&lt;br" not in out
     assert "<th>S2 -1</th>" in out and "<td>a b</td>" in out
+
+
+def test_a_definition_quote_and_numbered_steps_render_as_their_blocks():
+    """The HTML dialect opens every concept with a definition quote and puts
+    steps in an ordered list; the Markdown path can now say both."""
+    out = markdown_to_html("> **Q-value:** expected return of an action.\n\n"
+                           "1. Observe the state\n2. Pick an action\n- a fact")
+    assert "<blockquote><p><strong>Q-value:</strong> expected return of an action.</p></blockquote>" in out
+    assert "<ol><li>Observe the state</li><li>Pick an action</li></ol>" in out.replace("\n", "")
+    assert "<ul><li>a fact</li></ul>" in out.replace("\n", "")

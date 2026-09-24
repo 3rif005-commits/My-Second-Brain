@@ -19,6 +19,8 @@ The dialect the model is asked for is deliberately small:
     ...                                 …
     ??                                </details>
     | a | b |                      → <table>
+    > **Term:** definition         → <blockquote>
+    1. step                        → <ol>
 
 Anything it does not recognise is passed through as a paragraph rather than
 dropped: a note with an odd line in it beats a note with a hole in it.
@@ -42,6 +44,8 @@ _MATH = re.compile(r"^\$\$\s*(.*?)\s*\$\$$")
 _TABLE_ROW = re.compile(r"^\|(.+)\|\s*$")
 _TABLE_SEP = re.compile(r"^\|[\s:|-]+\|\s*$")
 _BULLET = re.compile(r"^[-*]\s+(.*)$")
+_ORDERED = re.compile(r"^\d+[.)]\s+(.*)$")
+_QUOTE = re.compile(r"^>(?!>)\s?(.*)$")
 _INLINE = [
     (re.compile(r"\*\*(.+?)\*\*"), r"<strong>\1</strong>"),
     (re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)"), r"<em>\1</em>"),
@@ -70,7 +74,7 @@ def markdown_to_html(md: str) -> str:
     out: list[str] = []
     open_callout: str | None = None
     open_toggles = 0
-    bullets_open = False
+    bullets_open: str | None = None       # "ul" or "ol" while a list is open
     table: list[list[str]] = []
     # A note has one title. A second `#` is a chapter written a level too
     # high (E6b: 2 of 9 Markdown runs), so it becomes an <h2> instead of a
@@ -80,8 +84,15 @@ def markdown_to_html(md: str) -> str:
     def close_bullets() -> None:
         nonlocal bullets_open
         if bullets_open:
-            out.append("</ul>")
-            bullets_open = False
+            out.append(f"</{bullets_open}>")
+            bullets_open = None
+
+    def open_list(kind: str) -> None:
+        nonlocal bullets_open
+        if bullets_open != kind:
+            close_bullets()
+            out.append(f"<{kind}>")
+            bullets_open = kind
 
     def flush_table() -> None:
         nonlocal table
@@ -168,10 +179,22 @@ def markdown_to_html(md: str) -> str:
 
         bullet = _BULLET.match(line)
         if bullet:
-            if not bullets_open:
-                out.append("<ul>")
-                bullets_open = True
+            open_list("ul")
             out.append(f"<li>{_inline(bullet.group(1))}</li>")
+            continue
+
+        # Steps are a sequence, not labelled facts (the HTML dialect's rule).
+        ordered = _ORDERED.match(line)
+        if ordered:
+            open_list("ol")
+            out.append(f"<li>{_inline(ordered.group(1))}</li>")
+            continue
+
+        # "> **Term:** one sentence." — how a concept toggle opens.
+        quote = _QUOTE.match(line)
+        if quote and quote.group(1).strip():
+            close_bullets()
+            out.append(f"<blockquote><p>{_inline(quote.group(1))}</p></blockquote>")
             continue
 
         close_bullets()

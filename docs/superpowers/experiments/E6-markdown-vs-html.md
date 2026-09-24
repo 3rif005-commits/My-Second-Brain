@@ -284,3 +284,26 @@ kept 24–27 tables.
 The anchors and tables gaps are closed; the one left is callouts (the
 exam-tip / mistake / formula layer), at less than half. Whether −59% cost is
 worth that is a product call, not an eval result.
+
+## E6f — porting the HTML dialect's block rules to Markdown (2026-09-24, `iml-slides-app`, n=3)
+
+The HTML dialect's "INSIDE A CONCEPT TOGGLE" rules (definition quote first,
+numbered steps, which callout for which content, ≤2 sentences of prose) were
+translated into the Markdown spec (3.6K → 5.4K chars); the converter learned
+`>` quotes and `1.` lists so every rule had a block to land in.
+
+| | HTML | MD before | MD + ported rules |
+|---|---|---|---|
+| callouts | 31 · 35 · 45 | 14 · 15 · 15 | **13 · 9 · 7** |
+| callout types used | — | 6–7 | 3–5 |
+| definition quotes | — | 0 | 13–16 |
+| math | 19 · 6 · 14 | 3 · 4 · 6 | 11 · 9 · 6 |
+| tables | 30–35 | 24–27 | 26–29 |
+| text chars | 33–41K | 23–25K | 22–26K |
+
+**Primary (callouts) got worse → REVERTED** (the spec text; the converter's
+quote/ordered-list support stays — harmless, tested). The rules were
+followed where they asked for quotes and formulas, at the callouts' expense.
+The gap looks like LENGTH, not rules: Markdown answers run ~6K output tokens
+against HTML's 13–15K, at the same instructions' intent. Richness costs
+tokens; −59% cost and HTML's colour density may simply not coexist.
