@@ -56,7 +56,7 @@ at 06:43); nothing of mine is left running.
    HTML path); the Python modules read them byte-for-byte (hashes verified
    identical). Offered on no menu. Chat now classifies only chat-surface
    skills (agent family 9/9). Open: under AGENT_SKILL_DISCLOSURE=index the
-   catalogue still lists every skill.
+   catalogue still lists every skill. **Fixed 2026-09-24**: the index and `skill.load` are chat-surface only.
 5. [x] **Run card** — done 2026-09-24: Retry reruns the failed job
    (`efca17a`), the running status names the job and counts up (`e6d22a3`),
    and Undo sits beside the receipt (`2e2793d`) — all but the failure path

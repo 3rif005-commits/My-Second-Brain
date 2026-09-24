@@ -160,3 +160,13 @@ def test_the_study_guide_is_a_skill_folder_that_no_menu_offers():
     assert "study-guide" not in {s.name for s in reg.for_surface("chat")}
     assert "study-guide" not in {s.name for s in skill_run.workspace_skills()}
     assert "study-guide" not in {s.name for s in skill_run.selection_skills()}
+
+
+def test_the_chat_catalogue_lists_only_chat_skills():
+    from pathlib import Path
+    from services.agent.skills import SkillRegistry
+    reg = SkillRegistry.load([Path(__file__).resolve().parent.parent / "skills"])
+    chat = reg.index("chat")
+    assert "flashcards" in chat
+    assert "define-terms" not in chat and "study-guide" not in chat
+    assert "define-terms" in reg.index()          # the unfiltered listing is unchanged

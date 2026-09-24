@@ -156,14 +156,18 @@ class SkillRegistry:
             logger.warning("skipping skill %s: %s", path, e)
             return None
 
-    def index(self) -> str:
+    def index(self, surface: str | None = None) -> str:
         """The metadata-only listing that belongs in a system prompt.
 
         Roughly a hundred tokens per skill instead of the whole body, which is
         what lets the catalogue grow without the base prompt growing with it.
+        With a surface, only the skills that surface may use are listed — a
+        chat catalogue offering a selection-only skill offers a job chat
+        cannot run.
         """
+        skills = self.for_surface(surface) if surface else self._skills.values()
         return "\n".join(f"- {s.name}: {s.description}"
-                          for s in sorted(self._skills.values(), key=lambda s: s.name))
+                          for s in sorted(skills, key=lambda s: s.name))
 
     def for_surface(self, surface: str) -> list["Skill"]:
         """Skills a given surface may offer. No `surfaces` means anywhere."""

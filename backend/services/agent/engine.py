@@ -207,7 +207,7 @@ async def run_turn(
     system_prompt = _build_system_prompt(
         skill_bodies=[s.body for s in matched],
         knowledge_xml=knowledge_xml,
-        skill_index=skill_registry.index() if by_index else "",
+        skill_index=skill_registry.index("chat") if by_index else "",
     )
 
     # Restrict tool list per active-skill whitelists. If no skill restricts,
@@ -484,8 +484,11 @@ async def _stream_loop(
                 # skill that does not exist needs to see what does.
                 skill = (skill_registry.get(args.get("name", ""))
                          if skill_registry else None)
+                # A skill this surface may not use is treated as unknown.
+                if skill is not None and skill.surfaces and "chat" not in skill.surfaces:
+                    skill = None
                 if skill is None:
-                    available = skill_registry.index() if skill_registry else ""
+                    available = skill_registry.index("chat") if skill_registry else ""
                     _answer(slot, f"No skill by that name. Available:\n{available}")
                     yield _ev({"type": "tool_denied", "id": slot["id"],
                                "tool": tool, "reason": "unknown skill"})
