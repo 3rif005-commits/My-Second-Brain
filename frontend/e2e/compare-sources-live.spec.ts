@@ -57,5 +57,10 @@ test("compare-sources writes a note from two real lectures", async ({ page }) =>
   fs.writeFileSync(path.join(OUT, "note.txt"), `${page.url()}\n\n${text}`);
   expect(text).toMatch(/agree/i);
   expect(text).toMatch(/differ/i);
+
+  // The draft landed on its own; the way back is beside the receipt.
+  await page.getByRole("button", { name: /^undo$/i }).click();
+  await expect(editorH1).toHaveCount(0, { timeout: 10_000 });
+  await ss(page, "03-undone");
   expect(errors, `page errors: ${errors.join(" | ")}`).toHaveLength(0);
 });

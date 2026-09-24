@@ -208,6 +208,8 @@ export interface BlockEditorHandle {
    *  document from here — saving the returned slice would replace the note with
    *  just the appended part. */
   getDocument: () => AnyBlock[];
+  /** Replace the whole document with these blocks — how a draft is undone. */
+  replaceDocument: (blocks: AnyBlock[]) => void;
 }
 
 export interface InteractiveBlock { title: string; html: string }
@@ -392,6 +394,12 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     useImperativeHandle(ref, () => ({
       getDocument() {
         return editor.document as AnyBlock[];
+      },
+      replaceDocument(blocks: AnyBlock[]) {
+        // An empty note is one empty paragraph: replaceBlocks with nothing
+        // would leave BlockNote without a block to put the cursor in.
+        editor.replaceBlocks(editor.document,
+          blocks.length ? blocks : [{ type: "paragraph" }] as AnyBlock[]);
       },
       async exportMarkdown(title: string) {
         const md = await editor.blocksToMarkdownLossy(editor.document);

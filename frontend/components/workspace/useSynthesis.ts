@@ -40,6 +40,11 @@ export interface SynthesisController {
   chooseMode: (mode: "replace" | "append") => void;
   cancelMode: () => void;
   dismissError: () => void;
+  /** A draft landed in the note during this visit and can still be undone. */
+  justApplied: boolean;
+  /** Put the note back as it was before that draft. False when it cannot be
+   *  undone any more (the user has typed since). */
+  undoApply: () => boolean;
 }
 
 function sameSet(a: string[], b: string[]): boolean {
@@ -133,13 +138,18 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
   }, [noteId, synthesis, applyRef]);
 
   /** The draft is now durably in the note — record it server-side. */
+  const [justApplied, setJustApplied] = useState(false);
+  useEffect(() => { setJustApplied(false); }, [noteId]);
+
   const markApplied = useCallback(() => {
     if (!noteId) return;
+    setJustApplied(true);
     wsApi.markSynthesisApplied(noteId).then(refresh).catch(() => {});
   }, [noteId, refresh]);
 
   const queue = useCallback((mode: "replace" | "append") => {
     if (!noteId) return;
+    setJustApplied(false);
     modeRef.current = mode;
     setErrorDismissed(false);
     setSynthesis((s) => ({
@@ -154,7 +164,14 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
     else queue("replace");
   }, [noteId, running, applyRef, queue]);
 
+  const undoApply = useCallback(() => {
+    const ok = applyRef.current?.undoApply() ?? false;
+    setJustApplied(false);
+    return ok;
+  }, [applyRef]);
+
   const refreshAfterStart = useCallback(() => {
+    setJustApplied(false);
     setErrorDismissed(false);
     modeRef.current = null;
     setSynthesis((s) => ({ status: "queued", source_ids: s?.source_ids ?? [],
@@ -184,5 +201,7 @@ export function useSynthesis({ noteId, sources, applyRef }: Options): SynthesisC
     chooseMode,
     cancelMode: () => setAskMode(false),
     dismissError: () => setErrorDismissed(true),
+    justApplied,
+    undoApply,
   };
 }

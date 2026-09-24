@@ -464,6 +464,21 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
                 · {lastRunText}
               </span>
             )}
+            {/* The receipt and the way back, side by side: a draft lands on
+                its own, so the undo belongs where the user sees it land. */}
+            {syn.justApplied && !syn.running && (
+              <button
+                onClick={() => {
+                  if (!syn.undoApply()) {
+                    showToast("You've edited the note since — use Ctrl+Z to step back.", "info");
+                  }
+                }}
+                title="Put the note back as it was before this draft"
+                className="shrink-0 px-1.5 rounded-full text-indigo-500 hover:bg-indigo-500/10 transition-colors"
+              >
+                Undo
+              </button>
+            )}
             <StatusNote saving={saving} saved={savedFlash} synthesizing={syn.running}
               job={lastJob} startedAt={syn.synthesis?.updated_at} />
           </div>

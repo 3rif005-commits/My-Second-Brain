@@ -41,6 +41,10 @@ export interface NoteApplyApi {
   /** True when the note holds content that did not come from the last applied
    *  draft — i.e. the user's own work is in there and must not be clobbered. */
   hasUserEdits: () => boolean;
+  /** Put the note back as it was before the last applied draft. False — and
+   *  nothing changed — when there is no snapshot or the user has typed since:
+   *  restoring then would throw their edits away. */
+  undoApply: () => boolean;
 }
 
 interface PendingAnchor { sourceIndex: number; type: AnchorType; value: number }
@@ -116,6 +120,7 @@ export function NotePane({
   const currentTextRef = useRef<string>(getPlainText(note.content ?? []));
   const userEditedRef = useRef(false);   // a real user keystroke since the last applied draft
   const applyingRef = useRef(false);     // a programmatic apply is in flight
+  const beforeApplyRef = useRef<AnyBlock[] | null>(null);  // the note before the last draft
   const appliedOnceRef = useRef(false);  // a draft has been applied in THIS session
 
   // ── anchors ───────────────────────────────────────────────────────────────
@@ -240,6 +245,8 @@ export function NotePane({
   useEffect(() => {
     applyRef.current = {
       apply: (html, sourceIds, mode) => {
+        // What the note held before this draft, for Undo.
+        beforeApplyRef.current = structuredClone(editorRef.current?.getDocument() ?? []);
         collect(html, sourceIds);
         applyingRef.current = true;
         if (mode === "append") {
@@ -252,6 +259,17 @@ export function NotePane({
           setIngestHtml(html);   // BlockEditor's proven replace path
         }
       },
+      undoApply: () => {
+        const before = beforeApplyRef.current;
+        if (!before || userEditedRef.current || !editorRef.current) return false;
+        beforeApplyRef.current = null;
+        applyingRef.current = true;           // not the user's typing
+        editorRef.current.replaceDocument(before);
+        setTimeout(() => { applyingRef.current = false; }, 400);
+        const blocks = editorRef.current.getDocument();
+        void handleSave(blocks, getPlainText(blocks));
+        return true;
+      },
       hasUserEdits: () => {
         // Without a draft applied in this session we cannot prove where the
         // note's content came from, so treat any content as the user's.
@@ -260,7 +278,7 @@ export function NotePane({
       },
     };
     return () => { applyRef.current = null; };
-  }, [applyRef, collect, registerAnchors, persistApplied, finishApply]);
+  }, [applyRef, collect, registerAnchors, persistApplied, finishApply, handleSave]);
 
   const handleBlocksApplied = useCallback((blocks: AnyBlock[]) => {
     registerAnchors(blocks, "replace");
