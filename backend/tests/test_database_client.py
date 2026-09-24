@@ -6,7 +6,7 @@ compare-sources run died that way before it reached the model.
 """
 from supabase import create_client
 
-from services.database import _http1_postgrest
+from services.database import _http1_postgrest, _http1_storage
 
 
 def _client():
@@ -33,3 +33,14 @@ def test_the_swap_keeps_url_auth_headers_and_timeout():
     # a relative path still resolves against the project
     assert str(after.build_request("GET", "/notes").url) == \
         "https://example.supabase.co/rest/v1/notes"
+
+
+def test_storage_session_is_http1_and_buckets_use_it():
+    c = _client()
+    assert c.storage.session._transport._pool._http2 is True
+    headers = dict(c.storage.session.headers)
+    _http1_storage(c)
+    assert c.storage.session._transport._pool._http2 is False
+    assert c.storage.session.headers["authorization"] == headers["authorization"]
+    # a bucket built afterwards uploads through the new session
+    assert c.storage.from_("workspace")._client is c.storage.session

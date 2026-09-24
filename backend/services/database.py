@@ -23,9 +23,26 @@ def _http1_postgrest(client: Client) -> None:
     old.close()
 
 
+def _http1_storage(client: Client) -> None:
+    """The same swap for Storage, whose client also defaults to h2.
+
+    Source processing uploads every page image through one client, and those
+    uploads died with `ConnectionTerminated error_code:9` / `Server
+    disconnected` — the source then failed and the AI panel had no jobs to
+    offer. The bucket proxies read `_client`, the client itself `session`.
+    """
+    storage = client.storage
+    old = storage.session
+    new = httpx.Client(headers=old.headers, timeout=old.timeout,
+                       follow_redirects=True, http2=False)
+    storage.session = storage._client = new
+    old.close()
+
+
 def get_supabase() -> Client:
     global _client
     if _client is None:
         _client = create_client(settings.supabase_url, settings.supabase_service_role_key)
         _http1_postgrest(_client)
+        _http1_storage(_client)
     return _client

@@ -20,7 +20,11 @@ chat skills; run card (Retry the right job, job + elapsed, Undo).
 re-check E6b on real slides. **Your app.sh stack** is stopped (you stopped it
 at 06:43); nothing of mine is left running.
 **Next action, in order:**
-- [~] **One AI in the workspace (user, 2026-09-24)** — the app-wide side panel
+- [~] **One AI in the workspace (user, 2026-09-24)** — code in 7c737af; free
+  e2e green; the paid live pass (one-ai-live, chat-job-live) is still OPEN: it
+  ran against the dev server with the generation model up, swap hit 100%, and
+  uploads/embeddings stalled past the test waits. Re-run on `--prod` with
+  llama-server stopped. The app-wide side panel
   (robot icon) is merged INTO the workspace AI panel; one engine (the agent,
   surface "workspace", current_note_id). Decided cases:
   1. The AI never writes the OPEN note through tools (it would fight the

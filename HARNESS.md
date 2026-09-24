@@ -179,3 +179,6 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - This machine has 3.8GB RAM. Playwright needs the generation server stopped,
   the frontend on `npm run start` rather than `next dev`, and nothing else big
   open. `app.sh` starts the dev server, which is too heavy to test against here.
+- Supabase Storage also defaults to HTTP/2; source uploads died with
+  `ConnectionTerminated error_code:9`, the source failed, and the AI panel had
+  no jobs. `services/database.py` gives Storage an HTTP/1.1 session too.
