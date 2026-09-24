@@ -128,3 +128,15 @@ def test_an_opted_in_skill_can_still_fire(tmp_path):
     reg = SkillRegistry.load([d])
     picked = classify_skills("sort my incoming notes", reg.all(), require_auto=True)
     assert [s.name for s in picked] == ["triage"]
+
+
+def test_chat_only_classifies_skills_it_may_use():
+    """A selection- or workspace-only skill must never be pasted into a chat
+    turn; one with no surfaces, or with `chat`, may be."""
+    from pathlib import Path
+    from services.agent.skills import SkillRegistry
+    reg = SkillRegistry.load([Path(__file__).resolve().parent.parent / "skills"])
+    chat = {s.name for s in reg.for_surface("chat")}
+    assert "flashcards" in chat                 # used from chat (E7 case)
+    assert "define-terms" not in chat           # selection only
+    assert "compare-sources" not in chat        # needs attached sources

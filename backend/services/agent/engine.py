@@ -191,9 +191,12 @@ async def run_turn(
     # 2. Skill activation. Under "index" disclosure nothing is pasted in: the
     #    prompt carries the catalogue and the model asks for what it needs.
     by_index = settings.agent_skill_disclosure == "index"
+    # Only skills this surface may use: a workspace-only or selection-only skill
+    # pasted into a chat turn is instructions for a job chat cannot do (E7
+    # saw flashcards and note-author pasted into "delete my shopping list").
     matched = [] if by_index else classify_skills(
         query=request.query,
-        skills=skill_registry.all(),
+        skills=skill_registry.for_surface("chat"),
         limit=3,
     )
     for s in matched:

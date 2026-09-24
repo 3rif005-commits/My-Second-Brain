@@ -1,7 +1,7 @@
 ---
 name: flashcards
 description: Turn the attached sources into question-and-answer flashcards for revision.
-surfaces: [workspace]
+surfaces: [workspace, chat]
 inputs: sources
 output: draft_note
 model_tier: fast
