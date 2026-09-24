@@ -111,6 +111,55 @@ SKILL_LOAD_TOOL = {
 }
 
 
+# ── the workspace (one AI panel beside the note) ─────────────────────────────
+#
+# User decision (2026-09-24): the app-wide side panel is merged into the
+# workspace's AI panel — one engine, with the open note as its scope. Its
+# context is that note's sources, numbered for [n] citations; the rest of the
+# brain is reachable through the tools; jobs run through workspace.run_job and
+# come back as cards; and the open note is never written through a tool, since
+# the editor holding it would overwrite the write (or be overwritten by it).
+
+WORKSPACE_NOTICE = """You are the AI panel beside ONE open note in the user's
+workspace. The note's own sources are numbered below as excerpts.
+- Answer from them first, and end every factual claim from them with its
+  marker, like [1] or [2][4]. Only use numbers that appear below.
+- For anything about the user's OTHER notes, use brain.search_brain / get_note
+  and cite those notes by their deep_link.
+- Never edit or delete the open note with a tool: it is open in the editor.
+  Write the text in your reply instead — the user inserts it with one click.
+- When the user asks for one of the JOBS (a study guide, flashcards, a
+  comparison…), call workspace.run_job; its result is shown to them as a card.
+  Do not run a job they did not ask for.
+
+<sources>
+{sources}
+</sources>"""
+
+WORKSPACE_JOB_TOOL = "workspace.run_job"
+# Tools that would change the open note under the editor's feet.
+_OPEN_NOTE_WRITES = {"brain.update_note", "brain.delete_note", "brain.patch_note"}
+
+
+def workspace_job_tool(jobs: list[dict]) -> dict:
+    catalogue = "; ".join(f"{j['skill']}: {j.get('description', '')}" for j in jobs)
+    return {
+        "name": WORKSPACE_JOB_TOOL,
+        "description": ("Run one job over ALL of the open note's sources. The "
+                        "result is shown to the user as a card they can insert; "
+                        f"you get a one-line summary back. Jobs — {catalogue}"),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "enum": [j["skill"] for j in jobs]},
+                "focus": {"type": "string",
+                          "description": "optional short focus taken from the request"},
+            },
+            "required": ["name"],
+        },
+    }
+
+
 def _build_system_prompt(skill_bodies: list[str], knowledge_xml: str,
                          skill_index: str = "") -> str:
     sections = [BASE_PERSONA]
@@ -178,15 +227,34 @@ async def run_turn(
     message_id = str(uuid.uuid4())
     tier = _tier_for_mode(request.mode)
 
-    # 1. Retrieve context
-    try:
-        embedding = embed(request.query)
-        notes = retrieve(embedding, user_id)
-    except Exception as e:
-        notes = []
-        yield _ev({"type": "error", "content": f"retrieval failed: {e}"})
+    workspace_note = (request.current_note_id
+                      if request.surface == "workspace" else None)
 
-    yield _ev({"type": "context", "notes": notes})
+    # 1. Retrieve context. In the workspace: the open note's own sources,
+    #    numbered for [n] citations. Elsewhere: the whole brain's notes.
+    citations: list[dict] = []
+    workspace_sources = ""
+    if workspace_note:
+        notes = []
+        try:
+            from services.workspace.chat import (
+                citations_payload, source_excerpts, workspace_chunks,
+            )
+            chunks, titles = workspace_chunks(request.query, workspace_note, user_id)
+            citations = citations_payload(chunks, titles)
+            workspace_sources = source_excerpts(chunks, titles)
+        except Exception as e:
+            yield _ev({"type": "error", "content": f"retrieval failed: {e}"})
+        yield _ev({"type": "context", "notes": [], "citations": citations})
+    else:
+        try:
+            embedding = embed(request.query)
+            notes = retrieve(embedding, user_id)
+        except Exception as e:
+            notes = []
+            yield _ev({"type": "error", "content": f"retrieval failed: {e}"})
+
+        yield _ev({"type": "context", "notes": notes})
 
     # 2. Skill activation. Under "index" disclosure nothing is pasted in: the
     #    prompt carries the catalogue and the model asks for what it needs.
@@ -209,6 +277,17 @@ async def run_turn(
         knowledge_xml=knowledge_xml,
         skill_index=skill_registry.index("chat") if by_index else "",
     )
+    jobs: list[dict] = []
+    if workspace_note:
+        # The note's sources are ingested files and pages: untrusted, like
+        # retrieved notes — the same notice, then the numbered excerpts.
+        system_prompt += ("\n\n" + UNTRUSTED_NOTICE.replace("<knowledge_context>", "<sources>")
+                          + "\n\n" + WORKSPACE_NOTICE.format(sources=workspace_sources or "(none yet)"))
+        try:
+            from services.workspace.skill_run import chat_skills
+            jobs = [j for j in chat_skills(workspace_note, user_id) if not j.get("runnable")]
+        except Exception:                          # noqa: BLE001
+            jobs = []
 
     # Restrict tool list per active-skill whitelists. If no skill restricts,
     # all brain tools are offered.
@@ -234,6 +313,8 @@ async def run_turn(
     all_tool_schemas = tool_schemas + mcp_tool_schemas
     if by_index:
         all_tool_schemas = all_tool_schemas + [SKILL_LOAD_TOOL]
+    if jobs:
+        all_tool_schemas = all_tool_schemas + [workspace_job_tool(jobs)]
 
     # 4. Pick the provider
     try:
@@ -263,11 +344,16 @@ async def run_turn(
             mcp_configs=mcp_configs,
             skill_registry=skill_registry,
             # Retrieved note text is ingested from files and web pages, so any
-            # turn that has some is a turn that has read untrusted input.
-            untrusted_context=bool(notes),
+            # turn that has some is a turn that has read untrusted input — and
+            # a workspace turn always has read the note's sources.
+            untrusted_context=bool(notes) or bool(workspace_note),
             approvals=set(request.approvals),
+            workspace_note=workspace_note,
         ):
             yield ev
+
+    if workspace_note:
+        yield _ev({"type": "citations", "citations": citations})
 
     # 6. Done
     yield _ev({"type": "done", "thread_id": thread_id, "message_id": message_id})
@@ -394,6 +480,7 @@ async def _stream_loop(
     untrusted_context: bool = False,
     approvals: set[str] | None = None,
     skill_registry: "SkillRegistry | None" = None,
+    workspace_note: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """The agent loop: stream a model turn, run whatever tools it asked for,
     feed the results back, and go round again until it answers in text.
@@ -505,6 +592,42 @@ async def _stream_loop(
                     yield _ev({"type": "tool_result", "id": slot["id"],
                                "summary": f"loaded {skill.name}",
                                "data": {"name": skill.name}})
+                continue
+
+            if tool == WORKSPACE_JOB_TOOL and workspace_note:
+                # The job's result goes to the USER as a card; the model gets a
+                # one-line summary, never the (long) result itself.
+                import asyncio
+                from services.workspace import skill_run
+                name = str(args.get("name") or "")
+                focus = str(args.get("focus") or "")
+                tool_calls_made += 1
+                yield _ev({"type": "skill_start", "skill": name,
+                           "title": skill_run.job_title(name), "focus": focus,
+                           "picked": True})
+                try:
+                    result = await asyncio.to_thread(
+                        skill_run.produce_skill_result, workspace_note,
+                        user_id, name, focus)
+                except Exception as e:                  # noqa: BLE001
+                    _answer(slot, f"The job could not run: {e}. Tell the user why.")
+                    yield _ev({"type": "job_error", "content": str(e)[:400]})
+                    continue
+                from services.workspace.chat import summarize_result
+                _answer(slot, f"Done — shown to the user as a card ({summarize_result(result)}). "
+                              "Do not repeat its content; say in one sentence that it is "
+                              "ready to insert into the note.")
+                yield _ev({"type": "result", **result})
+                continue
+
+            if workspace_note and tool in _OPEN_NOTE_WRITES \
+                    and str(args.get("id") or args.get("note_id") or "") == workspace_note:
+                # Written under the editor, the change would be lost to the next
+                # autosave — or would silently replace what the user is typing.
+                _answer(slot, "Denied: that note is open in the editor. Write the "
+                              "new text in your reply — the user inserts it with one click.")
+                yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
+                           "reason": "this note is open in the editor — use Insert on my reply"})
                 continue
 
             # Permission check — note-targeted tools need note_meta

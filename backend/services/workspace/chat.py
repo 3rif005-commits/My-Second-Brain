@@ -65,12 +65,42 @@ def retrieve_chunks(query: str, note_id: str, user_id: str) -> list[dict]:
     return res.data or []
 
 
-def build_system_prompt(chunks: list[dict], titles: dict[str, str]) -> str:
+def source_excerpts(chunks: list[dict], titles: dict[str, str]) -> str:
+    """The numbered excerpts, as the prompt shows them — [n] (title, page) text."""
     lines = []
     for i, c in enumerate(chunks, start=1):
         title = titles.get(str(c["resource_id"]), "resource")
         lines.append(f'[{i}] ({title}, {_anchor_label(c)}) {c["chunk_text"][:800]}')
-    return SYSTEM_TEMPLATE.format(sources="\n\n".join(lines) if lines else "(no sources)")
+    return "\n\n".join(lines)
+
+
+def build_system_prompt(chunks: list[dict], titles: dict[str, str]) -> str:
+    return SYSTEM_TEMPLATE.format(sources=source_excerpts(chunks, titles) or "(no sources)")
+
+
+def workspace_chunks(query: str, note_id: str, user_id: str) -> tuple[list[dict], dict[str, str]]:
+    """The open note's excerpts for this question, and their sources' titles."""
+    chunks = retrieve_chunks(query, note_id, user_id)
+    titles: dict[str, str] = {}
+    if chunks:
+        rids = list({str(c["resource_id"]) for c in chunks})
+        rows = (get_supabase().table("note_resources")
+                .select("id,title").in_("id", rids).execute().data or [])
+        titles = {str(r["id"]): r["title"] for r in rows}
+    return chunks, titles
+
+
+def summarize_result(result: dict) -> str:
+    """'3 chapters · 24 boxes · 6 tables' — what a job's result holds."""
+    html = result.get("html") or ""
+    parts = []
+    for pattern, one, many in ((r"<h2[\s>]", "chapter", "chapters"),
+                               (r'data-type="callout"', "box", "boxes"),
+                               (r"<table[\s>]", "table", "tables")):
+        n = len(re.findall(pattern, html))
+        if n:
+            parts.append(f"{n} {one if n == 1 else many}")
+    return " · ".join(parts) or "ready"
 
 
 def citations_payload(chunks: list[dict], titles: dict[str, str]) -> list[dict]:

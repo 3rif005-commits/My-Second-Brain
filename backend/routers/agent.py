@@ -41,6 +41,10 @@ async def agent_endpoint(
     # Append user message to thread (or create thread)
     _append_user_message_to_thread(thread_id, user_id, body)
 
+    if body.job and body.surface == "workspace" and body.current_note_id:
+        return StreamingResponse(_job_stream(body, user_id, thread_id),
+                                 media_type="text/event-stream")
+
     async def stream():
         last_assistant_text = ""
         async for ev in run_turn(body, user_id=user_id, skill_registry=registry):
@@ -56,6 +60,24 @@ async def agent_endpoint(
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+async def _job_stream(body: AgentRequest, user_id: str, thread_id: str):
+    """`/name` in the workspace AI panel: the job runs directly — no model turn
+    decides anything — and its result arrives as a card. The thread records
+    that it ran (the result itself is not stored; it lives in the note once
+    inserted)."""
+    from services.workspace.chat import run_skill_in_chat, summarize_result
+    said = ""
+    async for ev in run_skill_in_chat(body.current_note_id, user_id, body.job, body.focus):
+        if ev.get("type") == "result":
+            said = f"{ev.get('title', body.job)} ready — {summarize_result(ev)}."
+        elif ev.get("type") == "error":
+            said = f"{body.job} could not run: {ev.get('content', '')}"
+        yield "data: " + json.dumps(ev) + "\n\n"
+    _append_assistant_message_to_thread(thread_id, said or f"{body.job} finished.")
+    yield "data: " + json.dumps({"type": "done", "thread_id": thread_id}) + "\n\n"
+    yield "data: [DONE]\n\n"
 
 
 def _append_user_message_to_thread(

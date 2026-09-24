@@ -107,7 +107,11 @@ class AgentRequest(BaseModel):
     query: str                          # latest user message text
     mode: Mode = Mode.API
     current_note_id: str | None = None  # set when invoked from inline /ai
-    surface: Literal["chat", "inline", "ingest", "interactive"] = "chat"
+    surface: Literal["chat", "inline", "ingest", "interactive", "workspace"] = "chat"
     # Approval keys ("<tool>:<target id>") the user granted in the UI after a
     # previous turn asked. Never written by the model — that is the point.
     approvals: list[str] = Field(default_factory=list)
+    # Workspace only: run this job directly (the `/name` command) — no model
+    # turn, the result comes back as a card. `focus` is the rest of the line.
+    job: str | None = None
+    focus: str = ""
