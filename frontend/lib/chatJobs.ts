@@ -25,20 +25,47 @@ export interface JobResult {
   usd: number | null;
 }
 
-/** "/flashcards on Q-learning" → { skill: "flashcards", focus: "on Q-learning" }.
- *  Only a job this note offers counts as a command; anything else is a question. */
+// A command can sit anywhere in the message, as long as it starts a word:
+// "make it short /study-guide" runs the study guide with "make it short" as
+// its focus (user, 2026-09-24). A "/" inside a word or a link is not one.
+const COMMAND = /(^|\s)\/([a-z0-9-]+)(?=\s|$)/g;
+
+/** "/flashcards on Q-learning" or "on Q-learning /flashcards" →
+ *  { skill: "flashcards", focus: "on Q-learning" }. The first offered job
+ *  wins; anything else is a question. */
 export function parseCommand(input: string, jobs: ChatJob[]): { skill: string; focus: string } | null {
-  const m = /^\/([a-z0-9-]+)(?:\s+([\s\S]*))?$/.exec(input.trim());
-  if (!m || !jobs.some((j) => j.skill === m[1])) return null;
-  return { skill: m[1], focus: (m[2] ?? "").trim() };
+  for (const m of input.matchAll(COMMAND)) {
+    if (!jobs.some((j) => j.skill === m[2])) continue;
+    const start = m.index! + m[1].length;
+    const focus = (input.slice(0, start) + input.slice(start + m[2].length + 1))
+      .replace(/\s+/g, " ").trim();
+    return { skill: m[2], focus };
+  }
+  return null;
 }
 
-/** The jobs that match what is being typed after "/", best first. */
-export function matchJobs(input: string, jobs: ChatJob[]): ChatJob[] {
-  const m = /^\/([a-z0-9-]*)$/.exec(input);
-  if (!m) return [];
-  const q = m[1];
+/** The "/word" being typed at the caret, if any: where it starts and ends in
+ *  the input, and what follows the "/". */
+export function slashAt(input: string, caret = input.length): { start: number; end: number; query: string } | null {
+  const m = /(^|\s)\/([a-z0-9-]*)$/.exec(input.slice(0, caret));
+  if (!m) return null;
+  return { start: caret - m[2].length - 1, end: caret, query: m[2] };
+}
+
+/** The jobs that match the "/word" being typed at the caret, best first. */
+export function matchJobs(input: string, jobs: ChatJob[], caret = input.length): ChatJob[] {
+  const at = slashAt(input, caret);
+  if (!at) return [];
+  const q = at.query;
   return jobs.filter((j) => j.skill.startsWith(q) || j.title.toLowerCase().includes(q));
+}
+
+/** Put the chosen job where its "/word" was being typed; the caret goes after it. */
+export function completeCommand(input: string, caret: number, skill: string): { text: string; caret: number } {
+  const at = slashAt(input, caret) ?? { start: caret, end: caret, query: "" };
+  const rest = input.slice(at.end).replace(/^\s+/, "");
+  const head = input.slice(0, at.start) + `/${skill} `;
+  return { text: head + rest, caret: head.length };
 }
 
 /** "3 chapters · 24 boxes · 6 tables" — what a result holds, at a glance. */

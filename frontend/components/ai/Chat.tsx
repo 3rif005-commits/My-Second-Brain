@@ -23,7 +23,7 @@ import {
   type Attachment, type PanelScope,
 } from "./panelSources";
 import {
-  matchJobs, parseCommand, type ChatJob, type JobRequest, type JobResult,
+  completeCommand, matchJobs, parseCommand, slashAt, type ChatJob, type JobRequest, type JobResult,
 } from "@/lib/chatJobs";
 import { ACCEPTED_WORKSPACE_FILES, jobTitle, type Citation } from "@/lib/workspace";
 import { answerToHtml } from "@/lib/answerToHtml";
@@ -103,7 +103,9 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   const abortRef = useRef<AbortController | null>(null);
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const suggestions = matchJobs(input, jobs);
+  // Where the caret is: a "/word" is suggested wherever it is being typed.
+  const [caret, setCaret] = useState(0);
+  const suggestions = matchJobs(input, jobs, caret);
   const activeScope = fixedScope ?? scope;
   // Where a job would run right now — said in the / menu before anything runs.
   const jobsRunOn = attachments.length
@@ -385,7 +387,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
     const files = opts?.query ? [] : attachments;
     if ((!query && !files.length) || loading) return;
     lastQueryRef.current = query;
-    const cmd = parseCommand(query, query.startsWith("/") ? await ensureJobs() : jobs);
+    const cmd = parseCommand(query, /(^|\s)\//.test(query) ? await ensureJobs() : jobs);
 
     const shown = [query, files.length ? `📎 ${files.map(attachmentName).join(", ")}` : ""]
       .filter(Boolean).join("\n");
@@ -513,7 +515,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   }
 
   function completeJob(skill: string) {
-    setInput(`/${skill} `);
+    const done = completeCommand(input, caret, skill);
+    setInput(done.text);
+    setCaret(done.caret);
+    requestAnimationFrame(() => inputRef.current?.setSelectionRange(done.caret, done.caret));
     setMenuIndex(0);
     inputRef.current?.focus();
   }
@@ -819,10 +824,12 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             value={input}
             onChange={(e) => {
               setInput(e.target.value);
+              setCaret(e.target.selectionStart ?? e.target.value.length);
               setMenuIndex(0);
-              if (e.target.value === "/" && !jobs.length) void ensureJobs();
+              if (!jobs.length && slashAt(e.target.value, e.target.selectionStart ?? undefined)) void ensureJobs();
             }}
             onKeyDown={handleKey}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
             placeholder={attachments.length
               ? "Ask about them, or type / for a skill…"
               : workspace ? "Ask, or / for a skill…"

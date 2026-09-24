@@ -100,11 +100,15 @@ test.describe("workspace: sources · note · AI", () => {
     await expect(aiPanel(page)).toBeVisible({ timeout: 30_000 });
     await page.locator(".bn-editor[contenteditable='true']").first().click();
     await page.keyboard.type("/flash");
-    await expect(page.getByText(/^Flashcards$/).first()).toBeVisible({ timeout: 10_000 });
-    await ss(page, "05-slash-menu");
-    await page.keyboard.press("Escape");        // runs nothing: free
-    // This is a real note: take the typed "/flash" back out again.
-    for (let i = 0; i < "/flash".length; i++) await page.keyboard.press("Backspace");
+    try {
+      await expect(page.getByText(/^Flashcards$/).first()).toBeVisible({ timeout: 10_000 });
+      await ss(page, "05-slash-menu");
+    } finally {
+      // This is a real note: take the typed "/flash" back out — even when the
+      // check above failed (it once left four of them in a user's title).
+      await page.keyboard.press("Escape");      // runs nothing: free
+      for (let i = 0; i < "/flash".length; i++) await page.keyboard.press("Backspace");
+    }
   });
 
   test("dropping a source indexes it without generating anything", async ({ page }) => {

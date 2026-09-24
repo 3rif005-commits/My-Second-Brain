@@ -79,3 +79,14 @@ test("📎 offers files or a link; a link becomes a chip, a non-link is refused"
   await page.getByRole("button", { name: /^Remove youtube\.com\/watch/ }).click();
   await expect(page.getByRole("button", { name: /^Remove / })).toHaveCount(0);
 });
+
+test("a /skill can come after other text: the menu follows the caret", async ({ page }) => {
+  await page.goto("/brain", { waitUntil: "networkidle" });
+  const box = await openPanel(page);
+  await box.click();
+  await page.keyboard.type("keep it short /stu");
+  await expect(page.getByRole("option", { name: /\/study-guide/ })).toBeVisible({ timeout: 15_000 });
+  await page.keyboard.press("Tab");
+  await expect(box).toHaveValue("keep it short /study-guide ");
+  await page.screenshot({ path: path.join(OUT, "06-mid-text-slash.png") });
+});
