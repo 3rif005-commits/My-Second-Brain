@@ -47,14 +47,19 @@ BROWSER CHECKS — CHEAP BY DESIGN
 Every change that touches the UI gets a live check, but through the existing
 Playwright specs (scripted, headless, text results), NOT the claude-in-chrome
 extension and NOT by reading many screenshots:
-- Stack (3.8GB RAM — nothing else running):
+- FIRST: `./app.sh status`. If the user's app.sh stack is running (it was on
+  2026-09-24, started 00:11), USE IT — its backend has --reload, so code
+  changes are live — and NEVER stop it. Only stop processes whose pid YOU
+  wrote down when you started them. (A night run killed the user's frontend
+  by stopping "whatever listens on :3000".)
+- Otherwise start your own stack (3.8GB RAM — nothing else running):
     S=/tmp/sb; mkdir -p $S
     ~/llama.cpp/build/bin/llama-server -m ~/llama.cpp/models/nomic-embed-text-v1.5.f16.gguf --port 8081 --embedding --ctx-size 2048 --batch-size 2048 -ngl 0 > $S/embed.log 2>&1 &
     (cd backend && env -u PYTHONPATH ./.venv/bin/uvicorn main:app --port 8000 > $S/backend.log 2>&1 &)
     (cd frontend && NODE_OPTIONS=--max-old-space-size=2048 npm run build > $S/build.log 2>&1 && npm run start > $S/frontend.log 2>&1 &)
   Backend runs from .venv (runtime); tests use venv. Never `next dev`.
-  Stop by pid from `ss -ltnp | grep -E ":3000|:8000|:8081"` — never pkill a
-  pattern in your own command line.
+  Record each pid as you start it ($!) and stop exactly those — never by
+  port, never pkill a pattern in your own command line.
 - Free specs (no model call): npx playwright test --project=workspace-skills
 - Paid specs, one call each, only after a change they cover:
     npx playwright test --project=skills-live e2e/selection-skills-live.spec.ts

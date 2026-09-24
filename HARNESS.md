@@ -153,6 +153,8 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - A free-tier model is priced at exactly zero, and "≈$0.000" reads as broken.
   Say "free", and still say the token count — free of price is not free of time.
   (Caught by the first live pass, not by any unit test.)
+- Stop only the processes you started, by the pid you recorded. Stopping
+  "whatever listens on :3000" killed the user's own app.sh frontend.
 - Never `pkill -f <pattern>` where the pattern appears in your own command line:
   it kills the shell running it. Use `pgrep -f "[l]lama-server"` or kill by pid.
   (Cost three dead shells before it was written down.)
