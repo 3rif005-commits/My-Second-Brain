@@ -1,0 +1,435 @@
+[page 1]
+05 /1 2 /2 0 2 6
+1
+## Machine Learning
+Lecture 11 Bias, Fairness & Ethics in Machine
+Learning
+S.DEHILI 2025-2026
+OVERVIEW Today's  Agenda
+1
+2 2
+3
+4
+Why Fairness in ML Matters
+Motivation, intuition and definition
+Concrete use cases
+When Things Go Wrong
+Where Bias Comes From & What To Do
+[page 2]
+05 /1 2 /2 0 2 6
+2
+What is bias and why we should care
+## Why Fairness in ML  Matters 1
+3
+ML is Not Neutral
+■ Models are trained on human-generated data
+■ Human decisions = human biases
+■ ML amplifies, automates, and legitimizes those biases
+4
+Past Human
+Decisions Data Model Biased Future
+Decisions
+[page 3]
+05 /1 2 /2 0 2 6
+3
+## Real-World Impact — High Stakes
+■ Where unfair models hurt people
+5
+Consequence Domain
+Resumes filtered out based on  gender or race Jobs
+Algorithms undertreating minority patients Healthcare
+Risk scores over-predicting  recidivism for certain groups Justice
+What is Bias in ML?
+■ Algorithmic bias : systematic, unfair discrimination in model  outputs that creates different outcomes for different groups,  where group membership should not matter.
+■ Key nuance (important):
+■ Not all differences are bias
+■ Bias = difference + unjustified + harmful
+6
+[page 4]
+05 /1 2 /2 0 2 6
+4
+## The 4 Types of Bias — Overview
+■ Where bias enters the pipeline
+past society            data collected      labels defined       model design
+7
+Historical  Representation  Measurement  Aggregation
+Historical Bias
+■ Historical bias : the world is unfair, data remembers
+■ Definition  : Past social inequalities reflected in training data.
+■ Exemple :
+■ Loan model trained on past approvals learns that certain zip  codes (historically redlined) have higher default rates, even if  current residents are equally creditworthy.
+8
+[page 5]
+05 /1 2 /2 0 2 6
+5
+## Representation Bias
+■ Representation bias : missing voices = blind spots
+■ Definition :  Training data does not reflect the real population.
+■ Example
+■ Medical image model trained mostly on fair-skin photos →  performs poorly on darker skin tones.
+9
+Measurement Bias
+■ Measurement bias : wrong proxy, wrong conclusion
+■ Definition : Features or labels are systematically different across  groups.
+■ Example
+■ Using healthcare costs as proxy for "health need." Lower access  to care  -> lower recorded costs  -> model thinks group needs less  care.
+10
+[page 6]
+05 /1 2 /2 0 2 6
+6
+## Aggregation Bias
+■ Aggregation bias : one-size-fits-all fails
+■ Definition: Forcing same model requirements on groups with  different base rates.
+■ Example
+■ Single recidivism model for two neighborhoods with different  crime rates and policing intensity. Looks "accurate" on average,  wrong for both.
+11
+Quick Recap — The 4 Types
+12
+Ask yourself Bias Type
+Is past unfairness in my training  data? Historical
+Does my data look like the real  world? Representation
+Are my labels valid across groups? Measurement
+Should I split into multiple models? Aggregation
+[page 7]
+05 /1 2 /2 0 2 6
+7
+## Why Should YOU Care?
+■ Three reasons (even if you just want good models)
+1. Business risk:  lawsuits, audits, brand damage
+2. Model quality:  bias = poor generalization to new groups
+3. Ethics:  you have power. Power creates responsibility.
+13
+Case Studies
+■ So what happens when we ignore this?
+■ Part 2 — Case Studies:
+• Amazon hiring → Historical bias • Optum healthcare → Measurement bias • Facial recognition → Representation bias • COMPAS → Fairness ≠ accuracy
+14
+[page 8]
+05 /1 2 /2 0 2 6
+8
+## When Things Go Wrong  2
+15
+Case Study #1 — Amazon Hiring
+16
+[page 9]
+05 /1 2 /2 0 2 6
+9
+## Case Study #1 — Amazon Hiring
+Back in 2014:
+■ Amazon was growing very fast
+■ Hiring thousands of people every year
+■ Getting millions of resumes each year
+■ Screening by hand was slow and not the same for everyone
+17
+The goal — automate resume screening
+Then engineers thought:
+■ If algorithms can recommend products...
+■ Why can't they recommend resumes?
+■ Could we automate resume screening?
+18
+[page 10]
+05 /1 2 /2 0 2 6
+10
+## The goal — automate resume screening
+The idea:
+■ Use machine learning to screen resumes
+■ Same way Amazon recommends products
+■ Train the algorithm on past resumes and hiring decisions
+■ Let it learn which resumes led to hires
+■ Then let it rank new resumes automatically
+■ Faster. Scalable. Always consistent.
+19
+The goal — automate resume screening
+■ So they built a tool to screen resumes automatically
+■ But soon they ran into a problem:
+• The algorithm learned from old resumes • And old resumes came from people already hired • Most of those people were men
+  So the algorithm learned to prefer men
+20
+[page 11]
+05 /1 2 /2 0 2 6
+11
+## The goal — automate resume screening
+■ The model learned bias, not merit !
+■ It started penalizing resumes with the word "women"
+■ Downgraded graduates from all-women's colleges
+■ Assigned lower scores to resumes with explicitly female- sounding activities
+■ Why ?
+■ Past data: tech industry was male-dominated  -> model learned:  "male" = "better hire"
+21
+The algorithm learned the wrong thing
+Men's chess club
+Positive Score
+Women's chess club
+Negative Score
+22
+[page 12]
+05 /1 2 /2 0 2 6
+12
+## Type of Bias – Historical Bias
+■ Follow patterns from history
+■ Apply them to new resumes
+■ Hidden patterns included unfair ones
+■ Amazon engineers did NOT program the AI to discriminate
+■ The AI learned it by itself
+■ Pattern it saw: Most successful past hires = men
+■ So resumes like those  -> higher score
+■ To the machine, it was just math. Not intention.
+  This is called:  Algorithmic bias  or  Statistical discrimination
+23
+What Amazon Did
+Timeline:
+■ 2014: Amazon starts building the tool
+■ 2015: Internal team discovers gender bias
+■ 2017: Amazon discontinues the tool
+■ Engineers tried to fix it:
+• Removed gender-related words • Adjusted the model • Ran new tests • The bias kept coming back (through hidden correlations)
+24
+[page 13]
+05 /1 2 /2 0 2 6
+13
+## Case Study #2 — Optum
+■ Optum's Healthcare Algorithm
+■ A tool designed to find high-risk patients
+25
+The goal — identify patients who need extra care
+Context:
+■ Optum is a major healthcare services company
+■ They built an algorithm to identify "high-risk" patients
+■ High-risk patients would receive extra care management  (nurses, check-ins, follow-ups)
+How it worked :
+■ Predict future healthcare costs  -> Higher predicted cost = "high  risk"  -> Send extra resources
+26
+[page 14]
+05 /1 2 /2 0 2 6
+|White patients|Black patients|
+|---|---|
+|**Less likely to be**<br>**identified**<br>**Identified as high-**<br>**risk**<br>Same illness<br>severity<br>**Received less**<br>**Received more**<br>Extra care resources|**Less likely to be**<br>**identified**<br>**Identified as high-**<br>**risk**<br>Same illness<br>severity<br>**Received less**<br>**Received more**<br>Extra care resources|
+14
+## The Proxy Problem
+■ Past healthcare costs ≠ health need
+■ But model used :
+• Past healthcare costs as a proxy for "how sick is this patient?"
+■ Why that’s a problem :
+27
+Actual health  need Recorded past  costs Access to care Group
+Medium High (everything recorded) Easy to see doctor White patients  (higher access)
+High Low (only emergencies) Hard to see  doctor Black patients  (lower access)
+What the Algorithm Did
+■ The model systematically excluded the sickest patients
+■ At the same level of illness severity, Black patients were  half as  likely  to be flagged for extra care management.
+28
+[page 15]
+05 /1 2 /2 0 2 6
+15
+## Type of Bias – Measurement Bias
+■ Features or labels are systematically different across groups.
+Apply to Optum:
+■ Label: Past healthcare costs (used as proxy for health need)
+■ Problem: Past costs reflect access, not just need
+■ Result: Model learned: low costs → low need (even when need  was high)
+29
+What Happened After
+Timeline:
+■ 2017: Researchers begin investigating
+■ 2019: Paper published in Science (Obermeyer et al.)
+■ After publication: Optum modifies the algorithm
+The fix:
+■ Instead of using past costs, they re-calibrated the model using a  different label:  "number of chronic conditions"  + adjust for  access barriers.
+30
+[page 16]
+05 /1 2 /2 0 2 6
+16
+## Case Study #3 — Gender Shades
+■ When training data doesn't look  like the real world
+31
+The Origin Story
+■ 2015: Joy Buolamwini, MIT grad student, working on a class  project
+■ Face-tracking software needed to detect her face
+■ It worked perfectly for her light-skinned classmates
+■ It even recognized a white beauty mask she put on
+■ When she looked into the camera: no detection
+32
+[page 17]
+05 /1 2 /2 0 2 6
+|Dataset Light-skinned|Darker-skinned|
+|---|---|
+|20.4%<br>79.6%<br>IJB-A<br>13.8%<br>86.2%<br>Adience|20.4%<br>79.6%<br>IJB-A<br>13.8%<br>86.2%<br>Adience|
+17
+## The Hypothesis
+What Joy suspected:
+■ Facial recognition algorithms are trained on datasets.
+■ If those datasets are mostly light-skinned faces, the algorithm :
+• will learn to recognize light-skinned faces well • and struggle with everyone else.
+■ She tested this by analyzing existing datasets:
+33
+The Experiment
+What they did:
+■ Created a balanced dataset of 1,270 faces
+■ Equal representation: 3 African countries + 3 European countries
+■ Balanced by gender and by skin type
+■ Tested 3 commercial gender classification systems:
+• IBM • Microsoft • Face++ (Chinese company)
+34
+[page 18]
+05 /1 2 /2 0 2 6
+18
+## The Results
+■ Darker-skinned females: the most misclassified group
+35
+Error Rate (Worst  Performer) Intersectional Group
+0.3%  (best) Lighter-skinned males
+~7% Lighter-skinned females
+~12% Darker-skinned males
+Up to 34.7%  (worst) Darker-skinned females
+Source :  Gender Shades
+Company-by-Company Breakdown
+■ Over 93% of faces misgendered by Microsoft were darker- skinned subjects.
+■ Over 95% of faces misgendered by Face++ were female subjects.
+36
+Largest gap (lighter male  vs darker female) Company
+20.8% difference Microsoft
+33.8% difference Face++
+34.4% difference  (worst) IBM
+Source :  Gender Shades
+[page 19]
+05 /1 2 /2 0 2 6
+19
+## Type of Bias – Representation Bias
+Apply to Gender Shades:
+■ Training data: 80-86% lighter-skinned faces
+■ Problem: Algorithms learned patterns from mostly lighter faces
+■ Result: Poor performance on darker-skinned faces (especially  women)
+37
+The Aftermath — What Changed
+■ The study changed the industry
+■ Immediate responses (2018):
+■ IBM responded within one day and announced changes to  Watson Visual Recognition
+■ Microsoft and Face++ began internal audits and retraining
+■ One year later (2019 follow-up audit):
+■ Microsoft: 19.28% error reduction for darker females
+■ IBM: 17.73% error reduction
+■ Face++: 30.4% error reduction (biggest improvement)
+38
+[page 20]
+05 /1 2 /2 0 2 6
+|White defendants|Black defendants|
+|---|---|
+|56%<br>46%<br>% labeled "high risk"<br>52%<br>35%<br>% who actually re-<br>offended|56%<br>46%<br>% labeled "high risk"<br>52%<br>35%<br>% who actually re-<br>offended|
+20
+## Case Study #4 — COMPAS
+■ COMPAS : A tool used in US courts to predict future crime
+■ Developed by Northpointe
+■ Used in  over 1 million cases  across dozens of US states
+■ Predicts  recidivism  : whether someone will re-offend within 2  years
+■ How it's used:
+■ Judges receive a risk score (1-10) for each defendant
+■ Scores influence: bail amounts, sentencing, parole decisions
+39
+The Investigation — ProPublica
+■ 2016 : ProPublica asks a simple question: "Is COMPAS fair?“ What they did :
+■ Obtained COMPAS scores for over  7,000 defendants  in Broward  County, Florida (2013-2014)
+■ Tracked whether they actually re-offended within 2 years
+■ Compared model performance across racial groups
+40
+[page 21]
+05 /1 2 /2 0 2 6
+|White defendants|Black defendants|
+|---|---|
+|45%<br>28%<br>False Positive Rate|45%<br>28%<br>False Positive Rate|
+|White defendants|Black defendants|
+|---|---|
+|28%<br>48%<br>False Negative Rate|28%<br>48%<br>False Negative Rate|
+|TP|45%|
+|---|---|
+|**28%**|**TN**|
+|TP|28%|
+|---|---|
+|**48%**|**TN**|
+21
+The Two Kinds of Errors
+ProPublica's finding : False Positives (labeled "high risk" but did NOT  re-offend):
+COMPAS's defense : False Negatives (labeled "low risk" but DID re- offend):
+41
+Confusion Matrix
+White Defendants Black Defendants
+42
+Predicted
+NR
+R
+HR
+LR
+Predicted
+NR
+R
+HR
+LR
+[page 22]
+05 /1 2 /2 0 2 6
+|Fairness metric What it measures|COMPAS performance|
+|---|---|
+|Fails (45% vs 28%)<br>False positive rates equal across<br>groups<br>**Equalized odds**<br>Passes<br>Same risk score = same likelihood<br>of re-offending, regardless of race<br>**Calibration**|Fails (45% vs 28%)<br>False positive rates equal across<br>groups<br>**Equalized odds**<br>Passes<br>Same risk score = same likelihood<br>of re-offending, regardless of race<br>**Calibration**|
+22
+## Type of Bias
+■ Not a simple "bias type" : this is a trade-off
+■ ProPublica’s claim : COMPAS is racially biased
+■ Nothpoint’s defense : COMPAS is equally accurate for both  groups
+43
+Fairness
+■ Both right but by different fairness metrics !
+■ Different fairness metrics can conflict
+■ Choosing a metric means choosing whose errors you prioritize
+■ No algorithm can satisfy all definitions of fairness simultaneously
+44
+[page 23]
+05 /1 2 /2 0 2 6
+23
+Deeper Problem
+■ Base rate = actual re-offending rate in the population
+■ White defendants ~35%
+■ Black defendants   ~52%
+■ When base rates differ across groups, it is  mathematically  impossible  to have equal false positive rates AND equal false  negative rates simultaneously.
+45
+## Where Bias Comes  From & What To Do  3
+46
+[page 24]
+05 /1 2 /2 0 2 6
+24
+## The Bias Pipeline — Where It Enters
+■ Bias doesn't appear in the model. It enters before.
+47
+Three Places to Intervene
+■ Fix data  -> Fix model  -> Fix predictions
+48
+Difficulty Example What you do Stage
+Medium Reweight  samples to  balance groups
+Change  training data  before modeling
+Pre-processing (fix data)
+Hard Force equal false  positive rates
+Add fairness  constraints  during training
+In-processing (fix model)
+Easy Different thresholds per  group
+Adjust predictions after training
+Post-processing (fix outputs)
+[page 25]
+05 /1 2 /2 0 2 6
+|# Question|If "no" or "I don't know" →|
+|---|---|
+|Collect more data or reweight<br>Have you** audited your data** for missing groups?<br>1<br>Pick one<br>Have you** chosen a fairness metric**?<br>2<br>Run the numbers<br>Have you** measured that metric** across groups?<br>3<br>Reweight, threshold adjust, or<br>constrain<br>Have you** tried at least one mitigation**?<br>4<br>Set up regular audits<br>Will you** monitor after deployment**?<br>5|Collect more data or reweight<br>Have you** audited your data** for missing groups?<br>1<br>Pick one<br>Have you** chosen a fairness metric**?<br>2<br>Run the numbers<br>Have you** measured that metric** across groups?<br>3<br>Reweight, threshold adjust, or<br>constrain<br>Have you** tried at least one mitigation**?<br>4<br>Set up regular audits<br>Will you** monitor after deployment**?<br>5|
+25
+## Pre-processing : Reweighting
+■ Pre-processing example: reweight the training data
+■ The problem (Amazon historical bias)
+■ The fix (reweighting):
+■ Give female resumes  higher weight  during training
+■ Make the model "care more" about getting female examples  correct
+49
+Practical Checklist — 5 Questions Before Deploy
+50
+[page 26]
+05 /1 2 /2 0 2 6
+26
+Fairness is not a one-time fix. It's a process.
+■ Bias enters at  every stage  of the pipeline (data → label → model →  deploy → feedback)
+■ You can intervene  pre, in, or post -processing
+■ Audit → Choose metrics → Mitigate → Monitor,  then repeat
+51

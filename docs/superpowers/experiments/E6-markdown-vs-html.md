@@ -192,3 +192,26 @@ AI-generated study guides and does not transfer.
 The Markdown path stays wired and opt-in (`SYNTHESIS_FORMAT=md`). A next try
 would target tables specifically (e.g. convert every source pipe-table
 deterministically instead of asking the model), measured on `iml-slides-two`.
+
+## E6d — carrying source tables over verbatim (2026-09-24, `iml-slides-app`)
+
+`iml-slides-app` = the same slides as the APP extracts them (23 pipe tables),
+which `iml-slides-two` (pdftotext) was not — so E6c's inputs were not the
+app's. Baselines on app-faithful text, n=3: HTML tables 9·11·14, Markdown
+8·10·6 — **both** lose most of the 23.
+
+Change (Markdown path): `services/workspace/tables.py` labels every source table
+`[[TABLE s.k]]`; the prompt says to place the marker, never retype; the exact
+table is substituted afterwards and any unplaced one appended. First cut found
+16 of 23 (tables written back to back read as one) — fixed by splitting.
+
+| Markdown path | tables | callouts | pass | $/run |
+|---|---|---|---|---|
+| baseline | 8 · 10 · 6 | 18 · 18 · 15 | 3/3 | 0.041 |
+| + carry (23 labelled), n=6 | 25 · 24 · 26 · 16 · 27 · 26 | 8–23 | **4/6** | 0.041 |
+
+Tables: fixed. But 2 of 6 runs failed an ANCHOR guardrail (all anchors on
+source 1 although both lectures were covered; one run with anchor-less
+sections). The HTML path never did that. Carry-over is kept on the (opt-in)
+Markdown path; the default stays HTML. **Next:** the same carry-over on the
+HTML path, whose anchors hold but which keeps only 9–14 of 23 tables.

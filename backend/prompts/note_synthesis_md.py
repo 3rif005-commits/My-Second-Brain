@@ -39,3 +39,17 @@ SOURCE MATERIAL — {len(sources)} source(s) attached to this note:
 ---
 
 Write the synthesized study notes in Markdown now:"""
+
+
+def build_markdown_synthesis_prompt_with_tables(
+    sources: list[dict],
+    total_budget: int = TOTAL_SOURCE_BUDGET,
+) -> tuple[str, dict[str, str]]:
+    """The same prompt, with every source table labelled for verbatim carry-over.
+
+    Returns (prompt, {marker: table}); pass both to
+    services.workspace.tables.carry_tables once the answer is back.
+    """
+    from services.workspace.tables import label_tables
+    labelled, tables = label_tables(sources)
+    return build_markdown_synthesis_prompt(labelled, total_budget), tables

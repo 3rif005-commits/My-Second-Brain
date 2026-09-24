@@ -339,6 +339,40 @@
       ],
       "must_not_mention": [],
       "why": "REAL lecture slides (PowerPoint printed to PDF), two consecutive lectures of one course, user-approved 2026-09-24. Built to re-check E6b, whose Markdown default rested on AI-generated study guides only. Q-learning/reward live only in lecture 10, fairness/COMPAS/proxy only in lecture 11. Floors (text 17K, anchors 5, math 4, tables 10) set at ~2/3 of the thinnest HTML run BEFORE the Markdown arm ran."
+    },
+    {
+      "id": "iml-slides-app",
+      "family": "slides",
+      "mode": "synthesis",
+      "sources": [
+        {
+          "title": "Machine Learning Lecture 10 - Reinforcement Learning",
+          "kind": "pdf",
+          "path": "sources/iml-lecture-10.extracted.txt"
+        },
+        {
+          "title": "Machine Learning Lecture 11 - Bias, Fairness & Ethics",
+          "kind": "pdf",
+          "path": "sources/iml-lecture-11.extracted.txt"
+        }
+      ],
+      "expect": {
+        "h1_exact": 1,
+        "unknown_callouts_max": 0,
+        "grounding_min": 0.8,
+        "anchor_validity_min": 1.0,
+        "sources_cited_min": 2,
+        "must_mention_rate_min": 1.0
+      },
+      "must_mention": [
+        "Q-learning",
+        "reward",
+        "fairness",
+        "COMPAS",
+        "proxy"
+      ],
+      "must_not_mention": [],
+      "why": "The same two real slide decks, as the APP extracts them (pdf_elements.extract_pdf + chunk_pages, the text source_text_from_chunks rebuilds): 23 source pipe tables. iml-slides-two used pdftotext, which is not what the app sends. Floors to be set from the HTML arm before any Markdown arm."
     }
   ]
 }

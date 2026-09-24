@@ -19,7 +19,9 @@ from datetime import datetime, timezone
 
 from core.config import settings
 from prompts.note_synthesis import build_note_synthesis_prompt, split_budget
-from prompts.note_synthesis_md import build_markdown_synthesis_prompt
+from prompts.note_synthesis_md import (
+    build_markdown_synthesis_prompt, build_markdown_synthesis_prompt_with_tables,
+)
 from services.ai.client import complete, last_call_truncated
 from services.ai import budget as budget_guard
 from services.ai import usage as usage_log
@@ -29,6 +31,7 @@ from services.database import get_supabase
 from services.workspace.dbretry import with_retry
 from services.workspace.figures import figure_parts
 from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML, markdown_to_html
+from services.workspace.tables import carry_tables
 
 logger = logging.getLogger(__name__)
 
@@ -254,7 +257,8 @@ def _inherited_titles(note: dict, first_source: dict) -> set[str]:
 
 def _complete(prompt: str, video_urls: list[str], has_text: bool,
               user_id: str, figures: list[dict] | None = None,
-              markdown: bool = False) -> str:
+              markdown: bool = False,
+              tables: dict[str, str] | None = None) -> str:
     """Text path, or the Gemini-native video path when a source has no
     transcript (same capability routing the per-resource summary used)."""
     if video_urls:
@@ -294,7 +298,8 @@ def _complete(prompt: str, video_urls: list[str], has_text: bool,
             max_tokens=OUTPUT_CAP,
             validate=lambda text: _looks_like_a_mastery_guide(
                 markdown_to_html(_strip_fences(text))))
-        return markdown_to_html(_strip_fences(md))
+        # Source tables go in verbatim, where the model put their markers.
+        return markdown_to_html(carry_tables(_strip_fences(md), tables or {}, offered=prompt))
     return _strip_fences(complete_with_fallback(
         "summarize_text", user_id, [{"role": "user", "content": prompt}],
         max_tokens=OUTPUT_CAP, validate=_looks_like_a_mastery_guide))
@@ -358,8 +363,11 @@ def run_synthesis(note_id: str, mode: str = "replace",
                    if not video_urls and (settings.workspace_synthesis_vision or not has_text)
                    else [])
         use_md = _uses_markdown(figures, video_urls)
-        prompt = (build_markdown_synthesis_prompt(blocks) if use_md
-                  else build_note_synthesis_prompt(blocks, has_figures=bool(figures)))
+        tables: dict[str, str] = {}
+        if use_md:
+            prompt, tables = build_markdown_synthesis_prompt_with_tables(blocks)
+        else:
+            prompt = build_note_synthesis_prompt(blocks, has_figures=bool(figures))
         with usage_log.annotate(surface="workspace", job="synthesis",
                                 trigger=trigger, note_id=note_id,
                                 user_id=user_id), \
@@ -369,7 +377,7 @@ def run_synthesis(note_id: str, mode: str = "replace",
             budget_guard.check(estimate_synthesis(note_id, user_id)["usd"],
                                what="Writing this note", setting="MAX_USD_PER_RUN")
             html = _complete(prompt, video_urls, has_text, user_id, figures,
-                             markdown=use_md)
+                             markdown=use_md, tables=tables)
             if last_call_truncated():
                 # Say so in the note itself: a guide that stops mid-section
                 # with no explanation reads as the whole lecture.
