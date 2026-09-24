@@ -20,7 +20,7 @@ chat skills; run card (Retry the right job, job + elapsed, Undo).
 re-check E6b on real slides. **Your app.sh stack** is stopped (you stopped it
 at 06:43); nothing of mine is left running.
 **Next action, in order:**
-- **Re-run E6b on real lecture slides** (needs the user's OK for a slide pair) — the Markdown default rests on AI-generated study guides only.
+- [x] **E6c on real slides** — done 2026-09-24: Markdown lost tables (1/3 vs 3/3); **default reverted to HTML**. Opt-in `SYNTHESIS_FORMAT=md` remains. Next try: deterministic table carry-over, measured on `iml-slides-two`.
 - The failure path of the run card, live (needs a run that fails — e.g. a budget cap set below the estimate).
 - "Contradiction" usage in compare-sources: read the runs that use it and judge.
 0. [x] **Truncation on real lectures** — done 2026-09-24: detection + UI
@@ -74,7 +74,7 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 | User skills storage | Bundled skills stay files. User-authored skills deferred to H3 — do not build now. |
 | Framework adoption | None. No CrewAI/LangGraph/Temporal. Plain Python in `services/`. |
 | Subagents | Do not spawn Claude Code subagents for execution. Work inline, write to disk as you go. |
-| E6 outcome (2026-09-23) | Synthesis stays on the HTML dialect. The Markdown variant is kept behind `--variant md`; skills keep writing Markdown. |
+| E6 outcome (2026-09-24) | Synthesis default is HTML. Markdown was default overnight (E6b) and reverted on real slides (E6c: tables 1/3 vs 3/3); opt-in `SYNTHESIS_FORMAT=md`. Skills keep writing Markdown. |
 | E7 outcome (2026-09-23) | `AGENT_SKILL_DISCLOSURE` stays `inline` until the catalogue grows; `index` is proven safe (loads the right skill 5/5). |
 | Supabase transport (2026-09-23) | PostgREST over HTTP/1.1 — reversible in `services/database.py`; h2 GOAWAY killed two live runs. |
 | Selection skills (2026-09-23) | Run through xl-ai's own invokeAI and review (no second model path); output `insert_below` = add only, `rewrite_selection` = update only; never delete. |
@@ -256,3 +256,4 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - 2026-09-24 · night run 2 (03:17): Markdown default wired + live 2-source guide, source-type correction, study-guide skill folder, chat surface filter, Retry fix · `63f5c5e`…`efca17a`
 - 2026-09-24 · night run 3 (05:17): running status names the job + elapsed, verified live; E14 confirmed in-app · see git log
 - 2026-09-24 · 06:40 session: Undo beside the receipt, morning smoke all green · `2e2793d`
+- 2026-09-24 · E6c on real slides: Markdown default reverted to HTML (tables) · see next commit

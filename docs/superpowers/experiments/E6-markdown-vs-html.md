@@ -165,3 +165,30 @@ less time. Remaining gaps: callouts (29 vs 37) and the double-title defect.
 **Decision:** KEEP the coverage rule in the MD prompt. Next: fix the double
 title deterministically in the converter, then wire Markdown into the app's
 synthesis behind a setting and verify one real generation live.
+
+## E6c — on REAL lecture slides (2026-09-24, Claude, `iml-slides-two`, n=3 per arm)
+
+Two consecutive Machine Learning lectures (RL; bias & fairness), PowerPoint
+printed to PDF, user-approved. Floors set from the HTML arm BEFORE the Markdown
+arm ran: text ≥ 17K chars, anchors ≥ 5, math ≥ 4, tables ≥ 10.
+
+| | HTML | Markdown + coverage rule |
+|---|---|---|
+| pass | **3/3** | **1/3** (tables 4 and 9 < 10) |
+| tables | 19 · 16 · 16 | 4 · 12 · 9 |
+| callouts | 23 · 27 · 26 | 6 · 21 · 19 |
+| math | 15 · 6 · 6 | 8 · 7 · 6 |
+| anchors | 7 · 17 · 7 | 17 · 24 · 28 |
+| text chars (median) | 25.8K | 24.6K |
+| $/run | 0.078 | 0.044 (−44%) |
+
+**The guardrail regresses on real slides**: the Markdown path keeps the text
+and the formulas but drops more than half of the tables and, in one run, most
+of the callouts — exactly what a slide deck carries. E6b's parity held on long
+AI-generated study guides and does not transfer.
+
+## Decision: REVERT the default to HTML (`SYNTHESIS_FORMAT=html`)
+
+The Markdown path stays wired and opt-in (`SYNTHESIS_FORMAT=md`). A next try
+would target tables specifically (e.g. convert every source pipe-table
+deterministically instead of asking the model), measured on `iml-slides-two`.

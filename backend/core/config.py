@@ -60,11 +60,12 @@ class Settings(BaseSettings):
     # again. The manual POST /notes/{id}/synthesize path is unaffected by this
     # setting — it is an explicit request.
     workspace_on_drop: str = "suggest"
-    # Study-guide output format. "md" (E6b: depth parity with the HTML dialect
-    # on two real lectures at -41% cost) writes Markdown and converts it with
-    # services/workspace/md_to_blocks; "html" is the original dialect, one env
-    # line away (SYNTHESIS_FORMAT=html). Figure and video runs always use html.
-    synthesis_format: str = "md"
+    # Study-guide output format. "html" is the shipped dialect. "md" writes
+    # Markdown and converts it with services/workspace/md_to_blocks: at depth
+    # parity and -41% cost on long AI-generated study guides (E6b), but on real
+    # lecture SLIDES it lost more than half the tables (1/3 vs 3/3, E6c) — so
+    # it is opt-in (SYNTHESIS_FORMAT=md). Figure and video runs always use html.
+    synthesis_format: str = "html"
 
     # Spending ceiling for one piece of work: one synthesis, or one agent turn
     # including all of its tool rounds. A run that would exceed it is refused

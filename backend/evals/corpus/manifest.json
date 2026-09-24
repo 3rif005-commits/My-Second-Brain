@@ -301,6 +301,44 @@
         "contradiction"
       ],
       "why": "SOURCE TYPE: both PDFs are AI-generated study guides (printed from a browser) built from Arabic Remote Sensing lecture transcripts — not slides. They carry their own DEF-xx/INS-xx labels and 'Component Bank' sections. compare-sources on the APP'S extracted text for the two lectures (exported from the live note), which carries the source's own labels (DEF-01, C-01, INS-06). The first live note leaked them into prose. 'Contradiction' is counted, not failed: whether one is deserved needs reading."
+    },
+    {
+      "id": "iml-slides-two",
+      "family": "slides",
+      "mode": "synthesis",
+      "sources": [
+        {
+          "title": "Machine Learning Lecture 10 - Reinforcement Learning",
+          "kind": "pdf",
+          "path": "sources/iml-lecture-10.txt"
+        },
+        {
+          "title": "Machine Learning Lecture 11 - Bias, Fairness & Ethics",
+          "kind": "pdf",
+          "path": "sources/iml-lecture-11.txt"
+        }
+      ],
+      "expect": {
+        "h1_exact": 1,
+        "unknown_callouts_max": 0,
+        "grounding_min": 0.8,
+        "anchor_validity_min": 1.0,
+        "sources_cited_min": 2,
+        "must_mention_rate_min": 1.0,
+        "text_chars_min": 17000,
+        "anchors_min": 5,
+        "math_blocks_min": 4,
+        "tables_min": 10
+      },
+      "must_mention": [
+        "Q-learning",
+        "reward",
+        "fairness",
+        "COMPAS",
+        "proxy"
+      ],
+      "must_not_mention": [],
+      "why": "REAL lecture slides (PowerPoint printed to PDF), two consecutive lectures of one course, user-approved 2026-09-24. Built to re-check E6b, whose Markdown default rested on AI-generated study guides only. Q-learning/reward live only in lecture 10, fairness/COMPAS/proxy only in lecture 11. Floors (text 17K, anchors 5, math 4, tables 10) set at ~2/3 of the thinnest HTML run BEFORE the Markdown arm ran."
     }
   ]
 }

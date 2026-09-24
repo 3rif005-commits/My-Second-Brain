@@ -47,6 +47,9 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   and in the eval (`truncated`). The first real two-document case hit the 16K cap
   on every run and the note simply ended mid-section, unmarked. The cap is
   now 32K (E13: guides from two long real documents ran 14.7K–25.6K tokens).
+- A result on one kind of source is not a result on another. Markdown matched
+  HTML on long AI-generated study guides (E6b) and lost half the tables on real
+  slides (E6c) — the default was flipped overnight and reverted by morning.
 - A pass-rate guardrail cannot see a note that got shorter. Check a token
   saving against content density (text, anchors, callouts) before calling it a
   saving. (E6 on Claude: −68% output tokens at an equal pass rate was mostly
