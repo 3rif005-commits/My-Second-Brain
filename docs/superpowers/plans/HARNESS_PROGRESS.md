@@ -26,8 +26,11 @@ live, and the selection menu shipped after fixing editor AI edits for everyone.
    the study-guide synthesis still receives the IDs (unmeasured there).
 2. **E6b** — format vs spec length, with `anchors` and `text_chars` floors
    added to the manifest first (the pass-rate guardrail cannot see a thin note).
-3. **Blocked reason lies when a source FAILED**: the chip says "needs at least
-   two sources" when one of two failed processing. Say which source failed.
+3. [x] **Blocked reason names the source** — done 2026-09-24: a chip blocked
+   for want of sources now says '"Lecture 3" failed to process — retry or
+   remove it' or 'waiting for "Lecture 3" to finish processing'. Unit-tested;
+   live pass (workspace-skills, 5/5) shows no regression, but the failed-source
+   wording itself has not been seen in a browser (needs a source that fails).
 4. Study-guide migration — **unblocked** (your edit is committed, `1750ee3`).
 5. Run card (5.1 remainder).
 
@@ -227,3 +230,4 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - 2026-09-23 · selection menu + define-terms; editor AI edits fixed (Responses
   API vs chat/completions), selection kept across menu open · `6695e84`, `4dc8da3`
 - 2026-09-24 · first real corpus case (two RS lectures); Claude baseline finds every note truncated at 16K tokens · see next commit
+- 2026-09-24 · night run 1: truncation flagged + cap 32K (E13), estimate follows sources, compare-sources label leak fixed (E14), chip names failed sources; ~$1.11 spent · `1b5c095`…see log

@@ -180,3 +180,16 @@ def test_the_extractors_id_column_never_reaches_a_skill():
     assert "|a|b|\n|---|---|\n|1|2|" in out            # other tables untouched
     prompt = skill_run.build_prompt(_skill(), [{"title": "L", "kind": "pdf", "text": text}])
     assert "DEF-01" not in prompt
+
+
+def test_a_failed_source_is_named_instead_of_asking_for_another():
+    """Seen live: two sources dropped, one failed processing, and the chip
+    said 'comparing needs at least two sources'."""
+    skill = _skill()
+    reason = skill_run._runnable(skill, 1, [{"title": "Lecture 3", "status": "failed"}])
+    assert reason == '"Lecture 3" failed to process — retry or remove it'
+    reason = skill_run._runnable(skill, 1, [{"title": "Lecture 3", "status": "queued"}])
+    assert reason == 'waiting for "Lecture 3" to finish processing'
+    assert skill_run._runnable(skill, 1) == "comparing needs at least two sources"
+    assert skill_run._runnable(skill, 2, [{"title": "x", "status": "failed"}]) is None
+    assert skill_run._runnable(_skill("flashcards"), 0) == "no sources are ready yet"

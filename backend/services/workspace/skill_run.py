@@ -30,6 +30,7 @@ from services.ai.pricing import estimate_usd, tokens_from_chars
 from services.ai.router import complete_with_fallback, pick
 from services.ai.client import last_call_truncated
 from services.workspace.md_to_blocks import TRUNCATION_NOTICE_MD, markdown_to_html
+from services.database import get_supabase
 from services.workspace.synthesis import (
     OUTPUT_CAP, _strip_fences, _write, ready_sources, source_text_from_chunks,
 )
@@ -151,17 +152,38 @@ def estimate(note_id: str, user_id: str, skill: Skill) -> dict:
         "output_tokens": output_tokens,
         "model": model,
         "usd": estimate_usd(model, input_tokens, output_tokens),
-        "runnable": _runnable(skill, len(source_ids)),
+        "runnable": _runnable(skill, len(source_ids),
+                              _unready(note_id) if len(source_ids) < 2 else ()),
     }
 
 
-def _runnable(skill: Skill, source_count: int) -> str | None:
-    """Why this skill cannot run right now, or None if it can."""
+def _unready(note_id: str) -> list[dict]:
+    """The note's sources that are not ready, with their state."""
+    rows = (get_supabase().table("note_resources").select("title,status")
+            .eq("note_id", note_id).neq("status", "ready")
+            .order("order_index").execute().data or [])
+    return rows
+
+
+def _runnable(skill: Skill, source_count: int,
+              unready: list[dict] | tuple = ()) -> str | None:
+    """Why this skill cannot run right now, or None if it can.
+
+    When a source is the reason, name it. "Comparing needs at least two
+    sources" on a note with two sources — one of which FAILED processing — sent
+    the user looking for a second source they had already added (seen live).
+    """
+    needed = 2 if skill.name == "compare-sources" else 1
+    if source_count >= needed:
+        return None
+    failed = [u for u in unready if u.get("status") == "failed"]
+    if failed:
+        return f'"{failed[0].get("title") or "a source"}" failed to process — retry or remove it'
+    if unready:
+        return f'waiting for "{unready[0].get("title") or "a source"}" to finish processing'
     if source_count == 0:
         return "no sources are ready yet"
-    if skill.name == "compare-sources" and source_count < 2:
-        return "comparing needs at least two sources"
-    return None
+    return "comparing needs at least two sources"
 
 
 def run_skill(note_id: str, user_id: str, skill_name: str,
