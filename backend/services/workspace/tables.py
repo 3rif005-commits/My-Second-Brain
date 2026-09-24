@@ -87,7 +87,26 @@ _HTML_CELL = re.compile(r"<t[hd][^>]*>(.*?)</t[hd]>", re.S)
 def _norm(cell: str) -> str:
     # Unescape first: a source cell's "<br>" and a rendered cell's "&lt;br&gt;"
     # (or a space) must compare equal, or every carried table looks missing.
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html.unescape(cell))).strip().lower()
+    # Bold markers and the Unicode minus are formatting, not content.
+    text = html.unescape(cell).replace("**", "").replace("\u2212", "-")
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text)).strip().lower()
+
+
+def _body(rows: list[tuple[str, ...]]) -> set[tuple[str, ...]]:
+    # The data rows, not the header: models reformat headers ("S1<br>-1" →
+    # "S1") when retyping, and the data is what makes two tables different.
+    return set(rows[1:]) if len(rows) > 1 else set(rows)
+
+
+def _rows_md(table: str) -> set[tuple[str, ...]]:
+    return _body([tuple(_norm(c) for c in line.strip().strip("|").split("|"))
+                  for line in table.split("\n")
+                  if line.strip() and not _SEPARATOR.match(line)])
+
+
+def _rows_html(table: str) -> set[tuple[str, ...]]:
+    return _body([tuple(_norm(c) for c in _HTML_CELL.findall(row))
+                  for row in re.findall(r"<tr>(.*?)</tr>", table, re.S)])
 
 
 def _cells_md(table: str) -> set[str]:
@@ -99,12 +118,17 @@ def _cells_md(table: str) -> set[str]:
     return {c for c in cells if c}
 
 
-def _already_there(table: str, note_tables: list[set[str]]) -> bool:
+def _already_there(table: str, note_tables: list[set[tuple[str, ...]]]) -> bool:
     """The model retyped this table instead of placing its marker. Appending
     the source copy as well gave the reader the same table twice (E6d: 46
-    tables, 33 distinct)."""
-    cells = _cells_md(table)
-    return bool(cells) and any(len(cells & t) >= 0.8 * len(cells) for t in note_tables)
+    tables, 33 distinct).
+
+    Every ROW must be there, cell for cell. Comparing sets of cells called
+    11 of a slide pair's 23 tables duplicates of each other — Q-tables from
+    successive iterations share labels and zeros — and dropped real tables.
+    A table shown twice is the lesser harm."""
+    rows = _rows_md(table)
+    return bool(rows) and any(rows <= t for t in note_tables)
 
 
 def carry_tables(md: str, tables: dict[str, str], offered: str = "") -> str:
@@ -123,7 +147,7 @@ def carry_tables(md: str, tables: dict[str, str], offered: str = "") -> str:
         return tables[key]
 
     md = _MARKER.sub(_place, md or "")
-    note_tables = [_cells_md(m.group(1)) for m in _TABLE.finditer(md)]
+    note_tables = [_rows_md(m.group(1)) for m in _TABLE.finditer(md)]
     missing = [k for k in tables if k not in placed and (not offered or k in offered)
                and not _already_there(tables[k], note_tables)]
     md, missing = _place_by_page_md(md, missing, tables)
@@ -152,8 +176,7 @@ def carry_tables_html(html: str, tables: dict[str, str], offered: str = "") -> s
         return markdown_to_html(tables[key])
 
     html = _HTML_MARKER.sub(_place, html or "")
-    note_tables = [{c for c in (_norm(x) for x in _HTML_CELL.findall(t)) if c}
-                   for t in _HTML_TABLE.findall(html)]
+    note_tables = [_rows_html(t) for t in _HTML_TABLE.findall(html)]
     missing = [k for k in tables if k not in placed and (not offered or k in offered)
                and not _already_there(tables[k], note_tables)]
     html, missing = _place_by_page_html(html, missing, tables, markdown_to_html)

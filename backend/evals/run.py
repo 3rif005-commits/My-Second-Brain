@@ -181,6 +181,7 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
     mark = len(usage_log.RECENT)
     started = time.monotonic()
     html, error, truncated = "", None, False
+    anchors_repaired = 0
 
     if dry_run:
         # Plumbing check: score the sources themselves so the whole path runs
@@ -225,6 +226,9 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
             from services.workspace.tables import carry_tables
             html = carry_tables(html, tables, offered=prompt)
         html = markdown_to_html(html)
+        if variant == "md" and skill is None:
+            from services.workspace.anchors import repair_anchors
+            html, anchors_repaired = repair_anchors(html, blocks)
 
     latency_ms = int((time.monotonic() - started) * 1000)
     # Straight from the run log, so the eval's cost column and the app's own
@@ -259,6 +263,7 @@ def run_case(case: dict, config: str, run_index: int, dry_run: bool,
     # cap can clear every range while the reader lost the end of the lecture.
     return CaseResult(case["id"], run_index, not failures, failures,
                       {**score.as_dict(), "truncated": truncated,
+                       "anchors_repaired": anchors_repaired,
                        **{f"count:{w}": len(re.findall(w, html or ""))
                           for w in case.get("count_words", [])}},
                       latency_ms, error,

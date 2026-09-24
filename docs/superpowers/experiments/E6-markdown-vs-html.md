@@ -248,3 +248,39 @@ the same source at that page (or the nearest earlier one); the appendix only
 takes tables no section covers. Replayed on that note: 15/15 placed beside
 their section, 0 in the appendix. HTML path only (the default); the opt-in
 Markdown path still appends.
+
+## E6e — repairing the Markdown path's anchors (2026-09-24, `iml-slides-app`)
+
+`services/workspace/anchors.py`: each `###` section is matched against every
+page of every source by shared distinctive words (IDF-weighted); an anchor is
+moved only when another SOURCE matches ≥1.5× better, and one is added only on
+a clear match. Offline first: on the saved failing note (19 anchors, all
+source 1) it moved exactly the 12 fairness sections to source 2 (mostly the
+same page number — the model had the page right, the source wrong) and left
+the 7 RL sections; on the correct live HTML note it changed nothing.
+
+| Markdown path | pass | tables | anchors repaired | callouts | $/run |
+|---|---|---|---|---|---|
+| carry only (n=6) | 4/6 | 16–27 | — | 8–23 | 0.041 |
+| carry + repair (n=9) | **9/9** | 10*, 20–27 | 0×8, **12×1** (a slip, fixed) | 11–21 | 0.038 |
+
+\*The one 10-table run exposed a duplicate-check bug: comparing SETS OF CELLS
+called 11 of 23 source tables copies of each other (successive Q-tables share
+labels and zeros) and skipped real tables. It now compares data rows exactly
+(headers are what models reformat when retyping); the 3 runs after the fix
+kept 24–27 tables.
+
+**Where the paths stand on real slides (app extraction):**
+
+| | HTML + carry (default) | Markdown + carry + repair |
+|---|---|---|
+| pass | 3/3 | 9/9 |
+| tables | 30–35 | 24–27 |
+| anchors | 16–21 | 14–26 |
+| **callouts** | **31–45** | **11–21** |
+| $/run | 0.093 | 0.038 (−59%) |
+
+**Decision:** keep the repair on the Markdown path; keep HTML the default.
+The anchors and tables gaps are closed; the one left is callouts (the
+exam-tip / mistake / formula layer), at less than half. Whether −59% cost is
+worth that is a product call, not an eval result.

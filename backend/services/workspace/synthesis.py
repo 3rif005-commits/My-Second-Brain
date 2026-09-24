@@ -31,6 +31,7 @@ from services.database import get_supabase
 from services.workspace.dbretry import with_retry
 from services.workspace.figures import figure_parts
 from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML, markdown_to_html
+from services.workspace.anchors import repair_anchors
 from services.workspace.tables import carry_tables, carry_tables_html, label_tables
 
 logger = logging.getLogger(__name__)
@@ -258,7 +259,8 @@ def _inherited_titles(note: dict, first_source: dict) -> set[str]:
 def _complete(prompt: str, video_urls: list[str], has_text: bool,
               user_id: str, figures: list[dict] | None = None,
               markdown: bool = False,
-              tables: dict[str, str] | None = None) -> str:
+              tables: dict[str, str] | None = None,
+              sources: list[dict] | None = None) -> str:
     """Text path, or the Gemini-native video path when a source has no
     transcript (same capability routing the per-resource summary used)."""
     if video_urls:
@@ -299,7 +301,13 @@ def _complete(prompt: str, video_urls: list[str], has_text: bool,
             validate=lambda text: _looks_like_a_mastery_guide(
                 markdown_to_html(_strip_fences(text))))
         # Source tables go in verbatim, where the model put their markers.
-        return markdown_to_html(carry_tables(_strip_fences(md), tables or {}, offered=prompt))
+        html = markdown_to_html(carry_tables(_strip_fences(md), tables or {}, offered=prompt))
+        # The Markdown path sometimes points every section at source 1; the
+        # note is right, the pointers are not (E6d). Checked against the pages.
+        html, fixed = repair_anchors(html, sources or [])
+        if fixed:
+            logger.info(f"repaired {fixed} section anchor(s)")
+        return html
     return _strip_fences(complete_with_fallback(
         "summarize_text", user_id, [{"role": "user", "content": prompt}],
         max_tokens=OUTPUT_CAP, validate=_looks_like_a_mastery_guide))
@@ -380,7 +388,7 @@ def run_synthesis(note_id: str, mode: str = "replace",
             budget_guard.check(estimate_synthesis(note_id, user_id)["usd"],
                                what="Writing this note", setting="MAX_USD_PER_RUN")
             html = _complete(prompt, video_urls, has_text, user_id, figures,
-                             markdown=use_md, tables=tables)
+                             markdown=use_md, tables=tables, sources=blocks)
             if not use_md:
                 html = carry_tables_html(html, tables, offered=prompt)
             if last_call_truncated():
