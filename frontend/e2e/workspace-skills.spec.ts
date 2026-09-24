@@ -150,3 +150,24 @@ test.describe("one AI for the whole app", () => {
     await expect(page.getByRole("complementary", { name: "AI assistant panel" })).toHaveCount(1);
   });
 });
+
+test.describe("the floating AI button covers nothing", () => {
+  test.setTimeout(120_000);
+  type Box = { x: number; y: number; width: number; height: number };
+  const overlaps = (a: Box, b: Box) =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+  test("workspace header and note page menu stay clear of it while the panel is closed", async ({ page }) => {
+    await openRecent(page, /2 sources/);
+    await page.getByRole("button", { name: "Close AI panel" }).click();
+    const ai = page.getByRole("button", { name: "Open AI panel", exact: true });
+    await expect(ai).toBeVisible();
+    const own = page.getByTitle("Open this note on its own page");
+    expect(overlaps((await ai.boundingBox())!, (await own.boundingBox())!)).toBe(false);
+    await own.click();                                  // reachable, not under the AI button
+    await page.waitForURL(/\/brain\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+    const menu = page.getByRole("button", { name: "Note options" });
+    await expect(menu).toBeVisible({ timeout: 30_000 });
+    expect(overlaps((await ai.boundingBox())!, (await menu.boundingBox())!)).toBe(false);
+  });
+});
