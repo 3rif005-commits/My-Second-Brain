@@ -27,18 +27,18 @@ test.describe("CommandK launcher", () => {
     await page.getByLabel("AI query").fill("Hello");
     await page.keyboard.press("Enter");
     // After expansion, Chat component renders with its Send button
-    await expect(page.getByLabel("Message input")).toBeVisible({ timeout: 3000 });
+    await expect(page.getByLabel("Message the AI")).toBeVisible({ timeout: 3000 });
   });
 
   test("Esc in expanded goes back to compact", async ({ page }) => {
     await page.keyboard.press("Meta+k");
     await page.getByLabel("AI query").fill("Hello");
     await page.keyboard.press("Enter");
-    await expect(page.getByLabel("Message input")).toBeVisible({ timeout: 3000 });
+    await expect(page.getByLabel("Message the AI")).toBeVisible({ timeout: 3000 });
     await page.keyboard.press("Escape");
     // Back to compact — Message input is gone, AI query input is back
     await expect(page.getByLabel("AI query")).toBeVisible();
-    await expect(page.getByLabel("Message input")).not.toBeVisible();
+    await expect(page.getByLabel("Message the AI")).not.toBeVisible();
   });
 
   test("⌘K again closes compact modal", async ({ page }) => {

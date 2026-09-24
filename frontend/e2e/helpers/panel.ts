@@ -6,7 +6,7 @@ import path from "path";
 const FIXTURE = path.join(process.cwd(), "e2e/fixtures/test.pdf");
 
 export async function openPanel(page: Page) {
-  const box = page.getByRole("textbox", { name: "Message input" });
+  const box = page.getByRole("textbox", { name: "Message the AI" });
   if (!(await box.isVisible().catch(() => false))) {
     await page.getByRole("button", { name: "Open AI panel", exact: true }).click();
   }

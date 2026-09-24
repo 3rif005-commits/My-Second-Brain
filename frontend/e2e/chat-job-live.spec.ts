@@ -30,9 +30,9 @@ test("/study-guide in the AI panel: preview, insert, undo", async ({ page }) => 
   await page.keyboard.type("/study-guide");
   await page.keyboard.press("Escape");            // close the / menu, keep the text
   await box.fill("/study-guide");
-  await page.getByTitle("Send").click();
+  await page.getByRole("button", { name: "Send" }).click();
 
-  const insert = page.getByRole("button", { name: /insert into note/i });
+  const insert = page.getByRole("button", { name: /insert into this note/i });
   await expect(page.getByText(/Writing…/)).toBeVisible({ timeout: 30_000 });
   await page.screenshot({ path: path.join(OUT, "01-running.png") });
   await expect(insert).toBeVisible({ timeout: 300_000 });
@@ -43,11 +43,12 @@ test("/study-guide in the AI panel: preview, insert, undo", async ({ page }) => 
 
   await insert.click();
   await expect(page.locator(".bn-editor h1").first()).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText(/Added to the note/)).toBeVisible();
+  await expect(page.getByText(/In “/)).toBeVisible();
   await page.screenshot({ path: path.join(OUT, "03-inserted.png") });
 
   await page.getByRole("button", { name: /^undo$/i }).click();
   await expect(page.locator(".bn-editor h1")).toHaveCount(0, { timeout: 15_000 });
-  await expect(page.getByRole("button", { name: /insert into note/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /insert into this note/i })).toBeVisible();
   await page.screenshot({ path: path.join(OUT, "04-undone.png") });
+  await page.request.delete(`/api/notes/${page.url().split("/").pop()}`);   // its own note, not the user's
 });

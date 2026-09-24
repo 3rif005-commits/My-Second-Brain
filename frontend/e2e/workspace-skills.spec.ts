@@ -93,6 +93,8 @@ test.describe("workspace: sources · note · AI", () => {
     await expect(page.getByText(/^Flashcards$/).first()).toBeVisible({ timeout: 10_000 });
     await ss(page, "05-slash-menu");
     await page.keyboard.press("Escape");        // runs nothing: free
+    // This is a real note: take the typed "/flash" back out again.
+    for (let i = 0; i < "/flash".length; i++) await page.keyboard.press("Backspace");
   });
 
   test("dropping a source indexes it without generating anything", async ({ page }) => {
@@ -115,9 +117,10 @@ test.describe("one AI per screen", () => {
   test("on a workspace note the side panel steps aside and ⌘K focuses the workspace AI", async ({ page }) => {
     await openRecent(page, /2 sources/);
     await expect(aiPanel(page)).toBeVisible({ timeout: 30_000 });
-    // The app-wide assistant and its buttons are not on this screen.
-    await expect(page.getByRole("button", { name: /thread history/i })).toHaveCount(0);
-    await expect(page.getByPlaceholder("Ask anything about your notes…")).toHaveCount(0);
+    // One panel: the workspace's is the app's own, and the app-wide one steps aside.
+    await expect(page.getByRole("complementary", { name: "AI assistant panel" })).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: /message the ai/i })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: /thread history/i })).toHaveCount(1);
     await expect(page.getByRole("button", { name: "Open AI panel", exact: true })).toHaveCount(0);
     // ⌘K reaches the workspace AI, even when collapsed.
     await page.getByTitle(/collapse the ai panel/i).first().click();

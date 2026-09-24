@@ -1,23 +1,29 @@
 "use client";
 
-// The app-wide AI panel. Besides answering from the brain, it runs skills on
-// files attached right here (user decision, 2026-09-24): attach, type
-// `/study-guide …`, and the result comes back as a card to put in a note —
-// the workspace is one click away, never a required stop.
+// THE AI panel — the same one on every page and in the workspace (user
+// decision, 2026-09-24: one AI, one look). Besides answering from the brain,
+// it runs skills on files or links attached right here: attach, type
+// `/study-guide …`, and the result comes back as a card to put in a note.
+// In the workspace (`workspace` prop) it is bound to that note: answers cite
+// its sources as chips that jump to the page, attachments become its sources,
+// and results go into its editor.
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Send, History, SquarePen, X, Smartphone, Cloud, Check, SlidersHorizontal, Sparkles,
-  Paperclip, FileText, FilePlus2,
+  Paperclip, FileText, FilePlus2, Link2, Upload, PanelRightClose, ChevronRight,
 } from "lucide-react";
 import { MessageList, type StreamItem } from "./MessageList";
 import { ThreadHistory } from "./ThreadHistory";
 import { useMode, type Mode } from "./ModeToggle";
 import { PanelJobCard, type PanelJob } from "./PanelCards";
 import {
-  attachAndProcess, fileTitle, readNote, usePanelContext, type PanelScope,
+  attachAndProcess, attachmentName, attachmentsTitle, parseLink, readNote, usePanelContext,
+  type Attachment, type PanelScope,
 } from "./panelSources";
-import { jobPrice, matchJobs, parseCommand, type JobResult } from "@/lib/chatJobs";
+import {
+  jobPrice, matchJobs, parseCommand, type ChatJob, type JobRequest, type JobResult,
+} from "@/lib/chatJobs";
 import { ACCEPTED_WORKSPACE_FILES, jobTitle, type Citation } from "@/lib/workspace";
 import { answerToHtml } from "@/lib/answerToHtml";
 import { offerDraft, stageDraft, undoDraft, type NoteDraft } from "@/lib/noteDraft";
@@ -26,19 +32,45 @@ const ACCEPTED_EXT = ACCEPTED_WORKSPACE_FILES.split(",");
 const accepted = (f: File) => ACCEPTED_EXT.some((ext) => f.name.toLowerCase().endsWith(ext));
 const uid = () => crypto.randomUUID();
 
+/** The panel inside the workspace, bound to the open note. */
+export interface WorkspaceBinding {
+  noteId: string;
+  title: string;
+  /** Priced, each with the reason it cannot run yet (if any). */
+  jobs: ChatJob[];
+  colorIndex: Map<string, number>;
+  onCitation: (c: Citation) => void;
+  /** Files or links attached in the panel became sources: refresh the list. */
+  onSourcesAdded?: () => void;
+  /** A job asked for from the editor's "/" menu. */
+  request?: JobRequest | null;
+  /** Bumped by ⌘K: focus the input. */
+  focusNonce?: number;
+}
+
 interface ChatProps {
   threadId?: string | null;
   onThreadIdChange?: (id: string) => void;
   initialQuery?: string;
   onClose?: () => void;
+  workspace?: WorkspaceBinding;
 }
+
+/** Openers for an empty conversation about sources — one tap, not a blank page. */
+const STARTERS = [
+  "Summarise the key ideas",
+  "What should I remember first?",
+  "Explain the hardest part simply",
+];
+
+const WS_THREAD_KEY = (noteId: string) => `workspace:thread:${noteId}`;
 
 const MODEL_OPTIONS: { value: Mode; label: string; desc: string; icon: React.ReactNode }[] = [
   { value: "local", label: "Local", desc: "On-device · private", icon: <Smartphone size={14} /> },
   { value: "api",   label: "Cloud", desc: "Faster · smarter",    icon: <Cloud size={14} /> },
 ];
 
-export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQuery, onClose }: ChatProps = {}) {
+export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQuery, onClose, workspace }: ChatProps = {}) {
   const [items, setItems] = useState<StreamItem[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -54,8 +86,18 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
   const lastQueryRef = useRef<string>("");
   const modeMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  const { pageNoteId, pageSources, setPageSources, jobs, ensureJobs } = usePanelContext();
-  const [attachments, setAttachments] = useState<File[]>([]);
+  const ctx = usePanelContext();
+  // In the workspace the open note is the workspace's; elsewhere the page's.
+  const pageNoteId = workspace ? workspace.noteId : ctx.pageNoteId;
+  const pageSources = workspace ? workspace.jobs.length : ctx.pageSources;
+  const setPageSources = ctx.setPageSources;
+  const jobs = workspace ? workspace.jobs : ctx.jobs;
+  const ensureJobs = async () => (workspace ? workspace.jobs : ctx.ensureJobs());
+  const fixedScope: PanelScope | null = workspace ? { noteId: workspace.noteId, title: workspace.title } : null;
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [linkDraft, setLinkDraft] = useState<string | null>(null);
+  const linkInputRef = useRef<HTMLInputElement>(null);
   // The note this thread's attached files live in: later questions and jobs
   // in the same thread keep working on them.
   const [scope, setScope] = useState<PanelScope | null>(null);
@@ -67,11 +109,15 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const suggestions = matchJobs(input, jobs);
+  const activeScope = fixedScope ?? scope;
   // Where a job would run right now — said in the / menu before anything runs.
   const jobsRunOn = attachments.length
-    ? `the ${attachments.length} attached file${attachments.length === 1 ? "" : "s"}`
+    ? `the ${attachments.length} attached source${attachments.length === 1 ? "" : "s"}`
+    : workspace ? "this note's sources"
     : scope ? `“${scope.title}”`
     : pageNoteId && pageSources ? "this note's sources" : null;
+  // The empty panel offers the jobs when there are sources to run them on.
+  const offerJobs = !!(workspace || scope || (pageNoteId && pageSources)) && jobs.length > 0;
 
   function addFiles(list: FileList | File[] | null | undefined) {
     const files = Array.from(list ?? []);
@@ -79,8 +125,29 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
     if (ok.length < files.length) {
       setError(`Not a supported file: ${files.filter((f) => !accepted(f)).map((f) => f.name).join(", ")}. Try PDF, Markdown, text or video.`);
     }
-    if (ok.length) setAttachments((prev) => [...prev, ...ok]);
+    if (ok.length) setAttachments((prev) => [...prev, ...ok.map((file) => ({ kind: "file" as const, file }))]);
     inputRef.current?.focus();
+  }
+
+  /** A website or YouTube link, as a source. False when it is not a link. */
+  function addLink(text: string): boolean {
+    const url = parseLink(text);
+    if (!url) return false;
+    setAttachments((prev) => (prev.some((a) => a.kind === "url" && a.url === url)
+      ? prev : [...prev, { kind: "url", url }]));
+    return true;
+  }
+
+  function submitLinkDraft() {
+    if (linkDraft === null) return;
+    if (!linkDraft.trim()) { setLinkDraft(null); return; }
+    if (addLink(linkDraft)) {
+      setLinkDraft(null);
+      setError(null);
+      inputRef.current?.focus();
+    } else {
+      setError("That is not a link — paste a full address starting with https://");
+    }
   }
 
   function resetThread(id: string | null) {
@@ -115,7 +182,32 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
   function setThreadId(id: string | null) {
     setInternalThreadId(id);
     if (id) onThreadIdChange?.(id);
+    // In the workspace each note keeps its own conversation.
+    if (workspace) {
+      try {
+        if (id) localStorage.setItem(WS_THREAD_KEY(workspace.noteId), id);
+        else localStorage.removeItem(WS_THREAD_KEY(workspace.noteId));
+      } catch { /* private mode */ }
+    }
   }
+
+  // Switching notes in the workspace: stop the answer for the old one, and
+  // bring back the new note's own conversation.
+  const wsNoteId = workspace?.noteId;
+  useEffect(() => {
+    if (!wsNoteId) return;
+    abortRef.current?.abort();
+    adoptedThreadRef.current = null;
+    setItems([]);
+    setAttachments([]);
+    setHistoryOpen(false);
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(WS_THREAD_KEY(wsNoteId)); } catch { /* private mode */ }
+    setInternalThreadId(saved);
+  }, [wsNoteId]);
+
+  const focusNonce = workspace?.focusNonce;
+  useEffect(() => { if (focusNonce) inputRef.current?.focus(); }, [focusNonce]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -328,7 +420,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
     lastQueryRef.current = query;
     const cmd = parseCommand(query, query.startsWith("/") ? await ensureJobs() : jobs);
 
-    const shown = [query, files.length ? `📎 ${files.map((f) => f.name).join(", ")}` : ""]
+    const shown = [query, files.length ? `📎 ${files.map(attachmentName).join(", ")}` : ""]
       .filter(Boolean).join("\n");
     setItems((prev) => [...prev, { kind: "user", id: uid(), content: shown }]);
     setInput("");
@@ -339,25 +431,32 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
     abortRef.current = ctl;
 
     try {
-      let where: PanelScope | null = scope;
+      let where: PanelScope | null = activeScope;
       if (files.length) {
-        // Files go into the open note only when it is empty; anywhere else a
-        // new note holds them, so existing work is never touched.
-        const page = pageNoteId ? await readNote(pageNoteId) : null;
-        const target = page?.empty ? pageNoteId : null;
-        const title = target ? page!.title : fileTitle(files[0].name);
+        // In the workspace they become this note's sources. Elsewhere they go
+        // into the open note only when it is empty; otherwise a new note holds
+        // them, so existing work is never touched.
+        const page = !workspace && pageNoteId ? await readNote(pageNoteId) : null;
+        const target = workspace ? workspace.noteId : page?.empty ? pageNoteId : null;
+        const title = workspace ? workspace.title : target ? page!.title : attachmentsTitle(files);
         const uploadId = uid();
         setItems((prev) => [...prev, { kind: "upload", id: uploadId, title, files: [] }]);
+        let told = false;
         const out = await attachAndProcess(files, target,
-          (_, fs) => patchItem(uploadId, (it) => it.kind === "upload" ? { ...it, files: fs } : it),
+          (_, fs) => {
+            patchItem(uploadId, (it) => it.kind === "upload" ? { ...it, files: fs } : it);
+            // The sources list shows them as soon as they are in.
+            if (!told && fs.every((f) => f.status !== "uploading")) { told = true; workspace?.onSourcesAdded?.(); }
+          },
           ctl.signal);
+        workspace?.onSourcesAdded?.();
         where = { noteId: out.noteId, title };
         setScope(where);
         if (out.noteId === pageNoteId) {
           setPageSources((n) => n + out.files.filter((f) => f.status === "ready").length);
         }
         if (!out.files.some((f) => f.status === "ready")) {
-          notice("None of the files could be read, so nothing ran.");
+          notice("None of them could be read, so nothing ran.");
           return;
         }
         if (!query) {
@@ -372,7 +471,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
         const on = where ?? (pageNoteId && pageSources
           ? { noteId: pageNoteId, title: (await readNote(pageNoteId)).title } : null);
         if (!on) {
-          notice(`/${cmd.skill} works on sources — attach a file with 📎 (or drop it here) and send it again.`);
+          notice(`/${cmd.skill} works on sources — attach a file or a link with 📎 (or drop it here) and send it again.`);
           return;
         }
         setLoading(false);
@@ -388,6 +487,17 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
       setLoading(false);
     }
   }
+
+  // A job asked for from the editor's "/" menu runs as if typed — after any
+  // answer in progress has finished (the effect re-runs when loading ends).
+  const request = workspace?.request;
+  const lastNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!request || request.nonce === lastNonce.current || loading) return;
+    lastNonce.current = request.nonce;
+    void send(undefined, { query: `/${request.skill}${request.focus ? " " + request.focus : ""}` });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request, loading]);
 
   // ── where a result goes ─────────────────────────────────────────────────
   /** Put `html` into a note: the open one takes it live; any other is opened
@@ -419,9 +529,20 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
           : "Open the note to undo it there (Ctrl+Z)." });
   }
 
-  function insertAnswer(item: Extract<StreamItem, { kind: "assistant" }>, noteId: string) {
-    void deliver({ noteId, html: answerToHtml(item.content, item.citations ?? []),
+  async function insertAnswer(item: Extract<StreamItem, { kind: "assistant" }>, noteId: string) {
+    await deliver({ noteId, html: answerToHtml(item.content, item.citations ?? []),
       mode: "replace", sourceIds: [] });
+    patchItem(item.id, (it) => it.kind === "assistant" ? { ...it, inserted: noteId, undoNote: undefined } : it);
+  }
+
+  async function undoAnswer(item: Extract<StreamItem, { kind: "assistant" }>) {
+    if (!item.inserted) return;
+    const out = await undoDraft(item.inserted);
+    patchItem(item.id, (it) => it.kind !== "assistant" ? it : out === "undone"
+      ? { ...it, inserted: undefined, undoNote: undefined }
+      : { ...it, undoNote: out === "edited"
+          ? "You've edited the note since — use Ctrl+Z in the note."
+          : "Open the note to undo it there (Ctrl+Z)." });
   }
 
   function completeJob(skill: string) {
@@ -455,25 +576,30 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
       className="flex flex-col h-full min-h-0 relative overflow-hidden"
       data-ai-panel
       onDragOver={(e) => {
-        if (!e.dataTransfer?.types?.includes("Files")) return;
+        const types = e.dataTransfer?.types ?? [];
+        if (!types.includes("Files") && !types.includes("text/uri-list")) return;
         e.preventDefault();
+        e.stopPropagation();
         setDragOver(true);
       }}
       onDragLeave={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false);
       }}
       onDrop={(e) => {
-        if (!e.dataTransfer?.files?.length) return;
+        const link = e.dataTransfer?.getData("text/uri-list")?.split("\n").find((l) => l && !l.startsWith("#"));
+        if (!e.dataTransfer?.files?.length && !link) return;
         e.preventDefault();
+        e.stopPropagation();
         setDragOver(false);
-        addFiles(e.dataTransfer.files);
+        if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+        else if (link) addLink(link);
       }}
     >
       {dragOver && (
         <div className="absolute inset-2 z-30 rounded-2xl border-2 border-dashed border-indigo-400 bg-indigo-50/80
           dark:bg-indigo-950/60 flex flex-col items-center justify-center gap-2 pointer-events-none">
           <FilePlus2 size={26} className="text-indigo-500" />
-          <p className="text-sm font-medium text-indigo-700 dark:text-indigo-200">Drop to attach</p>
+          <p className="text-sm font-medium text-indigo-700 dark:text-indigo-200">Drop files or links to attach</p>
           <p className="text-xs text-indigo-500/80">then ask, or type /study-guide</p>
         </div>
       )}
@@ -521,10 +647,11 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
           {onClose && (
             <button
               onClick={onClose}
-              aria-label="Close AI panel"
+              aria-label={workspace ? "Collapse the AI panel" : "Close AI panel"}
+              title={workspace ? "Collapse the AI panel" : undefined}
               className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
-              <X size={15} />
+              {workspace ? <PanelRightClose size={15} /> : <X size={15} />}
             </button>
           )}
         </div>
@@ -540,25 +667,50 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-1.5">
               What do you want to know?
             </h2>
-            <p className="text-sm text-gray-400 dark:text-gray-500 max-w-[240px] leading-relaxed">
-              Ask anything — answers are grounded in your notes.
+            <p className="text-sm text-gray-400 dark:text-gray-500 max-w-[260px] leading-relaxed">
+              {workspace
+                ? "Ask about this note's sources — answers cite the exact page — or anything in your brain."
+                : "Ask anything — answers are grounded in your notes."}
             </p>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-4 inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[12.5px] text-indigo-600
-                dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/40"
-            >
-              <Paperclip size={13} /> Attach files to make a study guide
-            </button>
+            {offerJobs && (
+              <div className="mt-5 w-full max-w-[300px] flex flex-col gap-1.5 text-left">
+                {jobs.map((j) => (
+                  <button key={j.skill} disabled={!!j.runnable || loading}
+                    onClick={() => void send(undefined, { query: `/${j.skill}` })}
+                    title={j.runnable ?? j.description}
+                    className="group flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-gray-800/60
+                      border border-gray-100 dark:border-gray-700/50 shadow-sm hover:border-indigo-300
+                      dark:hover:border-indigo-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    <span className="text-[12.5px] font-medium text-gray-800 dark:text-gray-100">/{j.skill}</span>
+                    <span className="text-[11px] text-gray-400 truncate flex-1">{j.runnable ?? j.description}</span>
+                    <span className="text-[11px] text-gray-400 shrink-0">{jobPrice(j)}</span>
+                    <ChevronRight size={12} className="text-gray-300 shrink-0" />
+                  </button>
+                ))}
+                <div className="flex flex-wrap justify-center gap-1.5 mt-2">
+                  {STARTERS.map((q) => (
+                    <button key={q} disabled={loading} onClick={() => void send(undefined, { query: q })}
+                      className="px-2.5 h-7 rounded-full text-[12px] text-gray-600 dark:text-gray-300
+                        bg-white dark:bg-gray-800/60 border border-gray-100 dark:border-gray-700/50
+                        hover:text-indigo-600 transition-colors">
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <MessageList
             items={items}
             onApprove={approve}
+            onCitation={workspace?.onCitation}
+            colorIndex={workspace?.colorIndex}
             renderJob={(it) => (
               <PanelJobCard
                 job={it.job}
                 pageNoteId={pageNoteId}
+                inWorkspace={!!workspace}
                 busy={loading}
                 onApply={(noteId) => void applyJob(it.id, it.job, noteId)}
                 onUndo={() => void undoJob(it.id, it.job)}
@@ -572,9 +724,18 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
               // An answer from sources can go into a note, like a job's result.
               const to = pageNoteId ?? it.scopeNoteId;
               if (!it.scopeNoteId || !to) return null;
+              if (it.inserted) return (
+                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11.5px]">
+                  <span className="text-emerald-600">Added to the note</span>
+                  {it.inserted === pageNoteId && (
+                    <button onClick={() => void undoAnswer(it)} className="text-indigo-600 hover:underline">Undo</button>
+                  )}
+                  {it.undoNote && <span className="text-gray-500">{it.undoNote}</span>}
+                </div>
+              );
               return (
                 <button
-                  onClick={() => insertAnswer(it, to)}
+                  onClick={() => void insertAnswer(it, to)}
                   className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] text-gray-400 hover:text-indigo-500"
                 >
                   <FileText size={11} /> {pageNoteId ? "Insert into this note" : "Put in note"}
@@ -597,7 +758,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
             className="absolute bottom-full left-3 right-3 mb-1 z-20 bg-white dark:bg-gray-800 rounded-xl shadow-xl
               border border-gray-200 dark:border-gray-700 overflow-hidden">
             <p className="px-3 pt-2 pb-1 text-[10.5px] text-gray-400">
-              {jobsRunOn ? `Runs on ${jobsRunOn}` : "Attach a file first (📎) — skills run on sources"}
+              {jobsRunOn ? `Runs on ${jobsRunOn}` : "Attach a file or a link first (📎) — skills run on sources"}
             </p>
             {suggestions.map((j, i) => (
               <button key={j.skill} type="button" role="option" aria-selected={i === menuIndex}
@@ -606,26 +767,60 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
                   ? "bg-indigo-50 dark:bg-indigo-950/40" : "hover:bg-gray-50 dark:hover:bg-white/5"}`}>
                 <span className="text-[13px] font-medium text-gray-800 dark:text-gray-100">/{j.skill}</span>
                 {jobPrice(j) && <span className="ml-1.5 text-[11px] text-gray-400">{jobPrice(j)}</span>}
-                <span className="block text-[11.5px] text-gray-500 dark:text-gray-400 line-clamp-1">{j.description}</span>
+                <span className="block text-[11.5px] text-gray-500 dark:text-gray-400 line-clamp-1">{j.runnable ?? j.description}</span>
               </button>
             ))}
+            {mode === "local" && (
+              <p className="px-3 py-1.5 text-[10.5px] text-gray-400 border-t border-gray-100 dark:border-gray-700">
+                Skills run on the cloud model, even in Local mode.
+              </p>
+            )}
           </div>
         )}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
-            {attachments.map((f, i) => (
-              <span key={`${f.name}-${i}`}
+            {attachments.map((a, i) => (
+              <span key={`${attachmentName(a)}-${i}`}
                 className="inline-flex items-center gap-1 max-w-full h-7 pl-2 pr-1 rounded-lg text-[12px]
                   bg-white dark:bg-gray-800 ring-1 ring-gray-200 dark:ring-gray-700 text-gray-700 dark:text-gray-200">
-                <FileText size={12} className="text-indigo-500 shrink-0" />
-                <span className="truncate max-w-[180px]">{f.name}</span>
-                <button type="button" aria-label={`Remove ${f.name}`}
+                {a.kind === "file"
+                  ? <FileText size={12} className="text-indigo-500 shrink-0" />
+                  : <Link2 size={12} className="text-emerald-500 shrink-0" />}
+                <span className="truncate max-w-[180px]">{attachmentName(a)}</span>
+                <button type="button" aria-label={`Remove ${attachmentName(a)}`}
                   onClick={() => setAttachments((prev) => prev.filter((_, k) => k !== i))}
                   className="p-0.5 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
                   <X size={12} />
                 </button>
               </span>
             ))}
+          </div>
+        )}
+        {linkDraft !== null && (
+          <div className="flex items-center gap-1.5 mb-2">
+            <Link2 size={14} className="text-emerald-500 shrink-0" />
+            <input
+              ref={linkInputRef}
+              autoFocus
+              value={linkDraft}
+              onChange={(e) => setLinkDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); submitLinkDraft(); }
+                if (e.key === "Escape") { e.preventDefault(); setLinkDraft(null); inputRef.current?.focus(); }
+              }}
+              placeholder="https://… a website or a YouTube video"
+              aria-label="Link to add"
+              className="flex-1 min-w-0 h-8 px-2.5 text-[12.5px] rounded-lg bg-white dark:bg-gray-800 ring-1
+                ring-gray-200 dark:ring-gray-700 outline-none focus:ring-indigo-400"
+            />
+            <button type="button" onClick={submitLinkDraft}
+              className="h-8 px-3 rounded-lg text-[12px] font-medium bg-indigo-600 text-white hover:bg-indigo-500">
+              Add
+            </button>
+            <button type="button" onClick={() => setLinkDraft(null)} aria-label="Cancel link"
+              className="p-1 rounded text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+              <X size={13} />
+            </button>
           </div>
         )}
         <input
@@ -641,16 +836,45 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
           onSubmit={send}
           className="flex items-end gap-2 bg-white dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/60 rounded-xl px-3 py-2.5 shadow-md shadow-gray-100 dark:shadow-black/20"
         >
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={loading}
-            aria-label="Attach files"
-            title="Attach files — PDF, Markdown, text, video"
-            className="shrink-0 p-1.5 -ml-1 rounded-lg text-gray-400 hover:text-indigo-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
-          >
-            <Paperclip size={15} />
-          </button>
+          <div className="relative shrink-0 -ml-1">
+            <button
+              type="button"
+              onClick={() => setAttachMenuOpen((v) => !v)}
+              disabled={loading}
+              aria-label="Attach"
+              aria-expanded={attachMenuOpen}
+              title="Attach files or a link"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+            >
+              <Paperclip size={15} />
+            </button>
+            {attachMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setAttachMenuOpen(false)} aria-hidden />
+                <div role="menu" className="absolute bottom-full mb-2 left-0 z-20 w-56 bg-white dark:bg-gray-800 rounded-xl
+                  shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden py-1">
+                  <button type="button" role="menuitem"
+                    onClick={() => { setAttachMenuOpen(false); fileInputRef.current?.click(); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5">
+                    <Upload size={14} className="text-indigo-500" />
+                    <span>
+                      <span className="block text-[13px] text-gray-800 dark:text-gray-100">Upload files</span>
+                      <span className="block text-[11px] text-gray-400">PDF, Markdown, text, video</span>
+                    </span>
+                  </button>
+                  <button type="button" role="menuitem"
+                    onClick={() => { setAttachMenuOpen(false); setLinkDraft(""); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5">
+                    <Link2 size={14} className="text-emerald-500" />
+                    <span>
+                      <span className="block text-[13px] text-gray-800 dark:text-gray-100">Add a link</span>
+                      <span className="block text-[11px] text-gray-400">A website or a YouTube video</span>
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <textarea
             ref={inputRef}
             rows={1}
@@ -663,9 +887,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
             onKeyDown={handleKey}
             placeholder={attachments.length
               ? "Ask about them, or type / for a skill…"
+              : workspace ? "Ask, or / for a skill…"
               : "Ask anything about your notes…"}
             disabled={loading}
-            aria-label="Message input"
+            aria-label="Message the AI"
             className="flex-1 resize-none text-sm bg-transparent border-none outline-none disabled:opacity-50 placeholder-gray-400"
             style={{ minHeight: "1.5rem" }}
           />
@@ -734,7 +959,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, initialQu
           </button>
         </form>
         <p className="text-[10px] text-gray-400 mt-1.5 text-center">
-          Enter to send · / for skills · 📎 or drop files
+          Enter to send · / for skills · 📎 files or links
         </p>
       </div>
     </div>

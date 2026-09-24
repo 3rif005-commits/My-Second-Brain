@@ -27,7 +27,7 @@ async function freshNote(page: Page): Promise<string> {
 async function ask(page: Page, q: string) {
   const box = page.getByRole("textbox", { name: /message the ai/i });
   await box.fill(q);
-  await page.getByTitle("Send").click();
+  await page.getByRole("button", { name: "Send" }).click();
 }
 
 test("ask → cited answer → insert → undo; and the open note survives 'delete this note'", async ({ page }) => {
@@ -36,7 +36,7 @@ test("ask → cited answer → insert → undo; and the open note survives 'dele
   const noteId = await freshNote(page);
 
   await ask(page, "In two sentences, what is this lecture about?");
-  const insert = page.getByRole("button", { name: /^insert into note$/i }).last();
+  const insert = page.getByRole("button", { name: /^insert into this note$/i }).last();
   await expect(insert).toBeVisible({ timeout: 120_000 });
   // At least one source chip: a small button whose name is just a number.
   await expect(page.locator("[role=log] button").filter({ hasText: /^\d+$/ }).first())
@@ -54,11 +54,12 @@ test("ask → cited answer → insert → undo; and the open note survives 'dele
   await page.screenshot({ path: path.join(OUT, "02-undone.png") });
 
   await ask(page, "Delete this note.");
-  await expect(page.getByRole("button", { name: /^insert into note$/i }).nth(1)
+  await expect(page.getByRole("button", { name: /^insert into this note$/i }).nth(1)
     .or(page.getByText(/open in the editor|needs your OK/i).first()))
     .toBeVisible({ timeout: 120_000 });
   await page.screenshot({ path: path.join(OUT, "03-delete-refused.png") });
   const note = await page.request.get(`/api/notes/${noteId}`).then((r) => r.json());
   expect(note.deleted_at ?? null).toBeNull();            // the open note is still there
   await expect(page.locator(".bn-editor").first()).toBeVisible();
+  await page.request.delete(`/api/notes/${noteId}`);     // its own note, not the user's
 });

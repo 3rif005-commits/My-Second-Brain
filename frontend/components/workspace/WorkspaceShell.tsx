@@ -13,13 +13,14 @@ import {
 } from "lucide-react";
 import { useToast } from "@/app/providers";
 import { formatElapsed, jobTitle, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
-import type { ChatJob } from "@/lib/chatJobs";
+import type { ChatJob, JobRequest } from "@/lib/chatJobs";
 import { DropZone } from "./DropZone";
 import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
 import { SourceRail } from "./SourceRail";
 import { SourceViewer } from "./SourceViewer";
 import { useSynthesis } from "./useSynthesis";
-import { WorkspaceChat, type JobRequest } from "./WorkspaceChat";
+import { Chat } from "@/components/ai/Chat";
+import { DRAFT_EVENT, UNDO_EVENT, type NoteDraft, type UndoOutcome } from "@/lib/noteDraft";
 
 const SPLIT_KEY = "workspace:splitPct";
 const PANELS_KEY = "workspace:panels";
@@ -193,11 +194,28 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     // above the title. A note with anything in it gets the result at the end.
     api.apply(html, sourceIds, mode === "append" && !api.hasUserEdits() ? "replace" : mode);
   }, []);
-  const undoResult = useCallback(() => {
-    const ok = applyRef.current?.undoApply() ?? false;
-    if (!ok) showToast("You've edited the note since — use Ctrl+Z to step back.", "info");
-    return ok;
-  }, [showToast]);
+
+  // The AI panel hands its results over the same events a note page answers
+  // (lib/noteDraft.ts), so one panel works on both.
+  useEffect(() => {
+    function onDraft(e: Event) {
+      const { draft, respond } = (e as CustomEvent<{ draft: NoteDraft; respond: (ok: boolean) => void }>).detail;
+      if (draft.noteId !== noteId || !applyRef.current) return;
+      respond(true);
+      insertResult(draft.html, draft.sourceIds, "append");
+    }
+    function onUndo(e: Event) {
+      const { noteId: target, respond } = (e as CustomEvent<{ noteId: string; respond: (o: UndoOutcome) => void }>).detail;
+      if (target !== noteId) return;
+      respond(applyRef.current?.undoApply() ? "undone" : "edited");
+    }
+    window.addEventListener(DRAFT_EVENT, onDraft);
+    window.addEventListener(UNDO_EVENT, onUndo);
+    return () => {
+      window.removeEventListener(DRAFT_EVENT, onDraft);
+      window.removeEventListener(UNDO_EVENT, onUndo);
+    };
+  }, [noteId, insertResult]);
 
   // ── load ──────────────────────────────────────────────────────────────────
   const loadSources = useCallback(async () => {
@@ -376,9 +394,14 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   }, [addFiles, addUrl]);
 
   const dragProps = useMemo(() => ({
-    onDragEnter: () => { dragDepth.current += 1; setDragOver(true); },
+    // Over the AI panel a drop attaches to the conversation instead.
+    onDragEnter: (e: React.DragEvent) => {
+      if ((e.target as Element).closest?.("[data-ai-panel]")) return;
+      dragDepth.current += 1; setDragOver(true);
+    },
     onDragOver: (e: React.DragEvent) => { e.preventDefault(); },
-    onDragLeave: () => {
+    onDragLeave: (e: React.DragEvent) => {
+      if ((e.target as Element).closest?.("[data-ai-panel]")) return;
       dragDepth.current = Math.max(0, dragDepth.current - 1);
       if (dragDepth.current === 0) setDragOver(false);
     },
@@ -634,18 +657,25 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
               <span className="w-[3px] h-8 rounded-full bg-gray-300/0 dark:bg-white/0
                 group-hover/split:bg-indigo-400 dark:group-hover/split:bg-indigo-500 transition-colors" />
             </div>
-            <div className="shrink-0 min-w-0" style={{ width: chatWidth }}>
-              <WorkspaceChat
-                noteId={note.id}
-                colorIndex={colorIndex}
-                onCitation={handleCitation}
-                onClose={() => setChatOpen(false)}
-                onInsert={insertResult}
-                onUndo={undoResult}
-                request={jobRequest}
-                jobs={chatJobs}
-                focusNonce={focusNonce}
-              />
+            {/* The app's AI panel, the same component and look as on every page. */}
+            <div className="shrink-0 min-w-0 flex flex-col rounded-2xl overflow-hidden ring-1 ring-gray-200/70
+              dark:ring-white/10 bg-[#eeeefc] dark:bg-[#0f0f1a]" style={{ width: chatWidth }}>
+              <div className="h-[3px] w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-400 shrink-0" />
+              <div className="flex-1 min-h-0">
+                <Chat
+                  onClose={() => setChatOpen(false)}
+                  workspace={{
+                    noteId: note.id,
+                    title: note.title,
+                    jobs: chatJobs,
+                    colorIndex,
+                    onCitation: handleCitation,
+                    onSourcesAdded: loadSources,
+                    request: jobRequest,
+                    focusNonce,
+                  }}
+                />
+              </div>
             </div>
           </>
         ) : (

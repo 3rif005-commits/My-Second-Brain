@@ -52,10 +52,12 @@ async function copyResult(html: string) {
   }
 }
 
-export function PanelJobCard({ job, pageNoteId, busy, onApply, onUndo, onRetry, onDiscard, onOpen }: {
+export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, onApply, onUndo, onRetry, onDiscard, onOpen }: {
   job: PanelJob;
   /** The note open behind the panel, if any. */
   pageNoteId: string | null;
+  /** Shown inside the workspace — no need to offer the way there. */
+  inWorkspace?: boolean;
   /** Another turn is running: actions that start one wait. */
   busy: boolean;
   onApply: (noteId: string) => void;
@@ -161,10 +163,10 @@ export function PanelJobCard({ job, pageNoteId, busy, onApply, onUndo, onRetry, 
           )}
           {job.undoNote && <p className="text-[11.5px] text-gray-500">{job.undoNote}</p>}
 
-          <button onClick={() => onOpen(`/brain/workspace/${job.noteId}`)}
+          {!inWorkspace && <button onClick={() => onOpen(`/brain/workspace/${job.noteId}`)}
             className="inline-flex items-center gap-1 text-[11.5px] text-gray-400 hover:text-indigo-500">
             <Layers size={11} /> Open in workspace — the note beside its sources
-          </button>
+          </button>}
         </div>
       )}
     </div>

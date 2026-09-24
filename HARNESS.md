@@ -189,3 +189,11 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   silently turned `/study-guide` into a plain question (the model then ran
   the job itself and its result was dropped). The list is re-fetched on
   demand, and a model-picked job gets a card too.
+- One AI panel, one component (user, 2026-09-24): the workspace renders the
+  app's `Chat` bound to its note (`workspace` prop) — citation chips, priced
+  jobs, per-note thread, the editor's "/" requests — and WorkspaceChat is
+  gone. Results reach the workspace editor through the same draft events a
+  note page answers, so a card behaves the same everywhere. Links attach like
+  files (📎 → Add a link, or drop one).
+- A free e2e typed "/flash" into a real note's title four times before anyone
+  noticed. A test that types into a user's note must take it back out.

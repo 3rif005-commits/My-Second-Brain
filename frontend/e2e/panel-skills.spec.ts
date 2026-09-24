@@ -25,7 +25,7 @@ test("attach in the side panel → processed into a new note → / says what it 
   await box.click();
   await page.keyboard.type("/study");
   await expect(page.getByRole("option", { name: /\/study-guide/ })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText(/Attach a file first/)).toBeVisible();
+  await expect(page.getByText(/Attach a file or a link first/)).toBeVisible();
   await box.fill("");
 
   const noteP = attachFixture(page);
@@ -56,4 +56,26 @@ test("attach in the side panel → processed into a new note → / says what it 
   } finally {
     await page.request.delete(`/api/notes/${noteId}`);
   }
+});
+
+test("📎 offers files or a link; a link becomes a chip, a non-link is refused", async ({ page }) => {
+  await page.goto("/brain", { waitUntil: "networkidle" });
+  const box = await openPanel(page);
+  // The empty panel no longer carries its own attach button.
+  await expect(page.getByRole("button", { name: /attach files to make/i })).toHaveCount(0);
+  await page.getByRole("button", { name: "Attach", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: /upload files/i })).toBeVisible();
+  await page.getByRole("menuitem", { name: /add a link/i }).click();
+  const link = page.getByRole("textbox", { name: "Link to add" });
+  await link.fill("not a link");
+  await link.press("Enter");
+  await expect(page.getByText(/That is not a link/)).toBeVisible();
+  await link.fill("https://www.youtube.com/watch?v=aircAruvnKk");
+  await link.press("Enter");
+  await expect(page.getByRole("button", { name: /^Remove youtube\.com\/watch/ })).toBeVisible();
+  await expect(box).toBeFocused();
+  await page.screenshot({ path: path.join(OUT, "05-link-chip.png") });
+  // Removed again: nothing was uploaded.
+  await page.getByRole("button", { name: /^Remove youtube\.com\/watch/ }).click();
+  await expect(page.getByRole("button", { name: /^Remove / })).toHaveCount(0);
 });

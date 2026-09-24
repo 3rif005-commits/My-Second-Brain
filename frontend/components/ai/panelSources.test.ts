@@ -39,3 +39,17 @@ describe("handing a draft to a note page", () => {
     window.removeEventListener(DRAFT_EVENT, claim);
   });
 });
+
+describe("links as sources", async () => {
+  const { parseLink, attachmentName, attachmentsTitle } = await import("./panelSources");
+  it("accepts only a whole http(s) link", () => {
+    expect(parseLink(" https://youtu.be/abc ")).toBe("https://youtu.be/abc");
+    expect(parseLink("see https://x.org")).toBeNull();
+    expect(parseLink("ftp://x.org/a")).toBeNull();
+  });
+  it("names a link by its host and path", () => {
+    const a = { kind: "url" as const, url: "https://www.example.com/ml/lecture-3" };
+    expect(attachmentName(a)).toBe("example.com/ml/lecture-3");
+    expect(attachmentsTitle([a])).toBe("example.com/ml/lecture-3");
+  });
+});

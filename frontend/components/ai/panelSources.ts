@@ -15,6 +15,26 @@ import { usePathname } from "next/navigation";
 import { wsApi } from "@/lib/workspace";
 import type { ChatJob } from "@/lib/chatJobs";
 
+/** Something to add as a source: a file, or a link (website, YouTube). */
+export type Attachment =
+  | { kind: "file"; file: File }
+  | { kind: "url"; url: string };
+
+export function attachmentName(a: Attachment): string {
+  if (a.kind === "file") return a.file.name;
+  try {
+    const u = new URL(a.url);
+    return (u.hostname.replace(/^www\./, "") + (u.pathname === "/" ? "" : u.pathname)).slice(0, 60);
+  } catch { return a.url.slice(0, 60); }
+}
+
+/** "https://…" typed or pasted → a link, or null when it is not one. */
+export function parseLink(text: string): string | null {
+  const t = text.trim();
+  if (!/^https?:\/\/\S+$/i.test(t)) return null;
+  try { return new URL(t).toString(); } catch { return null; }
+}
+
 /** The note a panel thread's files live in. */
 export interface PanelScope {
   noteId: string;
@@ -38,6 +58,12 @@ export function pageNoteIdOf(pathname: string | null): string | null {
 /** "Lect10-IML26.pdf" → "Lect10-IML26": what the new note is called. */
 export function fileTitle(name: string): string {
   return name.replace(/\.[^.]+$/, "") || name;
+}
+
+/** What a new note holding these attachments is called. */
+export function attachmentsTitle(list: Attachment[]): string {
+  const first = list[0];
+  return first.kind === "file" ? fileTitle(first.file.name) : attachmentName(first);
 }
 
 export function usePanelContext() {
@@ -111,22 +137,23 @@ const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((res, rej)
   signal?.addEventListener("abort", () => { clearTimeout(t); rej(new DOMException("aborted", "AbortError")); });
 });
 
-/** Upload the files into `target` (null → a new note), then wait until each
+/** Upload the files (and add the links) into `target` (null → a new note), then wait until each
  *  one is processed. Reports progress through `onChange` after every step. */
 export async function attachAndProcess(
-  files: File[], target: string | null,
+  files: Attachment[], target: string | null,
   onChange: (noteId: string | null, files: UploadFile[]) => void,
   signal?: AbortSignal,
 ): Promise<{ noteId: string; files: UploadFile[] }> {
   let noteId = target;
-  const state: UploadFile[] = files.map((f) => ({ name: f.name, status: "uploading" }));
+  const state: UploadFile[] = files.map((f) => ({ name: attachmentName(f), status: "uploading" }));
   const emit = () => onChange(noteId, state.map((s) => ({ ...s })));
   emit();
 
   for (let i = 0; i < files.length; i++) {
     if (signal?.aborted) throw new DOMException("aborted", "AbortError");
     try {
-      const r = await wsApi.addSource({ file: files[i], noteId });
+      const a = files[i];
+      const r = await wsApi.addSource(a.kind === "file" ? { file: a.file, noteId } : { url: a.url, noteId });
       noteId = r.note_id;
       state[i].sourceId = r.source.id;
       state[i].status = r.source.status === "ready" ? "ready"

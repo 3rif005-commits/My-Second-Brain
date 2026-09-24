@@ -80,3 +80,6 @@ blockquote{margin:6px 0;padding:4px 10px;border-left:3px solid #c7d2fe;backgroun
 [data-type="math"]{font-family:ui-monospace,monospace;background:#f9fafb;padding:4px 8px;border-radius:6px}
 details{margin:4px 0}summary{cursor:pointer}summary>*{display:inline}
 `;
+
+/** A job asked for from outside the AI panel (the editor's "/" menu). */
+export interface JobRequest { skill: string; focus?: string; nonce: number }
