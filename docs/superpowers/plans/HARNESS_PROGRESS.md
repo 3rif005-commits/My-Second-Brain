@@ -20,6 +20,16 @@ chat skills; run card (Retry the right job, job + elapsed, Undo).
 re-check E6b on real slides. **Your app.sh stack** is stopped (you stopped it
 at 06:43); nothing of mine is left running.
 **Next action, in order:**
+- [x] **Workspace redesign (user, 2026-09-24)** — three panels (sources · note ·
+  AI); jobs run from the AI panel (/study-guide, /flashcards, /compare-sources,
+  or the model picks one), results previewed then Insert / Replace / Undo; the
+  job buttons and Generate / Re-synthesize are gone. Settings → Skills lists
+  every skill, edits built-ins as a user copy with Reset, creates chat jobs or
+  selection actions. Verified live: workspace-skills 7/7, chat-job flow (paid,
+  $0.05), settings-skills (restores what it touches).
+- Next: the workspace start page still says the note is "written for you the
+  moment the last one finishes" (old behaviour); the job list and note load
+  slowly on this machine under load.
 - [x] **Markdown anchor repair (E6e)** — done 2026-09-24: 9/9 on real slides,
   one live slip repaired. **Open product call:** Markdown is now −59% cost
   with tables/anchors at parity, but callouts at less than half (11–21 vs
@@ -278,3 +288,4 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - 2026-09-24 · late morning: E6c (MD default reverted), E6d table carry-over + placement, run-card failure path live · `d9ce49f`…`ab23878`
 - 2026-09-24 · afternoon: Markdown anchor repair + row-exact table dedupe · `74dff6e`
 - 2026-09-24 · user review: old instructions restored byte-for-byte, forced table copying removed · see next commit
+- 2026-09-24 · workspace redesign: 3 panels, jobs in the AI panel, Settings → Skills editable · `9179163`…see git log

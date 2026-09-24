@@ -61,6 +61,15 @@ export default defineConfig({
       retries: 0,          // a retry is a second paid run
     },
 
+    // 4d. Settings → Skills. Free; restores whatever it changes.
+    {
+      name: "settings-skills",
+      testMatch: "**/settings-skills.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      timeout: 180_000,
+    },
+
     // 4c. The run card's failure path. Free, but only meaningful against a
     //     backend started with MAX_USD_PER_RUN=0.001 (every job refused).
     {
