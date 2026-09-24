@@ -48,8 +48,9 @@ restored it (dev frontend + --reload backend); both running at 03:55.
    catalogue still lists every skill.
 5. [~] **Run card** — first piece done 2026-09-24 (`efca17a`): a failed run
    names its job and Retry reruns THAT job (it always restarted the study
-   guide). Still to do: one card per run with job, elapsed time, tokens/cost
-   and Apply/Discard in one place; a live check of the failure path.
+   guide). Second piece (05:2x): the running status names the job and counts
+   up ("Compare sources… 0:42"), verified live. Still to do: Apply/Discard
+   and the receipt in the same place; a live check of the failure path.
 
 **Run the backend suite with `env -u PYTHONPATH`** — this machine's ROS install
 puts `/opt/ros/jazzy` on PYTHONPATH and its pytest plugins crash collection:
@@ -249,3 +250,4 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 - 2026-09-24 · first real corpus case (two RS lectures); Claude baseline finds every note truncated at 16K tokens · see next commit
 - 2026-09-24 · night run 1: truncation flagged + cap 32K (E13), estimate follows sources, compare-sources label leak fixed (E14), chip names failed sources; ~$1.11 spent · `1b5c095`…see log
 - 2026-09-24 · night run 2 (03:17): Markdown default wired + live 2-source guide, source-type correction, study-guide skill folder, chat surface filter, Retry fix · `63f5c5e`…`efca17a`
+- 2026-09-24 · night run 3 (05:17): running status names the job + elapsed, verified live; E14 confirmed in-app · see git log
