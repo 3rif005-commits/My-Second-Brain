@@ -25,18 +25,19 @@ at 06:43); nothing of mine is left running.
   deleted). Branch pushed; PR text in the session scratchpad — the user opens
   it (the active gh account cannot see the repo). **Before merge:** root
   `.env` (HF token) and `backend/venv/` are tracked — user decides.
-- [~] **Study-guide quality guard (2026-09-25)** — `python -m evals.quality_guard`
-  compares a new Lecture 10 guide with the user-approved note
-  (`evals/reference/ml-lecture-10.approved.json`, the note's saved blocks)
-  on ratios: chapters, sections, subsections, callouts (+kinds), tables,
-  math, text, text per section, 17 lecture concepts; anchors and truncation
-  checked on the new guide alone. Floors = 70% of the approved note, set
-  before any run. **Baseline (1 run, $0.049, the user's unchanged prompt):
-  FAIL** — math 6 vs 15 (worked examples show one step, S4→S5 example
-  missing) and text per section 1248 vs 1907 (12 sections vs 9; total text
-  87%). So one run of the unchanged prompt already misses the floors: the
-  guard needs the prompt's own spread (n≥3) before it can call a regression.
-  Waiting on the user: run 2 more (~$0.10) and set floors from the spread.
+- [x] **Study-guide quality guard (2026-09-25)** — `python -m evals.quality_guard`
+  compares new Lecture 10 guides with the user-approved note
+  (`evals/reference/ml-lecture-10.approved.json`, the note's saved blocks):
+  chapters, sections, subsections, callouts (+kinds), tables, math, total
+  text, 17 lecture concepts, each ≥ 70% of the approved note (floors set
+  before any run, unchanged). Verdict = MEDIAN of 3 runs; anchors, invented
+  callout types and truncation fail on ANY run. Calibration, user's unchanged
+  prompt, n=3, $0.159: tables 3–8, math 6–15, sections 9–20 — one run fell
+  under the floors by luck, the median passes all. Text-per-section dropped
+  (the longest guide looked shallowest when split into 20 sections). Note:
+  the typical guide carries ~20 callouts vs the approved note's 24. Baseline
+  guides kept in `evals/reference/ml-lecture-10.baseline-2026-09-25-{1,2,3}.html`.
+  A check costs ~$0.16 (3 runs); `--html` re-scores saved guides free.
 - [~] **One AI in the workspace (user, 2026-09-24)** — code in 7c737af; free
   e2e green; the paid live pass (one-ai-live, chat-job-live) is still OPEN: it
   ran against the dev server with the generation model up, swap hit 100%, and

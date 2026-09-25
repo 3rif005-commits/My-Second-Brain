@@ -1,8 +1,8 @@
 """Study-guide quality guard: is a new guide as good as the one the user approved?
 
     python -m evals.quality_guard --self-test          # free: the check checks itself
-    python -m evals.quality_guard --html note.html     # free: score a saved guide
-    python -m evals.quality_guard --generate           # PAID (~$0.06): write one now
+    python -m evals.quality_guard --html a.html b.html c.html   # free: saved guides
+    python -m evals.quality_guard --generate           # PAID (~$0.16): write 3 now
 
 Why this exists: an experiment once rewrote the study-guide instructions to
 raise the eval scoreboard, and the notes got plainer. The scoreboard asked
@@ -20,6 +20,12 @@ It never edits the study-guide instructions and never judges them — it only
 reports. A prompt change the user makes can fail it; that is information for
 the user, not a reason to change their text.
 
+One guide is not a verdict. Three runs of the user's own unchanged
+instructions (2026-09-25) gave 3 to 8 tables and 6 to 15 math blocks; one of
+them fell under the floors by luck. So the verdict is on the MEDIAN of n runs
+(3 by default), and a single run is reported as a hint only. The median of
+those three passes every floor — that is the calibration.
+
 The reference is the note's SAVED blocks (the editor drops `data-anchor` on
 save), so anchors are checked on the new guide alone: they must exist and
 resolve, not match a count.
@@ -29,6 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import statistics
 import re
 import sys
 import time
@@ -132,8 +139,9 @@ def _visible(html: str) -> str:
 
 
 def profile(html: str) -> dict:
-    """What a reader gets, counted. `depth` is text per section: a guide can
-    keep every heading and still say half as much under each."""
+    """What a reader gets, counted. Depth is total text, not text per
+    section: the same prompt wrote 9 to 20 sections, and its longest guide
+    (more text than the approved one) looked shallowest per section."""
     s: NoteScore = score_note(html, source_count=1)
     h = s.headings
     sections = h.get("h3", 0)
@@ -149,7 +157,6 @@ def profile(html: str) -> dict:
         "table_rows": s.table_rows,
         "math": s.math_blocks,
         "text_chars": s.text_chars,
-        "depth": round(s.text_chars / sections) if sections else 0,
         "concepts": sum(1 for c in CONCEPTS if c.lower() in text),
         # absolute checks, on the new guide only
         "h1": h.get("h1", 0),
@@ -164,7 +171,7 @@ def profile(html: str) -> dict:
 #: Compared as a share of the reference. Kinds of box are compared as a
 #: difference instead: 8 kinds → 5 is a plainer note even at 70%.
 RATIO_KEYS = ["chapters", "sections", "subsections", "toggles_with_body",
-              "callouts", "tables", "table_rows", "math", "text_chars", "depth"]
+              "callouts", "tables", "table_rows", "math", "text_chars"]
 
 
 @dataclass
@@ -174,8 +181,37 @@ class Verdict:
     problems: list[str]
 
 
-def compare(new: dict, ref: dict, *, truncated: bool = False,
-            keep: float = KEEP, check_anchors: bool = True) -> Verdict:
+def median_profile(profiles: list[dict]) -> dict:
+    """The typical guide of n runs. A concept counts as missed only when most
+    runs missed it."""
+    out = {k: statistics.median_low(p[k] for p in profiles)
+           for k in profiles[0] if not k.startswith("_")}
+    out["_missed_concepts"] = [c for c in CONCEPTS
+                               if sum(c in p["_missed_concepts"] for p in profiles)
+                               > len(profiles) / 2]
+    return out
+
+
+def defects(profiles: list[dict], truncated: list[bool]) -> list[str]:
+    """Faults on ANY run, not the median: one guide cut off or with an invented
+    box type is a guide a user would have received."""
+    out = []
+    for i, (p, cut) in enumerate(zip(profiles, truncated), start=1):
+        for name, bad in (
+            ("not exactly one title (h1)", p["h1"] != 1),
+            ("unknown callout types", p["unknown_callouts"] > 0),
+            ("sections without page anchors (grounding < 0.8)", p["grounding"] < 0.8),
+            ("an anchor that does not resolve", p["anchor_validity"] < 1.0),
+            ("cut off at the output cap", cut),
+        ):
+            if bad:
+                out.append(f"run {i}: {name}")
+    return out
+
+
+def compare(new: dict, ref: dict, *, keep: float = KEEP) -> Verdict:
+    """`new` is one profile or a median_profile. Absolute defects of the
+    runs themselves come from `defects`."""
     rows, problems = [], []
     for key in RATIO_KEYS:
         floor = math.ceil(ref[key] * keep) if ref[key] else 0
@@ -195,28 +231,22 @@ def compare(new: dict, ref: dict, *, truncated: bool = False,
     if not good:
         problems.append("concepts missing: " + ", ".join(new["_missed_concepts"]))
 
-    for name, bad in (
-        ("exactly one title (h1)", new["h1"] != 1),
-        ("unknown callout types", new["unknown_callouts"] > 0),
-        ("page anchors on sections (grounding ≥ 0.8)",
-         check_anchors and new["grounding"] < 0.8),
-        ("every anchor resolves", check_anchors and new["anchor_validity"] < 1.0),
-        ("cut off at the output cap", truncated),
-    ):
-        if bad:
-            problems.append(name)
     return Verdict(not problems, rows, problems)
 
 
-def print_verdict(v: Verdict, new: dict) -> None:
-    print(f"{'':<18}{'approved':>9}{'new':>8}{'floor':>8}")
-    for name, ref, got, floor, good in v.rows:
-        print(f"{name:<18}{ref:>9}{got:>8}{floor:>8}  {'ok' if good else 'LOWER'}")
-    print(f"{'anchors':<18}{'—':>9}{new['anchors']:>8}   grounding {new['grounding']},"
-          f" valid {new['anchor_validity']}")
+def print_verdict(v: Verdict, profiles: list[dict]) -> None:
+    runs = "".join(f"{'run' + str(i):>7}" for i in range(1, len(profiles) + 1))
+    print(f"{'':<18}{'approved':>9}{runs}{'median':>8}{'floor':>7}")
+    for (name, ref, got, floor, good) in v.rows:
+        per = "".join(f"{p[name]:>7}" for p in profiles)
+        print(f"{name:<18}{ref:>9}{per}{got:>8}{floor:>7}  {'ok' if good else 'LOWER'}")
+    print(f"{'anchors':<18}{'—':>9}" + "".join(f"{p['anchors']:>7}" for p in profiles))
     print()
+    if len(profiles) < 3:
+        print(f"(n={len(profiles)}: a hint, not a verdict — the same prompt varies"
+              " more than the floors between two runs)")
     if v.ok:
-        print("PASS — at the approved level on every dimension.")
+        print("PASS — the typical guide is at the approved level on every dimension.")
     else:
         print("FAIL — below the approved guide:")
         for p in v.problems:
@@ -236,12 +266,12 @@ def _thinned(html: str) -> str:
 
 
 def self_test() -> int:
-    """The saved reference carries no anchors (the editor drops them), so
-    anchors are not checked here — only the dimensions it is compared on."""
+    """The approved guide must pass against itself, and a thinned copy of
+    it must fail — otherwise the guard cannot see what it exists for."""
     html = reference_html()
     ref = profile(html)
-    same = compare(ref, ref, check_anchors=False)
-    thin = compare(profile(_thinned(html)), ref, check_anchors=False)
+    same = compare(ref, ref)
+    thin = compare(profile(_thinned(html)), ref)
     print("approved vs itself:", "PASS" if same.ok else f"FAIL {same.problems}")
     print("approved, thinned: ", "FAIL, as it should" if not thin.ok
           else "PASS — the guard is blind")
@@ -279,35 +309,48 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--self-test", action="store_true")
-    ap.add_argument("--html", type=Path, help="score a saved guide (free)")
+    ap.add_argument("--html", type=Path, nargs="+", help="score saved guides (free)")
     ap.add_argument("--generate", action="store_true",
-                    help="write one guide now — PAID, about $0.06 on Haiku 4.5")
+                    help="write --runs guides now — PAID, about $0.055 each on Haiku 4.5")
+    ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--model", help="model id override for --generate")
     args = ap.parse_args(argv)
 
     if args.self_test:
         return self_test()
     ref = profile(reference_html())
+    htmls: list[str] = []
+    truncated: list[bool] = []
     if args.html:
         from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML
-        html = args.html.read_text(encoding="utf-8")
-        truncated = TRUNCATION_NOTICE_HTML in html
+        for path in args.html:
+            htmls.append(path.read_text(encoding="utf-8"))
+            truncated.append(TRUNCATION_NOTICE_HTML in htmls[-1])
     elif args.generate:
-        html, truncated, row = generate(args.model)
         REPORTS.mkdir(exist_ok=True)
-        out = REPORTS / f"quality-guard-{time.strftime('%Y%m%d-%H%M%S')}.html"
-        out.write_text(html, encoding="utf-8")
-        usd = row.get("estimated_usd")
-        print(f"model {row.get('model')} · in {row.get('input_tokens')} · out "
-              f"{row.get('output_tokens')} · "
-              f"{'$' + format(usd, '.4f') if usd is not None else 'cost unknown'}"
-              f"\nguide: {out}\n")
+        spent = 0.0
+        for i in range(args.runs):
+            html, cut, row = generate(args.model)
+            out = REPORTS / f"quality-guard-{time.strftime('%Y%m%d-%H%M%S')}.html"
+            out.write_text(html, encoding="utf-8")
+            usd = row.get("estimated_usd")
+            spent += usd or 0.0
+            print(f"run {i + 1}: {row.get('model')} · in {row.get('input_tokens')}"
+                  f" · out {row.get('output_tokens')} · "
+                  f"{'$' + format(usd, '.4f') if usd is not None else 'cost unknown'}"
+                  f" · {out}")
+            htmls.append(html)
+            truncated.append(cut)
+        print(f"spent ${spent:.4f}\n")
     else:
         ap.print_help()
         return 2
-    new = profile(html)
-    verdict = compare(new, ref, truncated=truncated)
-    print_verdict(verdict, new)
+    profiles = [profile(h) for h in htmls]
+    verdict = compare(median_profile(profiles), ref)
+    faults = defects(profiles, truncated)
+    verdict.problems += faults
+    verdict.ok = verdict.ok and not faults
+    print_verdict(verdict, profiles)
     return 0 if verdict.ok else 1
 
 

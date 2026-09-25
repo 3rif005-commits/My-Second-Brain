@@ -1,0 +1,580 @@
+<h1>Reinforcement Learning</h1>
+<p><strong>Source:</strong> Machine Learning Lecture 10 - Reinforcement Learning</p>
+<p><strong>Topic:</strong> How agents learn optimal decision-making by interacting with environments through rewards and punishments, using value functions and Q-Learning</p>
+<ul>
+  <li>Foundations of Reinforcement Learning</li>
+  <li>Value Functions and Q-Learning</li>
+  <li>The Q-Learning Algorithm and Updates</li>
+</ul>
+
+<h2>Foundations of Reinforcement Learning</h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> Establishes RL as a distinct learning paradigm where agents learn through interaction and feedback, not instruction.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>Definition and Core Components</strong> — what RL is and the five elements any RL system must have</li>
+          <li><strong>The "No Teacher" Principle</strong> — the fundamental insight that separates RL from supervised learning</li>
+          <li><strong>When to Use RL</strong> — practical applications and the exploration-exploitation trade-off</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> RL applies when you have feedback signals but no labeled answers, which is common in real-world sequential decision problems where the correct action depends on what comes next.</li>
+    </ul>
+  </details>
+</div>
+
+<h3 data-anchor="1:p:2">Definition and Core Components</h3>
+
+<details>
+  <summary><h5>Reinforcement Learning</h5></summary>
+  <blockquote><p><strong>Reinforcement Learning (RL):</strong> Learning what to do (which action to take) based on rewards and punishments received from the environment.</p></blockquote>
+  
+  <p>RL is one of three branches of machine learning, distinct in that it maps actions to maximum reward rather than inputs to outputs (supervised) or discovering hidden patterns (unsupervised).</p>
+  
+  <div data-type="callout" data-callout-type="ANALOGY">
+    <p>Think of RL like a <strong>pet learning tricks for treats</strong>. The pet (agent) tries different behaviors in its environment (jumping, rolling, sitting). When it does the right thing, it gets a treat (reward). Over time, it learns which behaviors lead to treats and which don't — without anyone showing it how.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>The Five Core Components</h5></summary>
+  <ul>
+    <li><strong>Agent:</strong> The learner (e.g., a robot)</li>
+    <li><strong>Environment:</strong> The world the agent interacts with (e.g., a grid, game board, physical space)</li>
+    <li><strong>Action:</strong> What the agent can do (e.g., move up, down, left, right; press a button)</li>
+    <li><strong>State:</strong> Where the agent is; a snapshot of the environment (e.g., a specific cell in a grid)</li>
+    <li><strong>Reward:</strong> Feedback signal indicating how good or bad an outcome is (positive for good, negative for bad, zero for neutral)</li>
+  </ul>
+</details>
+
+<h3 data-anchor="1:p:3">The "No Teacher" Principle</h3>
+
+<details>
+  <summary><h5>No Correct Path Given</h5></summary>
+  <blockquote><p><strong>Core insight:</strong> The agent receives no instructions, no map, and no answer key — only feedback signals from outcomes.</p></blockquote>
+  
+  <p>Instead of being told "take this path," the agent:</p>
+  <ul>
+    <li>Explores an unknown environment on its own</li>
+    <li>Takes actions and observes the reward or penalty it receives</li>
+    <li>Gradually learns which actions lead to better outcomes</li>
+    <li>Improves by accumulating rewards over time, not by following a preset solution</li>
+  </ul>
+  
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>In a typical scenario, the agent might receive <strong>small feedback signals</strong> along the way ("warmer" = small positive reward; "colder" = small negative reward) and <strong>major outcomes</strong> at the goal ("candy" = large positive reward; "lemon" = large negative reward/penalty). The agent uses all of these to refine its decisions.</p>
+  </div>
+</details>
+
+<h3 data-anchor="1:p:5">When to Use RL</h3>
+
+<details>
+  <summary><h5>Applications and Problem Characteristics</h5></summary>
+  
+  <table>
+    <tr>
+      <th>Application</th>
+      <th>Why RL Fits</th>
+    </tr>
+    <tr>
+      <td>Self-driving cars</td>
+      <td>No "correct" steering label for every situation; the right action depends on context</td>
+    </tr>
+    <tr>
+      <td>Game AI (AlphaGo, Chess)</td>
+      <td>Opponent adapts; no fixed answer key exists</td>
+    </tr>
+    <tr>
+      <td>Robot navigation</td>
+      <td>Environment is unknown or changing; the robot must learn in real time</td>
+    </tr>
+    <tr>
+      <td>Recommendation systems</td>
+      <td>User feedback is sequential, not one-shot; recommendations improve based on reactions</td>
+    </tr>
+  </table>
+  
+  <p>All these problems share one trait: <strong>the correct action is not labeled in advance</strong>, but you do have access to feedback signals that tell you how well you did.</p>
+</details>
+
+<details>
+  <summary><h5>The Exploration-Exploitation Dilemma</h5></summary>
+  <blockquote><p><strong>Core question:</strong> Should I do what I already know works (exploit), or try something new that might be better (explore)?</p></blockquote>
+  
+  <ul>
+    <li><strong>Exploitation:</strong> Choosing the greedy action—the one with the highest known value. Safe, reliable based on past experience.</li>
+    <li><strong>Exploration:</strong> Choosing randomly or trying something untested. Risky, but the only way to discover better paths the agent has not yet encountered.</li>
+  </ul>
+  
+  <div data-type="callout" data-callout-type="TIP">
+    <p>This dilemma is central to RL: you must balance learning from what you know (exploitation) with discovering new possibilities (exploration). Too much exploitation and you get stuck in local optima; too much exploration and you waste time on bad actions. Q-Learning manages this through its behavior policy.</p>
+  </div>
+</details>
+
+<h2><span data-style-type="backgroundColor" data-value="orange">Value Functions and Q-Learning</span></h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> Introduces the value-based approach to RL — assigning numbers to states and state-action pairs to represent their long-term value, which the agent then learns and uses to make decisions.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>Value Functions</strong> — what state values and Q-values represent and how they differ</li>
+          <li><strong>The Q-Table</strong> — how Q-values are organized and accessed during learning and decision-making</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> Q-Learning works because it separates the problem of "what is each state-action pair worth?" from "what action should I take?" — the algorithm updates the Q-table over time until the values are accurate enough to produce an optimal policy.</li>
+    </ul>
+  </details>
+</div>
+
+<h3 data-anchor="1:p:6">Value-Based Methods</h3>
+
+<details>
+  <summary><h5>Q-Learning as a Value-Based Algorithm</h5></summary>
+  <blockquote><p><strong>Q-Learning:</strong> A value-based reinforcement learning algorithm that learns a value function (Q-values) to determine the optimal policy.</p></blockquote>
+  
+  <p>In value-based methods, the algorithm learns to estimate how good each action is in each state. Once these estimates are accurate, the optimal policy emerges naturally: always pick the action with the highest estimated value.</p>
+  
+  <div data-type="callout" data-callout-type="NOTE">
+    <p><strong>The flow:</strong> Value function (learned over many steps) → inputs agent and state → outputs Q-value for each action → Policy (greedy selection of max Q-value) → determines total reward achieved.</p>
+  </div>
+</details>
+
+<h3 data-anchor="1:p:7">Value Functions</h3>
+
+<details>
+  <summary><h5>State Value V(s)</h5></summary>
+  <blockquote><p><strong>State value V(s):</strong> A number representing how good it is to be in a given state s, assuming the agent acts optimally from that state forward.</p></blockquote>
+  
+  <p>V(s) tells you the long-term reward you can expect starting from state s. A high V(s) means that state is desirable; a low or negative V(s) means it should be avoided.</p>
+</details>
+
+<details>
+  <summary><h5>State-Action Value Q(s,a)</h5></summary>
+  <blockquote><p><strong>State-action value Q(s,a):</strong> A number representing how good it is to take a specific action a in a given state s, assuming the agent acts optimally after that first action.</p></blockquote>
+  
+  <p>Q(s,a) is richer than V(s): it tells you not just whether a state is good, but which of the available actions in that state is best. The agent's policy is then simply "in state s, pick the action a that maximizes Q(s,a)".</p>
+  
+  <div data-type="callout" data-callout-type="IMPORTANT">
+    <p>Q-Learning learns Q-values, not state values.</p>
+  </div>
+  <table>
+    <tr>
+      <th>Aspect</th>
+      <th>V(s)</th>
+      <th>Q(s,a)</th>
+    </tr>
+    <tr>
+      <td>What it represents</td>
+      <td>Value of being in state s</td>
+      <td>Value of taking action a in state s</td>
+    </tr>
+    <tr>
+      <td>Dimensions</td>
+      <td>One value per state</td>
+      <td>One value per state-action pair</td>
+    </tr>
+    <tr>
+      <td>Used to decide actions?</td>
+      <td>Indirectly; still need to know which action leads where</td>
+      <td>Directly; pick the action with max Q</td>
+    </tr>
+  </table>
+</details>
+
+<h3 data-anchor="1:p:7">The Q-Table</h3>
+
+<details>
+  <summary><h5>Q-Table Structure and Initialization</h5></summary>
+  <blockquote><p><strong>Q-table:</strong> A two-dimensional table with rows for states and columns for actions, storing Q(s,a) values for each state-action pair.</p></blockquote>
+  
+  <p>Each cell Q(s,a) is updated iteratively as the agent gains experience. At the start, Q-values can be initialized arbitrarily (zeros, random numbers, or heuristic estimates).</p>
+  
+  <div data-type="callout" data-callout-type="TIP">
+    <p>Even if initialized incorrectly, the Q-Learning algorithm will correct the values over time as the agent accumulates rewards and feedback. The initialization is just a starting point.</p>
+  </div>
+  
+  <p><strong>Example Q-table</strong> for a grid with 3 states and 4 possible actions:</p>
+  <table>
+    <tr>
+      <th>Q</th>
+      <th>Left</th>
+      <th>Right</th>
+      <th>Up</th>
+      <th>Down</th>
+    </tr>
+    <tr>
+      <td><strong>S1</strong></td>
+      <td>0.5</td>
+      <td>−1.0</td>
+      <td>2.1</td>
+      <td>0.75</td>
+    </tr>
+    <tr>
+      <td><strong>S2</strong></td>
+      <td>0.3</td>
+      <td>1.2</td>
+      <td>0.8</td>
+      <td>−0.5</td>
+    </tr>
+    <tr>
+      <td><strong>S3</strong></td>
+      <td>−1.0</td>
+      <td>0.9</td>
+      <td>2.5</td>
+      <td>0.6</td>
+    </tr>
+  </table>
+</details>
+
+<h2><span data-style-type="backgroundColor" data-value="red">The Q-Learning Algorithm and Updates</span></h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> The concrete, step-by-step process of how Q-Learning updates its Q-values based on observed rewards and how discount factors and learning rates control that update.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>The Bellman Equation</strong> — the fundamental formula linking current and future rewards</li>
+          <li><strong>Temporal Difference Error</strong> — how much the observed value differs from the expected value, which drives learning</li>
+          <li><strong>The Update Rule</strong> — how the learning rate scales the error and adjusts the Q-value</li>
+          <li><strong>Effect of the Discount Factor</strong> — how gamma tunes the agent's tolerance for short-term losses</li>
+          <li><strong>Episodes and Convergence</strong> — why one episode is not enough and how Q-values converge over many episodes</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> Q-Learning's update rule (Q ← Q + α × TDE) is simple but powerful: it nudges the Q-table toward the true value every time the agent acts, and the algorithm guarantees convergence to the optimal Q-values if allowed enough episodes and exploration.</li>
+    </ul>
+  </details>
+</div>
+
+<h3 data-anchor="1:p:9">The Bellman Equation</h3>
+
+<details>
+  <summary><h5>Observed Q-Value and the Bellman Equation</h5></summary>
+  
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Bellman Equation for observed Q-value</p>
+    <div data-type="math">Q_{\text{observed}}(s,a) = R(s') + \gamma \max_{a'} Q(s', a')</div>
+    <ul>
+      <li><strong>Q_observed(s,a):</strong> The value of taking action a in state s, as estimated from this single observed transition</li>
+      <li><strong>R(s'):</strong> The immediate reward received upon arriving in the next state s'</li>
+      <li><strong>γ (gamma):</strong> Discount factor; how much future rewards are valued relative to immediate rewards</li>
+      <li><strong>max_a' Q(s', a'):</strong> The best Q-value available from the next state s'</li>
+    </ul>
+  </div>
+  
+  <p>The Bellman equation encodes the key insight of Q-Learning: the value of an action is not just its immediate reward, but the immediate reward plus the best future you can do from where it takes you.</p>
+  
+  <div data-type="callout" data-callout-type="ANALOGY">
+    <p>Like choosing a job: the value of a job is not just the salary today (immediate reward), but the salary plus the career growth and opportunities it opens up (future value). A lower-paying job that leads to better future opportunities might have higher total value.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Discount Factor γ (Gamma)</h5></summary>
+  <blockquote><p><strong>Discount factor γ:</strong> A number between 0 and 1 that determines how much the agent values future rewards relative to immediate rewards.</p></blockquote>
+  
+  <ul>
+    <li><strong>γ = 0:</strong> Robot only cares about immediate reward; future is irrelevant. Leads to greedy, short-sighted decisions.</li>
+    <li><strong>γ = 0.5:</strong> Future rewards matter half as much as immediate rewards. Mild preference for immediate gains.</li>
+    <li><strong>γ = 0.9:</strong> Future rewards matter significantly, but slightly less than today. Balanced perspective.</li>
+    <li><strong>γ = 1:</strong> Robot values future rewards equally to immediate rewards. Maximizes total long-term reward; ignores time.</li>
+  </ul>
+  
+  <div data-type="callout" data-callout-type="TIP">
+    <p>Higher γ makes the agent more tolerant of short-term negative rewards when future rewards are promising. A robot with γ = 0.9 is willing to accept a loss today if it leads to a big gain tomorrow; one with γ = 0.1 is not.</p>
+  </div>
+</details>
+
+<h3 data-anchor="1:p:10">Temporal Difference Error</h3>
+
+<details>
+  <summary><h5>Temporal Difference Error (TDE)</h5></summary>
+  <blockquote><p><strong>Temporal Difference Error:</strong> The gap between what the agent observed (Q_observed) and what it previously believed (Q_expected), which drives the learning update.</p></blockquote>
+  
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Temporal Difference Error</p>
+    <div data-type="math">\text{TDE} = Q_{\text{observed}}(s,a) - Q_{\text{expected}}(s,a)</div>
+    <ul>
+      <li><strong>TDE > 0:</strong> The observed value was better than expected; the Q-value estimate was too low.</li>
+      <li><strong>TDE < 0:</strong> The observed value was worse than expected; the Q-value estimate was too high.</li>
+      <li><strong>TDE ≈ 0:</strong> The estimate was accurate; no large update needed.</li>
+    </ul>
+  </div>
+  
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>The TDE is the "error" that signals how much to correct the Q-value. Large errors → large updates; small errors → small updates.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h6>Worked Example: Computing TDE</h6></summary>
+  <p>Agent in state S1, takes action down, arrives at S4.</p>
+  
+  <table>
+    <tr>
+      <th>Given</th>
+      <th>Value</th>
+    </tr>
+    <tr>
+      <td>Q_expected(S1, down)</td>
+      <td>0.75 (from Q-table)</td>
+    </tr>
+    <tr>
+      <td>R(S4)</td>
+      <td>−1 (immediate reward at S4)</td>
+    </tr>
+    <tr>
+      <td>max_a Q(S4, a)</td>
+      <td>1.5 (best action from S4)</td>
+    </tr>
+    <tr>
+      <td>γ</td>
+      <td>0.1</td>
+    </tr>
+  </table>
+  
+  <div data-type="math">Q_{\text{observed}}(S1, \text{down}) = -1 + 0.1 \times 1.5 = -0.85</div>
+  
+  <div data-type="math">\text{TDE} = -0.85 - 0.75 = -1.6</div>
+  
+  <p><strong>Interpretation:</strong> The agent expected Q(S1, down) = 0.75, but the observed value was −0.85. The negative error of −1.6 signals that the estimate was too optimistic; the true value is worse.</p>
+</details>
+
+<h3 data-anchor="1:p:11">The Q-Learning Update Rule</h3>
+
+<details>
+  <summary><h5>Q-Value Update Rule</h5></summary>
+  
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Q-Learning Update Rule</p>
+    <div data-type="math">Q(s,a) \leftarrow Q(s,a) + \alpha \times \text{TDE}</div>
+    <ul>
+      <li><strong>Q(s,a):</strong> The Q-value being updated</li>
+      <li><strong>α (alpha):</strong> Learning rate or step size; controls how much of the error to apply in each update</li>
+      <li><strong>TDE:</strong> Temporal Difference Error (calculated as shown above)</li>
+    </ul>
+  </div>
+  
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>This update rule is the core of Q-Learning and must be memorized. The exam will ask you to compute a new Q-value given the old Q-value, the observed reward, discount factor, and learning rate.</p>
+  </div>
+  
+  <p><strong>How α controls learning:</strong></p>
+  <ul>
+    <li><strong>α = 0:</strong> No learning; Q-values never change.</li>
+    <li><strong>α = 0.1:</strong> Slow, cautious learning; take 10% of the error each step.</li>
+    <li><strong>α = 0.5:</strong> Moderate learning; take 50% of the error each step.</li>
+    <li><strong>α = 1:</strong> Aggressive learning; fully trust the observation and replace Q-value immediately (rarely used).</li>
+  </ul>
+  
+  <div data-type="callout" data-callout-type="TIP">
+    <p>Lower α is safer when the environment is noisy (one observation might be a fluke); higher α converges faster in stable, clean environments.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h6>Worked Example: Updating Q(S1, down)</h6></summary>
+  
+  <p>From the previous TDE example, apply the update rule with α = 0.1:</p>
+  
+  <div data-type="math">Q(S1, \text{down}) = 0.75 + 0.1 \times (-1.6) = 0.75 - 0.16 = 0.59</div>
+  
+  <table>
+    <tr>
+      <th>Step</th>
+      <th>Value</th>
+    </tr>
+    <tr>
+      <td>Old Q(S1, down)</td>
+      <td>0.75</td>
+    </tr>
+    <tr>
+      <td>TDE</td>
+      <td>−1.6</td>
+    </tr>
+    <tr>
+      <td>Adjustment (α × TDE)</td>
+      <td>0.1 × (−1.6) = −0.16</td>
+    </tr>
+    <tr>
+      <td>New Q(S1, down)</td>
+      <td>0.75 − 0.16 = 0.59</td>
+    </tr>
+  </table>
+  
+  <p>The Q-value decreased from 0.75 to 0.59, reflecting the negative TDE. The agent learned that going down from S1 is worse than it thought.</p>
+</details>
+
+<details>
+  <summary><h6>Worked Example: Second Transition S4 → S5</h6></summary>
+  
+  <p>Agent moves from S4 (right) to S5:</p>
+  
+  <table>
+    <tr>
+      <th>Given</th>
+      <th>Value</th>
+    </tr>
+    <tr>
+      <td>Q_expected(S4, right)</td>
+      <td>0.75</td>
+    </tr>
+    <tr>
+      <td>R(S5)</td>
+      <td>−2</td>
+    </tr>
+    <tr>
+      <td>max_a Q(S5, a)</td>
+      <td>1.7</td>
+    </tr>
+    <tr>
+      <td>γ</td>
+      <td>0.1</td>
+    </tr>
+    <tr>
+      <td>α</td>
+      <td>0.1</td>
+    </tr>
+  </table>
+  
+  <div data-type="math">Q_{\text{observed}}(S4, \text{right}) = -2 + 0.1 \times 1.7 = -1.83</div>
+  
+  <div data-type="math">\text{TDE} = -1.83 - 0.75 = -2.58</div>
+  
+  <div data-type="math">Q(S4, \text{right}) = 0.75 + 0.1 \times (-2.58) = 0.49</div>
+  
+  <p>Even larger error here (−2.58) because the agent was further from the truth. The Q-value dropped more significantly.</p>
+</details>
+
+<details>
+  <summary><h6>Worked Example: Comparing Two Discount Factors</h6></summary>
+  
+  <p>Agent moves from S5 (right) to S6 with two different values of γ.</p>
+  
+  <table>
+    <tr>
+      <th>Given</th>
+      <th>Value</th>
+    </tr>
+    <tr>
+      <td>Q_expected(S5, right)</td>
+      <td>1.2</td>
+    </tr>
+    <tr>
+      <td>R(S6)</td>
+      <td>−1</td>
+    </tr>
+    <tr>
+      <td>max_a Q(S6, a)</td>
+      <td>2.0</td>
+    </tr>
+    <tr>
+      <td>α</td>
+      <td>0.1</td>
+    </tr>
+  </table>
+  
+  <p><strong>With γ = 0.1 (low future value):</strong></p>
+  
+  <div data-type="math">Q_{\text{observed}} = -1 + 0.1 \times 2.0 = -0.8</div>
+  
+  <div data-type="math">\text{TDE} = -0.8 - 1.2 = -2.0</div>
+  
+  <div data-type="math">Q(S5, \text{right}) = 1.2 + 0.1 \times (-2.0) = 1.0</div>
+  
+  <p><strong>With γ = 0.9 (high future value):</strong></p>
+  
+  <div data-type="math">Q_{\text{observed}} = -1 + 0.9 \times 2.0 = 0.8</div>
+  
+  <div data-type="math">\text{TDE} = 0.8 - 1.2 = -0.4</div>
+  
+  <div data-type="math">Q(S5, \text{right}) = 1.2 + 0.1 \times (-0.4) = 1.16</div>
+  
+  <p><strong>Comparison:</strong></p>
+  <table>
+    <tr>
+      <th>γ</th>
+      <th>Q_observed</th>
+      <th>TDE</th>
+      <th>New Q-value</th>
+      <th>Interpretation</th>
+    </tr>
+    <tr>
+      <td>0.1</td>
+      <td>−0.8</td>
+      <td>−2.0</td>
+      <td>1.0</td>
+      <td>Large decrease; immediate reward dominates</td>
+    </tr>
+    <tr>
+      <td>0.9</td>
+      <td>0.8</td>
+      <td>−0.4</td>
+      <td>1.16</td>
+      <td>Small decrease; future payoff offsets loss</td>
+    </tr>
+  </table>
+  
+  <div data-type="callout" data-callout-type="TIP">
+    <p>With high γ (0.9), the algorithm recognized that although the immediate reward is −1, the next state has a high value (2.0), so the overall value is positive (0.8). The agent is more tolerant of the short-term loss because it knows good things are coming. With low γ (0.1), the future payoff is nearly ignored, so the outcome looks bad.</p>
+  </div>
+</details>
+
+<h3 data-anchor="1:p:16">Episodes and Convergence</h3>
+
+<details>
+  <summary><h5>What Is an Episode?</h5></summary>
+  <blockquote><p><strong>Episode:</strong> One complete run from start to goal (or failure), during which the agent takes actions, receives rewards, and updates Q-values.</p></blockquote>
+  
+  <p>In the grid example:</p>
+  <ul>
+    <li><strong>Episode starts:</strong> Robot at a starting cell (e.g., S1) or randomly chosen.</li>
+    <li><strong>Episode ends:</strong> Robot reaches the goal (e.g., S9 with reward +10) or hits a failure state (e.g., S8 with reward −10).</li>
+  </ul>
+  
+  <p>One partial episode walked through in the lecture: S1 → (down) → S4 → (right) → S5 → (right) → S6 → ... (not yet finished; robot hasn't reached S8/S9).</p>
+</details>
+
+<details>
+  <summary><h5>Why One Episode Is Not Enough</h5></summary>
+  
+  <div data-type="callout" data-callout-type="CAUTION">
+    <p>After just one episode, the Q-values are still wrong or unstable. They have not yet seen the full picture of the environment.</p>
+  </div>
+  
+  <p>In the example, after one episode:</p>
+  <ul>
+    <li>Q(S1, down) = 0.59 — but is this the true value?</li>
+    <li>The robot has not yet discovered the path to the +10 goal.</li>
+    <li>It has only experienced negative rewards (−1, −2, −1).</li>
+    <li>It has not seen what happens from many other states or with other actions.</li>
+  </ul>
+  
+  <p>One episode is a single data point. The robot's estimate of each Q-value is based on limited experience and will be refined as it explores more.</p>
+</details>
+
+<details>
+  <summary><h5>Why Multiple Episodes Are Needed and Convergence</h5></summary>
+  
+  <blockquote><p><strong>Convergence:</strong> As the agent runs more episodes, its Q-values stabilize and stop changing much, eventually reaching their true optimal values.</p></blockquote>
+  
+  <p>With each additional episode:</p>
+  <ol>
+    <li>The robot might try different actions (exploration) or refine actions it has tried before.</li>
+    <li>It might discover better paths it has never taken.</li>
+    <li>It updates Q-values closer to the truth based on new observations.</li>
+    <li>Eventually, Q-values converge (stop changing much).</li>
+  </ol>
+  
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>When Q-values stop changing significantly across episodes, learning is done. At that point, the robot has learned the optimal policy: from any state, it knows exactly which action leads to the highest total reward.</p>
+  </div>
+  
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>Convergence is not instantaneous. It depends on how many states and actions exist, how much exploration happens, and the learning rate α. A small α converges slowly but smoothly; a large α converges fast but may oscillate.</p>
+  </div>
+</details>
