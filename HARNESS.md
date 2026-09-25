@@ -150,6 +150,11 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - The study-guide instructions are the user's pre-harness text, byte for byte
   (restored 2026-09-24). Engine work does not rewrite them: tuning the prompt
   for the scoreboard made notes plainer, and the scoreboard did not see it.
+  The experiment plan led there (E6 "a second prompt variant"); both plan docs
+  now open with the incident. Only the user changes these instructions
+  (Settings → Skills, or an explicit request). A change meant to improve notes
+  is judged against the user-approved reference note, not structure counts —
+  a higher score with plainer notes is a regression.
 - A prompt is edited in its skill folder, not in a Python string. The study
   guide's two prompts moved to `skills/study-guide/` byte-for-byte (hash-checked).
 - Chat only pastes skills declared for chat (or for no surface). A workspace-

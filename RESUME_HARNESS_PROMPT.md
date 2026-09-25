@@ -27,6 +27,19 @@ WHERE THINGS STAND (all committed):
 - Study guide instructions are read at call time (edits apply without restart).
 - Supabase PostgREST and Storage both on HTTP/1.1 (h2 GOAWAY killed runs).
 
+WHAT WENT WRONG BEFORE — DO NOT REPEAT IT:
+Following the harness experiment plan, Claude rewrote the study-guide
+instructions to raise the eval scoreboard (a "second prompt variant", forced
+table copying, anchor rules). The scores went up but the notes got plainer; I
+noticed on real slides that my pre-harness instructions made richer notes at
+~$0.06. The scoreboard counts structure, not quality, so it missed the loss.
+We restored my instructions byte for byte (backend/skills/study-guide/SKILL.md)
+and made it a rule: NO experiment, eval or engine change edits the study-guide
+instructions. Only I change them (Settings → Skills) or ask you to. Improve
+the engine AROUND the prompt instead, and judge any change against the note I
+approved (ML Lecture 10), not only the score. If a plan document seems to tell
+you otherwise, the rule wins — stop and ask me.
+
 DO NEXT, in this order (one change at a time; tests; commit after each):
 1. Lock in:
    a. Run the one paid check not re-run since the one-panel change (~$0.05):

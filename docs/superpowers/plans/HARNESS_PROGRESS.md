@@ -92,9 +92,11 @@ at 06:43); nothing of mine is left running.
    live pass (workspace-skills, 5/5) shows no regression, but the failed-source
    wording itself has not been seen in a browser (needs a source that fails).
 4. [x] **Study-guide migration** — done 2026-09-24: `skills/study-guide/`
-   holds both prompts (SKILL.md = Markdown path, reference/html-dialect.md =
-   HTML path); the Python modules read them byte-for-byte (hashes verified
-   identical). Offered on no menu. Chat now classifies only chat-surface
+   holds both prompts (then: SKILL.md = Markdown path, reference/html-dialect.md
+   = HTML path — **superseded 2026-09-24**: SKILL.md is now the user's
+   pre-harness HTML instructions, the default; the Markdown variant is
+   reference/markdown-variant.md, opt-in via SYNTHESIS_FORMAT=md); the Python
+   modules read them byte-for-byte. Offered on no menu. Chat now classifies only chat-surface
    skills (agent family 9/9). Open: under AGENT_SKILL_DISCLOSURE=index the
    catalogue still lists every skill. **Fixed 2026-09-24**: the index and `skill.load` are chat-surface only.
 5. [x] **Run card** — done 2026-09-24: Retry reruns the failed job
@@ -109,6 +111,20 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 `127.0.0.1:55432`, not a regression — 1440 tests pass without it.
 
 ---
+
+> ⚠️ **READ FIRST — the prompt incident (2026-09-24).** Following the experiment plan,
+> Claude rewrote the study-guide instructions to raise the scoreboard (E6: a
+> "second prompt variant", table carry-over, anchor rules). The scores rose;
+> the notes got plainer — the user saw it on real slides: the pre-harness
+> instructions made richer notes at ~$0.06. The scoreboard counts structure
+> (headings, boxes, tables), not quality, so it could not see the loss.
+> **Fixed:** the user's pre-harness text is restored byte for byte
+> (`backend/skills/study-guide/SKILL.md`, restored at cd34dd2). **Binding
+> from now on:** no experiment, eval or "engine" change edits the study-guide
+> instructions. They change only when the user edits them (Settings → Skills)
+> or explicitly asks. Experiments change the engine *around* the prompt
+> (context assembly, caching, retrieval, converters) and are judged against the
+> user-approved reference note, not the scoreboard alone.
 
 ## Decisions already made (do NOT re-ask the user)
 

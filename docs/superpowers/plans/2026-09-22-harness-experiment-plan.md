@@ -4,6 +4,20 @@
 > Companion to `../research/2026-09-22-agent-harness-state-of-the-art.md` (what the world knows)
 > and `../specs/2026-09-13-ai-harness-skills-proposal.md` (what we decided to build).
 
+> ⚠️ **READ FIRST — the prompt incident (2026-09-24).** Following this plan,
+> Claude rewrote the study-guide instructions to raise the scoreboard (E6: a
+> "second prompt variant", table carry-over, anchor rules). The scores rose;
+> the notes got plainer — the user saw it on real slides: the pre-harness
+> instructions made richer notes at ~$0.06. The scoreboard counts structure
+> (headings, boxes, tables), not quality, so it could not see the loss.
+> **Fixed:** the user's pre-harness text is restored byte for byte
+> (`backend/skills/study-guide/SKILL.md`, restored at cd34dd2). **Binding
+> from now on:** no experiment, eval or "engine" change edits the study-guide
+> instructions. They change only when the user edits them (Settings → Skills)
+> or explicitly asks. Experiments change the engine *around* the prompt
+> (context assembly, caching, retrieval, converters) and are judged against the
+> user-approved reference note, not the scoreboard alone.
+
 ---
 
 ## 0. The honest answer to "I'm afraid of losing something"
