@@ -26,6 +26,20 @@ at 06:43); nothing of mine is left running.
   it (the active gh account cannot see the repo). **Before merge:** root
   `.env` (HF token) and `backend/venv/` are tracked — user decides.
 - [x] **E3 prompt cache (2026-09-25)** — on by default; see Stage 3.1.
+- [x] **Queue checked against the run log (2026-09-25, free)** — `ai_runs`,
+  last 400 non-eval rows: chat agent calls 209, input median 3,218 tokens,
+  max 3,792; workspace agent 4.8–5.4K; study guides 8.5K in / 9.3K out.
+  * **Chat caching: not possible on Haiku 4.5** — no chat call reaches the
+    4,096-token cache minimum. The plan's "45K tokens per turn" is stale.
+    Revisit if the system prompt grows past ~4K or the model changes (Sonnet
+    5 / Opus 5 cache from 512–1024).
+  * **E5 (cap tool output): nothing to cut today** — the largest chat call,
+    tool results included, is 3.8K tokens. Parked until a tool returns big.
+  * **Workspace start page**: already honest since b131342 ("Nothing is
+    written until you ask"); the "Next:" line below was stale.
+  * **Flashcards have produced a real note** (2026-09-24 13:29, ML Lecture 10,
+    21 cards, 12–34-word answers, formulas written out, no `??` left) — the
+    "never exercised" line below was stale.
 - [x] **Study-guide quality guard (2026-09-25)** — `python -m evals.quality_guard`
   compares new Lecture 10 guides with the user-approved note
   (`evals/reference/ml-lecture-10.approved.json`, the note's saved blocks):
@@ -207,7 +221,7 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       are now priced. Chat/skills not cached yet (the plan's 45K-token chat
       turns are the bigger saving). Card: `experiments/E3-prompt-cache.md`.
 - [x] 3.2 **E4** close the tool loop (code + unit tests; measurement pending credits) (feed results back, round cap, parallel results in one message).
-- [ ] 3.3 **E5** tool-output discipline (25k cap + hint, `response_format`, errors as instructions).
+- [!] 3.3 **E5** tool-output discipline — parked 2026-09-25: largest real chat call is 3.8K tokens incl. tool results, nothing to cut. (25k cap + hint, `response_format`, errors as instructions).
 - [x] 3.4 Gateway merge — **steps A and B done**: agent provider selection
       comes from `services/ai`, agent turns write run rows, and
       `services/ai/agent_stream.py` drives the tool loop in either dialect, so
@@ -276,7 +290,7 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 
 ## Never exercised against a real model (the honest list)
 
-- `flashcards` has never produced a note (compare-sources has, once, live).
+- ~~`flashcards` has never produced a note~~ — it has (2026-09-24, 21 cards on ML Lecture 10).
 - `POST /v1/chat/completions` has never served a real editor request.
 - The editor's inline AI runs on OpenRouter `openai/gpt-4o-mini` (pinned by
   `/agent/inline`), never on Claude; selection skills inherit that.
