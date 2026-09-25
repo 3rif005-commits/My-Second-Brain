@@ -25,7 +25,7 @@ async def _turn(monkeypatch, history, query, notes):
     monkeypatch.setattr(engine, "get_provider", lambda *a, **k: type(
         "P", (), {"provider": "anthropic", "model": "m", "chat_model": "m"})())
     monkeypatch.setattr(engine, "embed", lambda q: [0.0])
-    monkeypatch.setattr(engine, "retrieve", lambda e, u: notes)
+    monkeypatch.setattr(engine, "retrieve", lambda e, u, **kw: notes)
 
     async def no_mcp(u):
         return [], []

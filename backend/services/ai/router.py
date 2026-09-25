@@ -70,10 +70,25 @@ def with_model_override(pool: list[Provider], model: str | None) -> list[Provide
     if model in ("llamacpp", "local"):
         return [p for p in pool if p.provider == "local"] or [
             Provider(provider="local", label="Local (Gemma)", capabilities={"text"})]
+    # A model id its own provider serves goes to that provider: "claude-…" to
+    # Anthropic, "gemini-…" to Gemini. Sending a bare Claude id to the first
+    # OpenAI-compatible gateway (OpenRouter wants "anthropic/…") was a 400
+    # every time, even with Anthropic configured.
+    for prefix, provider in _NATIVE_PREFIXES:
+        if model.startswith(prefix):
+            for p in pool:
+                if p.provider == provider:
+                    return [replace(p, chat_model=model)]
     for p in pool:
         if p.provider in ("openai_compatible", "openai"):
             return [replace(p, chat_model=model)]
     return pool
+
+
+#: Model-id prefixes a provider serves under its own API.
+_NATIVE_PREFIXES = (("claude-", "anthropic"), ("gemini-", "gemini"),
+                    ("gpt-", "openai"), ("o1", "openai"), ("o3", "openai"),
+                    ("o4", "openai"))
 
 
 def complete_with_fallback(job: str, user_id: str, messages: list[dict],

@@ -5,18 +5,27 @@ Pass 2: within the top notes, find the best matching blocks.
 
 Falls back to legacy match_chunks RPC for notes that haven't been re-indexed
 (no descriptor_embedding set).
+
+With the question's text (`query`), pass 2 fuses the embedding's block order
+with word matching over every block of the chosen notes (E8,
+services/hybrid_search.py). Pass 1 — which notes — is still the descriptor
+embedding alone: E8's eval does not model it yet.
 """
 from __future__ import annotations
 
 from services.database import get_supabase
+from services.hybrid_search import fuse
 
 _TOP_NOTES    = 5
 _TOP_BLOCKS   = 15   # total across all top notes
+_VECTOR_BLOCKS = 40  # embedding candidates fed into the fusion (E8)
+_LEXICAL_CAP  = 3000 # blocks of the chosen notes read for word matching
 _LEGACY_THRESHOLD = 0.50
 _LEGACY_CHUNKS    = 12
 
 
-def retrieve(query_embedding: list[float], user_id: str) -> list[dict]:
+def retrieve(query_embedding: list[float], user_id: str,
+             query: str | None = None) -> list[dict]:
     if not query_embedding:
         return []
 
@@ -44,11 +53,13 @@ def retrieve(query_embedding: list[float], user_id: str) -> list[dict]:
             "query_embedding": vec,
             "match_user_id":   user_id,
             "note_ids":        note_ids,
-            "match_count":     _TOP_BLOCKS,
+            "match_count":     _VECTOR_BLOCKS if query else _TOP_BLOCKS,
         },
     ).execute()
 
     block_rows = pass2.data or []
+    if query:
+        block_rows = _fused_blocks(db, query, block_rows, note_ids, user_id)
 
     if not block_rows:
         return _legacy_fallback(db, vec, user_id)
@@ -58,7 +69,8 @@ def retrieve(query_embedding: list[float], user_id: str) -> list[dict]:
         nid      = str(row["note_id"])
         block_id = row.get("block_id") or ""
         meta     = note_meta.get(nid, {})
-        score    = max(0.0, 1.0 - float(row["dist"]))
+        # A block found by its words alone has no embedding distance.
+        score    = max(0.0, 1.0 - float(row["dist"])) if row.get("dist") is not None else 0.0
         deep_link = f"/brain/{nid}#{block_id}" if block_id else f"/brain/{nid}"
         results.append({
             "id":           nid,
@@ -69,6 +81,31 @@ def retrieve(query_embedding: list[float], user_id: str) -> list[dict]:
         })
 
     return results
+
+
+def _block_key(row: dict) -> str:
+    return f"{row['note_id']}:{row.get('chunk_index')}"
+
+
+def _fused_blocks(db, query: str, vector_rows: list[dict], note_ids: list,
+                  user_id: str) -> list[dict]:
+    """Pass 2's blocks in fused order: the embedding's, and word matching over
+    every block of the chosen notes (so the lecture's own term, or a block
+    that never got an embedding, can still surface)."""
+    try:
+        rows = (db.table("note_chunks")
+                .select("note_id,block_id,chunk_text,chunk_index")
+                .in_("note_id", note_ids).eq("user_id", user_id)
+                .limit(_LEXICAL_CAP).execute().data or [])
+    except Exception:                              # noqa: BLE001
+        return vector_rows[:_TOP_BLOCKS]           # the embedding's order stands
+    by_key = {_block_key(r): r for r in rows}
+    for r in vector_rows:
+        by_key[_block_key(r)] = r                  # keeps the embedding's dist
+    order = fuse(query, [_block_key(r) for r in vector_rows],
+                 {k: r.get("chunk_text") or "" for k, r in by_key.items()},
+                 limit=_TOP_BLOCKS)
+    return [by_key[k] for k in order]
 
 
 def _legacy_fallback(db, vec: str, user_id: str) -> list[dict]:

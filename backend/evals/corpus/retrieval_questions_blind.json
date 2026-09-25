@@ -1,0 +1,418 @@
+{
+ "version": 1,
+ "note": "Written by claude-haiku-4-5 from each page, told not to reuse the page's distinctive words (evals/retrieval_blind.py, 2026-09-25). Gold = the page it was written from.",
+ "sources": {
+  "iml10": {
+   "title": "Machine Learning Lecture 10 - Reinforcement Learning",
+   "path": "sources/iml-lecture-10.extracted.txt",
+   "note": "iml"
+  },
+  "iml11": {
+   "title": "Machine Learning Lecture 11 - Bias, Fairness & Ethics",
+   "path": "sources/iml-lecture-11.extracted.txt",
+   "note": "iml"
+  },
+  "rs2": {
+   "title": "Lecture 2 RS - Definition, Applications and Data Sources for RS",
+   "path": "sources/rs-lecture-2.extracted.txt",
+   "note": "rs"
+  },
+  "rs3": {
+   "title": "Lecture 3 RS - Data Sources and Stages of Remote Sensing",
+   "path": "sources/rs-lecture-3.extracted.txt",
+   "note": "rs"
+  }
+ },
+ "questions": [
+  {
+   "q": "What are the three main types of machine learning and how do they differ?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml10",
+     2
+    ]
+   ]
+  },
+  {
+   "q": "What are the five key elements in a learning system with rewards and penalties?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml10",
+     3
+    ]
+   ]
+  },
+  {
+   "q": "How does an agent learn when given only feedback signals without instructions?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml10",
+     4
+    ]
+   ]
+  },
+  {
+   "q": "When is it better to use this approach instead of supervised learning?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml10",
+     5
+    ]
+   ]
+  },
+  {
+   "q": "What is the difference between storing memory as values versus policies?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml10",
+     6
+    ]
+   ]
+  },
+  {
+   "q": "How do you measure the quality of a state or a particular move?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml10",
+     7
+    ]
+   ]
+  },
+  {
+   "q": "How do you initialize and update the quality table for moves?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml10",
+     9
+    ]
+   ]
+  },
+  {
+   "q": "What is the mathematical equation for calculating observed quality?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml10",
+     10
+    ]
+   ]
+  },
+  {
+   "q": "How much should you adjust your table when predictions are wrong?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml10",
+     11
+    ]
+   ]
+  },
+  {
+   "q": "Why does valuing future rewards more make an agent patient with short-term costs?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml10",
+     16
+    ]
+   ]
+  },
+  {
+   "q": "Why does learning need to happen many times instead of just once?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml10",
+     17
+    ]
+   ]
+  },
+  {
+   "q": "Why are machines learning patterns from human decisions problematic?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     2
+    ]
+   ]
+  },
+  {
+   "q": "What counts as unfair discrimination in an algorithm?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     3
+    ]
+   ]
+  },
+  {
+   "q": "How do patterns from the past get baked into training data?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     4
+    ]
+   ]
+  },
+  {
+   "q": "What happens when training examples don't represent everyone?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     5
+    ]
+   ]
+  },
+  {
+   "q": "Why do wrong labels give wrong answers even with a good algorithm?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     6
+    ]
+   ]
+  },
+  {
+   "q": "Why should you care about fairness in machine learning?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     7
+    ]
+   ]
+  },
+  {
+   "q": "What went wrong with the resume screening system?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     9
+    ]
+   ]
+  },
+  {
+   "q": "How did the resume tool penalize one group over another?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     11
+    ]
+   ]
+  },
+  {
+   "q": "Why using cost as a measure led to unfair healthcare decisions?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     13
+    ]
+   ]
+  },
+  {
+   "q": "What problem did the face recognition researcher discover?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     16
+    ]
+   ]
+  },
+  {
+   "q": "Which group was most misidentified by facial recognition systems?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     18
+    ]
+   ]
+  },
+  {
+   "q": "What makes the crime prediction tool hard to call fair or unfair?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     20
+    ]
+   ]
+  },
+  {
+   "q": "At what stages can you fix bias in a trained model?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     24
+    ]
+   ]
+  },
+  {
+   "q": "What are the five checks to do before putting a model into use?",
+   "style": "blind",
+   "gold": [
+    [
+     "iml11",
+     25
+    ]
+   ]
+  },
+  {
+   "q": "What are the main ways to collect geographic information?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs2",
+     2
+    ]
+   ]
+  },
+  {
+   "q": "How is human vision an example of gathering information from distance?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs2",
+     3
+    ]
+   ]
+  },
+  {
+   "q": "What is the difference between sensors that receive versus sensors that broadcast?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs2",
+     4
+    ]
+   ]
+  },
+  {
+   "q": "What are the five types of film used in aerial photography?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs2",
+     5
+    ]
+   ]
+  },
+  {
+   "q": "How does infrared film show vegetation and water differently than regular film?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs2",
+     6
+    ]
+   ]
+  },
+  {
+   "q": "How does color film help you tell apart similar-looking objects?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs2",
+     8
+    ]
+   ]
+  },
+  {
+   "q": "Why were false-color images invented and what do they show?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs2",
+     9
+    ]
+   ]
+  },
+  {
+   "q": "How do different materials look across the color spectrum?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs2",
+     13
+    ]
+   ]
+  },
+  {
+   "q": "How can you detect pollution or disease using spectral patterns?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs2",
+     14
+    ]
+   ]
+  },
+  {
+   "q": "What is the difference between film cameras and electronic sensors?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs3",
+     2
+    ]
+   ]
+  },
+  {
+   "q": "What are three types of active sensors that emit their own waves?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs3",
+     3
+    ]
+   ]
+  },
+  {
+   "q": "What are the main types of paths satellites take around Earth?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs3",
+     4
+    ]
+   ]
+  },
+  {
+   "q": "What happens to satellites at the end of their useful life?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs3",
+     5
+    ]
+   ]
+  },
+  {
+   "q": "What are the seven stages that energy goes through in remote sensing?",
+   "style": "blind",
+   "gold": [
+    [
+     "rs3",
+     6
+    ]
+   ]
+  }
+ ]
+}

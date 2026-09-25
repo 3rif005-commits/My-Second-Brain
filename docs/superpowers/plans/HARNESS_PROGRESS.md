@@ -263,7 +263,14 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       the mastery-guide text out of `prompts/mastery_guide.py` into a
       `study-guide` skill — that file has uncommitted edits of yours, so it is
       waiting on you rather than on the code.
-- [ ] 4.4 **E8** retrieval upgrades (contextual chunk prefixes, reranking).
+- [~] 4.4 **E8** retrieval — 2026-09-25: free retrieval eval (`evals/retrieval.py`,
+      58 hand + 39 blind questions); hybrid (embedding + BM25 at half weight)
+      shipped for the workspace AI and the chat's block step — MRR 0.809→0.870
+      hand, 0.685→0.696 blind, hit@5 blind 0.87→0.95. Nomic prefixes +0.02
+      (not worth a re-embed); context headers hurt. **Open, user's call:** 54 of
+      80 notes with text have no descriptor, so the chat cannot find them
+      (backfill ~$0.06 / index on save / words in pass 1). Card:
+      `experiments/E8-hybrid-retrieval.md`.
 - [ ] 4.5 **E9** map-reduce for 3+ sources.
 - [ ] 4.6 **E10** model/effort tiering incl. local Gemma fast tier.
 

@@ -118,3 +118,47 @@ def test_empty_embedding_returns_empty():
     with patch("services.retriever.get_supabase", return_value=db):
         results = retrieve([], "user-x")
     assert results == []
+
+
+# ── E8: pass 2 fused with word matching ─────────────────────────────────────
+
+def _db_hybrid(pass1_rows, pass2_rows, note_rows):
+    db = _db_with_rpc_results(pass1_rows, pass2_rows)
+    (db.table.return_value.select.return_value.in_.return_value.eq.return_value
+     .limit.return_value.execute.return_value.data) = note_rows
+    return db
+
+
+BLOCKS = [
+    {"note_id": "n1", "block_id": "b1", "chunk_text": "Momentum averages gradients.", "chunk_index": 0},
+    {"note_id": "n1", "block_id": "b2", "chunk_text": "The Bellman equation gives the observed value.", "chunk_index": 1},
+]
+
+
+def test_the_question_s_own_term_lifts_its_block():
+    db = _db_hybrid([{"id": "n1", "title": "RL", "dist": 0.1}],
+                    [dict(BLOCKS[0], dist=0.2), dict(BLOCKS[1], dist=0.3)], BLOCKS)
+    with patch("services.retriever.get_supabase", return_value=db):
+        results = retrieve([0.1] * 768, "u", query="Bellman equation")
+    assert results[0]["deep_link"] == "/brain/n1#b2"
+    db.table.assert_called_with("note_chunks")
+
+
+def test_a_block_without_an_embedding_is_found_by_its_words():
+    unembedded = {"note_id": "n1", "block_id": "b3", "chunk_text": "Kepler's laws fix the orbit.", "chunk_index": 2}
+    db = _db_hybrid([{"id": "n1", "title": "RS", "dist": 0.1}],
+                    [dict(BLOCKS[0], dist=0.2)], BLOCKS + [unembedded])
+    with patch("services.retriever.get_supabase", return_value=db):
+        results = retrieve([0.1] * 768, "u", query="Kepler orbit")
+    found = {r["deep_link"]: r for r in results}
+    assert "/brain/n1#b3" in found                 # invisible to the embedding before
+    assert found["/brain/n1#b3"]["similarity"] == 0.0
+
+
+def test_without_the_question_text_the_embedding_order_stands():
+    db = _db_with_rpc_results([{"id": "n1", "title": "RL", "dist": 0.1}],
+                              [dict(BLOCKS[0], dist=0.2), dict(BLOCKS[1], dist=0.3)])
+    with patch("services.retriever.get_supabase", return_value=db):
+        results = retrieve([0.1] * 768, "u")
+    assert results[0]["deep_link"] == "/brain/n1#b1"
+    db.table.assert_not_called()

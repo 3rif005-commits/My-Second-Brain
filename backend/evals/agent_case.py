@@ -120,7 +120,7 @@ async def run_agent_case(case: dict, provider, skill_registry,
         patch.object(engine, "execute_brain_tool", brain.execute),
         patch.object(engine, "get_provider", lambda *a, **kw: provider),
         patch.object(engine, "embed", lambda q: [0.0] * 768),
-        patch.object(engine, "retrieve", lambda e, u: retrieved),
+        patch.object(engine, "retrieve", lambda e, u, **kw: retrieved),
         patch.object(engine, "_get_mcp_tools_for_user",
                      _no_mcp),                      # no servers in an eval
     ]

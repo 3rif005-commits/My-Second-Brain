@@ -231,3 +231,13 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - Cached tokens are billed once. OpenAI-style `cached_tokens` and DeepSeek's
   `prompt_cache_hit_tokens` are inside `prompt_tokens`; they are split out,
   as Anthropic reports them.
+- A retrieval eval needs questions its author did not write from the page.
+  Hand-written questions reused the page's words and made word matching look
+  like the winner (MRR 0.90 vs 0.81); questions written blind to those words
+  reversed it (0.55 vs 0.69). Half-weight fusion was chosen as the best WORST
+  case over both sets (E8).
+- Search quality is first a coverage question: 54 of 80 notes with text had
+  no descriptor, so no ranking change could ever surface them. Count what the
+  index can see before tuning how it ranks.
+- A model override goes to the provider that serves it: a bare `claude-…` id
+  sent to OpenRouter was a 400 on every call, even with Anthropic configured.

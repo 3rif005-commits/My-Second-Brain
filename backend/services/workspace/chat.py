@@ -19,6 +19,7 @@ from typing import Any, AsyncIterator
 
 from services.database import get_supabase
 from services.embedder import embed
+from services.hybrid_search import fuse
 from services.ai import usage as usage_log
 from services.ai.client import stream as ai_stream
 from services.ai.router import candidates
@@ -53,16 +54,43 @@ def _anchor_label(c: dict) -> str:
     return f"section {int(c['anchor_start'])}"
 
 
+#: How many embedding matches go into the fusion — enough that a piece the
+#: word match ranks first can still meet its vector rank.
+_VECTOR_CANDIDATES = 40
+#: A note's pieces read for word matching. A note of ten lectures is ~300.
+_LEXICAL_CAP = 3000
+
+
 def retrieve_chunks(query: str, note_id: str, user_id: str) -> list[dict]:
-    embedding = embed(query)
-    vec = "[" + ",".join(str(v) for v in embedding) + "]"
-    res = get_supabase().rpc("match_note_source_chunks", {
-        "query_embedding": vec,
-        "match_user_id": user_id,
-        "target_note_id": note_id,
-        "match_count": _TOP_K,
-    }).execute()
-    return res.data or []
+    """The note's best source pieces for this question: the embedding's order
+    fused with word matching (E8, services/hybrid_search.py). The embedding
+    finds paraphrases; the words find the lecture's own terms, and pieces that
+    never got an embedding. If the embedding server is down, words alone still
+    answer instead of the chat losing its sources."""
+    db = get_supabase()
+    vector_rows: list[dict] = []
+    try:
+        embedding = embed(query)
+        vec = "[" + ",".join(str(v) for v in embedding) + "]"
+        vector_rows = db.rpc("match_note_source_chunks", {
+            "query_embedding": vec,
+            "match_user_id": user_id,
+            "target_note_id": note_id,
+            "match_count": _VECTOR_CANDIDATES,
+        }).execute().data or []
+    except Exception as e:                          # noqa: BLE001
+        logger.warning(f"note {note_id}: embedding search failed, words only: {e}")
+    rows = (db.table("resource_chunks")
+            .select("id,resource_id,chunk_text,anchor_type,anchor_start,anchor_end")
+            .eq("note_id", note_id).eq("user_id", user_id)
+            .limit(_LEXICAL_CAP).execute().data or [])
+    by_id = {str(r["id"]): r for r in rows}
+    for r in vector_rows:
+        by_id.setdefault(str(r["id"]), r)
+    order = fuse(query, [str(r["id"]) for r in vector_rows],
+                 {i: r.get("chunk_text") or "" for i, r in by_id.items()},
+                 limit=_TOP_K)
+    return [by_id[i] for i in order]
 
 
 def source_excerpts(chunks: list[dict], titles: dict[str, str]) -> str:

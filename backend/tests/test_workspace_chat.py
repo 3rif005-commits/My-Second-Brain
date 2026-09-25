@@ -123,18 +123,58 @@ async def test_run_note_chat_falls_back_to_next_provider():
     assert not any(e["type"] == "error" for e in events)
 
 
-def test_retrieval_is_note_scoped():
+def _db(vector_rows, note_rows):
     db = MagicMock()
-    db.rpc.return_value.execute.return_value.data = CHUNKS
+    db.rpc.return_value.execute.return_value.data = vector_rows
+    (db.table.return_value.select.return_value.eq.return_value.eq.return_value
+     .limit.return_value.execute.return_value.data) = note_rows
+    return db
+
+
+def test_retrieval_is_note_scoped():
+    db = _db(CHUNKS, CHUNKS)
     with patch("services.workspace.chat.embed", return_value=[0.1] * 768), \
          patch("services.workspace.chat.get_supabase", return_value=db):
         out = retrieve_chunks("query", "n1", "u1")
-    assert out == CHUNKS
+    assert {c["id"] for c in out} == {"c1", "c2"}
     name, args = db.rpc.call_args[0]
     assert name == "match_note_source_chunks"
     assert args["target_note_id"] == "n1"
     assert args["match_user_id"] == "u1"
     assert "target_workspace_id" not in args
+    # the word-matching side reads the same note only
+    db.table.assert_called_with("resource_chunks")
+    eqs = db.table.return_value.select.return_value.eq
+    assert eqs.call_args == (("note_id", "n1"),)
+    assert eqs.return_value.eq.call_args == (("user_id", "u1"),)
+
+
+def test_the_lecture_s_own_term_lifts_its_piece():
+    """E8: the embedding put the chain-rule piece first; the question names
+    gradient descent, so the fused order puts that piece first."""
+    db = _db([CHUNKS[1], CHUNKS[0]], CHUNKS)
+    with patch("services.workspace.chat.embed", return_value=[0.1] * 768), \
+         patch("services.workspace.chat.get_supabase", return_value=db):
+        out = retrieve_chunks("what does gradient descent minimize?", "n1", "u1")
+    assert out[0]["id"] == "c1"
+
+
+def test_words_alone_answer_when_the_embedding_server_is_down():
+    db = _db([], CHUNKS)
+    with patch("services.workspace.chat.embed", side_effect=ConnectionError("8081 down")), \
+         patch("services.workspace.chat.get_supabase", return_value=db):
+        out = retrieve_chunks("chain rule", "n1", "u1")
+    assert [c["id"] for c in out] == ["c2"]
+
+
+def test_a_piece_without_an_embedding_is_still_found():
+    unembedded = {"id": "c3", "resource_id": "r2", "chunk_text": "Backpropagation uses the Jacobian.",
+                  "anchor_type": "page", "anchor_start": 9, "anchor_end": 9}
+    db = _db(CHUNKS, CHUNKS + [unembedded])
+    with patch("services.workspace.chat.embed", return_value=[0.1] * 768), \
+         patch("services.workspace.chat.get_supabase", return_value=db):
+        out = retrieve_chunks("Jacobian", "n1", "u1")
+    assert "c3" in [c["id"] for c in out]
 
 
 @pytest.mark.asyncio

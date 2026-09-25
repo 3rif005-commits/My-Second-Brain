@@ -305,7 +305,7 @@ async def execute_brain_tool(
 def _search_brain(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     query = args["query"]
     embedding = embed(query)
-    matches = retrieve(embedding, user_id)
+    matches = retrieve(embedding, user_id, query=query)
     return {"matches": matches[: args.get("limit", 6)]}
 
 

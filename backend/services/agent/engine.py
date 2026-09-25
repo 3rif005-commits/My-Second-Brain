@@ -287,7 +287,7 @@ async def run_turn(
     else:
         try:
             embedding = embed(request.query)
-            notes = retrieve(embedding, user_id)
+            notes = retrieve(embedding, user_id, query=request.query)
         except Exception as e:
             notes = []
             yield _ev({"type": "error", "content": f"retrieval failed: {e}"})
