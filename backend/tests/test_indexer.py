@@ -199,3 +199,51 @@ def test_database_row_with_no_body_blocks_still_gets_preamble():
     assert [r["chunk_index"] for r in rows] == [0]
     assert rows[0]["chunk_text"] == "Status: In progress"
     assert rows[0]["block_id"] == indexer.PROPERTY_PREAMBLE_BLOCK_ID
+
+
+def test_a_local_only_note_is_described_without_any_model():
+    """A local-only note never leaves the machine — its descriptor is the
+    title and first block, and the cloud descriptor call is never made."""
+    db = _db(note={"id": NOTE_ID, "title": "Private", "content": CONTENT,
+                   "local_only": True})
+    with _patched(db), patch.object(indexer, "generate_descriptor") as gen:
+        assert indexer.index_note(NOTE_ID, USER_ID) is True
+    gen.assert_not_called()
+    update = db.table("notes").update.call_args[0][0]
+    assert update["descriptor"] == "Private. First block"
+
+
+def test_a_normal_note_still_gets_a_model_descriptor():
+    db = _db(note={"id": NOTE_ID, "title": "T", "content": CONTENT, "local_only": False})
+    with _patched(db), patch.object(indexer, "generate_descriptor", return_value="d") as gen:
+        indexer.index_note(NOTE_ID, USER_ID)
+    gen.assert_called_once()
+
+
+def test_the_indexed_content_s_fingerprint_is_recorded():
+    """Migration 021: the sweep skips a note whose content was already
+    indexed — by the sweep or by the editor's timer."""
+    db = _db(note={"id": NOTE_ID, "title": "T", "content": CONTENT,
+                   "local_only": False, "content_hash": "abc"})
+    with _patched(db):
+        indexer.index_note(NOTE_ID, USER_ID)
+    updates = [c.args[0] for c in db.table("notes").update.call_args_list]
+    assert {"indexed_hash": "abc", "is_indexed": True} in updates
+
+
+def test_before_migration_021_nothing_extra_is_written():
+    db = _db(note={"id": NOTE_ID, "title": "T", "content": CONTENT, "local_only": False})
+    with _patched(db):
+        indexer.index_note(NOTE_ID, USER_ID)
+    updates = [c.args[0] for c in db.table("notes").update.call_args_list]
+    assert all("indexed_hash" not in u for u in updates)
+
+
+def test_a_database_without_the_fingerprint_column_still_indexes():
+    db = _db(note={"id": NOTE_ID, "title": "T", "content": CONTENT, "local_only": False})
+    chain = db.table("notes").select
+    real = chain.return_value
+    chain.side_effect = lambda fields: (_ for _ in ()).throw(
+        Exception("column notes.content_hash does not exist")) if "content_hash" in fields else real
+    with _patched(db):
+        assert indexer.index_note(NOTE_ID, USER_ID) is True

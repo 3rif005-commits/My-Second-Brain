@@ -17,6 +17,7 @@ from typing import Any
 from services.block_chunker import parse as parse_blocks
 from services.database import get_supabase
 from services.db.properties.format import format_property_value
+from services.descriptor import _fallback as describe_without_model
 from services.descriptor import generate as generate_descriptor
 from services.embedder import embed, embed_batch
 
@@ -153,14 +154,7 @@ def _with_property_preamble(note_id: str, user_id: str, blocks: list[dict]) -> l
 def index_note(note_id: str, user_id: str) -> bool:
     """Fetch, chunk, embed and describe a single note. Returns True on success."""
     db = get_supabase()
-    res = (
-        db.table("notes")
-        .select("id, title, content")
-        .eq("id", note_id)
-        .eq("user_id", user_id)
-        .maybe_single()
-        .execute()
-    )
+    res = _read_note(db, note_id, user_id)
     if not res or not res.data:
         logger.warning("index_note: note %s not found for user %s", note_id, user_id)
         return False
@@ -178,18 +172,46 @@ def index_note(note_id: str, user_id: str) -> bool:
     # unchanged" holds exactly: the property preamble is a note_chunks/
     # retrieval concern only, not a topic-summary input.
     if not blocks:
+        _record_indexed(db, note)
         return True
 
     texts = [b["chunk_text"] for b in blocks]
-    desc = generate_descriptor(title, texts)
+    # A local-only note never leaves the machine: its descriptor is written
+    # without a model (title + first block). Embeddings are already local.
+    desc = (describe_without_model(title, texts) if note.get("local_only")
+            else generate_descriptor(title, texts))
     desc_emb = embed(desc)
 
     db.table("notes").update({
         "descriptor":           desc,
         "descriptor_embedding": "[" + ",".join(str(v) for v in desc_emb) + "]",
     }).eq("id", note_id).execute()
-
+    _record_indexed(db, note)
     return True
+
+
+def _read_note(db, note_id: str, user_id: str):
+    """The note, with its content fingerprint when migration 021 is applied."""
+    def read(fields: str):
+        return (db.table("notes").select(fields).eq("id", note_id)
+                .eq("user_id", user_id).maybe_single().execute())
+    try:
+        return read("id, title, content, local_only, content_hash")
+    except Exception as e:                          # noqa: BLE001
+        if "content_hash" not in str(e):
+            raise
+        return read("id, title, content, local_only")
+
+
+def _record_indexed(db, note: dict) -> None:
+    """Remember WHICH content was indexed (E8, migration 021), so the sweep
+    skips this note until it changes again — whoever indexed it. The
+    fingerprint is the one read with the content: an edit made while indexing
+    leaves the note different, and it is indexed again."""
+    if not note.get("content_hash"):
+        return                                     # before migration 021
+    db.table("notes").update({"indexed_hash": note["content_hash"],
+                              "is_indexed": True}).eq("id", note["id"]).execute()
 
 
 def try_index_note(note_id: str, user_id: str) -> bool:

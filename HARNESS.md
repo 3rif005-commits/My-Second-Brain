@@ -241,3 +241,9 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   index can see before tuning how it ranks.
 - A model override goes to the provider that serves it: a bare `claude-…` id
   sent to OpenRouter was a 400 on every call, even with Anthropic configured.
+- Index from the database, not from one screen. A note was indexed only by a
+  timer in the note editor; everything the AI, imports and the workspace wrote
+  stayed unsearchable. And decide "needs indexing" by content, not time:
+  indexing itself bumps `updated_at`.
+- A local-only note never reaches a cloud model — including for background
+  work like its search descriptor.

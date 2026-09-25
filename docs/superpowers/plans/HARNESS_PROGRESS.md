@@ -267,10 +267,11 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       58 hand + 39 blind questions); hybrid (embedding + BM25 at half weight)
       shipped for the workspace AI and the chat's block step — MRR 0.809→0.870
       hand, 0.685→0.696 blind, hit@5 blind 0.87→0.95. Nomic prefixes +0.02
-      (not worth a re-embed); context headers hurt. **Open, user's call:** 54 of
-      80 notes with text have no descriptor, so the chat cannot find them
-      (backfill ~$0.06 / index on save / words in pass 1). Card:
-      `experiments/E8-hybrid-retrieval.md`.
+      (not worth a re-embed); context headers hurt. 54 of 80 notes with text
+      had no descriptor (chat could not find them); user: current notes are
+      test data, fix it for new ones → backend index sweep over any writer
+      (migration 021, **user applies**), local-only notes no longer sent to
+      the cloud for a descriptor. Card: `experiments/E8-hybrid-retrieval.md`.
 - [ ] 4.5 **E9** map-reduce for 3+ sources.
 - [ ] 4.6 **E10** model/effort tiering incl. local Gemma fast tier.
 

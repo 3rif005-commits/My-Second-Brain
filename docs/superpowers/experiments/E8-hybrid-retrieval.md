@@ -59,15 +59,29 @@ Pass 1 picks notes by descriptor embedding, so a note without one can never be
 found by the chat or `brain.search_brain` — e.g. both `EMAIL_CANDIDATURE`
 notes. Indexing only happens from a 30-second timer in the note editor after
 an edit; imported, AI-written and untouched notes are never indexed.
-This is a bigger loss than any ranking change. Options (user's call — they
-spend money and write index rows):
-1. **Backfill**: index every note once (`POST /internal/reindex` exists).
-   Embeddings are local and free; each note's descriptor is one model call
-   (median $0.0012 in `ai_runs`) — ~$0.06 for the 54.
-2. **Index on the server** whenever a note is created or saved by any path,
-   instead of the editor's timer.
-3. **Words in pass 1**: `notes.fts` already covers every note; fuse it into
-   note selection so an unindexed note is still found (free, no backfill).
+This is a bigger loss than any ranking change.
+
+**User's call (2026-09-25):** the current notes are test data — no backfill.
+What matters is that notes made from now on are always findable. So:
+
+**Shipped — index whatever wrote the note:**
+- Migration `021_note_index_tracking.sql` (**user applies**): `content_hash`
+  (generated md5 of title + text), `indexed_hash`, and the service-role-only
+  RPC `notes_needing_index` (text, not deleted, content changed since its last
+  index, quiet for 2 minutes).
+- `services/index_sweep.py`: every 60 s (`INDEX_SWEEP_SECONDS`, 0 = off) the
+  backend indexes up to 20 such notes. The database is the one place every
+  writer lands — editor, workspace, AI tools, imports, Android.
+- Content, not time: indexing writes the descriptor, which bumps
+  `updated_at`, so a time check would re-index forever. `index_note` records
+  the fingerprint it read WITH the content, whoever called it (sweep or the
+  editor's timer), so a note is indexed once per change.
+- Before the migration: the sweep logs "apply 021" once and does nothing;
+  indexing still works (checked live on a temporary note, then deleted: it
+  was indexed and the chat search found it).
+- **Privacy fix found on the way:** a local-only note's descriptor was
+  written by the cloud model. It is now written without any model (title +
+  first block); embeddings were already local.
 
 ## Not done
 - Pass 1 (note choice) is not modelled by this eval.

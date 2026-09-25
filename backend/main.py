@@ -29,7 +29,12 @@ async def lifespan(app: FastAPI):
     # retries next interval rather than failing startup; see
     # `services/db/scheduler.py`'s `_tick` docstring.
     start_scheduler()
+    # E8: index notes changed by any writer, not only the editor's timer.
+    from services import index_sweep
+    sweep = index_sweep.start()
     yield
+    if sweep is not None:
+        sweep.cancel()
     stop_scheduler()
     # Safe no-op if the database query engine's pool was never created
     # (database_rows_enabled defaults False, so this is normally the case).
