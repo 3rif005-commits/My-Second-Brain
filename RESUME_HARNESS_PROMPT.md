@@ -1,110 +1,81 @@
-# Paste this to continue the harness work (copy everything inside the fence)
-
-The same text is scheduled to fire automatically overnight (see the bottom).
+# Paste this into a new Claude Code session (copy everything inside the fence)
 
 ```
-Continue the AI harness work on Second Brain, UNATTENDED — I am asleep and will
-not answer. Decide and execute. Branch: feat/ai-harness.
+Continue the AI harness work on Second Brain. Repo: /home/ayoub/projects/second_brain,
+branch feat/ai-harness (last commit a311416 "feat(skills): a Notion-style skills
+editor, built to grow"). Decide and execute; ask me only for decisions that are
+truly mine.
 
-FIRST, FIND WHERE THE LAST RUN STOPPED (this prompt may fire several times):
-  cd /home/ayoub/projects/second_brain && git status --short && git log --oneline -5
-  grep -n "\[~\]" docs/superpowers/plans/HARNESS_PROGRESS.md
-- A task marked [~] with uncommitted changes = a previous run died mid-task.
-  Read the diff, finish it or revert it, never start it over blind.
-- If the "Next action" list in HARNESS_PROGRESS.md is empty, or everything left
-  is blocked on me: run the MORNING SMOKE PASS below once, then stop.
+READ FIRST (only what you need):
+1. docs/superpowers/plans/HARNESS_PROGRESS.md — Decisions table (binding: do not
+   re-ask), open items, session log
+2. HARNESS.md — the rules; each line names the failure that bought it
+3. frontend/components/skills/README.md — the skills editor and its registries
+4. your memory index (MEMORY.md) — especially "Tests touch real notes"
 
-STATE — read in this order, only the parts you need:
-1. docs/superpowers/plans/HARNESS_PROGRESS.md — "Next action", Decisions (binding), Blocked
-2. HARNESS.md — the rules; each names the failure that bought it
-3. the experiment card for the task you pick (docs/superpowers/experiments/)
+WHERE THINGS STAND (all committed):
+- One AI panel for the whole app: the layout mounts it once
+  (components/sidebar/BrainLayoutClient.tsx, context/AIPanelContext.tsx); a
+  workspace note binds it to itself; ⌘K toggles it; round AI button bottom-right.
+- Skills run from the panel on attached files OR links (📎 → Upload files / Add a
+  link): result card → Put in note / Insert here / Try again / Copy / Discard /
+  Undo. "/" works anywhere a word starts; the text around it is the focus.
+- No prices anywhere in the UI.
+- Settings → Skills (sidebar → Settings): Notion-style editor — list + skill page,
+  property rows, tabs (Instructions / Files / Compare with original), ⌘S save,
+  unsaved guard, templates, Try it. Only settings the runtime honours are shown.
+- Study guide instructions are read at call time (edits apply without restart).
+- Supabase PostgREST and Storage both on HTTP/1.1 (h2 GOAWAY killed runs).
 
-THE QUEUE (from HARNESS_PROGRESS.md "Next action", in order):
-0. Truncation: rs-lectures-two hits the 16,000 output-token cap 3/3 on Claude.
-   First detect it (stop_reason == "max_tokens" / finish_reason == "length")
-   and record it on the run + show "note was cut off" in the UI — that is a
-   bug fix, no experiment needed. Then the experiment (card E13): cap 24K vs
-   tighter length rules; primary = pass rate on rs-lectures-two, guardrails =
-   anchors and $/run. n=3.
-1. compare-sources quality: leaked extractor labels ("C-01", "INS-06") and
-   coverage differences called "Contradiction". Guard in the eval first, then
-   change the skill, measure n=3.
-2. E6b (format vs spec length) with anchors/text_chars floors.
-3. The blocked-chip reason when a source FAILED processing.
-4. Study-guide skill migration (unblocked — mastery_guide.py is committed).
-5. Run card.
+DO NEXT, in this order (one change at a time; tests; commit after each):
+1. Lock in:
+   a. Run the one paid check not re-run since the one-panel change (~$0.05):
+      cd frontend && npx playwright test --project=skills-live e2e/one-ai-live.spec.ts
+      Fix what it finds.
+   b. Open a pull request feat/ai-harness → main (443+ commits ahead). Write a
+      clear summary by area (AI panel, skills from the panel, skills editor,
+      workspace, harness/evals, fixes). Do NOT merge it — I review and merge.
+2. Study-guide quality guard: an automated check that generates a guide from the
+   ML Lecture 10 slides and compares it with the version I approved (the
+   pre-harness level: structure, callout boxes, tables, page anchors, depth) —
+   so a prompt or engine change that lowers quality is flagged before I notice
+   it in a real note. Build on backend/evals (score_note, depth floors). One
+   paid run to set the baseline; say what it costs before running more.
+3. E3 prompt caching (docs/superpowers/experiments/, HARNESS_PROGRESS Stage 3.1):
+   the study guide sends ~2,500 words of instructions every run. Card + primary
+   and guardrail metric + n≥3; keep only if the guardrail holds.
 
-BUDGET — HARD LIMITS FOR TONIGHT
-- Model spend: stop starting new paid runs once the night's total passes $3.
-  Sum it from the eval reports' "spent this run" lines (evals/reports/*.json
-  newer than the last session-log entry). rs-lectures-two costs ~$0.10/run.
-- Paid Claude only for runs that DECIDE something (Decisions table rule).
-  Plumbing: --dry-run first, always.
-- Your own tokens: read files with grep/sed ranges, not whole files. Never paste
-  whole reports; print only the summary lines you need.
+Parked by me (do not start): "Turn off" for built-in skills; a separate test
+account (but tests must still clean up after themselves — see memory).
 
-BROWSER CHECKS — CHEAP BY DESIGN
-Every change that touches the UI gets a live check, but through the existing
-Playwright specs (scripted, headless, text results), NOT the claude-in-chrome
-extension and NOT by reading many screenshots:
-- FIRST: `./app.sh status`. If the user's app.sh stack is running (it was on
-  2026-09-24, started 00:11), USE IT — its backend has --reload, so code
-  changes are live — and NEVER stop it. Only stop processes whose pid YOU
-  wrote down when you started them. (A night run killed the user's frontend
-  by stopping "whatever listens on :3000".)
-- Otherwise start your own stack (3.8GB RAM — nothing else running):
-    S=/tmp/sb; mkdir -p $S
-    ~/llama.cpp/build/bin/llama-server -m ~/llama.cpp/models/nomic-embed-text-v1.5.f16.gguf --port 8081 --embedding --ctx-size 2048 --batch-size 2048 -ngl 0 > $S/embed.log 2>&1 &
-    (cd backend && env -u PYTHONPATH ./.venv/bin/uvicorn main:app --port 8000 > $S/backend.log 2>&1 &)
-    (cd frontend && NODE_OPTIONS=--max-old-space-size=2048 npm run build > $S/build.log 2>&1 && npm run start > $S/frontend.log 2>&1 &)
-  Backend runs from .venv (runtime); tests use venv. Never `next dev`.
-  Record each pid as you start it ($!) and stop exactly those — never by
-  port, never pkill a pattern in your own command line. npm leaves a
-  next-server grandchild behind: start with `setsid nohup npm run start … &`
-  and stop with `kill -- -<pid>` (the group), then check :3000 is free.
-- Free specs (no model call): npx playwright test --project=workspace-skills
-- Paid specs, one call each, only after a change they cover:
-    npx playwright test --project=skills-live e2e/selection-skills-live.spec.ts
-    LECTURE_A=backend/evals/corpus/sources/pdf/rs-lecture-2.pdf LECTURE_B=backend/evals/corpus/sources/pdf/rs-lecture-3.pdf npx playwright test --project=skills-live e2e/compare-sources-live.spec.ts
-- Read results as text (--reporter=line, grep passed|failed|Error). Open ONE
-  screenshot only when a test fails and the error text does not explain it.
-- A new UI feature gets a new spec in e2e/, not a manual click-through.
-- Cheaper model: you MAY hand "start the stack, run these specs, report
-  pass/fail + error lines" to ONE subagent with model "haiku" — it only runs
-  and reports, it never edits, so a dead session loses nothing. Everything
-  that writes code stays inline.
+RULES:
+- No subagents; work inline and write artifacts to disk as you go.
+- After each change: run the relevant tests, then give me the CLI commands to
+  check it myself. Never claim something works because it type-checks — verify
+  in the running app (Playwright against a production build).
+- Commit after every task, ending with:
+  Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- Paid Claude runs only for deciding/critical checks; say the cost first.
+  If a credit check returns 400 "credit balance too low": tell me, do not work
+  around it.
+- Tests run against MY real account: never type into or change my notes
+  without undoing it (try/finally); delete every note/skill a test creates.
+- Supabase migrations: write the SQL, I apply it; batch my to-dos at the end.
+- Explain to me briefly and simply; I am not a native English speaker.
 
-MORNING SMOKE PASS (once, at the end of the night)
-Start the stack, run workspace-skills (free) and selection-skills-live (one
-call), stop the stack, and write the result into HARNESS_PROGRESS.md
-"Last session" so I see at a glance whether the app works.
-
-HOW TO WORK
-- One change at a time. After each task: backend suite
-  (cd backend && env -u PYTHONPATH ./venv/bin/python -m pytest -q; the ~448
-  test_db_* errors are a missing local Postgres), vitest if frontend changed,
-  the relevant spec live. Commit after every completed task with this
-  session's attribution lines. Never push.
-- Experiments: a card in docs/superpowers/experiments/, primary + guardrail,
-  n>=3. Guardrail regresses → revert and say why. Kept → one line in HARNESS.md.
-- Anything new and genuinely a decision: take the reversible option, add one
-  line to the Decisions table, carry on.
-- Never claim it works because it type-checks. Say what you verified and how.
-- Do not spawn subagents for anything except the haiku browser runner above.
-
-THINGS ONLY I CAN DO — write them at the END of HARNESS_PROGRESS.md
-"Blocked / needs the user", never stop to ask:
-- Supabase migrations: write the SQL file, end it with a SELECT that proves it
-  applied, and keep working on anything that does not depend on it.
-- More lecture pairs for the corpus: say exactly what and where.
-
-BEFORE YOU STOP (every firing, even a short one)
-Update HARNESS_PROGRESS.md: statuses, "Last session", "Next action", blockers,
-one session-log line with the commit sha. Commit. Stop the stack.
+MACHINE (3.8GB RAM):
+- Backend tests: cd backend && env -u PYTHONPATH ./venv/bin/python -m pytest -q
+  (the test_db_* / Postgres errors are a missing local DB — not failures).
+- Playwright needs a production build, not next dev, and the local generation
+  model stopped when memory is tight:
+  cd frontend && NODE_OPTIONS=--max-old-space-size=2048 npm run build && npm run start
+  Start it with setsid and a pid file; stop only the pids you started.
+- ./app.sh start|stop|status runs my stack (backend on --reload). Never kill my
+  processes; never pkill on a pattern that appears in your own command line —
+  use pgrep -f "[l]lama-server" or kill by pid.
+- A production frontend from the previous session may still hold port 3000
+  (its pid was in that session's scratchpad). If port 3000 is busy and
+  ./app.sh status says the frontend is stopped, ask me before killing it.
+- git warns "bad object refs/seed/stash" during gc; harmless for commits —
+  mention it once, don't fix it without asking.
 ```
-
-## Overnight schedule
-
-Scheduled from the Claude Code session on 2026-09-24 with `CronCreate`: the
-prompt above fires every few hours while that terminal stays open. The jobs
-live only in that session — if Claude Code exits, paste the prompt by hand.
