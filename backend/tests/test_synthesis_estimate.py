@@ -159,3 +159,10 @@ def test_the_expected_output_follows_the_sources():
     assert 15_000 <= _expected_output_tokens(two_lectures) <= 20_000
     assert _expected_output_tokens(400) == 3_000     # a tiny note still writes a guide
     assert _expected_output_tokens(10_000_000) == OUTPUT_CAP
+
+
+def test_estimate_usd_charges_a_cache_write_at_a_premium():
+    """Anthropic reports written cache tokens outside input_tokens; without
+    this the first cached call — the one that pays extra — looked cheaper."""
+    assert pricing.estimate_usd("claude-haiku-4-5", 0, 0,
+                                cache_write_tokens=1_000_000) == 1.25

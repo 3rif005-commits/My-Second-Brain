@@ -47,6 +47,13 @@ NOTE = [{"id": "n1", "user_id": "u1", "title": "Backprop paper", "content": []}]
 
 # ── settle guard ─────────────────────────────────────────────────────────────
 
+
+def _prompt_text(ai) -> str:
+    """The prompt as the model reads it. With the prompt cache on (E3) it is
+    sent in two parts; joined, they are the same text."""
+    content = ai.call_args[0][2][0]["content"]
+    return content if isinstance(content, str) else "".join(p["text"] for p in content)
+
 def test_no_fire_while_a_sibling_is_still_processing():
     db = _db([READY, {"id": "s2", "status": "processing"}], [], NOTE)
     with patch.object(synthesis, "get_supabase", return_value=db), \
@@ -183,7 +190,7 @@ def test_run_synthesis_writes_ready_with_html_and_source_ids():
                       return_value="<h1>Backprop</h1><h2 data-anchor=\"1:p:1\">Why</h2>") as ai:
         synthesis.run_synthesis("n1")
 
-    prompt = ai.call_args[0][2][0]["content"]
+    prompt = _prompt_text(ai)
     assert '=== SOURCE 1: "Backprop paper" (pdf) ===' in prompt
     assert '=== SOURCE 2: "wiki" (website) ===' in prompt
     writes = [c.args[0] for c in db.tables["note_synthesis"].upsert.call_args_list]
@@ -201,7 +208,7 @@ def test_a_textless_non_video_source_is_declared_not_silently_blank():
          patch.object(synthesis, "complete_with_fallback",
                       return_value="<h1>T</h1>") as ai:
         synthesis.run_synthesis("n1")
-    prompt = ai.call_args[0][2][0]["content"]
+    prompt = _prompt_text(ai)
     assert "No text could be extracted" in prompt
 
 
@@ -360,7 +367,7 @@ def test_run_synthesis_on_the_markdown_path_writes_the_html_dialect(monkeypatch)
          patch.object(synthesis, "complete_with_fallback", return_value=md) as ai:
         synthesis.run_synthesis("n1")
 
-    prompt = ai.call_args[0][2][0]["content"]
+    prompt = _prompt_text(ai)
     assert "OUTPUT: Markdown" in prompt or "Markdown" in prompt[:2000]
     writes = [c.args[0] for c in db.tables["note_synthesis"].upsert.call_args_list]
     assert writes[-1]["status"] == "ready"

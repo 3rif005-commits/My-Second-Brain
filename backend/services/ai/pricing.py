@@ -55,12 +55,18 @@ def price_for(model: str | None) -> tuple[float, float] | None:
 
 
 def estimate_usd(model: str | None, input_tokens: int,
-                 output_tokens: int, cached_input_tokens: int = 0) -> float | None:
+                 output_tokens: int, cached_input_tokens: int = 0,
+                 cache_write_tokens: int = 0) -> float | None:
     """Cost of a run, or None when the model is unpriced.
 
     Cached input is billed at roughly a tenth of the input rate; it is passed
     separately rather than folded into `input_tokens` so the caller's numbers
     stay auditable against the provider's own usage fields.
+
+    A cache WRITE costs 1.25x the input rate (5-minute cache), and Anthropic
+    reports those tokens outside `input_tokens`. Leaving them out made a
+    cached run look cheaper than an uncached one on its very first call —
+    the call that pays the premium.
     """
     price = price_for(model)
     if price is None:
@@ -69,6 +75,7 @@ def estimate_usd(model: str | None, input_tokens: int,
     return round(
         (input_tokens * in_rate
          + cached_input_tokens * in_rate * 0.1
+         + cache_write_tokens * in_rate * 1.25
          + output_tokens * out_rate) / 1_000_000,
         6,
     )

@@ -25,6 +25,7 @@ at 06:43); nothing of mine is left running.
   deleted). Branch pushed; PR text in the session scratchpad — the user opens
   it (the active gh account cannot see the repo). **Before merge:** root
   `.env` (HF token) and `backend/venv/` are tracked — user decides.
+- [x] **E3 prompt cache (2026-09-25)** — on by default; see Stage 3.1.
 - [x] **Study-guide quality guard (2026-09-25)** — `python -m evals.quality_guard`
   compares new Lecture 10 guides with the user-approved note
   (`evals/reference/ml-lecture-10.approved.json`, the note's saved blocks):
@@ -200,7 +201,11 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
 
 ## Stage 3 — H2 core harness (one experiment at a time, card per experiment)
 
-- [ ] 3.1 **E3** cache-shaped context assembly (stable prefix, volatile tail, `cache_control`).
+- [x] 3.1 **E3** study-guide instructions as a cached prefix — ON by default
+      (2026-09-25, `SYNTHESIS_PROMPT_CACHE`): lone guide +2.4%, guide within
+      5 min of another −8.6%, quality guard PASS; live in the app. Cache writes
+      are now priced. Chat/skills not cached yet (the plan's 45K-token chat
+      turns are the bigger saving). Card: `experiments/E3-prompt-cache.md`.
 - [x] 3.2 **E4** close the tool loop (code + unit tests; measurement pending credits) (feed results back, round cap, parallel results in one message).
 - [ ] 3.3 **E5** tool-output discipline (25k cap + hint, `response_format`, errors as instructions).
 - [x] 3.4 Gateway merge — **steps A and B done**: agent provider selection

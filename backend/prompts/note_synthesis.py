@@ -172,3 +172,19 @@ SOURCE MATERIAL — {len(sources)} source(s) attached to this note:
 
 Generate the synthesized mastery guide HTML, with one <h1> topic title and
 source-indexed data-anchor attributes on every <h3>, now:"""
+
+
+#: Where the per-note part of the prompt begins. Everything before it — the
+#: study-guide instructions and the synthesis/anchor rules — is the same for
+#: every note, which is what a provider cache can reuse (E3).
+_SOURCE_MARK = "\n---\nSOURCE MATERIAL —"
+
+
+def cache_split(prompt: str) -> tuple[str, str]:
+    """(fixed instructions, this note's sources) — joined, byte for byte the
+    prompt. The text is never changed, only cut in two; with no mark the whole
+    prompt is the second part and nothing is cached."""
+    at = prompt.find(_SOURCE_MARK)
+    if at <= 0:
+        return "", prompt
+    return prompt[:at], prompt[at:]

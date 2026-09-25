@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     # lecture SLIDES it lost more than half the tables (1/3 vs 3/3, E6c) — so
     # it is opt-in (SYNTHESIS_FORMAT=md). Figure and video runs always use html.
     synthesis_format: str = "html"
+    # E3: send the study-guide instructions as a cached prefix (Anthropic
+    # cache_control). A guide started within 5 minutes of another costs −8.6%,
+    # a lone one +2.4%; quality guard held (docs/superpowers/experiments/
+    # E3-prompt-cache.md). SYNTHESIS_PROMPT_CACHE=false to turn off.
+    synthesis_prompt_cache: bool = True
 
     # Spending ceiling for one piece of work: one synthesis, or one agent turn
     # including all of its tool rounds. A run that would exceed it is refused

@@ -127,7 +127,12 @@ def _to_anthropic(messages: list[dict]) -> tuple[str, list[dict]]:
         parts = []
         for part in content:
             if part["type"] == "text":
-                parts.append({"type": "text", "text": part["text"]})
+                block = {"type": "text", "text": part["text"]}
+                # A stable prefix the caller marked for reuse (E3). Only this
+                # dialect has the field; the OpenAI converter drops the flag.
+                if part.get("cache"):
+                    block["cache_control"] = {"type": "ephemeral"}
+                parts.append(block)
             elif part["type"] == "image":
                 parts.append({"type": "image", "source": {
                     "type": "base64",

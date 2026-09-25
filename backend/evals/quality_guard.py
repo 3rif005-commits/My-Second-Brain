@@ -280,7 +280,7 @@ def self_test() -> int:
     return 0 if same.ok and not thin.ok else 1
 
 
-def generate(model: str | None = None) -> tuple[str, bool, dict]:
+def generate(model: str | None = None, cache: bool = False) -> tuple[str, bool, dict]:
     """One guide from the Lecture 10 slides through the app's own path: the
     study-guide prompt as it is on disk right now, the provider chain, the
     32K cap. Returns (html, truncated, cost row)."""
@@ -288,7 +288,8 @@ def generate(model: str | None = None) -> tuple[str, bool, dict]:
     from services.ai import usage as usage_log
     from services.ai.client import last_call_truncated
     from services.ai.router import complete_with_fallback
-    from services.workspace.synthesis import OUTPUT_CAP, _strip_fences
+    from services.workspace.synthesis import (OUTPUT_CAP, _strip_fences,
+                                              synthesis_messages)
 
     blocks = [{"title": SOURCE_TITLE, "kind": "pdf",
                "text": SOURCE.read_text(encoding="utf-8")}]
@@ -298,7 +299,7 @@ def generate(model: str | None = None) -> tuple[str, bool, dict]:
                             user_id=None, eval_case="quality-guard",
                             eval_config="quality-guard"):
         html = _strip_fences(complete_with_fallback(
-            "summarize_text", "", [{"role": "user", "content": prompt}],
+            "summarize_text", "", synthesis_messages(prompt, cache=cache),
             max_tokens=OUTPUT_CAP, model_override=model))
     truncated = last_call_truncated()
     rows = list(usage_log.RECENT)[mark:]
@@ -314,6 +315,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="write --runs guides now — PAID, about $0.055 each on Haiku 4.5")
     ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--model", help="model id override for --generate")
+    ap.add_argument("--cache", action="store_true",
+                    help="send the fixed instructions as a cached prefix (E3)")
     args = ap.parse_args(argv)
 
     if args.self_test:
@@ -330,12 +333,14 @@ def main(argv: list[str] | None = None) -> int:
         REPORTS.mkdir(exist_ok=True)
         spent = 0.0
         for i in range(args.runs):
-            html, cut, row = generate(args.model)
+            html, cut, row = generate(args.model, cache=args.cache)
             out = REPORTS / f"quality-guard-{time.strftime('%Y%m%d-%H%M%S')}.html"
             out.write_text(html, encoding="utf-8")
             usd = row.get("estimated_usd")
             spent += usd or 0.0
             print(f"run {i + 1}: {row.get('model')} · in {row.get('input_tokens')}"
+                  f" · cache write {row.get('cache_write_tokens', 0)}"
+                  f" · cache read {row.get('cache_read_tokens', 0)}"
                   f" · out {row.get('output_tokens')} · "
                   f"{'$' + format(usd, '.4f') if usd is not None else 'cost unknown'}"
                   f" · {out}")

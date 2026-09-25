@@ -18,7 +18,8 @@ import re
 from datetime import datetime, timezone
 
 from core.config import settings
-from prompts.note_synthesis import build_note_synthesis_prompt, split_budget
+from prompts.note_synthesis import (build_note_synthesis_prompt, cache_split,
+                                     split_budget)
 from prompts.note_synthesis_md import build_markdown_synthesis_prompt
 from services.ai.client import complete, last_call_truncated
 from services.ai import budget as budget_guard
@@ -305,8 +306,22 @@ def _complete(prompt: str, video_urls: list[str], has_text: bool,
             logger.info(f"repaired {fixed} section anchor(s)")
         return html
     return _strip_fences(complete_with_fallback(
-        "summarize_text", user_id, [{"role": "user", "content": prompt}],
+        "summarize_text", user_id, synthesis_messages(prompt),
         max_tokens=OUTPUT_CAP, validate=_looks_like_a_mastery_guide))
+
+
+def synthesis_messages(prompt: str, cache: bool | None = None) -> list[dict]:
+    """The one user message a study guide is written from. With the prompt
+    cache on (E3), the fixed instructions go first as their own part, marked
+    for reuse, and this note's sources follow — the same text either way."""
+    if cache is None:
+        cache = settings.synthesis_prompt_cache
+    fixed, rest = cache_split(prompt)
+    if not cache or not fixed:
+        return [{"role": "user", "content": prompt}]
+    return [{"role": "user", "content": [
+        {"type": "text", "text": fixed, "cache": True},
+        {"type": "text", "text": rest}]}]
 
 
 def run_synthesis(note_id: str, mode: str = "replace",

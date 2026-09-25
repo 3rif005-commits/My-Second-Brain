@@ -214,3 +214,10 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   live outside the reload watcher. They now read the skill at call time.
 - A skills editor shows only what the runtime honours. `model_tier` and
   `confirm` are stored but unused, so they are not offered.
+- A cache write is priced (1.25× input) even though Anthropic reports it
+  outside `input_tokens`. The log charged reads and not writes, so the first
+  cached call — the one that pays extra — looked cheaper than an uncached one.
+- A prompt is cached by cutting it, never by rewording it: the study guide's
+  fixed part is sent as its own marked block and the two parts join back
+  byte for byte (E3). Judge a cache by its input tokens — output varies more
+  between runs than the whole saving.
