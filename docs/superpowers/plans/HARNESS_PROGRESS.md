@@ -20,6 +20,23 @@ chat skills; run card (Retry the right job, job + elapsed, Undo).
 re-check E6b on real slides. **Your app.sh stack** is stopped (you stopped it
 at 06:43); nothing of mine is left running.
 **Next action, in order:**
+- [x] **Lock-in (2026-09-25)** — `one-ai-live` green on a production build
+  (~$0.02, screenshots checked: cited answer, Insert + Undo, open note not
+  deleted). Branch pushed; PR text in the session scratchpad — the user opens
+  it (the active gh account cannot see the repo). **Before merge:** root
+  `.env` (HF token) and `backend/venv/` are tracked — user decides.
+- [~] **Study-guide quality guard (2026-09-25)** — `python -m evals.quality_guard`
+  compares a new Lecture 10 guide with the user-approved note
+  (`evals/reference/ml-lecture-10.approved.json`, the note's saved blocks)
+  on ratios: chapters, sections, subsections, callouts (+kinds), tables,
+  math, text, text per section, 17 lecture concepts; anchors and truncation
+  checked on the new guide alone. Floors = 70% of the approved note, set
+  before any run. **Baseline (1 run, $0.049, the user's unchanged prompt):
+  FAIL** — math 6 vs 15 (worked examples show one step, S4→S5 example
+  missing) and text per section 1248 vs 1907 (12 sections vs 9; total text
+  87%). So one run of the unchanged prompt already misses the floors: the
+  guard needs the prompt's own spread (n≥3) before it can call a regression.
+  Waiting on the user: run 2 more (~$0.10) and set floors from the spread.
 - [~] **One AI in the workspace (user, 2026-09-24)** — code in 7c737af; free
   e2e green; the paid live pass (one-ai-live, chat-job-live) is still OPEN: it
   ran against the dev server with the generation model up, swap hit 100%, and
