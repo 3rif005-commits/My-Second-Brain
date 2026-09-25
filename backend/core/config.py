@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     # a lone one +2.4%; quality guard held (docs/superpowers/experiments/
     # E3-prompt-cache.md). SYNTHESIS_PROMPT_CACHE=false to turn off.
     synthesis_prompt_cache: bool = True
+    # E3b: cache marks on agent (chat / workspace AI) requests — Anthropic, and
+    # Anthropic/Gemini models via OpenRouter. The request is ordered for
+    # caching on every provider regardless; this only adds the marks. Sonnet 5:
+    # 64% of a 4-message chat read from cache, −43%; below a model's minimum a
+    # mark costs nothing (docs/superpowers/experiments/E3b-chat-prompt-cache.md).
+    agent_prompt_cache: bool = True
 
     # Spending ceiling for one piece of work: one synthesis, or one agent turn
     # including all of its tool rounds. A run that would exceed it is refused

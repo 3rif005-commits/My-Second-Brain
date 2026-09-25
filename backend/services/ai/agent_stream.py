@@ -177,6 +177,104 @@ def history_to_anthropic(messages: list[dict],
     return "\n".join(p for p in system_parts if p).strip(), out
 
 
+# ── prompt caching (E3b) ─────────────────────────────────────────────────────
+#
+# Every provider reuses the unchanged START of a request. OpenAI, DeepSeek,
+# Gemini and llama.cpp do it on their own; Anthropic (and Anthropic/Gemini
+# models behind OpenRouter) only where a block is marked. Two marks: the end
+# of the system prompt (the same for every message and every user) and the
+# end of the latest message (so the next tool round, or the next message,
+# reads the whole conversation back). A mark on a prefix under the model's
+# minimum (512-4096 tokens) is ignored by the API: no error, no charge.
+
+_EPHEMERAL = {"type": "ephemeral"}
+
+
+def _cache_on() -> bool:
+    from core.config import settings
+    return bool(getattr(settings, "agent_prompt_cache", True))
+
+
+def _mark_last_block(message: dict) -> dict:
+    content = message.get("content")
+    if isinstance(content, str):
+        if not content:
+            return message
+        return {**message, "content": [{"type": "text", "text": content,
+                                        "cache_control": _EPHEMERAL}]}
+    if isinstance(content, list) and content:
+        blocks = [dict(b) for b in content]
+        blocks[-1]["cache_control"] = _EPHEMERAL
+        return {**message, "content": blocks}
+    return message
+
+
+#: Where the engine attached this message's retrieved context (engine.py).
+_TURN_CONTEXT = "\n\n<turn_context>"
+
+
+def _split_question(message: dict) -> dict | None:
+    """The latest question as two blocks — its own text, then the attached
+    context — or None if it carries no context. The next message replays the
+    question WITHOUT the context, so a cache entry is only reusable if it ends
+    at the question, not after the context."""
+    content = message.get("content")
+    if not isinstance(content, str) or _TURN_CONTEXT not in content:
+        return None
+    question, _, context = content.partition(_TURN_CONTEXT)
+    return {**message, "content": [
+        {"type": "text", "text": question, "cache_control": _EPHEMERAL},
+        {"type": "text", "text": _TURN_CONTEXT.lstrip("\n") + context}]}
+
+
+def _mark_conversation(msgs: list[dict]) -> list[dict]:
+    """Mark the end of the latest question (reused by the next message) and,
+    during tool rounds, the newest block (reused by the next round)."""
+    out = list(msgs)
+    last_user = next((i for i in range(len(out) - 1, -1, -1)
+                      if out[i].get("role") == "user"
+                      and isinstance(out[i].get("content"), str)), None)
+    split = _split_question(out[last_user]) if last_user is not None else None
+    if split is not None:
+        out[last_user] = split
+    elif last_user is not None:
+        out[last_user] = _mark_last_block(out[last_user])
+    if out and (last_user is None or last_user != len(out) - 1):
+        out[-1] = _mark_last_block(out[-1])
+    return out
+
+
+def anthropic_cache_marks(system: str, msgs: list[dict]) -> tuple[list | str, list[dict]]:
+    """(system, messages) with the cache marks, Anthropic-shaped: the end of
+    the system prompt, the end of the latest question, and in a tool round the
+    newest tool result. At most three of the API's four."""
+    marked_system: list | str = system
+    if system:
+        marked_system = [{"type": "text", "text": system, "cache_control": _EPHEMERAL}]
+    return marked_system, _mark_conversation(msgs) if msgs else msgs
+
+
+#: OpenRouter forwards `cache_control` on content parts to these families and
+#: caches the rest automatically, like OpenAI does.
+_OPENROUTER_MARKED = ("anthropic/", "google/")
+
+
+def openrouter_cache_marks(model: str, msgs: list[dict]) -> list[dict]:
+    """The system prompt and the latest question, as for Anthropic. A `tool`
+    reply stays a plain string: the OpenAI shape has no parts there."""
+    if not model.startswith(_OPENROUTER_MARKED):
+        return msgs
+    out = list(msgs)
+    if out and out[0].get("role") == "system":
+        out[0] = _mark_last_block(out[0])
+    last_user = next((i for i in range(len(out) - 1, 0, -1)
+                      if out[i].get("role") == "user"
+                      and isinstance(out[i].get("content"), str)), None)
+    if last_user is not None:
+        out[last_user] = _split_question(out[last_user]) or _mark_last_block(out[last_user])
+    return out
+
+
 # ── streaming ────────────────────────────────────────────────────────────────
 
 async def _stream_anthropic(client: httpx.AsyncClient, p: Provider,
@@ -185,6 +283,8 @@ async def _stream_anthropic(client: httpx.AsyncClient, p: Provider,
     names = anthropic_tool_names([_tool_name(t) for t in tools])
     back = {wire: ours for ours, wire in names.items()}
     system, msgs = history_to_anthropic(messages, names)
+    if _cache_on():
+        system, msgs = anthropic_cache_marks(system, msgs)
     payload: dict[str, Any] = {"model": p.model, "messages": msgs,
                                "max_tokens": max_tokens, "stream": True}
     if system:
@@ -260,8 +360,10 @@ async def _stream_anthropic(client: httpx.AsyncClient, p: Provider,
 async def _stream_openai(client: httpx.AsyncClient, url: str, headers: dict,
                          model: str, messages: list[dict], tools: list[dict],
                          max_tokens: int) -> AsyncIterator[dict[str, Any]]:
-    payload: dict[str, Any] = {"model": model,
-                               "messages": _openai_history(messages),
+    history = _openai_history(messages)
+    if "openrouter.ai" in url and _cache_on():
+        history = openrouter_cache_marks(model, history)
+    payload: dict[str, Any] = {"model": model, "messages": history,
                                "max_tokens": max_tokens, "stream": True}
     if tools:
         payload["tools"] = [_openai_tool(t) for t in tools]

@@ -221,3 +221,13 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   fixed part is sent as its own marked block and the two parts join back
   byte for byte (E3). Judge a cache by its input tokens — output varies more
   between runs than the whole saving.
+- What changes per message rides at the END of the latest user message, never
+  in the system prompt. Retrieved notes inside the system prompt made every
+  chat request new from its first line — uncacheable on every provider, not
+  only on the one first measured (E3b; "the user can use any model").
+- A cache mark ends where the next request still agrees. Marking the end of a
+  message whose context is dropped on replay wrote a new entry every message
+  and read none; marking the end of the QUESTION reads 64% of a chat back.
+- Cached tokens are billed once. OpenAI-style `cached_tokens` and DeepSeek's
+  `prompt_cache_hit_tokens` are inside `prompt_tokens`; they are split out,
+  as Anthropic reports them.

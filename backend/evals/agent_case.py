@@ -103,7 +103,10 @@ async def run_agent_case(case: dict, provider, skill_registry,
 
     brain = FakeBrain(notes={n["id"]: dict(n) for n in case.get("notes", [])})
     request = AgentRequest(
-        messages=[ChatMessage(role="user", content=case["query"])],
+        # `history`: earlier messages of the same conversation, as the panel
+        # replays them (text only) — so a case can be one turn of several.
+        messages=[ChatMessage(**m) for m in case.get("history", [])]
+        + [ChatMessage(role="user", content=case["query"])],
         query=case["query"], mode=Mode.API,
         approvals=case.get("approvals", []),
     )

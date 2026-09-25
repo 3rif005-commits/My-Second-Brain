@@ -76,6 +76,7 @@ async def test_a_workspace_turn_reads_the_notes_sources_and_offers_the_jobs():
 
     async def fake_loop(provider, messages_payload, tool_schemas, **kw):
         seen["system"] = messages_payload[0]["content"]
+        seen["last"] = messages_payload[-1]["content"]
         seen["tools"] = [t["name"] for t in tool_schemas]
         seen["kw"] = kw
         yield {"type": "text", "content": "Q-values update [1]."}
@@ -89,7 +90,10 @@ async def test_a_workspace_turn_reads_the_notes_sources_and_offers_the_jobs():
          patch.object(engine, "embed") as embed:
         events = [e async for e in engine.run_turn(_request(), "u1", SkillRegistry({}))]
     embed.assert_not_called()                       # no brain-wide retrieval
-    assert "[1] (Lecture 10, p. 3)" in seen["system"] or "[1] (Lecture 10" in seen["system"]
+    # The excerpts change every message, so they ride on the message, not in
+    # the system prompt a provider could cache (E3b).
+    assert "[1] (Lecture 10" in seen["last"] and "[1] (Lecture 10" not in seen["system"]
+    assert "<sources>" in seen["last"] and "ONE open note" in seen["system"]
     assert "workspace.run_job" in seen["tools"]
     assert "skill.load" in seen["tools"]           # skills by index, loaded on demand
     assert not any(e["type"] == "skill_active" for e in events)   # nothing pasted in

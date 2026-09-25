@@ -64,12 +64,19 @@ async def _run(monkeypatch, mode: str, stream):
     return [e async for e in run_turn(req, user_id="u1", skill_registry=_registry())]
 
 
+
+def _request_text(stream) -> str:
+    """Everything the model read on the first round: system prompt and messages."""
+    return "\n".join(m.get("content") or "" for m in stream.sent[0]["messages"]
+                     if isinstance(m.get("content"), str))
+
+
 @pytest.mark.asyncio
 async def test_inline_mode_pastes_the_matched_skill_body(monkeypatch):
     stream = scripted([{"type": "text", "content": "ok"}])
     events = await _run(monkeypatch, "inline", stream)
 
-    system = stream.sent[0]["messages"][0]["content"]
+    system = _request_text(stream)       # skills ride at the end of the message (E3b)
     assert "THE FULL CITATION INSTRUCTIONS" in system
     assert any(e["type"] == "skill_active" for e in events)
     assert all(t["name"] != "skill.load" for t in stream.sent[0]["tools"])
@@ -80,7 +87,7 @@ async def test_index_mode_sends_the_catalogue_and_no_bodies(monkeypatch):
     stream = scripted([{"type": "text", "content": "ok"}])
     await _run(monkeypatch, "index", stream)
 
-    system = stream.sent[0]["messages"][0]["content"]
+    system = _request_text(stream)
     assert "note-author: Format note content" in system      # the catalogue
     assert "cite-everything: Cite the user's notes" in system
     assert "THE FULL CITATION INSTRUCTIONS" not in system     # not the body
@@ -103,8 +110,8 @@ async def test_the_index_is_much_smaller_than_the_bodies(monkeypatch):
     index_stream = scripted([{"type": "text", "content": "ok"}])
     await _run(monkeypatch, "index", index_stream)
 
-    inline_len = len(inline_stream.sent[0]["messages"][0]["content"])
-    index_len = len(index_stream.sent[0]["messages"][0]["content"])
+    inline_len = len(_request_text(inline_stream))
+    index_len = len(_request_text(index_stream))
     assert index_len < inline_len
 
 

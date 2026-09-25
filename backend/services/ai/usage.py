@@ -121,9 +121,16 @@ def report_openai_usage(data: dict) -> None:
     if not u:
         return
     details = u.get("prompt_tokens_details") or {}
-    report(input_tokens=u.get("prompt_tokens") or 0,
+    # OpenAI / OpenRouter / Gemini-compat say `prompt_tokens_details.cached_tokens`,
+    # DeepSeek says `prompt_cache_hit_tokens` — and in both the cached tokens
+    # are INSIDE prompt_tokens. Split them out, as Anthropic reports them, or
+    # every cached token is billed twice in the estimate.
+    prompt = u.get("prompt_tokens") or 0
+    cached = min(prompt, details.get("cached_tokens")
+                 or u.get("prompt_cache_hit_tokens") or 0)
+    report(input_tokens=prompt - cached,
            output_tokens=u.get("completion_tokens") or 0,
-           cache_read_tokens=details.get("cached_tokens") or 0)
+           cache_read_tokens=cached)
 
 
 @contextmanager

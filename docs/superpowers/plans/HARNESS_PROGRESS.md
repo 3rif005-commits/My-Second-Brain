@@ -26,13 +26,19 @@ at 06:43); nothing of mine is left running.
   it (the active gh account cannot see the repo). **Before merge:** root
   `.env` (HF token) and `backend/venv/` are tracked — user decides.
 - [x] **E3 prompt cache (2026-09-25)** — on by default; see Stage 3.1.
+- [x] **E3b chat caching for any model (2026-09-25, $0.17)** — per-message
+  context (retrieved notes, pasted skills, source excerpts) moved from the
+  system prompt to the end of the latest message; Anthropic/OpenRouter marks
+  end at the question. Sonnet 5 4-message chat: 64% read, −43%. Haiku: under
+  its minimum, marks cost nothing. Agent family 9/9; one-ai-live green.
+  OpenAI-style cached tokens no longer billed twice. Card:
+  `experiments/E3b-chat-prompt-cache.md`.
 - [x] **Queue checked against the run log (2026-09-25, free)** — `ai_runs`,
   last 400 non-eval rows: chat agent calls 209, input median 3,218 tokens,
   max 3,792; workspace agent 4.8–5.4K; study guides 8.5K in / 9.3K out.
-  * **Chat caching: not possible on Haiku 4.5** — no chat call reaches the
-    4,096-token cache minimum. The plan's "45K tokens per turn" is stale.
-    Revisit if the system prompt grows past ~4K or the model changes (Sonnet
-    5 / Opus 5 cache from 512–1024).
+  * ~~Chat caching: not possible on Haiku 4.5~~ — **wrong framing, the user
+    corrected it the same day**: the app runs on any model. Done as E3b
+    (below): chat requests now cache on every provider.
   * **E5 (cap tool output): nothing to cut today** — the largest chat call,
     tool results included, is 3.8K tokens. Parked until a tool returns big.
   * **Workspace start page**: already honest since b131342 ("Nothing is
