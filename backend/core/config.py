@@ -81,8 +81,9 @@ class Settings(BaseSettings):
     # writer — editor, AI, import, Android). 0 turns it off. Needs migration 021.
     index_sweep_seconds: int = 60
     # E9: a study guide from at least this many sources is planned, then
-    # written chapter by chapter. 0 = always one call. Off until measured.
-    synthesis_chapters_min_sources: int = 0
+    # written chapter by chapter (3 lectures: each 132-206% of its solo depth
+    # vs 55-106% in one call, about 2x the cost). 0 = always one call.
+    synthesis_chapters_min_sources: int = 3
 
     # Spending ceiling for one piece of work: one synthesis, or one agent turn
     # including all of its tool rounds. A run that would exceed it is refused

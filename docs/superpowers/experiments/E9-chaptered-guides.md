@@ -1,7 +1,8 @@
 # E9 — study guides from 3+ sources: plan, then write chapter by chapter
 
-**Status:** 2026-09-25 — built and measured; **switched OFF, waiting on the
-user** (it doubles the cost of a 3-source guide). Spent $0.99 (solo + one-call
+**Status:** 2026-09-26 — **ON for guides from 3+ sources** (user:
+"go ahead with your recommendation"; `SYNTHESIS_CHAPTERS_MIN_SOURCES=3`, 0 turns
+it off). About 2× the cost of such a guide. Spent $0.99 (solo + one-call
 guides $0.51, chaptered $0.51 — lecture 10 solo guides reused from the quality
 guard calibration). The study-guide instructions were not edited.
 
@@ -50,6 +51,13 @@ them. A bad plan falls back to one call.
   instructions are cached (E3). Faster: 2 min vs 3.5 min (parallel).
 - Guides kept for reading: `backend/evals/reference/e9/`.
 
-## Decision (user)
-Switch: `SYNTHESIS_CHAPTERS_MIN_SOURCES` (0 = off; 3 = guides from 3+ sources).
-Single-source guides are never affected.
+## Decision (user, 2026-09-26)
+On from 3 sources. Single- and two-source guides are never affected.
+- The pre-run estimate (and so the per-run cost cap) follows the chaptered
+  shape, calibrated on these runs: IML 08+09+10 estimated $0.246, measured
+  $0.246–0.263. The one-call estimate ($0.11) would have let the cap stop a
+  large guide half-way.
+- Verified: the functions end to end with the real model (the eval), and the
+  app's wiring by tests (3 sources → chapters, 2 → one call, a failed plan →
+  one call, a cut-off chapter marks the guide). **Not yet run through the
+  running app with three real uploads** (~$0.25).

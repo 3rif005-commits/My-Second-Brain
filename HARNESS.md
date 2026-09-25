@@ -252,3 +252,11 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   blocks were under 40 characters (a heading, a bullet) and tables and
   formulas were never indexed. Hits with their neighbours: 15/20 -> 20/20
   correct answers, 23% cheaper (E8b).
+- Find out whether a thin note is an input or an output problem before
+  choosing the fix. Three lectures in one call came out at 55-80% depth each
+  without touching the cap — the model wrote shorter, so reading each source
+  separately would have changed nothing. Writing each chapter in its own call
+  did (132-206%), at twice the cost (E9).
+- An estimate follows the shape of the run it prices. The one-call estimate
+  priced a chaptered guide at $0.11; it cost $0.25, and the per-run cap reads
+  the estimate.

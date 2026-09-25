@@ -172,6 +172,12 @@ def _uses_markdown(figures: list | None = None, video_urls: list | None = None) 
     return settings.synthesis_format == "md" and not figures and not video_urls
 
 
+#: E9, IML 08+09+10 (36.5K source characters): 38-44K output tokens when
+#: written chapter by chapter, in 9-10 chapters.
+_CHAPTERED_TOKENS_PER_SOURCE_CHAR = 1.2
+_CHAPTERS_PER_SOURCE = 3
+
+
 def _expected_output_tokens(source_chars: int, markdown: bool = False) -> int:
     tokens = tokens_from_chars(source_chars)
     if markdown:
@@ -206,6 +212,18 @@ def estimate_synthesis(note_id: str, user_id: str) -> dict:
     md = _uses_markdown()
     input_tokens = tokens_from_chars(source_chars + _prompt_overhead_chars(md))
     output_tokens = _expected_output_tokens(source_chars, markdown=md)
+    cached_tokens = 0
+    if not md and 0 < settings.synthesis_chapters_min_sources <= len(sources):
+        # Written chapter by chapter (E9), calibrated on the measured runs
+        # (IML 08+09+10: estimate $0.246, measured $0.246-0.263). The sources
+        # are read twice (plan + chapters); the instructions once per chapter,
+        # all but the first from the cache; output is no longer one call's cap.
+        # Underestimating would let the per-run cap stop a guide half-way.
+        overhead = tokens_from_chars(_prompt_overhead_chars(md))
+        chapters = _CHAPTERS_PER_SOURCE * len(sources)
+        input_tokens = tokens_from_chars(2 * source_chars) + overhead
+        cached_tokens = overhead * (chapters - 1)
+        output_tokens = int(source_chars * _CHAPTERED_TOKENS_PER_SOURCE_CHAR)
     provider = pick("summarize_text", user_id)
     model = provider.model if provider else None
     return {
@@ -217,7 +235,7 @@ def estimate_synthesis(note_id: str, user_id: str) -> dict:
         "output_tokens": output_tokens,
         "provider": provider.provider if provider else None,
         "model": model,
-        "usd": estimate_usd(model, input_tokens, output_tokens),
+        "usd": estimate_usd(model, input_tokens, output_tokens, cached_tokens),
     }
 
 

@@ -62,3 +62,46 @@ def test_the_guide_has_one_title_and_the_chapters_in_order():
 def test_an_unreadable_plan_means_one_call():
     with patch("services.ai.router.complete_with_fallback", return_value="not json"):
         assert chaptered.synthesize_chaptered(SOURCES, "u") is None
+
+
+# ── wiring: the app's guide path ────────────────────────────────────────────
+
+from services.workspace import synthesis  # noqa: E402
+
+THREE = SOURCES + [{"title": "L10", "kind": "pdf", "text": "[page 1]\nQ-learning"}]
+
+
+def test_three_sources_are_written_by_chapter():
+    with patch("services.workspace.chaptered.synthesize_chaptered",
+               return_value=("<h1>T</h1><h2>A</h2>", False)) as ch, \
+         patch.object(synthesis, "complete_with_fallback") as one_call:
+        html = synthesis._complete("prompt", [], True, "u", sources=THREE)
+    assert html == "<h1>T</h1><h2>A</h2>"
+    ch.assert_called_once()
+    one_call.assert_not_called()
+
+
+def test_two_sources_stay_one_call():
+    with patch("services.workspace.chaptered.synthesize_chaptered") as ch, \
+         patch.object(synthesis, "complete_with_fallback", return_value="<h1>T</h1><h2>x</h2>"):
+        synthesis._complete("prompt", [], True, "u", sources=SOURCES)
+    ch.assert_not_called()
+
+
+def test_a_failed_plan_falls_back_to_one_call():
+    with patch("services.workspace.chaptered.synthesize_chaptered", return_value=None), \
+         patch.object(synthesis, "complete_with_fallback", return_value="<h1>T</h1><h2>x</h2>") as one:
+        assert synthesis._complete("prompt", [], True, "u", sources=THREE).startswith("<h1>T")
+    one.assert_called_once()
+
+
+def test_a_cut_off_chapter_marks_the_guide_as_cut_off():
+    from services.ai.client import _last_stop, last_call_truncated
+    token = _last_stop.set(None)
+    try:
+        with patch("services.workspace.chaptered.synthesize_chaptered",
+                   return_value=("<h1>T</h1><h2>A</h2>", True)):
+            synthesis._complete("prompt", [], True, "u", sources=THREE)
+        assert last_call_truncated()
+    finally:
+        _last_stop.reset(token)                 # never leak into later tests

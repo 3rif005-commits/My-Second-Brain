@@ -166,3 +166,21 @@ def test_estimate_usd_charges_a_cache_write_at_a_premium():
     this the first cached call — the one that pays extra — looked cheaper."""
     assert pricing.estimate_usd("claude-haiku-4-5", 0, 0,
                                 cache_write_tokens=1_000_000) == 1.25
+
+
+def test_a_chaptered_guide_is_estimated_at_its_measured_size():
+    """E9: from 3 sources the guide is written chapter by chapter — ~1.75x
+    the output, not capped by one call. The per-run cap must see that."""
+    three = [{"id": f"s{i}", "title": f"L{i}", "kind": "pdf"} for i in range(3)]
+    two = three[:2]
+    text = "x" * 40_000
+    with patch.object(synthesis, "source_text_from_chunks", return_value=text), \
+         patch.object(synthesis, "pick", return_value=_provider()):
+        with patch.object(synthesis, "ready_sources", return_value=three):
+            chaptered = synthesis.estimate_synthesis("n1", "u1")
+        with patch.object(synthesis, "ready_sources", return_value=two):
+            one_call = synthesis.estimate_synthesis("n1", "u1")
+    assert chaptered["output_tokens"] > synthesis.OUTPUT_CAP      # not one call's cap
+    assert chaptered["output_tokens"] == int(120_000 * 1.2)
+    assert one_call["output_tokens"] <= synthesis.OUTPUT_CAP
+    assert chaptered["usd"] > 2 * one_call["usd"]
