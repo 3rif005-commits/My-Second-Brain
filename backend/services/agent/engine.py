@@ -70,7 +70,9 @@ def _build_knowledge_context_xml(notes: list[dict]) -> str:
         nid = n.get("id", "")
         title = n.get("title", "")
         link = n.get("deep_link", f"/brain/{nid}")
-        snippet = (n.get("content_text") or n.get("summary") or "")[:400]
+        # The retriever sizes the passage (a block with its neighbours, E8b);
+        # this cap only guards against an oversized one.
+        snippet = (n.get("content_text") or n.get("summary") or "")[:1000]
         parts.append(
             f'  <note id="{nid}" title="{title}" deep_link="{link}">\n'
             f'    {snippet}\n'

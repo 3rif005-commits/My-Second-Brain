@@ -247,3 +247,8 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   indexing itself bumps `updated_at`.
 - A local-only note never reaches a cloud model — including for background
   work like its search descriptor.
+- Measure what the model is shown before tuning a cut. The suspected
+  300-character snippet cap hit 3% of blocks; the real loss was that half the
+  blocks were under 40 characters (a heading, a bullet) and tables and
+  formulas were never indexed. Hits with their neighbours: 15/20 -> 20/20
+  correct answers, 23% cheaper (E8b).

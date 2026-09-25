@@ -34,9 +34,32 @@ def _walk(blocks: list[dict], out: list[dict]) -> None:
             _walk(children, out)
 
 
-def _extract_text(block: dict) -> str:
+def _inline_text(content) -> str:
+    """Text of inline content, links included (a link's words were lost)."""
     parts: list[str] = []
-    for inline in block.get("content") or []:
-        if isinstance(inline, dict) and inline.get("type") == "text":
+    for inline in content or []:
+        if not isinstance(inline, dict):
+            continue
+        if inline.get("type") == "text":
             parts.append(inline.get("text", ""))
-    return " ".join(parts).strip()
+        elif isinstance(inline.get("content"), list):          # link, etc.
+            parts.append(_inline_text(inline["content"]))
+    return " ".join(p for p in parts if p)
+
+
+def _extract_text(block: dict) -> str:
+    """A block's searchable text. Tables and formulas used to be skipped —
+    a table's content is a dict of rows and a formula lives in props.latex —
+    so a study guide's rates, comparisons and equations were never found
+    (E8b)."""
+    content = block.get("content")
+    if block.get("type") == "table" and isinstance(content, dict):
+        rows = []
+        for row in content.get("rows") or []:
+            cells = [_inline_text(c.get("content") if isinstance(c, dict) else c)
+                     for c in row.get("cells") or []]
+            rows.append(" | ".join(c.strip() for c in cells))
+        return "\n".join(r for r in rows if r.strip(" |")).strip()
+    if block.get("type") == "math":
+        return str((block.get("props") or {}).get("latex") or "").strip()
+    return _inline_text(content).strip()

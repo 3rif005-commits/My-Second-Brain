@@ -111,10 +111,13 @@ async def run_agent_case(case: dict, provider, skill_registry,
         approvals=case.get("approvals", []),
     )
 
-    retrieved = [{"id": n["id"], "title": n["title"],
-                  "content_text": n.get("content_text", ""),
-                  "deep_link": f"/brain/{n['id']}"}
-                 for n in case.get("notes", []) if n.get("retrieved", True)]
+    # `retrieved`: what the search returns, when a case measures the search
+    # itself (E8b) rather than handing the model whole notes.
+    retrieved = case.get("retrieved") or [
+        {"id": n["id"], "title": n["title"],
+         "content_text": n.get("content_text", ""),
+         "deep_link": f"/brain/{n['id']}"}
+        for n in case.get("notes", []) if n.get("retrieved", True)]
 
     patches = [
         patch.object(engine, "execute_brain_tool", brain.execute),

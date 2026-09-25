@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "note": "E8b chat-answer eval. The brain is two real study-guide notes (corpus/notes/*.json, snapshotted 2026-09-25). Each answer must contain every group (any one alternative per group; case-insensitive, unicode minus = '-', thousands commas ignored). 'where' says where the fact lives: text, table or math — tables and formulas were not indexed before E8b.",
+  "questions": [
+    {"q": "What was the COMPAS false positive rate for Black defendants compared with white defendants?", "where": "table", "expect": [["45"], ["28"]]},
+    {"q": "Which fairness metric does COMPAS pass, and which one does it fail?", "where": "table", "expect": [["calibration"], ["equalized odds", "equalised odds"]]},
+    {"q": "Why is reinforcement learning a good fit for game AI like AlphaGo?", "where": "table", "expect": [["opponent", "adapt", "no fixed answer"]]},
+    {"q": "Which question tells you whether you have aggregation bias?", "where": "table", "expect": [["multiple models", "separate models", "split"]]},
+    {"q": "What is the in-processing way to fix bias, and how difficult is it?", "where": "table", "expect": [["constraint"], ["hard", "difficult"]]},
+    {"q": "In the worked example, what is the new value of Q(S1, down) after the update?", "where": "math", "expect": [["0.59"]]},
+    {"q": "In the worked example, what is the observed Q-value for going down from S1?", "where": "math", "expect": [["-0.85"]]},
+    {"q": "With gamma = 0.9, what does the update give for Q(S4, right)?", "where": "math", "expect": [["0.655"]]},
+    {"q": "What is the formula for the temporal difference error?", "where": "math", "expect": [["observed"], ["expected"]]},
+    {"q": "What is the temporal difference error in the S4 to S5 example?", "where": "math", "expect": [["-2.58"]]},
+    {"q": "When did Amazon stop using its hiring tool?", "where": "text", "expect": [["2017"]]},
+    {"q": "How did Optum change its algorithm after the problem was found?", "where": "text", "expect": [["chronic condition"]]},
+    {"q": "What was the worst error rate for darker-skinned women in Gender Shades?", "where": "text", "expect": [["34.7"]]},
+    {"q": "How many faces were in the balanced dataset built for Gender Shades?", "where": "text", "expect": [["1270"]]},
+    {"q": "By how much did IBM reduce its error rate in the follow-up audit?", "where": "text", "expect": [["17.73"]]},
+    {"q": "How many defendants did ProPublica look at, and in which county?", "where": "text", "expect": [["7000"], ["broward"]]},
+    {"q": "Which company developed COMPAS?", "where": "text", "expect": [["northpointe"]]},
+    {"q": "Give an example of historical bias in lending.", "where": "text", "expect": [["zip code", "zip-code", "redlin", "neighbourhood", "neighborhood"]]},
+    {"q": "What does a discount factor of zero mean for the robot?", "where": "text", "expect": [["immediate"]]},
+    {"q": "What was the reweighting fix proposed for the Amazon hiring bias?", "where": "text", "expect": [["weight"], ["female", "women"]]}
+  ]
+}

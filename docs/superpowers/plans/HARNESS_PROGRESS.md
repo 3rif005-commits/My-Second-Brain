@@ -271,9 +271,20 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       had no descriptor (chat could not find them); user: current notes are
       test data, fix it for new ones → backend index sweep over any writer
       (migration 021, **user applies**), local-only notes no longer sent to
-      the cloud for a descriptor. Card: `experiments/E8-hybrid-retrieval.md`.
+      the cloud for a descriptor. **E8b:** the chat was shown 40-character
+      fragments and tables/formulas were never indexed; now indexed, and hits
+      come with their neighbours — chat answers 15/20 -> 20/20, −23% cost
+      (`evals/chat_answers.py`). Card: `experiments/E8-hybrid-retrieval.md`.
 - [ ] 4.5 **E9** map-reduce for 3+ sources.
-- [ ] 4.6 **E10** model/effort tiering incl. local Gemma fast tier.
+- [ ] 4.6 **E10** model routing — **deferred to the END by the user
+      (2026-09-25).** The app runs on any model (Claude or not, local too), so
+      routing must be designed across providers, not tuned for one: which job
+      goes to which tier (fast / standard / deep / local), how a user's own
+      model choice overrides it, and what each job needs from a model (tools,
+      vision, long output). Do it after the other experiments. Groundwork
+      already in place: the provider chain (`services/ai/providers.py`),
+      per-job candidates (`services/ai/router.py`), model overrides now reach
+      the provider that serves them (E8), and per-provider caching (E3b).
 
 ## Stage 5 — H4 (not before Stage 4 is measured)
 

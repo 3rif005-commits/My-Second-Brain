@@ -83,9 +83,37 @@ What matters is that notes made from now on are always findable. So:
   written by the cloud model. It is now written without any model (title +
   first block); embeddings were already local.
 
+## E8b — what the chat is shown (answer-quality eval, $0.36)
+Suspected: the 300-character cut. Measured first (free): of 1,000 real note
+blocks, **median 39 characters, 90% under 122** — the cut hit 3%. The real
+problem was the opposite: a hit was a heading or one bullet, and the model
+answered from the title of the explanation it needed. And the block chunker
+**skipped tables, formulas and link text** (a table's content is a dict of
+rows, a formula lives in props.latex) — a study guide's rates and equations
+were never searchable.
+
+Fix: tables (row by row), formulas and link text are indexed; each hit is
+shown with its neighbours up to 700 characters (text under a heading first),
+overlapping windows merged (`retriever.with_neighbours`).
+
+`python -m evals.chat_answers` — 20 questions with known facts over two real
+study-guide notes, through the real engine on Haiku; the model may still open
+a whole note (its recovery path):
+
+| arm | correct | in tables | in formulas | in text | opened a note | rounds | cost |
+|---|---|---|---|---|---|---|---|
+| before | 15/20 | 4/5 | 2/5 | 9/10 | 6 | 1.70 | $0.202 |
+| **after** | **20/20** | 5/5 | 5/5 | 10/10 | **0** | **1.10** | **$0.155** |
+
+More context per hit and still **23% cheaper**: the model stopped fetching
+whole notes to find what the fragments left out. The misses before were real
+("the notes are truncated", "I don't have a note on that" — the fact was
+there). Real data: "Bellman equation" now returns 9 passages of ~600
+characters with the definition and formula, not 15 fragments of which three
+were the same heading. Existing notes keep their old blocks until their
+content changes (the index sweep re-indexes by content); new notes get the
+full indexing.
+
 ## Not done
 - Pass 1 (note choice) is not modelled by this eval.
-- Snippets are cut to 300 characters in the app-wide chat (the model sees a
-  third of each block). Changing it needs an answer-quality check, not a
-  ranking one.
 - Reranking with a cross-encoder: too heavy for this machine's RAM.

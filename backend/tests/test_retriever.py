@@ -150,9 +150,8 @@ def test_a_block_without_an_embedding_is_found_by_its_words():
                     [dict(BLOCKS[0], dist=0.2)], BLOCKS + [unembedded])
     with patch("services.retriever.get_supabase", return_value=db):
         results = retrieve([0.1] * 768, "u", query="Kepler orbit")
-    found = {r["deep_link"]: r for r in results}
-    assert "/brain/n1#b3" in found                 # invisible to the embedding before
-    assert found["/brain/n1#b3"]["similarity"] == 0.0
+    # invisible to the embedding before; now its text reaches the model
+    assert any("Kepler" in r["content_text"] for r in results)
 
 
 def test_without_the_question_text_the_embedding_order_stands():
@@ -162,3 +161,34 @@ def test_without_the_question_text_the_embedding_order_stands():
         results = retrieve([0.1] * 768, "u")
     assert results[0]["deep_link"] == "/brain/n1#b1"
     db.table.assert_not_called()
+
+
+# ── E8b: a hit is shown with its neighbours ─────────────────────────────────
+
+from services.retriever import with_neighbours  # noqa: E402
+
+NOTE = [{"note_id": "n1", "block_id": f"b{i}", "chunk_index": i, "chunk_text": t}
+        for i, t in enumerate(["Intro", "The Bellman Equation",
+                               "Q_obs = R + gamma * max Q", "gamma weighs the future",
+                               "Episodes", "An episode is one run"])]
+
+
+def test_a_heading_hit_brings_the_text_under_it():
+    [(hit, text)] = with_neighbours([NOTE[1]], NOTE, budget=60)
+    assert "The Bellman Equation\nQ_obs = R + gamma * max Q" in text
+    assert hit is NOTE[1]
+
+
+def test_overlapping_hits_are_shown_once():
+    out = with_neighbours([NOTE[1], NOTE[2]], NOTE, budget=80)
+    assert len(out) == 1                            # NOTE[2] is inside the first window
+
+
+def test_the_window_stays_within_budget():
+    [(_, text)] = with_neighbours([NOTE[3]], NOTE, budget=30)
+    assert len(text) <= 30 + 5
+
+
+def test_a_hit_from_an_unknown_note_is_kept_as_is():
+    stray = {"note_id": "zz", "block_id": "x", "chunk_index": 0, "chunk_text": "alone"}
+    assert with_neighbours([stray], NOTE) == [(stray, "alone")]
