@@ -17,6 +17,7 @@ describe("skills editor model", () => {
     expect(isDirty(s, draftOf(s))).toBe(false);
     expect(isDirty(s, { ...draftOf(s), body: "Rules!" })).toBe(true);
     expect(isDirty(s, { ...draftOf(s), icon: "🎓" })).toBe(true);
+    expect(isDirty(s, { ...draftOf(s), multi_source: "chapters" })).toBe(true);   // E9
     expect(isDirty(null, null)).toBe(false);
   });
 

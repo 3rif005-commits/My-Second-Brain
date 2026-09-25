@@ -315,6 +315,20 @@ def _price_chat_jobs(note_id: str, user_id: str, skills: list[Skill]) -> list[di
     return out
 
 
+#: The first word after `/study-guide` can choose how a guide from several
+#: sources is written, for this run only (E9): "/study-guide deep …".
+METHOD_WORDS = {"deep": "chapters", "chapters": "chapters", "chaptered": "chapters",
+                "quick": "single", "single": "single", "one-pass": "single"}
+
+
+def split_method(focus: str) -> tuple[str | None, str]:
+    """("chapters" | "single" | None, the rest of the focus)."""
+    words = (focus or "").strip().split(maxsplit=1)
+    if words and words[0].lower() in METHOD_WORDS:
+        return METHOD_WORDS[words[0].lower()], (words[1] if len(words) > 1 else "")
+    return None, (focus or "").strip()
+
+
 def _focused(prompt: str, focus: str) -> str:
     focus = (focus or "").strip()
     if not focus:
@@ -348,11 +362,18 @@ def produce_skill_result(note_id: str, user_id: str, name: str,
         if name == STUDY_GUIDE:
             from prompts.note_synthesis import build_note_synthesis_prompt
             from services.workspace import synthesis
-            budget_guard.check(synthesis.estimate_synthesis(note_id, user_id)["usd"],
+            from services.workspace.guide_check import check_guide
+            chosen, focus = split_method(focus)
+            method = synthesis.resolve_method(len(blocks), chosen)
+            budget_guard.check(synthesis.estimate_synthesis(note_id, user_id, method)["usd"],
                                what="Writing the study guide")
             prompt = _focused(build_note_synthesis_prompt(blocks), focus)
-            html = synthesis._complete(prompt, [], True, user_id)
+            # `sources` lets the guide be written chapter by chapter (E9) —
+            # without it this, the AI panel's path, always wrote one call.
+            html = synthesis._complete(prompt, [], True, user_id, sources=blocks,
+                                       method=method, focus=focus)
             truncated = last_call_truncated()
+            check = check_guide(html, blocks, truncated)
             if truncated:
                 from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML
                 html += TRUNCATION_NOTICE_HTML
@@ -369,11 +390,14 @@ def produce_skill_result(note_id: str, user_id: str, name: str,
             if truncated:
                 answer = answer.rstrip() + "\n\n" + TRUNCATION_NOTICE_MD
             html = markdown_to_html(answer)
+            check, method = None, None
 
     rows = list(usage_log.RECENT)[mark:]
     spent = [r["estimated_usd"] for r in rows if r.get("estimated_usd") is not None]
     return {"skill": name, "title": job_title(name), "html": html,
             "source_ids": source_ids, "truncated": truncated,
+            # study guide only: how it was written, and the quality check
+            "method": method, "check": check,
             "input_tokens": sum(r.get("input_tokens") or 0 for r in rows),
             "output_tokens": sum(r.get("output_tokens") or 0 for r in rows),
             "usd": round(sum(spent), 4) if spent else None}

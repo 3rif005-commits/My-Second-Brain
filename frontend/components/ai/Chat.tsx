@@ -678,6 +678,12 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                 onUndo={() => void undoJob(it.id, it.job)}
                 onRetry={() => void runJob({ noteId: it.job.noteId, title: it.job.noteTitle },
                   it.job.skill, it.job.focus, `/${it.job.skill} ${it.job.focus}`.trim(), it.id)}
+                onRetryDeep={() => {
+                  // "deep" as the first word: this run only, chapter by chapter (E9).
+                  const focus = `deep ${it.job.focus.replace(/^(deep|quick|chapters|single)\b\s*/i, "")}`.trim();
+                  void runJob({ noteId: it.job.noteId, title: it.job.noteTitle },
+                    it.job.skill, focus, `/${it.job.skill} ${focus}`, it.id);
+                }}
                 onDiscard={() => setItems((prev) => prev.filter((p) => p.id !== it.id))}
                 onOpen={(href) => router.push(href)}
               />

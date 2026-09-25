@@ -128,6 +128,10 @@ def summarize_result(result: dict) -> str:
         n = len(re.findall(pattern, html))
         if n:
             parts.append(f"{n} {one if n == 1 else many}")
+    thin = (result.get("check") or {}).get("thin") or []
+    if thin:
+        # So the assistant can say it too; the card offers the fix (E9).
+        parts.append("may be thin on " + ", ".join(f"“{t}”" for t in thin))
     return " · ".join(parts) or "ready"
 
 

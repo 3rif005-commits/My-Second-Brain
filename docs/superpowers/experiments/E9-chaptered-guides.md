@@ -61,3 +61,39 @@ On from 3 sources. Single- and two-source guides are never affected.
   app's wiring by tests (3 sources → chapters, 2 → one call, a failed plan →
   one call, a cut-off chapter marks the guide). **Not yet run through the
   running app with three real uploads** (~$0.25).
+
+## The user's choice, not a forced method (2026-09-26)
+User: make the method something the user calls, edits and checks — "we do
+not force any method". Built:
+- **Setting** on the study-guide skill, Settings → Skills → "Several sources":
+  Automatic (default: chapters from 3 sources) · One pass · Chapter by
+  chapter. Saved in the user's copy as `multi_source`; the instructions stay
+  byte for byte (tested). Only the study guide shows it.
+- **Per run**: `/study-guide deep` (chapter by chapter) or `/study-guide
+  quick` (one pass) — the first word of the focus; the rest stays the focus
+  and now reaches the planner and every chapter.
+- **Editable planner**: `skills/study-guide/reference/chapter-plan.md`
+  (Files tab), read at call time.
+- **Quality check on every guide** (`services/workspace/guide_check.py`, no
+  model): per source — sections, concepts, guide text per source character —
+  and form (one title, an Overview per chapter, known boxes, page links, cut
+  off). A slide-like source (< 1,500 chars/page) under 1.0 text per character
+  is "thin" (calibrated: solo 1.19–1.96, chaptered 1.69–2.72, one call for
+  three 0.89–1.37; flags exactly the thin one-call lectures, no solo or
+  chaptered one). The card says so and offers "Try again chapter by
+  chapter"; the assistant hears it too. Nothing is blocked.
+- **Bug found on the way:** the AI panel's `/study-guide` called the writer
+  without its sources, so the chapter method switched on the day before never
+  ran there — only on the older Generate path. Fixed; the panel is the path
+  users take.
+- The note scorer moved into the app (`services/workspace/note_score.py`;
+  `evals/score_note.py` re-exports it): the card's check uses it.
+- **Live, in the running app** (`e2e/panel-guide-three-live.spec.ts`, ~$0.25 a
+  run): three real IML PDFs attached in the AI panel, `/study-guide` → card
+  "Written chapter by chapter · every source covered", 9 chapters, 76 boxes,
+  24 tables; Settings → Skills shows "Several sources: Automatic". The first
+  live run found a guide with page links pointing nowhere: a malformed or
+  foreign anchor ("2:p:3-5") was not recognised by the anchor repair, which
+  then ADDED a second anchor beside it — the bad one still won. Bad anchors
+  are now dropped before repair, and chaptered guides are repaired like the
+  Markdown path. The second run was clean.

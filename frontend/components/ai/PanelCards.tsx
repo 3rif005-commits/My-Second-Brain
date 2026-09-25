@@ -52,7 +52,45 @@ async function copyResult(html: string) {
   }
 }
 
-export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, onApply, onUndo, onRetry, onDiscard, onOpen }: {
+/** The study guide's check (E9): quiet when all is well; names a thin source
+ *  and offers to write it chapter by chapter — the user decides. */
+export function GuideCheckLine({ result, busy, onRetryDeep }: {
+  result: JobResult;
+  busy: boolean;
+  onRetryDeep?: () => void;
+}) {
+  const c = result.check;
+  if (!c) return null;
+  const how = result.method === "chapters" ? "Written chapter by chapter" : "Written in one pass";
+  if (!c.thin.length && !c.problems.length) {
+    return (
+      <p className="text-[11.5px] text-gray-400" data-testid="guide-check">
+        <CheckCircle2 size={11} className="inline -mt-0.5 text-emerald-500" /> {how} · every source covered
+      </p>
+    );
+  }
+  const names = c.thin.map((t) => `“${t}”`).join(", ");
+  return (
+    <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 px-2.5 py-2 space-y-1.5" data-testid="guide-check">
+      <p className="text-[11.5px] text-amber-700/80 dark:text-amber-300/80">{how}</p>
+      {c.thin.length > 0 && (
+        <p className="text-[12px] text-amber-800 dark:text-amber-200">
+          {names} got less depth than {c.thin.length === 1 ? "it" : "they"} would on {c.thin.length === 1 ? "its" : "their"} own.
+        </p>
+      )}
+      {c.problems.map((p) => (
+        <p key={p} className="text-[12px] text-amber-800 dark:text-amber-200">Check: {p}.</p>
+      ))}
+      {c.thin.length > 0 && result.method !== "chapters" && onRetryDeep && (
+        <button onClick={onRetryDeep} disabled={busy} className={`${chip} ring-1 ring-amber-300/70 text-amber-900 dark:text-amber-100 hover:bg-amber-100 dark:hover:bg-amber-500/20`}>
+          <RotateCcw size={12} /> Try again chapter by chapter
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, onApply, onUndo, onRetry, onRetryDeep, onDiscard, onOpen }: {
   job: PanelJob;
   /** The note open behind the panel, if any. */
   pageNoteId: string | null;
@@ -63,6 +101,8 @@ export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, onApply, onUn
   onApply: (noteId: string) => void;
   onUndo: () => void;
   onRetry: () => void;
+  /** Rerun the study guide chapter by chapter (the check's offer). */
+  onRetryDeep?: () => void;
   onDiscard: () => void;
   onOpen: (href: string) => void;
 }) {
@@ -113,6 +153,7 @@ export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, onApply, onUn
             {resultSummary(r.html) ? ` · ${resultSummary(r.html)}` : ""}
             {r.truncated && <span className="text-amber-600"> · cut off at the length limit</span>}
           </p>
+          {!job.applied && <GuideCheckLine result={r} busy={busy} onRetryDeep={onRetryDeep} />}
           {preview && (
             <iframe
               title={`${job.title} preview`}

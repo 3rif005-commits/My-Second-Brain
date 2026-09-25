@@ -105,3 +105,57 @@ def test_selection_skills_carry_their_prompt(client):
     skills = {s["name"]: s for s in res.json()["skills"]}
     assert skills["define-terms"]["output"] == "insert_below"
     assert "bulleted list" in skills["define-terms"]["prompt"]
+
+
+# ── E9: "Several sources" on the study guide ────────────────────────────────
+
+def test_the_study_guide_shows_its_several_sources_setting(client):
+    tc, _, _ = client
+    assert _get(tc, "study-guide")["multi_source"] == "auto"
+    assert _get(tc, "cite-everything")["multi_source"] is None     # nothing to show
+
+
+def test_the_setting_is_saved_and_the_instructions_stay_byte_identical(client):
+    tc, user_dir, _ = client
+    s = _get(tc, "study-guide")
+    r = tc.put("/skills/study-guide", headers=H,
+               json={"description": s["description"], "body": s["body"], "multi_source": "chapters"})
+    assert r.status_code == 200 and r.json()["multi_source"] == "chapters"
+    assert _get(tc, "study-guide")["body"] == s["body"]
+    copy = (user_dir / "study-guide" / "SKILL.md").read_text(encoding="utf-8")
+    assert "multi_source: chapters" in copy
+    # the runtime reads the same file
+    with patch("prompts._skill_text.USER_SKILLS_DIR", user_dir):
+        from prompts._skill_text import skill_body, skill_meta
+        assert skill_meta("study-guide")["multi_source"] == "chapters"
+        assert skill_body("study-guide") == s["body"]
+
+
+def test_back_to_automatic_removes_the_key(client):
+    tc, user_dir, _ = client
+    s = _get(tc, "study-guide")
+    for value in ("single", "auto"):
+        tc.put("/skills/study-guide", headers=H,
+               json={"description": s["description"], "body": s["body"], "multi_source": value})
+    assert "multi_source" not in (user_dir / "study-guide" / "SKILL.md").read_text(encoding="utf-8")
+    assert _get(tc, "study-guide")["multi_source"] == "auto"
+
+
+def test_editing_the_text_keeps_the_setting(client):
+    tc, _, _ = client
+    s = _get(tc, "study-guide")
+    tc.put("/skills/study-guide", headers=H,
+           json={"description": s["description"], "body": s["body"], "multi_source": "single"})
+    tc.put("/skills/study-guide", headers=H,
+           json={"description": s["description"], "body": s["body"] + "\nMore."})   # no setting sent
+    assert _get(tc, "study-guide")["multi_source"] == "single"
+
+
+def test_a_wrong_value_or_skill_is_refused(client):
+    tc, _, _ = client
+    s = _get(tc, "study-guide")
+    assert tc.put("/skills/study-guide", headers=H, json={
+        "description": s["description"], "body": s["body"], "multi_source": "always"}).status_code == 400
+    c = _get(tc, "cite-everything")
+    assert tc.put("/skills/cite-everything", headers=H, json={
+        "description": c["description"], "body": c["body"], "multi_source": "chapters"}).status_code == 400

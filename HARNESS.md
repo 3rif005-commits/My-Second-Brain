@@ -260,3 +260,10 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - An estimate follows the shape of the run it prices. The one-call estimate
   priced a chaptered guide at $0.11; it cost $0.25, and the per-run cap reads
   the estimate.
+- Switch a behaviour on where the user actually triggers it. The chapter
+  method was "on" for a day and never ran from the AI panel: that path called
+  the writer without its sources. A wiring test on the Generate path proved
+  nothing about the panel.
+- A method the user may prefer differently is a setting plus a check, not a
+  hard rule: the study guide's "Several sources" setting, a per-run word, and
+  a card that says when a source came out thin and offers the other way (E9).

@@ -10,6 +10,9 @@ export type SelectionOutput = "insert_below" | "rewrite_selection";
 
 export type SkillSource = "bundled" | "edited" | "user";
 
+/** How the study guide writes from several sources (E9). */
+export type MultiSource = "auto" | "single" | "chapters";
+
 export interface Skill {
   name: string;
   title: string;
@@ -23,6 +26,8 @@ export interface Skill {
   source: SkillSource;
   can_reset: boolean;
   can_delete: boolean;
+  /** The study guide only; null for every other skill. */
+  multi_source?: MultiSource | null;
 }
 
 /** What the editor changes; the rest of a Skill is read-only. */
@@ -32,6 +37,7 @@ export interface SkillDraft {
   where: Where;
   output: string | null;
   icon: string | null;
+  multi_source?: MultiSource | null;
 }
 
 export interface NewSkill extends SkillDraft {

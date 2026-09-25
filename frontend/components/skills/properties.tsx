@@ -7,9 +7,9 @@
 // nothing would mislead the user.
 import { useEffect, useRef, useState } from "react";
 import {
-  Check, ChevronDown, Command, Eye, FileOutput, Info, Layers, Lock, MapPin, type LucideIcon,
+  Check, ChevronDown, Command, Eye, FileOutput, Files, Info, Layers, Lock, MapPin, type LucideIcon,
 } from "lucide-react";
-import type { Skill, SkillDraft, Where } from "@/lib/skills";
+import type { MultiSource, Skill, SkillDraft, Where } from "@/lib/skills";
 import { GROUPS, groupOf } from "./groups";
 import { canChangeWhere, titleOf } from "./model";
 
@@ -117,6 +117,15 @@ const RESULT_OPTIONS: Option<"insert_below" | "rewrite_selection">[] = [
   { value: "rewrite_selection", label: "Replace the selection", hint: "The result takes the selected text's place." },
 ];
 
+const MULTI_SOURCE_OPTIONS: Option<MultiSource>[] = [
+  { value: "auto", label: "Automatic",
+    hint: "Chapter by chapter from 3 sources; one pass for 1 or 2." },
+  { value: "single", label: "One pass",
+    hint: "Faster and uses less. With several sources each gets less depth." },
+  { value: "chapters", label: "Chapter by chapter",
+    hint: "Deepest: each chapter is written on its own. Uses about twice as much." },
+];
+
 export const PROPERTIES: SkillProperty[] = [
   {
     id: "where",
@@ -147,6 +156,22 @@ export const PROPERTIES: SkillProperty[] = [
       <code className="px-1.5 py-0.5 rounded-md text-[12.5px] bg-gray-100 dark:bg-white/10 text-gray-800 dark:text-gray-100">
         /{skill.name}
       </code>
+    ),
+  },
+  {
+    id: "several-sources",
+    label: "Several sources",
+    icon: Files,
+    help: "How a guide from several sources is written. You can also choose for one run: "
+      + "/study-guide deep (chapter by chapter) or /study-guide quick (one pass).",
+    visible: ({ skill }) => skill.multi_source != null,
+    render: ({ draft, set }) => (
+      <SelectValue
+        testId="prop-several-sources"
+        value={draft.multi_source ?? "auto"}
+        options={MULTI_SOURCE_OPTIONS}
+        onChange={(multi_source) => set({ multi_source })}
+      />
     ),
   },
   {

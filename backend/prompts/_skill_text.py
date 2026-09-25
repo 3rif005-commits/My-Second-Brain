@@ -30,3 +30,15 @@ def skill_reference(name: str, file: str) -> str:
     path = _first(USER_SKILLS_DIR / name / "reference" / file,
                   SKILLS_DIR / name / "reference" / file)
     return path.read_text(encoding="utf-8")[:-1]
+
+
+def skill_meta(name: str) -> dict:
+    """The skill's settings (frontmatter), read at call time like its body —
+    a change in Settings → Skills applies to the next run."""
+    import yaml
+    path = _first(USER_SKILLS_DIR / name / "SKILL.md", SKILLS_DIR / name / "SKILL.md")
+    raw = path.read_text(encoding="utf-8")
+    head, sep, _ = raw.partition("\n---\n")
+    if not sep or not head.startswith("---"):
+        return {}
+    return yaml.safe_load(head[3:]) or {}

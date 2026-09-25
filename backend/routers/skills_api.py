@@ -119,6 +119,8 @@ def _json(s: Skill, bundled: set[str], user: set[str]) -> dict:
         "source": source,
         "can_reset": source == "edited",
         "can_delete": source == "user",
+        # The study guide only — None hides the setting for every other skill.
+        "multi_source": (s.multi_source or "auto") if s.name == MULTI_SOURCE_SKILL else None,
         # Old clients read these.
         "readonly": False,
         "tools": list(s.tools) if s.tools else None,
@@ -133,9 +135,15 @@ def _state() -> tuple[SkillRegistry, set[str], set[str]]:
     return reg, bundled, user
 
 
+#: The one skill whose "Several sources" setting the runtime honours (E9).
+MULTI_SOURCE_SKILL = "study-guide"
+MULTI_SOURCE = ("auto", "single", "chapters")
+
+
 def _write_user_skill(name: str, description: str, body: str, where: str,
                       base: Skill | None, icon: str | None = None,
-                      output: str | None = None) -> None:
+                      output: str | None = None,
+                      multi_source: str | None = None) -> None:
     surfaces, output = _surfaces_for(where, base, output)
     meta: dict = {"name": name, "description": description.strip()}
     icon = icon if icon is not None else (base.icon if base else None)
@@ -158,6 +166,9 @@ def _write_user_skill(name: str, description: str, body: str, where: str,
         meta["priority"] = base.priority
     if base and base.tools:
         meta["tools"] = list(base.tools)
+    ms = multi_source or (base.multi_source if base else None)
+    if name == MULTI_SOURCE_SKILL and ms and ms != "auto":
+        meta["multi_source"] = ms
     folder = _USER_SKILLS_DIR / name
     folder.mkdir(parents=True, exist_ok=True)
     fm = yaml.safe_dump(meta, sort_keys=False, default_flow_style=None).strip()
@@ -174,6 +185,8 @@ class SkillPayload(BaseModel):
     icon: str | None = None
     #: selection skills only: "insert_below" or "rewrite_selection"
     output: str | None = None
+    #: the study guide only: "auto" | "single" | "chapters" (E9)
+    multi_source: str | None = None
     # Accepted from old clients, ignored.
     tools: list[str] | None = None
     priority: int = 0
@@ -290,8 +303,14 @@ def update_skill(name: str, payload: SkillPayload, authorization: str = Header()
     if where not in WHERE:
         raise HTTPException(400, detail=f"where must be one of {', '.join(WHERE)}")
     _check_output(where, payload.output)
+    if payload.multi_source is not None:
+        if name != MULTI_SOURCE_SKILL:
+            raise HTTPException(400, detail="only the study guide has this setting")
+        if payload.multi_source not in MULTI_SOURCE:
+            raise HTTPException(400, detail=f"must be one of {', '.join(MULTI_SOURCE)}")
     _write_user_skill(name, payload.description, payload.body, where, current,
-                      icon=payload.icon, output=payload.output)
+                      icon=payload.icon, output=payload.output,
+                      multi_source=payload.multi_source)
     reg, bundled, user = _state()
     return _json(reg.get(name), bundled, user)
 

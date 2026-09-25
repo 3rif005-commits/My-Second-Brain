@@ -23,6 +23,18 @@ export interface JobResult {
   input_tokens: number;
   output_tokens: number;
   usd: number | null;
+  /** The study guide only (E9): how it was written, and the check on it. */
+  method?: "single" | "chapters" | null;
+  check?: GuideCheck | null;
+}
+
+/** services/workspace/guide_check.py — counts, no model. */
+export interface GuideCheck {
+  sources: { title: string; pages: number; sections: number; concepts: number;
+    depth: number | null; thin: boolean }[];
+  /** Sources that came out thin — the card offers to write it chapter by chapter. */
+  thin: string[];
+  problems: string[];
 }
 
 // A command can sit anywhere in the message, as long as it starts a word:

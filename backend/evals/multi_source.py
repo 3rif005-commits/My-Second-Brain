@@ -75,28 +75,7 @@ def write_guide(lectures: list[str], method: str = "single") -> dict:
             "usd": round(sum(r.get("estimated_usd") or 0 for r in rows), 4)}
 
 
-_H = re.compile(r"<(h[23])\b([^>]*)>", re.I)
-_ANCHOR = re.compile(r'data-anchor="(\d+):[pts]:[\d.]+"')
-
-
-def per_source(html: str, n_sources: int) -> dict[int, dict]:
-    """Depth of the sections anchored to each source (1-based)."""
-    cuts = [(m.start(), m.group(1).lower(), m.group(2)) for m in _H.finditer(html)]
-    parts: dict[int, list[str]] = {i: [] for i in range(1, n_sources + 1)}
-    for k, (start, tag, attrs) in enumerate(cuts):
-        if tag != "h3":
-            continue
-        a = _ANCHOR.search(attrs)
-        if not a or int(a.group(1)) not in parts:
-            continue
-        end = cuts[k + 1][0] if k + 1 < len(cuts) else len(html)
-        parts[int(a.group(1))].append(html[start:end])
-    out = {}
-    for i, sections in parts.items():
-        s = score_note("".join(sections))
-        out[i] = {"sections": len(sections), "text_chars": s.text_chars,
-                  "tables": s.tables, "math": s.math_blocks, "callouts": s.callout_total}
-    return out
+from services.workspace.guide_check import per_source  # noqa: E402  (the app's own measure)
 
 
 def save(result: dict) -> Path:

@@ -3,7 +3,8 @@
 import type { Skill, SkillDraft, Where } from "@/lib/skills";
 
 export function draftOf(s: Skill): SkillDraft {
-  return { description: s.description, body: s.body, where: s.where, output: s.output, icon: s.icon };
+  return { description: s.description, body: s.body, where: s.where, output: s.output, icon: s.icon,
+    multi_source: s.multi_source ?? null };
 }
 
 /** Has the draft moved away from what is saved? Compares what the editor
@@ -12,7 +13,8 @@ export function isDirty(saved: Skill | null, draft: SkillDraft | null): boolean 
   if (!saved || !draft) return false;
   const a = draftOf(saved);
   return a.description !== draft.description || a.body !== draft.body || a.where !== draft.where
-    || (a.output ?? null) !== (draft.output ?? null) || (a.icon ?? null) !== (draft.icon ?? null);
+    || (a.output ?? null) !== (draft.output ?? null) || (a.icon ?? null) !== (draft.icon ?? null)
+    || (a.multi_source ?? null) !== (draft.multi_source ?? null);
 }
 
 /** What `where` a skill can be moved to — a built-in keeps its kind (the app

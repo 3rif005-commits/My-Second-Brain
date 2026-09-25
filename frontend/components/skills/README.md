@@ -39,6 +39,16 @@ Each of these is **one entry in a list**:
   forwards it. Add the call to `skillsApi`.
 - **A new Settings section** → `components/settings/sections.ts`.
 
+## Settings that exist today
+
+- **Runs in**, **Command**, **Result**, **Shows up**, **Description**, **Version**.
+- **Several sources** — the study guide only (E9): Automatic (chapter by
+  chapter from 3 sources) · One pass · Chapter by chapter. Stored as
+  `multi_source` in the user's copy; read at call time
+  (`synthesis.resolve_method`). One run can choose too: `/study-guide deep` or
+  `/study-guide quick`. The planner's instructions are a file of the skill
+  (`reference/chapter-plan.md`, Files tab).
+
 ## Rules the design keeps
 
 - Saving is explicit (⌘S / Save). Editing a built-in saves the user's own

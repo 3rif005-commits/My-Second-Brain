@@ -196,7 +196,7 @@ def _prompt_overhead_chars(markdown: bool = False) -> int:
         return 8_000
 
 
-def estimate_synthesis(note_id: str, user_id: str) -> dict:
+def estimate_synthesis(note_id: str, user_id: str, method: str | None = None) -> dict:
     """What one synthesis over this note's ready sources would cost.
 
     Derived from the stored chunks and the price table: no model call, no
@@ -213,7 +213,7 @@ def estimate_synthesis(note_id: str, user_id: str) -> dict:
     input_tokens = tokens_from_chars(source_chars + _prompt_overhead_chars(md))
     output_tokens = _expected_output_tokens(source_chars, markdown=md)
     cached_tokens = 0
-    if not md and 0 < settings.synthesis_chapters_min_sources <= len(sources):
+    if not md and sources and resolve_method(len(sources), method) == "chapters":
         # Written chapter by chapter (E9), calibrated on the measured runs
         # (IML 08+09+10: estimate $0.246, measured $0.246-0.263). The sources
         # are read twice (plan + chapters); the instructions once per chapter,
@@ -278,10 +278,36 @@ def _inherited_titles(note: dict, first_source: dict) -> set[str]:
     return {t for t in titles if t}
 
 
+#: How a guide from several sources is written (E9): the study-guide skill's
+#: "Several sources" setting, or one run's own choice.
+METHODS = ("auto", "single", "chapters")
+
+
+def resolve_method(n_sources: int, override: str | None = None) -> str:
+    """'single' or 'chapters' for this run: the run's own choice (e.g.
+    `/study-guide deep`), else the skill's setting, else automatic —
+    chapter by chapter from SYNTHESIS_CHAPTERS_MIN_SOURCES sources. Nothing
+    is forced: each level can say either."""
+    choice = override if override in METHODS else None
+    if choice is None:
+        from prompts._skill_text import skill_meta
+        try:
+            choice = skill_meta("study-guide").get("multi_source")
+        except Exception:                           # noqa: BLE001
+            choice = None
+    if choice == "single":
+        return "single"
+    if choice == "chapters":
+        return "chapters" if n_sources >= 1 else "single"
+    threshold = settings.synthesis_chapters_min_sources
+    return "chapters" if 0 < threshold <= n_sources else "single"
+
+
 def _complete(prompt: str, video_urls: list[str], has_text: bool,
               user_id: str, figures: list[dict] | None = None,
               markdown: bool = False,
-              sources: list[dict] | None = None) -> str:
+              sources: list[dict] | None = None,
+              method: str | None = None, focus: str = "") -> str:
     """Text path, or the Gemini-native video path when a source has no
     transcript (same capability routing the per-resource summary used)."""
     if video_urls:
@@ -329,11 +355,11 @@ def _complete(prompt: str, video_urls: list[str], has_text: bool,
         if fixed:
             logger.info(f"repaired {fixed} section anchor(s)")
         return html
-    if sources and 0 < settings.synthesis_chapters_min_sources <= len(sources):
+    if sources and resolve_method(len(sources), method) == "chapters":
         # E9: one call covering several lectures wrote each shallower than it
         # was alone. Plan the chapters, write each in its own call.
         from services.workspace.chaptered import synthesize_chaptered
-        done = synthesize_chaptered(sources, user_id)
+        done = synthesize_chaptered(sources, user_id, focus=focus)
         if done is not None:
             html, truncated = done
             if truncated:                          # a chapter hit the cap

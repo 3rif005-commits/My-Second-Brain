@@ -61,8 +61,37 @@ def _best(section: set[str], pages: dict, idf: dict[str, float],
     return best, score
 
 
+_ANY_ANCHOR = re.compile(r'\s*data-anchor="([^"]*)"')
+_VALID = re.compile(r"^(\d+):[pts]:(\d+(?:\.\d+)?)$")
+
+
+def drop_bad_anchors(html: str, n_sources: int) -> tuple[str, int]:
+    """Remove anchors that point nowhere: malformed ("2:p:3-5") or naming a
+    source that is not attached. Seen live on a chaptered guide (E9). A bad
+    anchor used to survive repair: it did not look like an anchor, so the
+    repair ADDED one beside it and the first attribute still won."""
+    if n_sources < 1:
+        return html, 0                  # sources unknown: nothing to judge by
+    removed = 0
+
+    def fix(m: re.Match) -> str:
+        nonlocal removed
+        v = _VALID.match(m.group(1).strip())
+        if v and 1 <= int(v.group(1)) <= n_sources:
+            return m.group(0)
+        removed += 1
+        return ""
+    return _ANY_ANCHOR.sub(fix, html), removed
+
+
 def repair_anchors(html: str, sources: list[dict]) -> tuple[str, int]:
     """Return (html, number of anchors changed or added)."""
+    html, dropped = drop_bad_anchors(html, len(sources))
+    html, changed = _repair(html, sources)
+    return html, dropped + changed
+
+
+def _repair(html: str, sources: list[dict]) -> tuple[str, int]:
     pages = source_pages(sources)
     if len({s for s, _ in pages}) < 2:
         return html, 0              # one source: nothing to confuse it with

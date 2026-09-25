@@ -55,6 +55,10 @@ class Skill:
     folder: Path | None = None
     #: an emoji for Settings → Skills and the menus; display only
     icon: str | None = None
+    #: the study guide only — how a guide from several sources is written:
+    #: "auto" (chapter by chapter from SYNTHESIS_CHAPTERS_MIN_SOURCES
+    #: sources), "single" (one call) or "chapters" (E9)
+    multi_source: str | None = None
 
     def reference(self, relative: str) -> str:
         """Read one reference file, on demand.
@@ -119,6 +123,7 @@ def parse_frontmatter(raw: str, source_path: Path,
         confirm=bool(meta.get("confirm", False)),
         folder=folder,
         icon=meta.get("icon"),
+        multi_source=meta.get("multi_source"),
     )
 
 

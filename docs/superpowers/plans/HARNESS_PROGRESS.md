@@ -280,8 +280,13 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       map-reduce would not help). Plan + write chapter by chapter: every
       lecture 132–206% of solo text, format holds, **~2× cost** ($0.25 vs
       $0.13). **ON from 3 sources** (user, 2026-09-26); estimate calibrated
-      ($0.246 vs $0.246–0.263 measured). Open: one live run through the app
-      with three real uploads. Card: `experiments/E9-chaptered-guides.md`.
+      ($0.246 vs $0.246–0.263 measured). **User's choice, not forced**
+      (2026-09-26): "Several sources" setting on the study-guide skill,
+      `/study-guide deep|quick` per run, editable planner file, and a free
+      quality check on every guide's card with "Try again chapter by chapter"
+      when a source is thin. Found: the panel's `/study-guide` never used the
+      chapter method (no sources passed) — fixed. Card:
+      `experiments/E9-chaptered-guides.md`.
 - [ ] 4.6 **E10** model routing — **deferred to the END by the user
       (2026-09-25).** The app runs on any model (Claude or not, local too), so
       routing must be designed across providers, not tuned for one: which job
