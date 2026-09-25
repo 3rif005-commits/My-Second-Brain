@@ -1,0 +1,2181 @@
+<h1>Machine Learning: Ensemble Methods, Unsupervised Learning, and Reinforcement Learning</h1>
+<h2>Ensemble Learning Fundamentals</h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> Why combining multiple models beats training a single model, and the core principle that makes ensembles work.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>The Ensemble Concept</strong> — what an ensemble is and why single algorithms produce different outputs</li>
+          <li><strong>Why Ensembles Reduce Error</strong> — how bias, variance, and model diversity interact to improve predictions</li>
+          <li><strong>Parallel vs. Sequential Ensembles</strong> — the fundamental split between independent and dependent training strategies</li>
+          <li><strong>Core Ensemble Techniques</strong> — bagging, boosting, and stacking as the three pillars</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> Ensembles work not by training harder, but by exploiting the fact that different models fail in different ways — combining them cancels variance while keeping low bias, a result a single model cannot achieve alone.</li>
+    </ul>
+  </details>
+</div>
+
+<h3 data-anchor="1:p:2">The Ensemble Concept</h3>
+
+<details>
+  <summary><h5>Definition of Ensembles</h5></summary>
+  <blockquote><p><strong>Ensemble:</strong> A machine learning technique that trains multiple base learners independently and combines their predictions (by voting for classification, or by averaging for regression) to make a final prediction.</p></blockquote>
+  <ul>
+    <li><strong>Base learner:</strong> Each individual model trained as part of the ensemble.</li>
+    <li><strong>Output combination:</strong> Predictions are merged using a rule — voting (classification) or averaging (regression).</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>Why Single Algorithms Produce Different Models</h5></summary>
+  <blockquote><p><strong>Algorithm variability:</strong> Even one training algorithm, when run multiple times or on different data, produces different models rather than a single optimal solution.</p></blockquote>
+  <p>A single algorithm's output depends on three factors:</p>
+  <ul>
+    <li><strong>Training data:</strong> Different splits or random subsets of the same dataset lead to different learned models.</li>
+    <li><strong>Hyperparameters:</strong> Choices like learning rate, tree depth, or regularization strength alter the model's structure and performance.</li>
+    <li><strong>Random initialization:</strong> Starting weights in neural networks or random seeds in algorithms introduce stochasticity into the training process.</li>
+  </ul>
+</details>
+
+<h3 data-anchor="1:p:3">Why Ensembles Reduce Error</h3>
+
+<details>
+  <summary><h5>Bias, Variance, and Irreducible Error</h5></summary>
+  <blockquote><p><strong>Bias-variance decomposition:</strong> Total prediction error splits into systematic error from oversimplification (bias), sensitivity to training data changes (variance), and inherent data noise (irreducible error).</p></blockquote>
+  <ul>
+    <li><strong>Bias:</strong> Systematic error from a model's inability to capture the true relationship — using a linear model for nonlinear data is high bias.</li>
+    <li><strong>Variance:</strong> How much a model's predictions change when trained on slightly different data — high-variance models overfit.</li>
+    <li><strong>Irreducible error:</strong> Noise inherent in the data itself, independent of the model.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>Bias and variance cannot both be minimized simultaneously in a single model. Ensembles break this trade-off by combining models in a way that reduces variance without increasing bias.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>How Diversity Drives Ensemble Advantage</h5></summary>
+  <blockquote><p><strong>Ensemble principle:</strong> When base learners are diverse and make uncorrelated errors, combining them reduces overall variance while preserving low bias.</p></blockquote>
+  <ul>
+    <li><strong>Greater diversity → More accurate ensemble:</strong> If all base learners make the same mistake, combining them does not help. But if they fail in different ways, averaging cancels out their errors.</li>
+    <li><strong>Overfitting models work well in ensembles:</strong> High-variance (overfit) models are poor individually, but when multiple overfit models are trained on different data subsets, their overfitting patterns differ. Combining them averages out the variance while retaining the low bias of the individual models.</li>
+    <li><strong>No bias penalty:</strong> Unlike regularization (which reduces overfitting at the cost of higher bias), ensemble averaging reduces variance without sacrificing model complexity — the combined prediction can be as rich as any single base learner.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="ANALOGY">
+    <p>Think of an ensemble like a panel of independent experts. If all experts are biased the same way, their consensus is still biased. But if they each make different mistakes, their averaged opinion is closer to the truth than any single expert alone.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="red">Numeric Illustration of Ensemble Benefit</span></h5></summary>
+  <blockquote><p><strong>Ensemble advantage:</strong> Combining predictions of imperfect models can produce results better than most or all of the individual models, and more stable across variation in input.</p></blockquote>
+  <p><strong>Example:</strong> Predicting a small house with true price $200K.</p>
+  <table>
+    <tr>
+      <th>Model</th>
+      <th>Prediction</th>
+      <th>Error</th>
+      <th>Specialty</th>
+    </tr>
+    <tr>
+      <td>Tree A</td>
+      <td>$205K</td>
+      <td>$5K</td>
+      <td>Small houses</td>
+    </tr>
+    <tr>
+      <td>Tree B</td>
+      <td>$260K</td>
+      <td>$60K</td>
+      <td>Large houses</td>
+    </tr>
+    <tr>
+      <td>Tree C</td>
+      <td>$220K</td>
+      <td>$20K</td>
+      <td>General</td>
+    </tr>
+    <tr>
+      <td><strong>Ensemble Average</strong></td>
+      <td><strong>$228K</strong></td>
+      <td><strong>$28K</strong></td>
+      <td><strong>All sizes</strong></td>
+    </tr>
+  </table>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>The ensemble error ($28K) is worse than Tree A alone ($5K) because Tree A is overspecialized. But the ensemble is far more robust: it performs acceptably on all house sizes, whereas Tree B fails catastrophically on small houses. Ensembles trade peak performance for consistency.</p>
+  </div>
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>Be ready to explain why an ensemble's average prediction is not always better than the best single model, but is more stable and avoids catastrophic failures on data outside the best model's domain.</p>
+  </div>
+</details>
+
+<h3 data-anchor="1:p:5">Parallel vs. Sequential Ensembles</h3>
+
+<details>
+  <summary><h5>Parallel Ensemble Methods</h5></summary>
+  <blockquote><p><strong>Parallel ensembles:</strong> Train each base learner independently on the same or different data subsets; training can happen simultaneously, and the order of training is irrelevant.</p></blockquote>
+  <ul>
+    <li><strong>Independence:</strong> No base learner depends on the output or performance of another.</li>
+    <li><strong>Combination rule:</strong> Predictions are merged at the end (voting or averaging).</li>
+    <li><strong>Computational advantage:</strong> Base learners can be trained in parallel on multiple processors.</li>
+    <li><strong>Example:</strong> Random Forest.</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>Sequential Ensemble Methods</h5></summary>
+  <blockquote><p><strong>Sequential ensembles:</strong> Train base learners one after another, with each new learner explicitly trained to correct the mistakes of the previous ensemble.</p></blockquote>
+  <ul>
+    <li><strong>Dependency:</strong> Each base learner depends on the performance and errors of the ensemble built so far.</li>
+    <li><strong>Error correction:</strong> The next model focuses its learning on examples the current ensemble misclassifies.</li>
+    <li><strong>Order is critical:</strong> The sequence of training is essential — reordering learners changes the result.</li>
+    <li><strong>Example:</strong> Gradient Boosting, AdaBoost.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>Sequential methods cannot be parallelized fully because each stage depends on the previous one. However, they often achieve stronger ensemble performance because each new learner is specifically designed to fix prior errors.</p>
+  </div>
+</details>
+
+<h3 data-anchor="1:p:6">Core Ensemble Techniques</h3>
+
+<details>
+  <summary><h5>Bagging</h5></summary>
+  <blockquote><p><strong>Bagging (bootstrap aggregating):</strong> A parallel ensemble method that trains the same base algorithm on multiple random samples (with replacement) of the training data and combines predictions by voting (classification) or averaging (regression).</p></blockquote>
+  <ul>
+    <li><strong>Type:</strong> Parallel, Homogeneous (all base learners are the same algorithm).</li>
+    <li><strong>Process:</strong>
+      <ol>
+        <li>Create multiple random samples of the training data (with replacement).</li>
+        <li>Train the same base algorithm on each sample independently.</li>
+        <li>Combine predictions via voting or averaging.</li>
+      </ol>
+    </li>
+    <li><strong>Variance reduction mechanism:</strong> By training on different data subsets, each model learns slightly different patterns. Averaging these diverse predictions cancels variance.</li>
+    <li><strong>Famous algorithm:</strong> Random Forest (bagging + random feature selection at each split).</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>Boosting</h5></summary>
+  <blockquote><p><strong>Boosting:</strong> A sequential ensemble method that trains weak learners in stages, with each new learner focusing on examples the current ensemble misclassifies, and combines them with weighted voting.</p></blockquote>
+  <ul>
+    <li><strong>Type:</strong> Sequential, Homogeneous (all base learners are the same algorithm).</li>
+    <li><strong>Process:</strong>
+      <ol>
+        <li>Train the first (weak) model on the original data.</li>
+        <li>Identify which examples it misclassifies.</li>
+        <li>Train the next model to focus on those mistakes (by reweighting data or resampling hard examples).</li>
+        <li>Repeat for many stages.</li>
+        <li>Combine all models with weighted voting (models with lower error get higher weight).</li>
+      </ol>
+    </li>
+    <li><strong>Error correction philosophy:</strong> Unlike bagging, which reduces variance passively, boosting actively targets and corrects the ensemble's weaknesses.</li>
+    <li><strong>Famous algorithms:</strong> AdaBoost, Gradient Boosting, XGBoost.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="CAUTION">
+    <p>Boosting can overfit if too many stages are used or if base learners are too complex. The method is most effective with weak learners (e.g., shallow decision trees).</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Stacking</h5></summary>
+  <blockquote><p><strong>Stacking:</strong> A (typically parallel) ensemble method that trains multiple different base models on the same data, then trains a meta-learner to optimally combine their predictions.</p></blockquote>
+  <ul>
+    <li><strong>Type:</strong> Typically Parallel, Heterogeneous (base learners are different algorithms).</li>
+    <li><strong>Process:</strong>
+      <ol>
+        <li>Train multiple diverse base models (e.g., SVM, decision tree, neural network) on the same training data.</li>
+        <li>Generate predictions from all base models on the same data (or a validation set).</li>
+        <li>Train a separate meta-model (stacker) to learn how to best weight or combine those base predictions.</li>
+      </ol>
+    </li>
+    <li><strong>Meta-learner advantage:</strong> The meta-learner can learn non-linear or problem-specific ways to combine base predictions, often outperforming simple averaging.</li>
+    <li><strong>Famous algorithm:</strong> SuperLearner.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>Stacking is most effective when base learners are diverse in their approach (e.g., linear, tree-based, and neural). If all base learners make similar predictions, the meta-learner has little benefit information to work with.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Other Ensemble Techniques</h5></summary>
+  <ul>
+    <li><strong>Blending:</strong> Similar to stacking but uses a separate validation set for training the meta-learner, avoiding data leakage.</li>
+    <li><strong>Weighted average ensembles:</strong> Combine base predictions with fixed or learned weights based on their individual performance.</li>
+    <li><strong>Voting ensembles:</strong> Hard voting (majority class) or soft voting (average probability) for classification.</li>
+    <li><strong>Super ensembles:</strong> Ensembles of ensembles; higher-level combining strategies.</li>
+  </ul>
+</details>
+
+<div data-type="callout" data-callout-type="IMPORTANT">
+  <p>Parallel and Sequential are opposite structures solving the same problem: variance reduction through diversity. Parallel methods achieve diversity by training on different data subsets; sequential methods achieve it by training on different error patterns.</p>
+</div>
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th>Parallel (Bagging)</th>
+    <th>Sequential (Boosting)</th>
+  </tr>
+  <tr>
+    <td><strong>Training</strong></td>
+    <td>Independent, simultaneous</td>
+    <td>Dependent, staged</td>
+  </tr>
+  <tr>
+    <td><strong>Data for each learner</strong></td>
+    <td>Random samples of original data</td>
+    <td>Reweighted or resampled based on prior errors</td>
+  </tr>
+  <tr>
+    <td><strong>Order of training</strong></td>
+    <td>Irrelevant</td>
+    <td>Critical</td>
+  </tr>
+  <tr>
+    <td><strong>Error mechanism</strong></td>
+    <td>Passive variance averaging</td>
+    <td>Active error correction</td>
+  </tr>
+  <tr>
+    <td><strong>Example</strong></td>
+    <td>Random Forest</td>
+    <td>Gradient Boosting, AdaBoost</td>
+  </tr>
+</table>
+<h2>Bagging and Random Forests</h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> How to build parallel ensembles that reduce prediction variance by training multiple models on different views of the same data, then averaging their outputs.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>The Diversity Problem</strong> — why identical models fail and how random sampling fixes it</li>
+          <li><strong>Feature Subsets and max_features</strong> — forcing each tree to learn a different perspective on the data</li>
+          <li><strong>Hyperparameter Tuning</strong> — controlling ensemble size, tree depth, and leaf constraints to optimize performance</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> Random Forest succeeds not by making perfect trees, but by making many imperfect trees that disagree in different ways — errors cancel through averaging, and diversity matters more than individual tree quality.</li>
+    </ul>
+  </details>
+</div>
+
+<h3 data-anchor="1:p:8">The Diversity Problem</h3>
+
+<details>
+  <summary><h5>Why Identical Trees Fail</h5></summary>
+  <blockquote><p><strong>Identity trap:</strong> When multiple trees are trained on the same data with the same parameters, they produce identical predictions, eliminating any benefit from combining them.</p></blockquote>
+  <p>A concrete example: a bank receives a loan application and builds five decision trees to predict default risk. If each tree sees all 10 available features and uses the same splitting criteria, every tree will output the same probability. Voting five identical votes solves nothing — the ensemble is as weak as a single tree.</p>
+  <div data-type="callout" data-callout-type="CAUTION">
+    <p>Training multiple models on identical data with identical hyperparameters produces identical outputs. Ensemble value comes only from <strong>disagreement</strong> — different models making different errors that cancel when averaged.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Diversity Through Random Sampling</h5></summary>
+  <blockquote><p><strong>Bagging (Bootstrap Aggregating):</strong> Training each ensemble member on a random sample (with replacement) from the original dataset, so each model sees a slightly different version of the data.</p></blockquote>
+  <p>Instead of giving all five trees access to all 10 features, Random Forest gives each tree a random subset. Tree 1 might see features {A, B, C, D, E, F, G}. Tree 2 sees {A, C, E, G, H, I, J}. Tree 3 gets {B, D, F, H, I, J, A}. Each tree learns a different perspective on the same application, so their predictions diverge. When errors diverge, averaging reduces variance — the ensemble becomes stronger than any single tree.</p>
+  <div data-type="callout" data-callout-type="NOTE">
+    <ul>
+      <li><strong>Mechanism:</strong> Each tree is trained on a random bootstrap sample (sample with replacement from the original data) and/or random feature subset.</li>
+      <li><strong>Result:</strong> Trees make different predictions on the same input because they have seen different training data or different features.</li>
+      <li><strong>Benefit:</strong> Prediction errors are uncorrelated across trees — when averaged, random errors cancel, leaving only true signal.</li>
+    </ul>
+  </div>
+</details>
+
+<h3 data-anchor="1:p:9">Feature Subsets and max_features</h3>
+
+<details>
+  <summary><h5>Random Feature Selection Per Tree</h5></summary>
+  <blockquote><p><strong>max_features:</strong> A hyperparameter that specifies how many features each tree randomly selects from the total feature pool before training.</p></blockquote>
+  <p>In the loan example with 10 total features (income, assets, debt, loan amount, etc.), you set <code>max_features</code> to control the subset size. With <code>max_features=7</code>, each tree independently draws 7 random features from the 10 available. With <code>max_features=4</code>, each tree sees only 4 features. The trade-off is immediate: fewer features per tree increases diversity but risks missing important signals; more features decrease diversity but give each tree more information.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Features Per Tree</th>
+        <th>Setting</th>
+        <th>Diversity Effect</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>4 out of 10</td>
+        <td><code>max_features=4</code></td>
+        <td>High diversity, each tree sees very different perspective</td>
+      </tr>
+      <tr>
+        <td>7 out of 10</td>
+        <td><code>max_features=7</code></td>
+        <td>Moderate diversity, good balance</td>
+      </tr>
+      <tr>
+        <td>All 10</td>
+        <td><code>max_features=10</code></td>
+        <td>No diversity, all trees identical (pointless)</td>
+      </tr>
+    </tbody>
+  </table>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>Lower <code>max_features</code> forces stronger diversity but may sacrifice individual tree quality. Start with <code>max_features = sqrt(total_features)</code> as a common heuristic, then tune empirically.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Flexible Feature Granularity</h5></summary>
+  <blockquote><p><strong>No fixed rule:</strong> The number of features each tree sees can be any value — 1, 2, 4, 7, all features, or any integer in between.</p></blockquote>
+  <p>Random Forest does not enforce a specific feature subset size. You control it entirely through the <code>max_features</code> parameter. A tree can learn from 1 feature alone (extreme diversity, weak individual tree) or 10 features (high quality per tree, low diversity). The art of tuning is finding where your specific dataset's signal-to-noise ratio tips the balance.</p>
+</details>
+
+<h3 data-anchor="1:p:13">Hyperparameter Tuning</h3>
+
+<details>
+  <summary><h5>n_estimators: Ensemble Size</h5></summary>
+  <blockquote><p><strong>n_estimators:</strong> The number of decision trees in the Random Forest ensemble.</p></blockquote>
+  <p>More trees generally improve performance, but with diminishing returns. In the credit score example, AUC improves sharply as <code>n_estimators</code> increases from 1 to 50. Beyond 50 trees, performance plateaus — adding more trees yields negligible gains. The optimal point depends on your data and model complexity: a simpler dataset may saturate at 20 trees, while a complex one may need 100+.</p>
+  <div data-type="callout" data-callout-type="EXAM">
+    <p><code>n_estimators</code> controls the number of trees trained. Performance typically plateaus after a certain threshold (e.g., 50 trees for simpler problems). Training many more trees beyond this point wastes computation with minimal benefit.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>max_depth: Tree Complexity</h5></summary>
+  <blockquote><p><strong>max_depth:</strong> The maximum depth (number of levels) allowed for each tree in the ensemble.</p></blockquote>
+  <p>Shallower trees (low depth) underfit — they miss important patterns. Deeper trees (high depth) overfit — they memorize noise. In the credit score example, <code>max_depth=10</code> achieves best performance. <code>max_depth=5</code> is too shallow and misses signal. <code>max_depth=15</code> is slightly worse than depth 10, showing that deeper is not always better. The optimal depth interacts with <code>n_estimators</code>: fewer, shallower trees need less regularization; many, deep trees risk overfitting despite diversity.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>max_depth</th>
+        <th>Characteristic</th>
+        <th>Performance on Credit Score Example</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>5</td>
+        <td>Shallow, high bias</td>
+        <td>Underfits, poor AUC</td>
+      </tr>
+      <tr>
+        <td>10</td>
+        <td>Balanced</td>
+        <td>Best performance</td>
+      </tr>
+      <tr>
+        <td>15</td>
+        <td>Deep, low bias</td>
+        <td>Slightly worse, overfitting risk</td>
+      </tr>
+    </tbody>
+  </table>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>Use 150+ trees when aiming for <code>max_depth=10</code>. The ensemble size buffers depth-induced variance: more trees averaging reduces overfitting even if individual trees are complex.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>min_samples_leaf: Leaf Size Constraint</h5></summary>
+  <blockquote><p><strong>min_samples_leaf:</strong> The minimum number of samples required at a leaf node, preventing trees from creating pure leaves that memorize individual training examples.</p></blockquote>
+  <p>With <code>min_samples_leaf=1</code>, a tree can create a leaf containing a single training sample — extreme overfitting. With <code>min_samples_leaf=50</code>, each leaf must contain at least 50 samples, forcing the tree to generalize. The credit score example shows a clear trade-off: with 3–5 trees, <code>min_samples_leaf=3</code> or <code>5</code> is best. With 150+ trees, even <code>min_samples_leaf=1, 3, 5</code> perform similarly because the ensemble's averaging dampens individual-tree overfitting. At 50 samples per leaf, the constraint is so tight that signal is lost, yielding worst performance.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>min_samples_leaf</th>
+        <th>With 3–5 Trees</th>
+        <th>With 150+ Trees</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td>Overfitting risk</td>
+        <td>Good (ensemble averages overfitting away)</td>
+      </tr>
+      <tr>
+        <td>3–5</td>
+        <td>Best performance</td>
+        <td>Best performance</td>
+      </tr>
+      <tr>
+        <td>50</td>
+        <td>Underfitting</td>
+        <td>Underfitting (constraint too tight)</td>
+      </tr>
+    </tbody>
+  </table>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p><strong>Practical guidance:</strong> With a large ensemble (150+ trees), <code>min_samples_leaf</code> becomes less critical because averaging reduces variance from overfitting. Start with 3–5 and adjust only if individual-tree overfitting is evident.</p>
+  </div>
+</details>
+
+<div data-type="callout" data-callout-type="EXAM">
+  <p>The three primary Random Forest hyperparameters are <code>n_estimators</code> (number of trees), <code>max_depth</code> (tree depth limit), and <code>min_samples_leaf</code> (minimum samples per leaf). Performance typically plateaus with more trees; depth and leaf constraints control per-tree complexity and generalization.</p>
+</div>
+<h2>Gradient Boosting</h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> Sequential ensemble learning that combines many weak learners into a single strong learner by training each new model to correct the errors of all previous models.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>Boosting Fundamentals</strong> — the core principle of sequential error correction and the motivation for weak learners</li>
+          <li><strong>How Gradient Boosting Works</strong> — the step-by-step algorithm applied to tree-based models with a worked house-price example</li>
+          <li><strong>Weak Learners vs Strong Learners</strong> — why shallow trees are built by design and the trade-off between model depth and ensemble effectiveness</li>
+          <li><strong>Learning Rate and Regularization</strong> — controlling step size to prevent overfitting and balance convergence speed with generalization</li>
+          <li><strong>Gradient Boosting Algorithms</strong> — practical implementations and when to choose each one</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> Gradient Boosting's power comes not from starting with a strong model, but from the discipline of starting weak — each error becomes explicit and correctable, turning sequential incremental gains into reliable high accuracy without the overfitting risk of fitting a single deep model from scratch.</li>
+    </ul>
+  </details>
+</div>
+
+<h3 data-anchor="1:p:15">Boosting Fundamentals</h3>
+
+<details>
+  <summary><h5>Boosting</h5></summary>
+  <blockquote><p><strong>Boosting:</strong> An ensemble method that combines multiple models sequentially, where each new model is trained to correct the errors made by the combined predictions of all previous models.</p></blockquote>
+  <p>Unlike bagging (which trains models in parallel on random subsets), boosting builds models one after another, with each new model focusing on the mistakes of the ensemble so far. The final prediction is the sum of all individual model predictions, weighted by a learning rate.</p>
+</details>
+
+<details>
+  <summary><h5>Gradient Boosting</h5></summary>
+  <blockquote><p><strong>Gradient Boosting:</strong> A boosting variant in which each new model is a decision tree trained to predict the residuals (errors) of the current ensemble, and predictions are updated by adding the tree's correction scaled by a learning rate.</p></blockquote>
+  <ul>
+    <li><strong>Core cycle:</strong> Train tree → compute residuals → train new tree on residuals → update predictions by adding the tree's output × learning rate → repeat</li>
+    <li><strong>Why trees:</strong> Trees are the standard weak learner for gradient boosting because they are fast to train, capture non-linear relationships, and produce interpretable leaf-value corrections</li>
+    <li><strong>Prediction rule:</strong> <code>Final_Pred = Tree₁ + Tree₂ + ... + Treeₙ</code>, where each tree adds a small correction controlled by the learning rate</li>
+  </ul>
+</details>
+
+<h3 data-anchor="1:p:16">How Gradient Boosting Works</h3>
+
+<details>
+  <summary><h5>Residual</h5></summary>
+  <blockquote><p><strong>Residual:</strong> The difference between the true value and the predicted value for a single data point.</p></blockquote>
+  <p><code>Residual = True_Value − Predicted_Value</code></p>
+  <p>In gradient boosting, residuals encode where the current model fails. Training the next tree on residuals forces it to learn exactly those mistakes.</p>
+</details>
+
+<details>
+  <summary><h6>Worked Example: House Price Prediction</h6></summary>
+  <p>A real estate dataset with three houses: 50 m² → 100k, 100 m² → 200k, 150 m² → 300k.</p>
+
+<h4>Step 1: Initial Constant Prediction</h4>
+<p>Start with the mean of all prices: 200k.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Size (m²)</th>
+      <th>True Price</th>
+      <th>Prediction</th>
+      <th>Residual</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>50</td>
+      <td>100k</td>
+      <td>200k</td>
+      <td>−100k</td>
+    </tr>
+    <tr>
+      <td>100</td>
+      <td>200k</td>
+      <td>200k</td>
+      <td>0k</td>
+    </tr>
+    <tr>
+      <td>150</td>
+      <td>300k</td>
+      <td>200k</td>
+      <td>+100k</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4>Step 2: Train Tree 1 on Residuals</h4>
+<p>Create a decision tree using (Size, Residual) pairs. The tree learns a simple rule:</p>
+<ul>
+  <li>If size ≤ 75 m²: correction = −100k (small houses were overestimated)</li>
+  <li>If 75 < size ≤ 125 m²: correction = 0k (medium houses were correct)</li>
+  <li>If size > 125 m²: correction = +100k (large houses were underestimated)</li>
+</ul>
+
+<h4>Step 3: Update Predictions</h4>
+<p>Add the tree's correction to the old prediction:</p>
+<p><code>New_Pred = Old_Pred + Tree₁_Correction</code></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Size (m²)</th>
+      <th>Old Prediction</th>
+      <th>Tree 1 Correction</th>
+      <th>New Prediction</th>
+      <th>True Price</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>50</td>
+      <td>200k</td>
+      <td>−100k</td>
+      <td>100k</td>
+      <td>100k</td>
+    </tr>
+    <tr>
+      <td>100</td>
+      <td>200k</td>
+      <td>0k</td>
+      <td>200k</td>
+      <td>200k</td>
+    </tr>
+    <tr>
+      <td>150</td>
+      <td>200k</td>
+      <td>+100k</td>
+      <td>300k</td>
+      <td>300k</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>After one tree, all predictions are perfect on the training set. In practice, residuals remain, and the process repeats: compute new residuals, train Tree 2, update predictions, and so on.</p>
+</details>
+
+<h3 data-anchor="1:p:18">Weak Learners vs Strong Learners</h3>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">Weak Learner</span></h5></summary>
+  <blockquote><p><strong>Weak Learner:</strong> A model that performs only slightly better than random guessing, typically achieving 55–65% accuracy on binary classification.</p></blockquote>
+  <ul>
+    <li><strong>Examples:</strong> A decision tree with only 1 split (2 leaves), a shallow tree (depth 3–5), or a simple linear classifier</li>
+    <li><strong>Characteristic:</strong> Makes many predictable, systematic mistakes by design</li>
+    <li><strong>Alone:</strong> Not useful as a standalone model; exists as a building block for ensembles</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">Strong Learner</span></h5></summary>
+  <blockquote><p><strong>Strong Learner:</strong> A model that achieves high accuracy (90–95%+), capable of making reliable predictions on unseen data.</p></blockquote>
+  <ul>
+    <li><strong>Examples:</strong> A deep decision tree, a well-tuned neural network, or the final output of a gradient boosting ensemble</li>
+    <li><strong>Alone:</strong> Directly building a strong learner from scratch often fails: deep trees overfit, neural networks require extensive tuning and large datasets</li>
+  </ul>
+</details>
+
+<div data-type="callout" data-callout-type="IMPORTANT">
+  <p>Why Gradient Boosting Uses Weak Trees, Not Strong Ones</p>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Tree Depth</th>
+      <th>Few Errors</th>
+      <th>Ensemble Behavior</th>
+      <th>Risk</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Strong (depth=15)</strong></td>
+      <td>Makes very few errors initially</td>
+      <td>Next trees have almost nothing meaningful left to correct; corrections become noise</td>
+      <td>Immediate overfitting; no room for incremental learning</td>
+    </tr>
+    <tr>
+      <td><strong>Weak (depth=3–5)</strong></td>
+      <td>Makes simple, systematic errors</td>
+      <td>Each tree learns a clear pattern in the residuals; each adds a genuine improvement</td>
+      <td>Lower, because each tree is conservative and easily interpretable</td>
+    </tr>
+  </tbody>
+</table>
+
+<div data-type="callout" data-callout-type="ANALOGY">
+  <p><strong>Lifting a heavy box:</strong> One very strong person tries alone and risks injury (overfitting). Many weak people each add a small amount of strength, and together they lift safely and correctly without strain. Each weak person's contribution is small and predictable; the group's combined effort is reliable.</p>
+</div>
+
+<div data-type="callout" data-callout-type="EXAM">
+  <p>Gradient Boosting deliberately uses weak learners (shallow trees, depth 3–5) because weak learners make simple, correctable errors. Strong learners (deep trees) overfit immediately and leave no meaningful errors for subsequent trees to learn from, breaking the boosting algorithm's sequential correction mechanism.</p>
+</div>
+
+<h3 data-anchor="1:p:20">Learning Rate and Regularization</h3>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="red">Learning Rate (η)</span></h5></summary>
+  <blockquote><p><strong>Learning Rate (η):</strong> A scalar between 0 and 1 that controls the magnitude of each tree's contribution to the ensemble prediction, preventing any single tree from dominating and ensuring gradual, stable learning.</p></blockquote>
+  <p><strong>Update rule:</strong></p>
+  <div data-type="math">
+    \text{New Prediction} = \text{Old Prediction} + \eta \times \text{(Tree's Correction)}
+  </div>
+  <ul>
+    <li><strong>Typical range:</strong> 0.01–0.3 (algorithm-dependent)</li>
+    <li><strong>η = 1:</strong> Add the tree's full correction (aggressive, risky)</li>
+    <li><strong>η = 0.1:</strong> Add only 10% of the correction (conservative, stable)</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h6>Worked Example: Learning Rate in Action</h6></summary>
+  <p>Suppose the first tree predicts a correction of +100k for a 150 m² house (true price 300k, old prediction 200k).</p>
+
+<h4>Without Learning Rate (η = 1)</h4>
+<p>New prediction = 200k + 100k = 300k ✓ Correct, but one bad tree ruins everything.</p>
+
+<h4>With Learning Rate (η = 0.5)</h4>
+<p>New prediction = 200k + 0.5 × 100k = 250k</p>
+<p>Still an improvement from 200k, but cautious. If this tree was wrong, the next tree can correct the overshoot.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Size (m²)</th>
+      <th>True Price</th>
+      <th>Old Pred</th>
+      <th>Tree Correction</th>
+      <th>New Pred (η=0.5)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>50</td>
+      <td>100k</td>
+      <td>200k</td>
+      <td>−100k</td>
+      <td>200k + 0.5(−100k) = 150k</td>
+    </tr>
+    <tr>
+      <td>100</td>
+      <td>200k</td>
+      <td>200k</td>
+      <td>0k</td>
+      <td>200k + 0.5(0) = 200k</td>
+    </tr>
+    <tr>
+      <td>150</td>
+      <td>300k</td>
+      <td>200k</td>
+      <td>+100k</td>
+      <td>200k + 0.5(100k) = 250k</td>
+    </tr>
+  </tbody>
+</table>
+</details>
+
+<div data-type="callout" data-callout-type="IMPORTANT">
+  <p>High vs Low Learning Rate Trade-off</p>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Property</th>
+      <th>High η (e.g. 0.3)</th>
+      <th>Low η (e.g. 0.01)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Step size per tree</strong></td>
+      <td>Large, aggressive</td>
+      <td>Small, cautious</td>
+    </tr>
+    <tr>
+      <td><strong>Training effect</strong></td>
+      <td>Fast, may overshoot errors</td>
+      <td>Gradual improvement</td>
+    </tr>
+    <tr>
+      <td><strong>Risk of overfitting</strong></td>
+      <td>High</td>
+      <td>Low</td>
+    </tr>
+    <tr>
+      <td><strong>Number of trees needed</strong></td>
+      <td>Fewer</td>
+      <td>More</td>
+    </tr>
+    <tr>
+      <td><strong>Accuracy on training data</strong></td>
+      <td>Rises quickly</td>
+      <td>Rises slowly</td>
+    </tr>
+    <tr>
+      <td><strong>Accuracy on new data</strong></td>
+      <td>Can capture noise</td>
+      <td>Generalizes better</td>
+    </tr>
+  </tbody>
+</table>
+
+<div data-type="callout" data-callout-type="TIP">
+  <p>In practice, start with a low learning rate (0.01–0.1) and train more trees. This strategy almost always generalizes better than a high learning rate with fewer trees, because it forces the model to learn small, interpretable patterns rather than memorizing noise.</p>
+</div>
+
+<div data-type="callout" data-callout-type="CAUTION">
+  <p><strong>Common mistake:</strong> Assuming that a high learning rate with fewer trees is "more efficient." It is not — the trees are larger and noisier, overfitting begins earlier, and the final model performs worse on unseen data. Always prefer the patience of slow, small corrections.</p>
+</div>
+
+<h3 data-anchor="1:p:22">Gradient Boosting Algorithms</h3>
+
+<details>
+  <summary><h5>XGBoost</h5></summary>
+  <blockquote><p><strong>XGBoost:</strong> An optimized, fast gradient boosting implementation widely used in competition and production settings.</p></blockquote>
+  <ul>
+    <li><strong>Strengths:</strong> Speed, built-in regularization, handles missing data, robust to hyperparameter choices</li>
+    <li><strong>Best for:</strong> Tabular data, kaggle competitions, when raw performance and speed matter most</li>
+    <li><strong>Learning rate parameter:</strong> Often denoted <code>eta</code></li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>LightGBM</h5></summary>
+  <blockquote><p><strong>LightGBM:</strong> A very fast gradient boosting framework optimized for handling large datasets with millions of rows.</p></blockquote>
+  <ul>
+    <li><strong>Strengths:</strong> Extreme speed, memory efficiency, handles categorical features natively</li>
+    <li><strong>Best for:</strong> Large-scale datasets, real-time predictions, when training speed is the bottleneck</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>CatBoost</h5></summary>
+  <blockquote><p><strong>CatBoost:</strong> A gradient boosting library designed to handle categorical features automatically without manual encoding.</p></blockquote>
+  <ul>
+    <li><strong>Strengths:</strong> Automatic categorical handling, reduces preprocessing, often achieves high accuracy on mixed-type data</li>
+    <li><strong>Best for:</strong> Datasets with many categorical variables, when data cleaning time is expensive</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>GradientBoostingRegressor / GradientBoostingClassifier (scikit-learn)</h5></summary>
+  <blockquote><p><strong>scikit-learn's GB models:</strong> Educational, built-in gradient boosting for regression and classification; slower than XGBoost or LightGBM, but simple to use and understand.</p></blockquote>
+  <ul>
+    <li><strong>Strengths:</strong> No external dependencies beyond scikit-learn, good for learning, integrates with scikit-learn pipelines</li>
+    <li><strong>Best for:</strong> Learning, prototyping, small-to-medium datasets where simplicity outweighs speed</li>
+  </ul>
+</details>
+
+<div data-type="callout" data-callout-type="NOTE">
+  <p><strong>Choosing a gradient boosting algorithm:</strong></p>
+  <ul>
+    <li><strong>XGBoost:</strong> Start here for competitions and production unless you have a reason not to</li>
+    <li><strong>LightGBM:</strong> If your dataset is very large (millions of rows) or latency is critical</li>
+    <li><strong>CatBoost:</strong> If your data is mostly categorical and you want to avoid manual encoding</li>
+    <li><strong>scikit-learn:</strong> If you are learning or building a simple pipeline and speed is not a constraint</li>
+  </ul>
+</div>
+
+<div data-type="callout" data-callout-type="EXAM">
+  <p>The three main production-grade gradient boosting libraries are <strong>XGBoost</strong> (general-purpose, fast), <strong>LightGBoost</strong> (large-scale), and <strong>CatBoost</strong> (categorical data). Know their names, rough use cases, and why one is chosen over another (speed vs. dataset size vs. data type). The exam will not ask you to code them, but may ask which you would use given a scenario.</p>
+</div>
+<h2>Ensemble Methods Comparison and Practical Application</h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> Building decision criteria to choose between Random Forest and Gradient Boosting by understanding their architectural and performance trade-offs.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>Mechanism Comparison</strong> — how each method builds and combines trees, and what problem each solves</li>
+          <li><strong>Architectural and Performance Trade-offs</strong> — the direct contrasts in tree size, bias/variance reduction, and overfitting risk</li>
+          <li><strong>Practical Use Cases</strong> — when to reach for Random Forest vs Gradient Boosting based on data and deployment constraints</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> Random Forest is the go-to for robustness and simplicity; Gradient Boosting wins when accuracy matters more than tuning difficulty and the data can support it.</li>
+    </ul>
+  </details>
+</div>
+
+<h3 data-anchor="1:p:23">Mechanism Comparison</h3>
+
+<details>
+  <summary><h5>Random Forest</h5></summary>
+  <blockquote><p><strong>Random Forest:</strong> An ensemble that trains many independent decision trees on random bootstrap samples and combines predictions through averaging (regression) or majority voting (classification).</p></blockquote>
+  <ul>
+    <li><strong>How it builds:</strong> Each tree is trained on a different random sample of the data (bagging). Trees are built in parallel and do not communicate with each other.</li>
+    <li><strong>How it predicts:</strong> Average the predictions of all trees (regression) or use majority vote (classification).</li>
+    <li><strong>Key insight:</strong> Reduces variance by averaging predictions across diverse, independent learners.</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>Gradient Boosting</h5></summary>
+  <blockquote><p><strong>Gradient Boosting:</strong> An ensemble that trains trees sequentially, where each new tree learns to correct the prediction errors made by all previous trees, and combines predictions through summation.</p></blockquote>
+  <ul>
+    <li><strong>How it builds:</strong> Trees are trained one at a time. Each new tree is trained on the residuals (errors) of the previous ensemble.</li>
+    <li><strong>How it predicts:</strong> Sum the predictions of all trees to form the final prediction.</li>
+    <li><strong>Key insight:</strong> Reduces bias by iteratively fixing mistakes, building toward a stronger learner step by step.</li>
+  </ul>
+</details>
+
+<div data-type="callout" data-callout-type="ANALOGY">
+  <p><strong>Random Forest:</strong> Asking many independent experts and averaging their answers — mistakes cancel out through diversity.</p>
+  <p><strong>Gradient Boosting:</strong> Asking one expert, identifying where they went wrong, then sending the next expert to fix those specific mistakes — each iteration targets weakness.</p>
+</div>
+
+<h3 data-anchor="1:p:23">Architectural and Performance Trade-offs</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Attribute</th>
+      <th>Random Forest</th>
+      <th>Gradient Boosting</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Tree building strategy</strong></td>
+      <td>Parallel, independent</td>
+      <td>Sequential, each corrects previous</td>
+    </tr>
+    <tr>
+      <td><strong>Base learner size</strong></td>
+      <td>Deep trees</td>
+      <td>Small trees (stumps)</td>
+    </tr>
+    <tr>
+      <td><strong>Bias/Variance focus</strong></td>
+      <td>Reduce variance</td>
+      <td>Reduce bias</td>
+    </tr>
+    <tr>
+      <td><strong>Risk of overfitting</strong></td>
+      <td>Lower</td>
+      <td>Higher if learning rate is high</td>
+    </tr>
+    <tr>
+      <td><strong>Sensitivity to hyperparameters</strong></td>
+      <td>Lower</td>
+      <td>Higher</td>
+    </tr>
+    <tr>
+      <td><strong>Typical accuracy</strong></td>
+      <td>Good; robust</td>
+      <td>High; fine-tuned to data</td>
+    </tr>
+  </tbody>
+</table>
+
+<div data-type="callout" data-callout-type="IMPORTANT">
+  <p>Random Forest and Gradient Boosting solve different ensemble problems through opposite architectural choices.</p>
+</div>
+
+<details>
+  <summary><h6>Why Random Forest uses deep trees</h6></summary>
+  <p>Each tree in Random Forest aims to be a strong, low-bias learner on its bootstrap sample. Deeper trees capture complex patterns. Variance is controlled by averaging many diverse trees, not by limiting individual tree depth.</p>
+</details>
+
+<details>
+  <summary><h6>Why Gradient Boosting uses shallow trees (stumps)</h6></summary>
+  <p>Each weak learner (stump) makes a small, targeted correction to the ensemble's error. Shallow trees prevent overfitting to the residuals and keep each step interpretable. Strength comes from sequential combination, not individual tree power.</p>
+</details>
+
+<div data-type="callout" data-callout-type="WARNING">
+  <p>Gradient Boosting's learning rate is the key tuning knob: a high rate increases accuracy but raises overfitting risk; a low rate is safer but requires more trees and more computation.</p>
+</div>
+
+<h3 data-anchor="1:p:25">Practical Use Cases</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Method</th>
+      <th>Strengths</th>
+      <th>When to Use</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Random Forest</strong></td>
+      <td>Easy to tune, less overfitting, quick robust solution</td>
+      <td>When you need a reliable baseline fast; data is noisy; interpretability and stability matter; computational resources are limited</td>
+    </tr>
+    <tr>
+      <td><strong>Gradient Boosting</strong></td>
+      <td>High accuracy, handles tricky data</td>
+      <td>When maximum accuracy is the goal; you have time for hyperparameter tuning; data quality is high; overfitting can be controlled through validation</td>
+    </tr>
+  </tbody>
+</table>
+
+<div data-type="callout" data-callout-type="TIP">
+  <p>Start with Random Forest to establish a baseline and test your pipeline. Switch to Gradient Boosting only if the accuracy gap justifies the tuning effort and the additional computational cost.</p>
+</div>
+
+<div data-type="callout" data-callout-type="NOTE">
+  <p>Both methods share the same core principle: ensemble diversity reduces error. They differ in how they create and leverage that diversity — Random Forest through parallel randomness, Gradient Boosting through sequential correction.</p>
+</div>
+<h2>Clustering with K-Means</h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> A practical algorithm for partitioning unlabeled data into K groups by iteratively repositioning cluster centers (centroids) to minimize within-cluster distance.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>Clustering as a problem</strong> — the unsupervised learning goal and what "similar" means in data space</li>
+          <li><strong>K-Means intuition</strong> — why the algorithm works and what centroids represent</li>
+          <li><strong>The algorithm step-by-step</strong> — the six concrete operations and what each accomplishes</li>
+          <li><strong>Initialization and convergence</strong> — why the starting configuration matters and how to improve it</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> K-Means finds local optima, not global optima — the quality of the clustering depends critically on where you start, which is why smart initialization and multiple runs are standard practice, not optional refinements.</li>
+    </ul>
+  </details>
+</div>
+
+<h3 data-anchor="2:p:2">Clustering as an Unsupervised Problem</h3>
+
+<details>
+  <summary><h5>Clustering</h5></summary>
+  <blockquote><p><strong>Clustering:</strong> The task of grouping similar data points together into clusters without labeled training data, discovering hidden structure in unlabeled data.</p></blockquote>
+  <ul>
+    <li><strong>Key property:</strong> Unsupervised — no ground-truth labels are provided</li>
+    <li><strong>Goal:</strong> Each cluster should contain points that are similar to each other and dissimilar to points in other clusters</li>
+    <li><strong>Common applications:</strong>
+      <ul>
+        <li>Customer segmentation by behavior</li>
+        <li>Document or image grouping by content similarity</li>
+        <li>Exploratory data analysis to discover natural groupings</li>
+      </ul>
+    </li>
+  </ul>
+</details>
+
+<h3 data-anchor="2:p:3">K-Means Intuition and Core Concept</h3>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">K-Means Algorithm</span></h5></summary>
+  <blockquote><p><strong>K-Means:</strong> An iterative clustering algorithm that partitions data into K groups by repeatedly assigning points to their nearest cluster center (centroid) and then recomputing the centroid as the mean of assigned points.</p></blockquote>
+  
+  <div data-type="callout" data-callout-type="NOTE">
+    <p><strong>The core insight:</strong> K-Means organizes messy, unlabeled data into structure by finding natural groupings where points within a cluster are close to each other (relative to the centroid) and far from points in other clusters.</p>
+  </div>
+
+  <details>
+    <summary><h6>Visual intuition</h6></summary>
+    <ul>
+      <li>Start with randomly scattered data points and K random centroids</li>
+      <li>Points are assigned to their nearest centroid based on distance</li>
+      <li>Each centroid moves to the mean position of all points assigned to it</li>
+      <li>Points are reassigned based on the new centroid positions</li>
+      <li>This cycle repeats until centroids stop moving and assignments stabilize</li>
+      <li>Result: K compact clusters where similar points cluster together</li>
+    </ul>
+  </details>
+
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>K-Means is the simplest and most common method for cluster analysis. Understand that the algorithm minimizes within-cluster distance and that it converges to a local optimum, not necessarily the global optimum.</p>
+  </div>
+</details>
+
+<h3 data-anchor="2:p:4">The Six-Step K-Means Algorithm</h3>
+
+<details>
+  <summary><h5>Step 1: Choose the Number of Clusters (K)</h5></summary>
+  <blockquote><p><strong>K:</strong> A user-defined parameter specifying how many clusters the algorithm will create.</p></blockquote>
+  <ul>
+    <li>Must be decided before running the algorithm</li>
+    <li>Example: K = 3 means the algorithm will find exactly 3 clusters</li>
+    <li>Choosing K is non-trivial and discussed separately in the chapter on optimal cluster selection</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>Step 2: Initialize Centroids Randomly</h5></summary>
+  <blockquote><p><strong>Centroid initialization:</strong> Randomly place K centroids in the data space, each serving as the representative center of a cluster.</p></blockquote>
+  <ul>
+    <li>At this stage, assignments are essentially random and clusters are meaningless</li>
+    <li>The initial positions significantly affect the final result — this is a major source of variation in K-Means outcomes</li>
+    <li>See the section on initialization impact and k-means++ below for how to improve this step</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>Step 3: Assign Each Point to the Nearest Centroid</h5></summary>
+  <blockquote><p><strong>Assignment step:</strong> For each data point, compute its distance to all K centroids and assign it to the cluster whose centroid is nearest.</p></blockquote>
+  <ul>
+    <li>Distance metric: Usually Euclidean distance (L2 norm)</li>
+    <li>Formula: Assign point <em>x</em> to cluster <em>k</em> if <em>k</em> = arg min<sub>j</sub> ||<em>x</em> − <em>c</em><sub>j</sub>||</li>
+    <li>Result: Data is now partitioned into K non-overlapping clusters</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>Step 4: Recompute Centroids as the Mean of Assigned Points</h5></summary>
+  <blockquote><p><strong>Centroid update:</strong> For each cluster, compute the mean (average) of all points currently assigned to it and move the centroid to this new position.</p></blockquote>
+  <ul>
+    <li>Formula: <em>c</em><sub>k</sub> = (1/|<em>C</em><sub>k</sub>|) Σ<sub><em>x</em> ∈ <em>C</em><sub>k</sub></sub> <em>x</em>, where <em>C</em><sub>k</sub> is the set of points in cluster <em>k</em></li>
+    <li>Centroids now better represent the structure of their assigned points</li>
+    <li>This step is what distinguishes K-Means from other clustering algorithms</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>Step 5: Reassign Points to New Centroids</h5></summary>
+  <blockquote><p><strong>Reassignment:</strong> Repeat the assignment step (Step 3) using the updated centroid positions.</p></blockquote>
+  <ul>
+    <li>Each point is re-evaluated for assignment to the nearest centroid</li>
+    <li>Cluster membership may change if the centroid movement was significant</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>Step 6: Repeat Until Convergence</h5></summary>
+  <blockquote><p><strong>Convergence:</strong> Steps 4 and 5 (centroid updates and reassignments) are repeated until either centroids stop moving or point assignments no longer change.</p></blockquote>
+  <ul>
+    <li>Convergence is guaranteed in finite time because the algorithm cannot cycle through states</li>
+    <li>In practice, convergence often happens in 5–20 iterations depending on data complexity</li>
+    <li>Some implementations use a tolerance threshold: stop if centroids move less than ε distance</li>
+  </ul>
+</details>
+
+<div data-type="callout" data-callout-type="NOTE">
+  <p><strong>K-Means in summary:</strong> Repeat two steps alternately: (1) assign points to nearest centroid, (2) update centroids to the mean of their assigned points. Continue until stable. The result is K compact clusters that minimize total within-cluster distance.</p>
+</div>
+
+<h3 data-anchor="2:p:8">Initialization Impact and K-Means++</h3>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="yellow">Initialization Sensitivity in K-Means</span></h5></summary>
+  <blockquote><p><strong>Initialization problem:</strong> K-Means converges to a local optimum, not the global optimum, and the quality of the final clustering depends critically on the initial centroid positions.</p></blockquote>
+  
+  <div data-type="callout" data-callout-type="CAUTION">
+    <p>Different random initializations can produce substantially different cluster assignments and centroid positions, even on the same dataset. Running K-Means once and trusting the result is unreliable.</p>
+  </div>
+
+  <div data-type="callout" data-callout-type="IMPORTANT">
+    <p>K-Means converges to a local optimum (and may be far from global optimum)</p>
+  </div>
+  <table>
+    <tr>
+      <th>Poor Initialization</th>
+      <th>Smart Initialization (k-means++)</th>
+    </tr>
+    <tr>
+      <td>Centroids placed randomly, possibly too close together</td>
+      <td>Centroids spread out to cover the data space better</td>
+    </tr>
+    <tr>
+      <td>May converge to local optima with poor cluster separation</td>
+      <td>Better coverage reduces likelihood of bad local optima</td>
+    </tr>
+    <tr>
+      <td>Requires multiple runs to find good clustering</td>
+      <td>Single run more likely to be reasonable; fewer restarts needed</td>
+    </tr>
+  </table>
+
+  <details>
+    <summary><h6>Practical fixes: Running K-Means multiple times</h6></summary>
+    <ul>
+      <li>Run K-Means with multiple random initializations</li>
+      <li>Keep the result with the lowest total within-cluster distance (lowest inertia)</li>
+      <li>Typical practice: run 10–30 times and select the best</li>
+    </ul>
+  </details>
+
+  <details>
+    <summary><h6>K-Means++ initialization</h6></summary>
+    <blockquote><p><strong>K-Means++:</strong> A smarter initialization scheme that spreads out the initial centroids to cover the data space better, reducing convergence to poor local optima.</p></blockquote>
+    <ul>
+      <li><strong>How it works:</strong> First centroid is chosen randomly; subsequent centroids are placed with probability proportional to squared distance from the nearest existing centroid (points far from current centroids are more likely to be chosen)</li>
+      <li><strong>Benefit:</strong> Initial centroids are spread out, ensuring better coverage and reducing the chance of poor local optima</li>
+      <li><strong>In Python:</strong> <code>KMeans(init='k-means++', n_clusters=K)</code></li>
+      <li><strong>Exam-level fact:</strong> K-Means++ is a standard technique that improves K-Means results without significantly increasing computational cost</li>
+    </ul>
+  </details>
+
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>K-Means is sensitive to initialization. In practice, use k-means++ initialization or run standard K-Means multiple times and keep the best result. Know that K-Means converges to a local optimum, not necessarily the global optimum.</p>
+  </div>
+</details>
+<h2>Choosing Optimal Clusters and Hierarchical Clustering</h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> Moving beyond the assumption that K is known — how to choose the right number of clusters and how to build cluster hierarchies automatically.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>The Cluster Count Problem</strong> — why K matters and what happens when you choose wrong</li>
+          <li><strong>Within-Cluster Sum of Squares</strong> — the metric that measures clustering quality</li>
+          <li><strong>The Elbow Method</strong> — using diminishing returns to find the optimal K</li>
+          <li><strong>Hierarchical Clustering</strong> — building a tree of clusters without choosing K in advance</li>
+          <li><strong>Reading a Dendrogram</strong> — interpreting cluster structure from the tree</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> K-Means requires a choice you cannot make with the algorithm alone, while Hierarchical Clustering delegates that choice to you after seeing the full structure — a trade-off between simplicity and interpretability.</li>
+    </ul>
+  </details>
+</div>
+
+<h3 data-anchor="2:p:10">The Cluster Count Problem</h3>
+
+<details>
+  <summary><h5>The K Selection Dilemma</h5></summary>
+  <blockquote><p><strong>The problem:</strong> K-Means requires you to specify the number of clusters in advance, but the data does not tell you what K should be.</p></blockquote>
+  <ul>
+    <li><strong>Too few clusters (K too small):</strong> Clusters become too broad and heterogeneous; dissimilar points are forced together.</li>
+    <li><strong>Too many clusters (K too large):</strong> Clusters become overly fragmented; the algorithm discovers noise rather than genuine structure.</li>
+  </ul>
+  <p>Neither extreme produces good clustering. The challenge is finding the middle ground without prior knowledge of how many groups actually exist in the data.</p>
+</details>
+
+<h3 data-anchor="2:p:11">Within-Cluster Sum of Squares</h3>
+
+<details>
+  <summary><h5>WCSS (Within-Cluster Sum of Squares)</h5></summary>
+  <blockquote><p><strong>WCSS:</strong> The sum of squared distances from each point to its cluster's centroid, aggregated across all clusters.</p></blockquote>
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Metric for clustering compactness</p>
+    <div data-type="math">\text{WCSS} = \sum_{k=1}^{K} \sum_{x_i \in C_k} |x_i - \mu_k|^2</div>
+    <ul>
+      <li><strong>K:</strong> number of clusters</li>
+      <li><strong>C_k:</strong> the set of all points assigned to cluster k</li>
+      <li><strong>μ_k:</strong> the centroid (center) of cluster k</li>
+      <li><strong>x_i:</strong> an individual data point</li>
+      <li><strong>|x_i − μ_k|²:</strong> squared Euclidean distance from point to centroid</li>
+    </ul>
+  </div>
+  <h4>Interpreting WCSS</h4>
+  <ul>
+    <li><strong>Small WCSS:</strong> Points lie close to their centroids → points within each cluster are cohesive and similar → good clustering.</li>
+    <li><strong>Large WCSS:</strong> Points are scattered far from their centroids → clusters are spread out and loose → poor clustering.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p><strong>Critical behavior:</strong> As K increases, WCSS always decreases. With K equal to the number of data points, WCSS becomes zero (each point is its own cluster). This monotonic decrease is both useful and dangerous — it means you cannot simply minimize WCSS to find the best K.</p>
+  </div>
+</details>
+
+<h3 data-anchor="2:p:12">The Elbow Method</h3>
+
+<details>
+  <summary><h5>The Elbow Method for Choosing K</h5></summary>
+  <blockquote><p><strong>The Elbow Method:</strong> A visual heuristic for selecting K by plotting WCSS against different K values and identifying the point where improvements flatten out.</p></blockquote>
+  <h4>The Algorithm</h4>
+  <ol>
+    <li>Run K-Means for a range of K values (e.g., K = 1, 2, 3, … 10).</li>
+    <li>Calculate WCSS for each K.</li>
+    <li>Plot K on the x-axis and WCSS on the y-axis.</li>
+    <li>Identify the "elbow" — the point where the curve changes from steep to flat.</li>
+  </ol>
+  <h4>Why It Works</h4>
+  <ul>
+    <li><strong>Early increases in K:</strong> Adding a new cluster captures genuine structure in the data. WCSS drops sharply because you are separating truly different groups.</li>
+    <li><strong>Later increases in K:</strong> Additional clusters capture noise and minor variations. WCSS improves, but the gains are small and diminishing.</li>
+    <li><strong>The elbow:</strong> The transition point between steep and flat is where you stop capturing real structure and start fragmenting noise. This is the "sweet spot" for the number of clusters.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>The elbow is often not sharp — it is a region of slower change rather than a crisp corner. Judgment is required. In practice, plot the curve, look for a clear change in slope, and choose the K just before the curve flattens. If multiple candidates seem reasonable, validate using domain knowledge or downstream task performance.</p>
+  </div>
+</details>
+
+<h3 data-anchor="2:p:13">K-Means Limitations</h3>
+
+<details>
+  <summary><h5>When K-Means Fails</h5></summary>
+  <blockquote><p><strong>K-Means works well for:</strong> Data with round, roughly equally-sized clusters.</p></blockquote>
+  <h4>K-Means Limitations</h4>
+  <ul>
+    <li><strong>Complex cluster shapes:</strong> K-Means assumes spherical clusters. It struggles with elongated, crescent-shaped, or otherwise non-convex clusters.</li>
+    <li><strong>Unequal cluster sizes:</strong> When one cluster is much larger than another, K-Means tends to split the large cluster and merge nearby small ones.</li>
+    <li><strong>Sensitivity to initialization:</strong> K-Means is a local optimization algorithm. Different random initializations of centroids can converge to different local minima, producing different cluster assignments.</li>
+    <li><strong>Requires choosing K:</strong> Unlike some alternatives, K-Means does not automatically determine the number of clusters.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="CAUTION">
+    <p>Do not treat the elbow method as a guaranteed algorithm that always finds the "true" K. If your data has complex structure or your clusters are non-spherical, the elbow method may mislead you. Always visualize the resulting clusters to ensure they make sense for your domain.</p>
+  </div>
+</details>
+
+<h3 data-anchor="2:p:13">Hierarchical Clustering</h3>
+
+<details>
+  <summary><h5>Hierarchical Clustering</h5></summary>
+  <blockquote><p><strong>Hierarchical Clustering:</strong> A clustering method that builds a tree-structured hierarchy of clusters (a dendrogram) by repeatedly merging the two closest clusters, without requiring K to be specified in advance.</p></blockquote>
+  <h4>Key Properties</h4>
+  <ul>
+    <li><strong>No need to choose K:</strong> The algorithm runs once and produces a complete hierarchy. You choose K after seeing the tree structure.</li>
+    <li><strong>Interpretability:</strong> The dendrogram visually shows how clusters relate to each other and at what distances they merge.</li>
+    <li><strong>Scalability:</strong> Hierarchical Clustering does not scale well to large datasets because it requires computing pairwise distances between all points or clusters.</li>
+  </ul>
+</details>
+
+<h3 data-anchor="2:p:14">Hierarchical Clustering — Example</h3>
+
+<details>
+  <summary><h5>Building a Dendrogram Step by Step</h5></summary>
+  <blockquote><p><strong>Dendrogram:</strong> A tree diagram showing the nested structure of clusters and the distances at which clusters were merged.</p></blockquote>
+  <h4>Example: Clustering 6 Students</h4>
+  <p>Suppose you have 6 students, each described by their math and physics test scores. Hierarchical Clustering proceeds as follows:</p>
+  <ol>
+    <li><strong>Start:</strong> Each student is its own cluster (6 clusters total: {A}, {B}, {C}, {D}, {E}, {F}).</li>
+    <li><strong>Step 1:</strong> Find the two most similar students (smallest distance). Merge them into a single cluster. For example, if A and B are closest, create cluster {A, B}. Now you have 5 clusters.</li>
+    <li><strong>Step 2:</strong> Find the two most similar clusters (measured by the distance between their closest points, farthest points, or centroids, depending on the linkage method). Merge them. Now you have 4 clusters.</li>
+    <li><strong>Repeat:</strong> Continue merging the closest clusters until all data points are in a single cluster.</li>
+    <li><strong>Output:</strong> A dendrogram that shows the order and distance of each merge.</li>
+  </ol>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>The dendrogram is both the algorithm's output and the tool for choosing K. Unlike K-Means, where choosing K is a separate step, Hierarchical Clustering lets you choose K by "cutting" the dendrogram at a desired height — the higher you cut, the fewer clusters you get.</p>
+  </div>
+</details>
+
+<h3 data-anchor="2:p:16">Reading a Dendrogram</h3>
+
+<details>
+  <summary><h5>Interpreting Cluster Structure from a Dendrogram</h5></summary>
+  <blockquote><p><strong>Dendrogram interpretation:</strong> The horizontal position groups points; the vertical (height) axis shows the distance at which two clusters were merged.</p></blockquote>
+  <h4>How to Read a Dendrogram</h4>
+  <ul>
+    <li><strong>Horizontal axis (or leaf labels):</strong> Represents individual data points or small clusters.</li>
+    <li><strong>Vertical axis (height):</strong> Represents the distance at which two clusters merged. Higher merges occur at larger distances.</li>
+    <li><strong>Branches:</strong> A branch connects two clusters; the height of the branch shows the distance between them.</li>
+  </ul>
+  <h4>Example: Two Natural Groups</h4>
+  <p>In the student example, suppose the dendrogram shows:</p>
+  <ul>
+    <li>Students A and B are very similar (merge at a small distance).</li>
+    <li>Students C, D, E, and F form a second group (they merge at small distances within the group).</li>
+    <li><strong>The crucial feature:</strong> The distance at which clusters {A, B} and {C, D, E, F} merge is much larger than the distances within each group.</li>
+  </ul>
+  <p>This large jump at the top signals that these two groups are genuinely distinct and should not be merged. The dendrogram visually reveals the natural cluster structure.</p>
+  <details>
+    <summary><h6>Choosing K Using the Dendrogram — Horizontal Cut</h6></summary>
+    <p>To convert the dendrogram into a partition with a specific number of clusters, draw a horizontal line at a chosen height and count how many branches it crosses.</p>
+    <p>In the student example, if you draw a horizontal line at distance ≈ 6, it intersects 2 branches, giving you 2 clusters:</p>
+    <ul>
+      <li><strong>Cluster 1:</strong> A, B</li>
+      <li><strong>Cluster 2:</strong> C, D, E, F</li>
+    </ul>
+    <p>This is a data-driven choice: you are cutting at the point where the gap between cluster distances is largest, which is a natural separation in the data. Different cut heights give different numbers of clusters — you choose the one that aligns with your domain understanding or downstream task needs.</p>
+  </details>
+</details>
+
+<div data-type="callout" data-callout-type="EXAM">
+  <p><strong>Exam-critical facts:</strong></p>
+  <ul>
+    <li>WCSS always decreases as K increases; minimizing WCSS alone does not choose K.</li>
+    <li>The Elbow Method identifies K by finding the point of diminishing returns — where the curve of WCSS vs. K transitions from steep to flat.</li>
+    <li>Hierarchical Clustering produces a dendrogram without requiring K in advance; K is chosen by cutting the tree at a suitable height.</li>
+    <li>Large vertical jumps in a dendrogram signal natural cluster boundaries.</li>
+  </ul>
+</div>
+<h2>Dimensionality Reduction with PCA</h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> How to compress high-dimensional data into fewer dimensions without losing the structure that matters most.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>The Problem and Intuition</strong> — Why real datasets need compression and what PCA actually does geometrically.</li>
+          <li><strong>The PCA Algorithm</strong> — The step-by-step process: mean centering, covariance, eigenvalues, and eigenvectors.</li>
+          <li><strong>Interpreting Principal Components</strong> — How to read what each component represents and decide which ones to keep.</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> PCA does not discard features arbitrarily — it rotates your data to align with directions of maximum variance, then drops the directions where almost nothing happens. The components are ranked: the first captures the dominant pattern, the second captures what remains orthogonal to it, and so on. Keeping the top few is lossless in practice because the tail components hold only noise and redundancy.</li>
+    </ul>
+  </details>
+</div>
+
+<h3 data-anchor="2:p:18">The Problem and Intuition</h3>
+
+<details>
+  <summary><h5>Why Dimensionality Reduction Matters</h5></summary>
+  <blockquote><p><strong>Dimensionality reduction:</strong> Compressing data from many features into fewer features while retaining the information that drives the patterns in your data.</p></blockquote>
+  <p>Real-world datasets often contain hundreds or thousands of features. This creates several concrete problems:</p>
+  <ul>
+    <li><strong>Hard to visualize:</strong> Beyond 3 dimensions, human intuition breaks down; you cannot see patterns directly.</li>
+    <li><strong>Slow training:</strong> More features mean more computation, slower model fitting, and longer inference time.</li>
+    <li><strong>Redundant information:</strong> Many features are correlated — they carry overlapping signals. A student's IQ and GPA both correlate with exam score, but they measure related things.</li>
+    <li><strong>Overfitting risk:</strong> More features give the model more ways to memorize noise instead of learning signal. Reducing to essential features improves generalization.</li>
+  </ul>
+</details>
+
+<details>
+  <summary><h5>PCA Main Idea</h5></summary>
+  <blockquote><p><strong>Principal Component Analysis (PCA):</strong> A linear transformation that replaces original features with new features (principal components) that are fewer in number, uncorrelated, and ordered by the amount of variance (information) they capture.</p></blockquote>
+  <ul>
+    <li><strong>Replace, not select:</strong> PCA does not drop features. It creates new features as linear combinations of the old ones.</li>
+    <li><strong>Variance is information:</strong> Directions where data spreads out widely carry more signal. Directions where data is tightly clustered are redundant or noisy.</li>
+    <li><strong>Find the best angle:</strong> Imagine rotating your scatter plot to find the orientation where the cloud stretches longest. That direction is PC1. Then find the next-longest direction orthogonal to the first — that is PC2. Continue until you run out of variance to capture.</li>
+    <li><strong>Projection:</strong> Each data point is projected onto these new axes. A 200-feature dataset becomes a 4-component dataset with almost no information loss.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="ANALOGY">
+    <p>PCA is like finding the best way to photograph a 3D sculpture. A photo is 2D (fewer dimensions), but if you angle the camera right, the 2D image captures the essential shape. If you angle it wrong, the sculpture looks like a flat blob. PCA automatically finds the angle.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Principal Components Are Ranked</h5></summary>
+  <blockquote><p><strong>Variance ranking:</strong> PC1 captures the direction of maximum variance in the data, PC2 captures the next-largest orthogonal variance, PC3 the next, and so on. The components form a strict ordering: PC1 > PC2 > PC3 > …</p></blockquote>
+  <p>This ranking is why dimensionality reduction works. Early components concentrate the information; later components scatter what little remains. You keep the top few and discard the tail with minimal loss.</p>
+</details>
+
+<h3 data-anchor="2:p:20">The PCA Algorithm</h3>
+
+<details>
+  <summary><h5>Step 1: Mean Centering</h5></summary>
+  <blockquote><p><strong>Mean centering:</strong> Shift each feature so its mean is zero. This places the origin at the centre of your data cloud, making the subsequent linear algebra work correctly.</p></blockquote>
+  <p>For each feature, compute its mean, then subtract that mean from every data point:</p>
+  <ul>
+    <li>x′ = x − mean(x)</li>
+    <li>y′ = y − mean(y)</li>
+  </ul>
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>Mean centering is the first step in every PCA implementation. If you skip it, the covariance matrix will be wrong and all downstream results will be incorrect. Always centre your data before computing the covariance matrix.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Step 2: Compute the Covariance Matrix</h5></summary>
+  <blockquote><p><strong>Covariance matrix:</strong> A symmetric matrix that captures how much each feature varies on its own and how strongly pairs of features vary together.</p></blockquote>
+  <p>For two features x and y, the covariance matrix is:</p>
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Covariance Matrix</p>
+    <div data-type="math">
+      \begin{bmatrix}
+      \text{Var}(x) & \text{Cov}(x,y) \\
+      \text{Cov}(x,y) & \text{Var}(y)
+      \end{bmatrix}
+    </div>
+    <ul>
+      <li><strong>Var(x):</strong> How much x varies around its mean — the diagonal diagonal entries.</li>
+      <li><strong>Cov(x,y):</strong> How much x and y move together — the off-diagonal entries. Positive values mean they trend upward together; negative means they trend opposite; zero means they are independent.</li>
+    </ul>
+  </div>
+  <p>Compute each element:</p>
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Variance of a Feature</p>
+    <div data-type="math">
+      \text{Var}(x) = \frac{1}{n-1} \sum_{i=1}^{n} x_i'^2
+    </div>
+    <ul>
+      <li><strong>n:</strong> Number of data points.</li>
+      <li><strong>x′:</strong> Mean-centred values.</li>
+      <li><strong>1/(n−1):</strong> Sample variance denominator (not n, which is for population variance).</li>
+    </ul>
+  </div>
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Covariance Between Two Features</p>
+    <div data-type="math">
+      \text{Cov}(x,y) = \frac{1}{n-1} \sum_{i=1}^{n} x_i' \cdot y_i'
+    </div>
+    <ul>
+      <li><strong>x′ · y′:</strong> Product of mean-centred values. Positive products dominate when x and y co-vary; negative products dominate when they diverge.</li>
+    </ul>
+  </div>
+  <details>
+    <summary><h6>Worked Example: Exam Score and Study Hours</h6></summary>
+    <p>Dataset: 6 students with study hours (x) and exam scores (y).</p>
+    <table>
+      <tr>
+        <th>Student</th>
+        <th>Study Hours</th>
+        <th>Exam Score</th>
+      </tr>
+      <tr>
+        <td>A</td>
+        <td>2</td>
+        <td>50</td>
+      </tr>
+      <tr>
+        <td>B</td>
+        <td>3</td>
+        <td>58</td>
+      </tr>
+      <tr>
+        <td>C</td>
+        <td>4</td>
+        <td>57</td>
+      </tr>
+      <tr>
+        <td>D</td>
+        <td>5</td>
+        <td>65</td>
+      </tr>
+      <tr>
+        <td>E</td>
+        <td>6</td>
+        <td>62</td>
+      </tr>
+      <tr>
+        <td>F</td>
+        <td>7</td>
+        <td>75</td>
+      </tr>
+    </table>
+    <p><strong>Step 1a: Compute means</strong></p>
+    <div data-type="math">
+      \text{mean}(x) = \frac{2+3+4+5+6+7}{6} = 4.5
+    </div>
+    <div data-type="math">
+      \text{mean}(y) = \frac{50+58+57+65+62+75}{6} = 61.17
+    </div>
+    <p><strong>Step 1b: Centre the data</strong></p>
+    <table>
+      <tr>
+        <th>Student</th>
+        <th>x′ = x − 4.5</th>
+        <th>y′ = y − 61.17</th>
+      </tr>
+      <tr>
+        <td>A</td>
+        <td>−2.5</td>
+        <td>−11.17</td>
+      </tr>
+      <tr>
+        <td>B</td>
+        <td>−1.5</td>
+        <td>−3.17</td>
+      </tr>
+      <tr>
+        <td>C</td>
+        <td>−0.5</td>
+        <td>−4.17</td>
+      </tr>
+      <tr>
+        <td>D</td>
+        <td>0.5</td>
+        <td>3.83</td>
+      </tr>
+      <tr>
+        <td>E</td>
+        <td>1.5</td>
+        <td>0.83</td>
+      </tr>
+      <tr>
+        <td>F</td>
+        <td>2.5</td>
+        <td>13.83</td>
+      </tr>
+    </table>
+    <p><strong>Step 2a: Compute Var(x)</strong></p>
+    <div data-type="math">
+      \text{Squares: } (-2.5)^2 = 6.25, \quad (-1.5)^2 = 2.25, \quad (-0.5)^2 = 0.25, \quad (0.5)^2 = 0.25, \quad (1.5)^2 = 2.25, \quad (2.5)^2 = 6.25
+    </div>
+    <div data-type="math">
+      \text{Sum} = 6.25 + 2.25 + 0.25 + 0.25 + 2.25 + 6.25 = 17.5
+    </div>
+    <div data-type="math">
+      \text{Var}(x) = \frac{17.5}{5} = 3.5
+    </div>
+    <p><strong>Step 2b: Compute Var(y)</strong></p>
+    <div data-type="math">
+      \text{Squares: } (-11.17)^2 \approx 124.77, \quad (-3.17)^2 \approx 10.05, \quad (-4.17)^2 \approx 17.39, \quad (3.83)^2 \approx 14.67, \quad (0.83)^2 \approx 0.69, \quad (13.83)^2 \approx 191.27
+    </div>
+    <div data-type="math">
+      \text{Sum} \approx 358.84
+    </div>
+    <div data-type="math">
+      \text{Var}(y) = \frac{358.84}{5} \approx 71.77
+    </div>
+    <p><strong>Step 2c: Compute Cov(x, y)</strong></p>
+    <div data-type="math">
+      \text{Products: } (-2.5)(-11.17) \approx 27.93, \quad (-1.5)(-3.17) \approx 4.76, \quad (-0.5)(-4.17) \approx 2.09, \quad (0.5)(3.83) \approx 1.92, \quad (1.5)(0.83) \approx 1.25, \quad (2.5)(13.83) \approx 34.58
+    </div>
+    <div data-type="math">
+      \text{Sum} \approx 72.53
+    </div>
+    <div data-type="math">
+      \text{Cov}(x,y) = \frac{72.53}{5} \approx 14.51
+    </div>
+    <p><strong>Covariance Matrix</strong></p>
+    <div data-type="math">
+      \Sigma = \begin{bmatrix}
+      3.5 & 14.51 \\
+      14.51 & 71.77
+      \end{bmatrix}
+    </div>
+    <p><strong>Interpretation:</strong> The high positive covariance (14.51) shows that study hours and exam score move strongly together — more study → higher score. Var(y) ≈ 71.77 is much larger than Var(x) ≈ 3.5, meaning vertical spread (score variation) dominates the scatter plot. PCA will find a direction close to the score axis, because that is where the data stretches furthest.</p>
+  </details>
+</details>
+
+<details>
+  <summary><h5>Step 3: Eigenvalues and Explained Variance</h5></summary>
+  <blockquote><p><strong>Eigenvalues:</strong> The non-negative numbers that emerge from the covariance matrix, each representing the variance captured by one principal component. Larger eigenvalues mean more information in that component.</p></blockquote>
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Explained Variance Ratio</p>
+    <div data-type="math">
+      \text{Explained Variance Ratio}_i = \frac{\lambda_i}{\lambda_1 + \lambda_2 + \cdots + \lambda_k}
+    </div>
+    <ul>
+      <li><strong>λᵢ:</strong> The i-th eigenvalue.</li>
+      <li><strong>Denominator:</strong> Sum of all eigenvalues (total variance).</li>
+      <li><strong>Result:</strong> The percentage of total information carried by component i.</li>
+    </ul>
+  </div>
+  <p>The components are always ordered by eigenvalue: λ₁ ≥ λ₂ ≥ λ₃ ≥ … ≥ λₖ.</p>
+  <details>
+    <summary><h6>Worked Example: Variance Ratios</h6></summary>
+    <p>From the covariance matrix above, eigenvalues are λ₁ = 72 and λ₂ = 0.21.</p>
+    <div data-type="math">
+      \text{PC1 ratio} = \frac{72}{72 + 0.21} = \frac{72}{72.21} \approx 0.997 = 99.7\%
+    </div>
+    <div data-type="math">
+      \text{PC2 ratio} = \frac{0.21}{72.21} \approx 0.003 = 0.3\%
+    </div>
+    <p><strong>Decision:</strong> PC1 holds 99.7% of all variation. PC2 holds only 0.3% — mostly noise and measurement error. Safe to drop PC2 and reduce from 2D → 1D with only 0.3% information loss.</p>
+  </details>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>Use the explained variance ratios to decide how many components to keep. A common strategy: keep enough components to retain 90–95% of total variance, then discard the rest. This balances compression against information loss.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Step 4: Eigenvectors (Principal Directions)</h5></summary>
+  <blockquote><p><strong>Eigenvector:</strong> A unit-length vector (direction) in the original feature space, paired with each eigenvalue. Eigenvectors define the rotation that aligns the data axes with the directions of maximum variance.</p></blockquote>
+  <ul>
+    <li>Each eigenvalue λᵢ has a corresponding eigenvector vᵢ.</li>
+    <li>The eigenvector v₁ paired with λ₁ (the largest eigenvalue) points in the direction of maximum variance.</li>
+    <li>Eigenvectors are orthogonal to each other (perpendicular in the original space), so they form an uncorrelated basis.</li>
+    <li>Once you have the eigenvectors, you use them as the axes of your new coordinate system. Each principal component is a linear combination of the original features using the corresponding eigenvector as weights.</li>
+  </ul>
+  <details>
+    <summary><h6>Worked Example: Computing Principal Components</h6></summary>
+    <p>From the covariance matrix, eigenvectors are found (via numerical methods, which we omit here). For the exam-score example:</p>
+    <div data-type="math">
+      v_1 = \begin{bmatrix} 0.21 \\ 0.98 \end{bmatrix}, \quad v_2 = \begin{bmatrix} -0.98 \\ 0.21 \end{bmatrix}
+    </div>
+    <p><strong>PC1 (keep it):</strong></p>
+    <div data-type="math">
+      \text{PC1} = 0.21 \times \text{StudyHours} + 0.98 \times \text{ExamScore}
+    </div>
+    <p>The weight 0.98 on ExamScore dominates, so PC1 is mostly the score axis. This makes sense: variance in scores is 71.77, while variance in hours is only 3.5, so the data cloud stretches vertically.</p>
+    <p><strong>PC2 (ignore it):</strong></p>
+    <div data-type="math">
+      \text{PC2} = -0.98 \times \text{StudyHours} + 0.21 \times \text{ExamScore}
+    </div>
+    <p>PC2 captures deviations from the main pattern: students who score higher (or lower) than expected given their study time. This is only 0.3% of the data's variance, so it is safe to drop.</p>
+  </details>
+</details>
+
+<h3 data-anchor="2:p:24">Interpreting Principal Components</h3>
+
+<details>
+  <summary><h5>What Each Component Represents</h5></summary>
+  <blockquote><p><strong>Component interpretation:</strong> A principal component is not a single feature — it is a weighted blend of all original features, where the weights are determined by the eigenvector. Read the weights to understand what signal the component captures.</p></blockquote>
+  <p>Each eigenvector tells you which original features matter most for that component:</p>
+  <ul>
+    <li>If a weight is close to 1 or −1, that feature dominates the component.</li>
+    <li>If a weight is close to 0, that feature barely contributes.</li>
+    <li>Positive weights mean the feature pushes in the same direction; negative weights mean it pushes opposite.</li>
+  </ul>
+  <details>
+    <summary><h6>Worked Example: Real-World Meaning</h6></summary>
+    <p><strong>PC1 interpretation (99.7% of variance):</strong></p>
+    <ul>
+      <li><strong>What it captures:</strong> "Student success" — the more you study, the better your exam score. This is the dominant pattern in the data.</li>
+      <li><strong>Why:</strong> Almost every student follows this trend. Variance in PC1 reflects differences in overall student performance.</li>
+      <li><strong>Practical use:</strong> PC1 alone is an excellent proxy for how each student is doing.</li>
+    </ul>
+    <p><strong>PC2 interpretation (0.3% of variance):</strong></p>
+    <ul>
+      <li><strong>What it captures:</strong> Deviations from the main pattern — "unexpected outcomes."</li>
+      <li><strong>Examples:</strong>
+        <ul>
+          <li>A student who studies a lot but scores low (measurement error, illness on exam day, or the data was recorded wrong).</li>
+          <li>A natural genius who scores high with little study.</li>
+          <li>Random noise in the measurements.</li>
+        </ul>
+      </li>
+      <li><strong>Why safe to drop:</strong> These deviations are tiny (0.3%) and often not actionable. Dropping PC2 loses almost nothing real and removes noise.</li>
+    </ul>
+  </details>
+</details>
+
+<details>
+  <summary><h5>Deciding How Many Components to Keep</h5></summary>
+  <blockquote><p><strong>Truncation rule:</strong> Keep the top k principal components where the cumulative explained variance reaches your target threshold (commonly 90%, 95%, or 99%), then discard all remaining components.</p></blockquote>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>Plot the cumulative explained variance against component number. You will see a "knee" where adding more components yields diminishing returns. Keep components up to the knee, then stop.</p>
+  </div>
+  <div data-type="callout" data-callout-type="CAUTION">
+    <p>Do not keep all components just to preserve 100% variance — that defeats the purpose of dimensionality reduction. Some information loss is acceptable and even desirable (noise removal). A small information loss (dropping 0.3% or 1%) often improves model generalization by removing overfitting risk.</p>
+  </div>
+  <div data-type="callout" data-callout-type="WARNING">
+    <p>PCA is a linear transformation only. If your data's true structure is nonlinear (clusters, manifolds), PCA may fail to capture it even with many components. For nonlinear data, consider t-SNE, UMAP, or nonlinear autoencoders.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Information Loss and Reconstruction</h5></summary>
+  <blockquote><p><strong>Information loss:</strong> Dropping the tail components means you cannot perfectly reconstruct the original features from the reduced data. The reconstruction error is the variance carried by the discarded components.</p></blockquote>
+  <ul>
+    <li>If you keep components accounting for 95% of variance, reconstruction error is 5%.</li>
+    <li>For visualization (plotting in 2D or 3D) or exploratory analysis, 90% variance is often enough.</li>
+    <li>For supervised learning (training a classifier), 95–99% is safer to avoid losing predictive signal.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>PCA reconstruction: If you have the reduced components and the eigenvectors, you can rotate back to the original feature space and recover an approximation of the original data. The smaller the variance you discarded, the better the approximation.</p>
+  </div>
+</details>
+<h2>Reinforcement Learning Fundamentals</h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> Reinforcement Learning as a distinct paradigm where agents learn optimal behaviour through interaction, reward, and exploration rather than from labelled data or hidden structure.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>RL in the Machine Learning Landscape</strong> — how RL differs from supervised and unsupervised learning, and why it solves problems neither can</li>
+          <li><strong>The Five Core Components</strong> — the minimal vocabulary needed to define any RL problem</li>
+          <li><strong>The "No Teacher" Principle</strong> — the core insight that agents learn from sparse feedback signals without explicit instruction</li>
+          <li><strong>When to Use Reinforcement Learning</strong> — real-world applications that demand RL and why classical approaches fail there</li>
+          <li><strong>Exploration vs. Exploitation</strong> — the fundamental trade-off in learning from experience</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> RL is not just another algorithm — it is a fundamentally different learning model where the absence of a teacher is the feature, not the limitation, because many real problems have no teacher to give.</li>
+    </ul>
+  </details>
+</div>
+
+<h3 data-anchor="3:p:2">RL in the Machine Learning Landscape</h3>
+
+<details>
+  <summary><h5>The Three Branches of Machine Learning</h5></summary>
+  <blockquote><p><strong>Reinforcement Learning (RL):</strong> Learning what to do (which action to take) based on rewards and punishments received from the environment.</p></blockquote>
+  <p>Machine Learning splits into three paradigms, distinguished by the type of signal available to learn from:</p>
+  <table>
+    <tr>
+      <th>Branch</th>
+      <th>Learning Model</th>
+      <th>Signal Type</th>
+      <th>Analogy</th>
+    </tr>
+    <tr>
+      <td>Supervised Learning</td>
+      <td>Map input → output</td>
+      <td>Labelled correct answers</td>
+      <td>Student with answer key</td>
+    </tr>
+    <tr>
+      <td>Unsupervised Learning</td>
+      <td>Discover hidden patterns</td>
+      <td>Unlabelled data structure</td>
+      <td>Explorer finding tribes</td>
+    </tr>
+    <tr>
+      <td>Reinforcement Learning</td>
+      <td>Choose actions → maximize reward</td>
+      <td>Reward and punishment feedback</td>
+      <td>Pet learning tricks for treats</td>
+    </tr>
+  </table>
+  <div data-type="callout" data-callout-type="ANALOGY">
+    <p>A supervised learner is like a student with an answer key — it knows the right answer for every question and learns to predict it. An unsupervised learner is like an explorer mapping unknown territory — it finds patterns in what it sees but no one told it what to look for. An RL agent is like a pet learning tricks — it has no instruction manual, only feedback: this action got a treat, that one didn't.</p>
+  </div>
+</details>
+
+<h3 data-anchor="3:p:3">The Five Core Components</h3>
+
+<details>
+  <summary><h5>Agent, Environment, Action, State, Reward</h5></summary>
+  <blockquote><p><strong>The five core components:</strong> The minimal set of entities and signals that define every RL problem.</p></blockquote>
+  <ul>
+    <li><strong>Agent:</strong> The learner — the entity that observes the environment and chooses actions.</li>
+    <li><strong>Environment:</strong> The world the agent interacts with — everything outside the agent that responds to actions.</li>
+    <li><strong>Action:</strong> What the agent can do — the set of choices available at each step.</li>
+    <li><strong>State:</strong> Where the agent is — the current configuration of the environment and agent that determines which actions are possible and what rewards are reachable.</li>
+    <li><strong>Reward:</strong> Feedback signal — a scalar number (positive, negative, or zero) that tells the agent how good or bad the last action was.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>Every RL problem, from game-playing to robot control to recommendation systems, can be expressed using only these five terms. If you can name the agent, environment, actions, states, and reward structure, you have defined an RL problem completely.</p>
+  </div>
+</details>
+
+<h3 data-anchor="3:p:4">The "No Teacher" Principle</h3>
+
+<details>
+  <summary><h5>Learning Without Instructions</h5></summary>
+  <blockquote><p><strong>The "No Teacher" Principle:</strong> The agent learns to act by exploring an unknown environment and accumulating rewards over time, with no correct path, no map, and no labelled answers.</p></blockquote>
+  <h4>The Scenario</h4>
+  <ul>
+    <li>An agent explores an unknown environment.</li>
+    <li>No instructions or map are given.</li>
+    <li>Only feedback signals are available.</li>
+  </ul>
+  <h4>Feedback Signals</h4>
+  <ul>
+    <li><strong>Warmer:</strong> small positive reward (+) — the agent is moving toward the goal.</li>
+    <li><strong>Colder:</strong> small negative reward (−) — the agent is moving away from the goal.</li>
+    <li><strong>Candy:</strong> large positive reward — goal reached.</li>
+    <li><strong>Lemon:</strong> large negative reward — penalty or failure state.</li>
+  </ul>
+  <h4>The Learning Process</h4>
+  <ol>
+    <li>The agent takes an action (moves).</li>
+    <li>The environment returns a reward or penalty.</li>
+    <li>The agent gradually learns which actions lead to better outcomes.</li>
+    <li>Over time, the agent's behaviour improves without being told the correct path.</li>
+  </ol>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>This is the defining insight of RL: the absence of a teacher is not a limitation to work around — it is the reality of most real-world learning problems. A self-driving car has no teacher telling it "turn left here," only feedback from crashes and near-misses. An AlphaGo agent has no answer key for chess positions, only the game outcome. Agents improve by accumulating experience and learning from their own mistakes.</p>
+  </div>
+</details>
+
+<h3 data-anchor="3:p:5">When to Use Reinforcement Learning</h3>
+
+<details>
+  <summary><h5>Applications and the "No Correct Label" Problem</h5></summary>
+  <blockquote><p><strong>When to apply RL:</strong> When the problem requires sequential decision-making, the correct action depends on an adaptive environment or unknown future, and no fixed labelled dataset exists.</p></blockquote>
+  <table>
+    <tr>
+      <th>Application</th>
+      <th>Why RL?</th>
+    </tr>
+    <tr>
+      <td>Self-driving cars</td>
+      <td>No "correct" steering label for every situation; the right action depends on traffic, weather, and other unpredictable agents</td>
+    </tr>
+    <tr>
+      <td>Game AI (AlphaGo, Chess)</td>
+      <td>Opponent adapts; no fixed answer key exists for every position</td>
+    </tr>
+    <tr>
+      <td>Robot navigation</td>
+      <td>Environment is unknown or changing; the robot must learn as it explores</td>
+    </tr>
+    <tr>
+      <td>Recommendation systems</td>
+      <td>User feedback is sequential, not one-shot; the system learns which recommendations lead to engagement over time</td>
+    </tr>
+  </table>
+  <div data-type="callout" data-callout-type="CAUTION">
+    <p>RL is powerful precisely because it does not require labelled data — but that power comes at a cost. Training RL agents is often slower and requires more interaction with the environment than supervised learning. Do not reach for RL unless the problem genuinely lacks a fixed answer key; supervised learning will be faster if a labelled dataset exists.</p>
+  </div>
+</details>
+
+<h3 data-anchor="3:p:5">Exploration vs. Exploitation</h3>
+
+<details>
+  <summary><h5>The Fundamental Trade-off in Learning from Experience</h5></summary>
+  <blockquote><p><strong>Exploration-Exploitation Dilemma:</strong> Should the agent do what it already knows works (exploit), or try something new that might be better (explore)?</p></blockquote>
+  <ul>
+    <li><strong>Exploitation:</strong> Greedy choice — the agent selects the action with the highest known reward value, maximizing immediate return.</li>
+    <li><strong>Exploration:</strong> Random or deliberate choice — the agent tries an untested action to discover whether it leads to better outcomes than currently known.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>This dilemma has no perfect solution. Pure exploitation leads to suboptimal behaviour if the agent has not yet discovered the truly best actions. Pure exploration wastes time trying random actions when known good ones exist. Real RL algorithms balance exploration and exploitation — early in training, explore more; as confidence grows, exploit more. The balance is tuned by hyperparameters like the exploration rate (ε in epsilon-greedy strategies covered in the Q-Learning chapter).</p>
+  </div>
+</details>
+<h2>Q-Learning and Value Functions</h2>
+<div data-type="callout" data-callout-type="OVERVIEW">
+  <details>
+    <summary>Overview</summary>
+    <ul>
+      <li><strong>What:</strong> How a reinforcement learning agent learns optimal decision-making by estimating the value of state-action pairs and updating those estimates through experience.</li>
+      <li><strong>How it breaks down:</strong>
+        <ul>
+          <li><strong>Value Functions and Q-Values</strong> — What value functions measure and how state-action Q-values encode the quality of decisions</li>
+          <li><strong>The Bellman Equation and Temporal Difference Error</strong> — How to compute observed Q-values and measure the gap between expectation and reality</li>
+          <li><strong>The Q-Learning Update Rule</strong> — How to adjust Q-value estimates using the learning rate and temporal difference error</li>
+          <li><strong>Episodes and Convergence</strong> — Why one episode is insufficient and how repeated episodes drive Q-values toward their true optimal values</li>
+        </ul>
+      </li>
+      <li><strong>Takeaway:</strong> Q-Learning builds a decision table through incremental corrections: each experience reveals how wrong the current estimate was, and the agent corrects it proportionally. Over many episodes, this converges to the optimal policy — the one that maximizes total reward.</li>
+    </ul>
+  </details>
+</div>
+
+<h3 data-anchor="3:p:6">Value Functions and Q-Values</h3>
+
+<details>
+  <summary><h5>Value-Based Reinforcement Learning</h5></summary>
+  <blockquote><p><strong>Value-based methods:</strong> Reinforcement learning algorithms that learn a value function — an estimate of how good it is to be in a given state or take a given action — and use that function to determine the optimal policy.</p></blockquote>
+  <p>In value-based methods, the agent learns a mapping from states (or state-action pairs) to scalar values. These values then guide action selection: the agent picks actions that lead to states or outcomes with the highest values. Q-Learning is the foundational value-based algorithm.</p>
+</details>
+
+<details>
+  <summary><h5>State Value Function V(s)</h5></summary>
+  <blockquote><p><strong>State value V(s):</strong> A scalar value indicating how good it is to be in a given state s — a snapshot of the environment and its long-term reward potential from that point.</p></blockquote>
+  <p>The state value summarizes the total expected reward the agent can accumulate from state s onward, assuming it follows the optimal policy. It does not depend on the specific action taken; it only reflects the inherent desirability of being in that state.</p>
+</details>
+
+<details>
+  <summary><h5>State-Action Value Function Q(s,a)</h5></summary>
+  <blockquote><p><strong>State-action value Q(s,a):</strong> A scalar value indicating how good it is to take a specific action a in a given state s — the expected total reward after choosing that action and then following the optimal policy thereafter.</p></blockquote>
+  <p>Unlike V(s), the Q-value depends on both the state and the action. Q(s,a) encodes the quality of a decision: if Q(s,a₁) > Q(s,a₂), then action a₁ is preferable in state s. The goal of Q-Learning is to estimate all Q(s,a) pairs accurately so the agent can always choose the action with the highest Q-value.</p>
+  <table>
+    <tr>
+      <th>Concept</th>
+      <th>Definition</th>
+      <th>Scope</th>
+    </tr>
+    <tr>
+      <td><strong>V(s)</strong></td>
+      <td>Expected reward from being in state s</td>
+      <td>State only; marginalizes over actions</td>
+    </tr>
+    <tr>
+      <td><strong>Q(s,a)</strong></td>
+      <td>Expected reward from taking action a in state s</td>
+      <td>State-action pair; specific decision</td>
+    </tr>
+  </table>
+</details>
+
+<details>
+  <summary><h5>Q-Value Table Representation</h5></summary>
+  <blockquote><p><strong>Q-value table:</strong> A matrix representation of all Q(s,a) pairs, with states as rows and actions as columns, enabling lookup of the value for any decision.</p></blockquote>
+  <p>In discrete environments, Q-values are stored in a table where rows are states and columns are actions. Initially, entries are arbitrary (often zeros or random numbers). As the agent experiences episodes, it updates entries in this table to reflect learned estimates.</p>
+  <table>
+    <tr>
+      <th>Q</th>
+      <th>A₁</th>
+      <th>A₂</th>
+      <th>A₃</th>
+      <th>A₄</th>
+    </tr>
+    <tr>
+      <td><strong>S₁</strong></td>
+      <td>Q(S₁,A₁)</td>
+      <td>Q(S₁,A₂)</td>
+      <td>Q(S₁,A₃)</td>
+      <td>Q(S₁,A₄)</td>
+    </tr>
+    <tr>
+      <td><strong>S₂</strong></td>
+      <td>Q(S₂,A₁)</td>
+      <td>Q(S₂,A₂)</td>
+      <td>Q(S₂,A₃)</td>
+      <td>Q(S₂,A₄)</td>
+    </tr>
+    <tr>
+      <td><strong>S₃</strong></td>
+      <td>Q(S₃,A₁)</td>
+      <td>Q(S₃,A₂)</td>
+      <td>Q(S₃,A₃)</td>
+      <td>Q(S₃,A₄)</td>
+    </tr>
+    <tr>
+      <td><strong>S₄</strong></td>
+      <td>Q(S₄,A₁)</td>
+      <td>Q(S₄,A₂)</td>
+      <td>Q(S₄,A₃)</td>
+      <td>Q(S₄,A₄)</td>
+    </tr>
+  </table>
+</details>
+
+<h3 data-anchor="3:p:8">The Five Core Components of Q-Learning</h3>
+
+<details>
+  <summary><h5>Agent</h5></summary>
+  <blockquote><p><strong>Agent:</strong> The learner — the entity that observes the environment, takes actions, receives rewards, and updates its Q-value estimates.</p></blockquote>
+</details>
+
+<details>
+  <summary><h5>Environment</h5></summary>
+  <blockquote><p><strong>Environment:</strong> The world with which the agent interacts — the domain that responds to actions and provides rewards and state transitions.</p></blockquote>
+</details>
+
+<details>
+  <summary><h5>State</h5></summary>
+  <blockquote><p><strong>State:</strong> A snapshot of the environment at a point in time — the information the agent observes that describes where it is and what is possible.</p></blockquote>
+</details>
+
+<details>
+  <summary><h5>Action</h5></summary>
+  <blockquote><p><strong>Action:</strong> A decision the agent can take in response to the current state — a move, choice, or intervention available to the agent.</p></blockquote>
+</details>
+
+<details>
+  <summary><h5>Reward</h5></summary>
+  <blockquote><p><strong>Reward:</strong> Numerical feedback signal from the environment indicating the quality of the outcome — positive for desirable outcomes, negative for undesirable ones, zero for neutral.</p></blockquote>
+</details>
+
+<h3 data-anchor="3:p:9">The Behavior Policy and Exploration</h3>
+
+<details>
+  <summary><h5>Behavior Policy</h5></summary>
+  <blockquote><p><strong>Behavior policy:</strong> The strategy the agent follows to choose actions during learning — typically a random or ε-greedy policy that balances exploration and exploitation.</p></blockquote>
+  <p>Early in learning, the agent cannot rely on Q-values to make good decisions because Q-values are still inaccurate. Instead, it uses a behavior policy — most commonly random action selection or ε-greedy exploration — to ensure it tries different actions and discovers different parts of the environment. This guarantees diverse experience.</p>
+</details>
+
+<details>
+  <summary><h5>Random Exploration Strategy</h5></summary>
+  <blockquote><p><strong>Random exploration:</strong> A behavior policy in which the agent selects actions uniformly at random, independent of Q-values, ensuring broad coverage of the state-action space.</p></blockquote>
+  <p>During early episodes, actions are chosen by random chance, not by looking at Q-values. This guarantees the agent will explore the environment thoroughly rather than getting stuck in a locally appealing but suboptimal pattern.</p>
+</details>
+
+<h3 data-anchor="3:p:10">The Bellman Equation and Temporal Difference Error</h3>
+
+<details>
+  <summary><h5>Observed Q-Value and the Bellman Equation</h5></summary>
+  <blockquote><p><strong>Observed Q-value (Bellman equation):</strong> The estimated true value of a state-action pair based on the immediate reward and the discounted maximum future Q-value.</p></blockquote>
+  <p>When the agent is in state s, takes action a, and transitions to state s′ with reward r, it observes what the Q-value should have been based on that single sample:</p>
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Observed Q-value (Bellman Equation)</p>
+  </div>
+  <div data-type="math">Q(s, a)_{\text{observed}} = R(s') + \gamma \max_a Q(s', a)</div>
+  <ul>
+    <li><strong>R(s′):</strong> The immediate reward received upon arriving at state s′</li>
+    <li><strong>γ (gamma, discount factor):</strong> A value between 0 and 1 that weights future rewards relative to immediate rewards</li>
+    <li><strong>max_a Q(s′, a):</strong> The highest Q-value available from the next state (the best action the agent can take next)</li>
+  </ul>
+  <p>This equation says: the true value of an action is the immediate reward plus a discounted estimate of the best reward achievable next. It is the foundation of Q-Learning.</p>
+</details>
+
+<details>
+  <summary><h5>Discount Factor γ (Gamma)</h5></summary>
+  <blockquote><p><strong>Discount factor γ:</strong> A scalar between 0 and 1 that specifies how much the agent values future rewards relative to immediate rewards.</p></blockquote>
+  <ul>
+    <li><strong>γ = 0:</strong> Robot only cares about the immediate reward. Future rewards do not matter.</li>
+    <li><strong>γ = 0.5:</strong> Future rewards matter, but half as much as immediate rewards.</li>
+    <li><strong>γ = 0.9:</strong> Future rewards matter, but slightly less than immediate rewards.</li>
+    <li><strong>γ = 1:</strong> Robot values future rewards equally to immediate rewards (infinite horizon).</li>
+  </ul>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>Higher γ makes the agent more patient and forward-looking. It becomes more tolerant of short-term negative rewards when the promise of future rewards is high. A lower γ makes the agent myopic, prioritizing immediate payoff.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Temporal Difference Error (TDE)</h5></summary>
+  <blockquote><p><strong>Temporal Difference Error:</strong> The gap between the observed Q-value (what the agent just learned) and the expected Q-value (what it previously believed) — the amount by which the estimate was wrong.</p></blockquote>
+  <div data-type="math">\text{TDE} = Q(s, a)_{\text{observed}} - Q(s, a)_{\text{expected}}</div>
+  <p>The TDE is the key signal that drives learning in Q-Learning. A large positive TDE means the agent overestimated how bad the action is (the true value was better than expected). A large negative TDE means the agent overestimated how good the action is (the true value was worse than expected). The update rule uses TDE to correct the estimate.</p>
+</details>
+
+<details>
+  <summary><h5>Worked Example: Computing Observed Q-Value and TDE</h5></summary>
+  <table>
+    <tr>
+      <td colspan="3" style="text-align: center;"><strong>Grid World with Rewards</strong></td>
+    </tr>
+    <tr>
+      <td>S1</td>
+      <td>S2<br/>−1</td>
+      <td>S3<br/>−2</td>
+    </tr>
+    <tr>
+      <td>S4<br/>−1</td>
+      <td>S5<br/>−2</td>
+      <td>S6<br/>−1</td>
+    </tr>
+    <tr>
+      <td>S7<br/>−3</td>
+      <td>S8<br/>−10</td>
+      <td>S9<br/>+10</td>
+    </tr>
+  </table>
+  <p><strong>Current Q-values (from earlier steps in the episode):</strong></p>
+  <table>
+    <tr>
+      <th>Q</th>
+      <th>Left</th>
+      <th>Right</th>
+      <th>Up</th>
+      <th>Down</th>
+    </tr>
+    <tr>
+      <td><strong>S₁</strong></td>
+      <td>0.5</td>
+      <td>−1.0</td>
+      <td>2.1</td>
+      <td>0.75</td>
+    </tr>
+    <tr>
+      <td><strong>S₄</strong></td>
+      <td>0.5</td>
+      <td>0.75</td>
+      <td>−0.5</td>
+      <td>1.5</td>
+    </tr>
+    <tr>
+      <td><strong>S₅</strong></td>
+      <td>−1.2</td>
+      <td>1.2</td>
+      <td>0.7</td>
+      <td>1.7</td>
+    </tr>
+  </table>
+  <details>
+    <summary><h6>Step 1: Agent at S₁, Action Down → S₄</h6></summary>
+    <ol>
+      <li><strong>Agent is in:</strong> S1</li>
+      <li><strong>Agent takes action:</strong> Down</li>
+      <li><strong>Agent arrives in:</strong> S4</li>
+      <li><strong>Agent receives reward:</strong> R(S4) = −1</li>
+      <li><strong>Compute observed Q-value with γ = 0.1:</strong>
+        <div data-type="math">Q(S_1, \text{down})_{\text{observed}} = R(S_4) + \gamma \max_a Q(S_4, a)</div>
+        <div data-type="math">= -1 + 0.1 \times 1.5 = -0.85</div>
+      </li>
+      <li><strong>Expected Q-value (from table):</strong> Q(S1, down) = 0.75</li>
+      <li><strong>Temporal Difference Error:</strong>
+        <div data-type="math">\text{TDE} = -0.85 - 0.75 = -1.6</div>
+      </li>
+      <li><strong>Interpretation:</strong> The observed Q-value is 1.6 units worse than expected — the action led to a worse outcome than the estimate suggested. The estimate was too optimistic.</li>
+    </ol>
+  </details>
+  <details>
+    <summary><h6>Step 2: Agent at S₄, Action Right → S₅</h6></summary>
+    <ol>
+      <li><strong>Agent is in:</strong> S4</li>
+      <li><strong>Agent takes action:</strong> Right</li>
+      <li><strong>Agent arrives in:</strong> S5</li>
+      <li><strong>Agent receives reward:</strong> R(S5) = −2</li>
+      <li><strong>Compute observed Q-value:</strong>
+        <div data-type="math">Q(S_4, \text{right})_{\text{observed}} = R(S_5) + \gamma \max_a Q(S_5, a)</div>
+        <div data-type="math">= -2 + 0.1 \times 1.7 = -1.83</div>
+      </li>
+      <li><strong>Expected Q-value (from table):</strong> Q(S4, right) = 0.75</li>
+      <li><strong>Temporal Difference Error:</strong>
+        <div data-type="math">\text{TDE} = -1.83 - 0.75 = -2.58</div>
+      </li>
+      <li><strong>Interpretation:</strong> The observed Q-value is 2.58 units worse than expected — this action was even worse than Step 1. The agent's initial belief was significantly overoptimistic.</li>
+    </ol>
+  </details>
+</details>
+
+<h3 data-anchor="3:p:11">The Q-Learning Update Rule</h3>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="red">Q-Learning Update Rule</span></h5></summary>
+  <blockquote><p><strong>Q-Learning update rule:</strong> The equation that adjusts the Q-value estimate after each experience using the learning rate and temporal difference error.</p></blockquote>
+  <div data-type="callout" data-callout-type="FORMULA">
+    <p>Q-Learning Update Rule</p>
+  </div>
+  <div data-type="math">Q(s, a) = Q(s, a)_{\text{expected}} + \alpha \times \text{TDE}</div>
+  <ul>
+    <li><strong>Q(s, a)_expected:</strong> The current Q-value estimate before the update</li>
+    <li><strong>α (alpha, learning rate):</strong> A scalar between 0 and 1 that controls the step size of each update</li>
+    <li><strong>TDE:</strong> The temporal difference error (observed − expected)</li>
+  </ul>
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>The Q-Learning update rule combines the old estimate with a correction proportional to how wrong it was. If α is large, the agent trusts new experience heavily; if α is small, it changes its estimate slowly.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Learning Rate α (Alpha)</h5></summary>
+  <blockquote><p><strong>Learning rate α:</strong> A scalar between 0 and 1 that determines the magnitude of the update — how much weight to give new experience relative to the old estimate.</p></blockquote>
+  <ul>
+    <li><strong>α = 0:</strong> No learning; Q-values never change.</li>
+    <li><strong>α = 1:</strong> Complete replacement; ignore the old estimate and use only the observed value.</li>
+    <li><strong>α = 0.1:</strong> Slow, conservative learning; the new Q-value is 90% old estimate + 10% correction.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="TIP">
+    <p>Smaller α values lead to more stable learning but slower convergence. Larger α values adapt faster but risk instability if individual samples are noisy. In practice, α is often held constant or decayed over time.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Worked Example: Applying the Update Rule</h5></summary>
+  <details>
+    <summary><h6>Example 1: S₁ Down (Negative Error)</h6></summary>
+    <ol>
+      <li><strong>Given:</strong>
+        <ul>
+          <li>Expected Q-value: Q(S1, down) = 0.75</li>
+          <li>TDE = −1.6 (observed was worse)</li>
+          <li>Learning rate: α = 0.1</li>
+        </ul>
+      </li>
+      <li><strong>Update:</strong>
+        <div data-type="math">Q(S_1, \text{down}) = 0.75 + 0.1 \times (-1.6)</div>
+        <div data-type="math">= 0.75 - 0.16 = 0.59</div>
+      </li>
+      <li><strong>Result:</strong> The Q-value decreases from 0.75 to 0.59 because the actual outcome was worse than expected. The correction reduces the agent's belief in how good this action is.</li>
+      <li><strong>Table update:</strong> Q(S₁, Down) changes from 0.75 → <strong>0.59</strong></li>
+    </ol>
+  </details>
+  <details>
+    <summary><h6>Example 2: S₄ Right (Larger Negative Error)</h6></summary>
+    <ol>
+      <li><strong>Given:</strong>
+        <ul>
+          <li>Expected Q-value: Q(S4, right) = 0.75</li>
+          <li>TDE = −2.58 (observed was much worse)</li>
+          <li>Learning rate: α = 0.1</li>
+        </ul>
+      </li>
+      <li><strong>Update:</strong>
+        <div data-type="math">Q(S_4, \text{right}) = 0.75 + 0.1 \times (-2.58)</div>
+        <div data-type="math">= 0.75 - 0.258 = 0.492 \approx 0.49</div>
+      </li>
+      <li><strong>Result:</strong> The Q-value decreases to 0.49, a larger drop than Example 1 because the TDE was more negative. The agent learned this action is worse than it thought.</li>
+      <li><strong>Table update:</strong> Q(S₄, Right) changes from 0.75 → <strong>0.49</strong></li>
+    </ol>
+  </details>
+  <details>
+    <summary><h6>Example 3: S₅ Right (Positive Correction with Higher γ)</h6></summary>
+    <ol>
+      <li><strong>Given scenario:</strong> Same transition S5 → S6, reward −1, but with γ = 0.9 instead of 0.1</li>
+      <li><strong>Compute observed Q-value with γ = 0.9:</strong>
+        <div data-type="math">Q(S_5, \text{right})_{\text{observed}} = -1 + 0.9 \times 2.0 = 0.8</div>
+      </li>
+      <li><strong>Expected Q-value (from table):</strong> Q(S5, right) = 1.2</li>
+      <li><strong>Temporal Difference Error:</strong>
+        <div data-type="math">\text{TDE} = 0.8 - 1.2 = -0.4</div>
+      </li>
+      <li><strong>Update (α = 0.1):</strong>
+        <div data-type="math">Q(S_5, \text{right}) = 1.2 + 0.1 \times (-0.4)</div>
+        <div data-type="math">= 1.2 - 0.04 = 1.16</div>
+      </li>
+      <li><strong>Interpretation:</strong> With γ = 0.9, the future reward max_a Q(S6, a) = 2.0 is weighted more heavily (90% vs 10%), making the observed Q-value much closer to the expected value. The TDE is smaller, so the correction is smaller. The agent is more tolerant of short-term negative rewards when future rewards are promising.</li>
+    </ol>
+  </details>
+</details>
+
+<h3 data-anchor="3:p:16">Episodes and Convergence</h3>
+
+<details>
+  <summary><h5>Episode</h5></summary>
+  <blockquote><p><strong>Episode:</strong> One complete run from the start state to a terminal state (goal, failure, or time limit) — a full trajectory of the agent's interaction with the environment.</p></blockquote>
+  <p>An episode is the natural unit of learning in Q-Learning. The agent starts in some initial state (often fixed, sometimes random), takes actions according to its behavior policy, receives rewards, and continues until it reaches a goal state (success) or penalty state (failure) or hits a step limit. Then the episode ends, and a new one begins.</p>
+</details>
+
+<details>
+  <summary><h5>Partial Episode vs. Complete Episode</h5></summary>
+  <blockquote><p><strong>Partial episode:</strong> A sequence of steps within an episode, before reaching the terminal state — useful for understanding the learning process but not yet a complete learning cycle.</p></blockquote>
+  <p>In the earlier worked examples, the agent took three steps: S1 → S4 → S5 → S6. This is a partial episode because S6 is not the goal (S9) or the penalty state (S8). The episode continues from S6 until the agent reaches S8 or S9 or exceeds the step limit.</p>
+</details>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">Why One Episode Is Not Enough</span></h5></summary>
+  <blockquote><p><strong>Single-episode learning limitation:</strong> After just one attempt, Q-values are unstable and often incorrect because the agent has not yet experienced the full consequences of its actions or discovered optimal paths.</p></blockquote>
+  <ul>
+    <li><strong>Incomplete exploration:</strong> The agent may not have tried all actions in all states.</li>
+    <li><strong>Missed goals:</strong> In the worked example, the agent hadn't yet discovered the path to S9 (+10) by the time the partial episode snapshot was taken.</li>
+    <li><strong>Limited experience with rewards:</strong> The agent saw only negative rewards (−1, −2, −1) and had not yet experienced the high-value goal state (+10).</li>
+    <li><strong>No convergence:</strong> Q-values based on a single sample are noisy and may point to suboptimal actions.</li>
+  </ul>
+  <div data-type="callout" data-callout-type="CAUTION">
+    <p>It is tempting to deploy a policy after one episode of good performance. Resist this temptation. One lucky episode does not mean the policy is optimal; Q-values need many episodes of experience to converge to their true values.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5><span data-style-type="backgroundColor" data-value="orange">Why Multiple Episodes Are Needed</span></h5></summary>
+  <blockquote><p><strong>Multiple-episode convergence:</strong> Repeated episodes allow the agent to explore diverse paths, refine Q-value estimates, and eventually converge to the optimal policy — one in which Q-values accurately reflect the true value of each action.</p></blockquote>
+  <p>Each additional episode gives the agent more data:</p>
+  <ol>
+    <li><strong>Exploration:</strong> With a random or ε-greedy behavior policy, the agent tries different actions in the same states across episodes, discovering paths it missed before.</li>
+    <li><strong>Path discovery:</strong> The agent may find new routes through the environment and experience rewards it hadn't seen in earlier episodes.</li>
+    <li><strong>Q-value refinement:</strong> Each time the agent revisits a state-action pair, it updates the Q-value with new information. Repeated updates with different observed values converge to the true expected value.</li>
+    <li><strong>Convergence detection:</strong> When Q-values stop changing significantly from one episode to the next, the agent has learned a stable policy.</li>
+  </ol>
+  <div data-type="callout" data-callout-type="NOTE">
+    <p>The convergence process is probabilistic. Early episodes are noisy; the agent's estimates may oscillate wildly. Over time, with enough episodes, the noise averages out and Q-values stabilize around their true values. When Q-values stabilize, the policy they induce — always choose the action with the highest Q-value in each state — becomes optimal.</p>
+  </div>
+</details>
+
+<details>
+  <summary><h5>Convergence and the Optimal Policy</h5></summary>
+  <blockquote><p><strong>Optimal policy:</strong> A policy in which the agent always chooses the action with the highest Q-value in each state — guaranteed to maximize total expected reward once Q-values have converged to their true values.</p></blockquote>
+  <p>After many episodes, Q-values converge to their true values: the discounted expected reward for each state-action pair assuming optimal behavior thereafter. Once this happens, the greedy policy — always choosing max_a Q(s,a) — becomes optimal. The agent has learned the best possible way to navigate the environment.</p>
+  <div data-type="callout" data-callout-type="EXAM">
+    <p>Learning is complete when Q-values stabilize (stop changing much). At that point, max_a Q(s,a) for each state defines the optimal policy. The agent can then use this policy without further learning.</p>
+  </div>
+</details>

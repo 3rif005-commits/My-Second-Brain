@@ -1,0 +1,399 @@
+[page 1]
+04 /2 9 /2 0 2 6
+1
+## Machine Learning
+Lecture 09 Unsupervised Learning
+S.DEHILI 2025-2026
+## OVERVIEW Today's  Agenda
+1
+2 2
+3
+4
+Clustering
+K-means : Intuition, algorithm, choosing k. Hierarchical clustering
+PCA : intuition, projection idea, usage§§. T-SNE, SVD.
+Dimensionality Reduction
+[page 2]
+04 /2 9 /2 0 2 6
+2
+## Clustering 1
+3
+What is Clustering ?
+■ Goal:  Group similar data points together
+• No labels (unsupervised)  • Discover hidden structure  • Each group =  cluster
+■ Example :
+• Customers with similar behavior • Similar documents / images
+4
+[page 3]
+04 /2 9 /2 0 2 6
+3
+## K-Means Intuition
+■ Simplest and most common methods for cluster analysis
+■ We want to split data into  K groups
+■ Each group has a center (centroid)
+■ Points belong to the nearest centroid
+  Points close together  -> same cluster
+5
+K-Means – Visual Idea
+6
+■ From random points to clusters
+■ K-means organizes messy data into structure
+[page 4]
+04 /2 9 /2 0 2 6
+4
+## K-Means – Algorithm Steps
+■ K-Means works iteratively:
+1. Choose number of clusters K 2. Initialize centroids (randomly) 3. Assign each point to nearest centroid 4. Recompute centroids (mean of points) 5. Assign points to new clusters 6. Repeat until convergence
+7
+K-Means Algorithm – Step by Step
+1. Choose number of clusters K
+■ Decide how many groups you want  to find
+■ This is a user-defined parameter
+■ Example: K = 3 → 3 clusters
+8
+[page 5]
+04 /2 9 /2 0 2 6
+5
+## K-Means Algorithm – Step by Step
+2. Initialize centroids (randomly)
+■ Randomly  place K centroids in the  data space
+■ Each centroid represents a cluster
+At this stage:
+■ assignments are random
+■ clusters are not meaningful yet
+9
+K-Means Algorithm – Step by Step
+3. Assign points
+■ For each point:
+• Compute distance to all centroids • Assign to the closest one
+Result :
+■ Data is divided into K clusters
+  Usually uses  Euclidean distance
+10
+[page 6]
+04 /2 9 /2 0 2 6
+6
+## K-Means Algorithm – Step by Step
+3. Assign points
+■ For each point:
+• Compute distance to all centroids • Assign to the closest one
+Result :
+■ Data is divided into K clusters
+  Usually uses  Euclidean distance
+11
+K-Means Algorithm – Step by Step
+3. Assign points
+■ For each point:
+• Compute distance to all centroids • Assign to the closest one
+Result :
+■ Data is divided into K clusters
+  Usually uses  Euclidean distance
+12
+[page 7]
+04 /2 9 /2 0 2 6
+7
+## K-Means Algorithm – Step by Step
+4. Recompute centroids (mean of  points)
+■ For each cluster:
+• compute the mean of all points • Move centroid to this new position
+■ Centroids now better represent  their clusters
+13
+K-Means Algorithm – Step by Step
+5. Assign points to new clusters
+■ For each point:
+• Compute distance to all centroids • Assign to the closest one
+14
+[page 8]
+04 /2 9 /2 0 2 6
+8
+## K-Means Algorithm – Step by Step
+6. Repeat until convergence
+■ Step 4. and 5. are repeated until:
+• Centroids stop moving • Assignments no longer change
+15
+K-Means – Summary
+■ K-Means = Repeat 2 steps:
+• Assign points to nearest centroid • Update centroids
+  Until stable !
+■ K-Means minimizes distance within clusters
+• points in same cluster → close • clusters → compact
+16
+[page 9]
+04 /2 9 /2 0 2 6
+9
+## K-Means – Impact of Initial Cluster
+■ Initialization matters in K-Means
+• Centroids are chosen randomly at the start • Different initial positions → different results
+■ Possible issues:
+• Convergence to a  local optimum • Poor cluster separation  • Different runs → different clusters
+  K-Means is simple, but its result depends on where you  start
+17
+■ How we fix it in practice :
+• Run K-Means multiple times • Keep the best result • Use smarter initialization (k-means++)
+■ K-Means++ = smart initialization that improves K-Means results
+• It avoids placing centroids too close together • It ensures better coverage of the data space
+■ In Python :  KMeans(init='k-means++')
+K-Means – Impact of Initial Cluster
+18
+[page 10]
+04 /2 9 /2 0 2 6
+10
+■ The Problem :  How many clusters should we choose?
+• Too few → clusters are too broad • Too many → clusters are overly fragmented
+k=3 k=2
+## Choosing the Optimal Number of Clusters (K)
+19
+k=3 k=2
+■ As the number of clusters increases, the total distance within  clusters decreases
+■ With one cluster per data point, this distance becomes zero
+■ How many clusters should we choose?
+Choosing the Optimal Number of Clusters (K)
+20
+[page 11]
+04 /2 9 /2 0 2 6
+11
+■ The sum of distances,  for each cluster :
+1. Take all points in the cluster 2. Measure distance from each point to the centroid 3. Add all these distances
+■ Small total distance → points are close together → good clustering
+■ Large total distance → points are spread out → poor clustering
+■ K-Means tries to:
+■ minimize this total distance
+## Choosing the Optimal Number of Clusters (K)
+21
+■ Mathematically :
+WCSS =  ෍෍ |x ௜
+௫ ೔ ∈ ஼ ೖ
+௄
+௞ୀଵ
+−μ ௞ | ଶ
+■ Where:
+• K = number of clusters  • C ௞  = points in cluster  k • μ ௞  = centroid of cluster  k • x ௜  = data points
+WCSS (Within-Cluster Sum of Squares)
+22
+[page 12]
+04 /2 9 /2 0 2 6
+12
+■ The Solution : The Elbow Method
+■ The idea:
+• Try different K values • Measure clustering quality • Plot:
+o X-axis → K
+o Y-axis → Summed squared distance
+## Choosing the Optimal Number of Clusters (K)
+23
+■ Increasing the number of  clusters reduces the total within- cluster distance
+■ After a certain point, adding  more clusters brings only small  improvements
+■ This point of diminishing returns  is used to choose the optimal  number of clusters
+Choosing the Optimal K – Elbow Method
+24
+Elbow
+[page 13]
+04 /2 9 /2 0 2 6
+13
+## Limitations
+■ K-Means works well when:
+• clusters are  round • similar size
+■ Problems:
+• not good for complex shapes  • sensitive to initialization  • must choose K
+25
+Hierarchical Clustering
+■ Builds a tree of clusters (dendrogram)
+■ Does not require choosing the number of clusters in advance
+■ Useful for interpretation and visual understanding
+■ Does not scale well to large datasets
+26
+[page 14]
+04 /2 9 /2 0 2 6
+14
+## Hierarchical Clustering – Example
+■ Group 6 students based on their math and physics scores
+1. Each student is its own cluster.
+2. The algorithm then finds the two most similar students and  merges them into a group.
+3. It repeats this step: merging the closest clusters step by step.
+4. In the end, all students are grouped into one big cluster.
+■ This process creates a  tree structure called a dendrogram ,  which shows how clusters were formed at each step.
+27
+Hierarchical Clustering – Example
+28
+[page 15]
+04 /2 9 /2 0 2 6
+15
+## Hierarchical Clustering – Example
+Hierarchical Clustering – Example
+[page 16]
+04 /2 9 /2 0 2 6
+16
+## Hierarchical Clustering – Example
+Hierarchical Clustering – Example
+■ Two natural groups in the data :
+• A and B are very similar • C, D, E, F form another group.
+■ The large jump at the top tells  us that merging these two  groups is not natural.
+32
+[page 17]
+04 /2 9 /2 0 2 6
+17
+Hierarchical Clustering – Example
+■ If you draw a horizontal line  around distance ≈ 6:
+■ You get 2 clusters:
+• Cluster 1: A, B • Cluster 2: C, D, E, F
+33
+## Dimensionality Reduction 2
+34
+[page 18]
+04 /2 9 /2 0 2 6
+18
+## Why Do We Need Dimensionality Reduction?
+■ Real-world data is often messy
+■ Real datasets often have many features (10 → 1000+)
+■ Problem:
+• Hard to visualize • Slow training • Redundant information • Overfitting risk
+  How can we focus on the overall structure without getting lost in  the details?
+35
+Main Idea
+■ Reduce features while keeping most important information
+■ Replace original features with  new features
+■ New features:
+• Fewer in number  • Carry most of the information
+36
+[page 19]
+04 /2 9 /2 0 2 6
+|Col1|Feature1|Feature2|Feature3|...|Feature 200|
+|---|---|---|---|---|---|
+|1||||||
+|2||||||
+|3||||||
+|...||||||
+|52<br>1||||||
+|Col1|PC1|PC2|PC3|PC4|
+|---|---|---|---|---|
+|1|||||
+|2|||||
+|3|||||
+|...|||||
+|521|||||
+19
+## PCA Intuition
+■ PCA finds directions where data varies the most
+• First direction = maximum variance • Second direction = next maximum variance (orthogonal)
+■ Think of it as: “Best angle to look at the data”
+■ Data points are projected onto a new axis
+■ We lose some detail, but keep structure
+■ Goal: minimize information loss while reducing dimensions
+37
+PCA
+■ The first few principal components hold most of the information
+■ Principal components are ranked :
+PCA1 > PCA2 > PCA3 >...
+38
+PCA
+[page 20]
+04 /2 9 /2 0 2 6
+20
+## PCA Step-by-Step – Dataset
+Exam score Study hours
+50 2 A
+58 3 B
+57 4 C
+65 5 D
+62 6 E
+75 7 F
+Step 1 — Mean Centering
+■ Compute means:
+• Mean(x) = 4.5 • Mean(y) = 61.17
+[page 21]
+04 /2 9 /2 0 2 6
+21
+## Step 1 — Mean Centering
+y' x'
+-11.17 -2.5 A
+-3.17 -1.5 B
+-4.17 -0.5 C
+3.83 0.5 D
+0.83 1.5 E
+13.83 2.5 F
+Step 2 – Covariance Matrix
+Var   x= 1 n −1   ෍ x ᇱଶ
+■ Compute squares:
+• −2.5   ଶ = 6.25 • −1.5   ଶ = 2.25 • −0.5   ଶ = 0.25 • 0.5   ଶ = 0.25 • 1.5   ଶ = 2.25 • 2.5   ଶ = 6.25
+■ Sum:
+• 6.25 + 2.25 + 0.25 + 0.25 + 2.25 + 6.25 = 17.5
+■ Var   x=
+ଵ଻ . ହ
+ହ = 3.5
+y' x'
+-11.17 -2.5 A
+-3.17 -1.5 B
+-4.17 -0.5 C
+3.83 0.5 D
+0.83 1.5 E
+13.83 2.5 F
+[page 22]
+04 /2 9 /2 0 2 6
+22
+## Step 2 – Covariance Matrix
+Var   y   = 1 n −1   ෍ y′   ଶ
+■ Compute squares:
+• −11.17   ଶ ≈124.77 • −7.17   ଶ ≈51.41 • 1.83   ଶ ≈3.35 • −0.17   ଶ ≈0.03 • 6.83   ଶ ≈46.65 • 10.83   ଶ ≈117.29
+■ Sum:
+• 124.77 + 51.41 + 3.35 + 0.03 + 46.65 + 117.29 ≈343.5
+■ Var   x=
+ଷସଷ . ହ
+ହ = 68,7
+y' x'
+-11.17 -2.5 A
+-3.17 -1.5 B
+-4.17 -0.5 C
+3.83 0.5 D
+0.83 1.5 E
+13.83 2.5 F
+Step 2 – Covariance Matrix
+Covx, y   = 1 n −1   ෍ x ᇱ ȉ  y′
+■ Products:
+• −2.5 −11.17   ≈27.93 • −1.5 −7.17   ≈10.76 • −0.5 1.83   ≈−0.91 • 0.5 −0.17   ≈−0.08 • 1.5 6.83   ≈10.25 • 2.5 10.83   ≈27.08
+■ Sum:
+• 27.93 + 10.76 −0.92 −0.08 + 10.25 + 27.08 ≈75.02
+■ Covx, y   =
+଻ହ . ଴ଶ
+ହ ≈15.0
+y' x'
+-11.17 -2.5 A
+-3.17 -1.5 B
+-4.17 -0.5 C
+3.83 0.5 D
+0.83 1.5 E
+13.83 2.5 F
+[page 23]
+04 /2 9 /2 0 2 6
+23
+## Step 2 – Covariance Matrix
+Covariance Matrix = Var(x) Cov(x, y) Cov(x, y) Var(y)
+Covariance Matrix =   3,5 15 15 68,7
+■ Strong positive covariance → clear upward trend
+■ Variance in y is much larger → vertical spread dominates
+■ PCA will find a direction close to: score axis
+Eigenvalues (variance explained)
+■ Eigenvalues of the covariance matrix tell you how much variance  is captured by each component
+Explained Variance Ratio  =  λ _i λ ଵ + λ ଶ
+■ In our example  λ ଵ = 72  and   λ ଶ = 0,21
+■ PC1 ratio = 99,7% and   PC2 ratio = 0,3%
+■ PC1 keeps  almost all information
+■ PC2 contains almost nothing (dropping PC2  -> 0.3% info lost)
+■ That’s why we can safely go from  2D → 1D
+[page 24]
+04 /2 9 /2 0 2 6
+24
+## Principal Direction (Eigenvector)
+■ They define the  best rotation of the data
+■ Once we have eigenvectors:
+• We project data onto them  • We keep only the most important ones
+■ In our example :
+• Final PC1 eigenvector: (0.21, 0.98)
+o PC1 = 0.21 × StudyHours + 0.98 × ExamScore • Final PC2 eigenvector:(−0.98, 0.21)
+o PC2 = -0.98 × StudyHours + 0.21 × ExamScore
+Real-world meaning
+■ PC1 (keep it):
+• The more you study, the better your exam score • This explains 99.7% of all variation in your data. Almost every  student follows this pattern.
+■ PC2 (ignore it safely):
+• Students who study more than expected given their score, or score  higher than expected given their study time • This is only 0.3% of variation : just  tiny deviations  from the main  pattern.  • These could be:
+o Measurement errors
+o Unusual cases (sick on exam day, cheating, natural genius)
+o Just random noise

@@ -234,6 +234,12 @@ def _looks_like_a_mastery_guide(html: str) -> bool:
     return len(html) >= 500
 
 
+def _looks_like_a_chapter(html: str) -> bool:
+    """A chapter of a guide written in parts (E9): it opens a chapter and has
+    body — the same "not an outline stub" check, without the <h1>."""
+    return bool(html) and "<h2" in html.lower() and len(html) >= 300
+
+
 def _title_suggestion(html: str) -> str | None:
     m = _H1.search(html or "")
     if not m:
@@ -305,6 +311,17 @@ def _complete(prompt: str, video_urls: list[str], has_text: bool,
         if fixed:
             logger.info(f"repaired {fixed} section anchor(s)")
         return html
+    if sources and 0 < settings.synthesis_chapters_min_sources <= len(sources):
+        # E9: one call covering several lectures wrote each shallower than it
+        # was alone. Plan the chapters, write each in its own call.
+        from services.workspace.chaptered import synthesize_chaptered
+        done = synthesize_chaptered(sources, user_id)
+        if done is not None:
+            html, truncated = done
+            if truncated:                          # a chapter hit the cap
+                from services.ai import client as ai_client
+                ai_client._last_stop.set("max_tokens")
+            return html
     return _strip_fences(complete_with_fallback(
         "summarize_text", user_id, synthesis_messages(prompt),
         max_tokens=OUTPUT_CAP, validate=_looks_like_a_mastery_guide))

@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     # E8: how often the backend indexes notes whose content changed (any
     # writer — editor, AI, import, Android). 0 turns it off. Needs migration 021.
     index_sweep_seconds: int = 60
+    # E9: a study guide from at least this many sources is planned, then
+    # written chapter by chapter. 0 = always one call. Off until measured.
+    synthesis_chapters_min_sources: int = 0
 
     # Spending ceiling for one piece of work: one synthesis, or one agent turn
     # including all of its tool rounds. A run that would exceed it is refused

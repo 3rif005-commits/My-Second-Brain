@@ -1,0 +1,421 @@
+[page 1]
+04 /2 1 /2 0 2 6
+1
+## Machine Learning
+Lecture 08 Ensembles
+S.DEHILI 2025-2026
+## OVERVIEW Today's  Agenda
+1
+2 2
+3
+4
+Motivation & Ensemble Idea
+Motivations, types, techniques
+Bagging, decision trees, averaging predictions
+Sequential learning, correct errors, boos weak learners
+Robustness & accuracy
+Random Forest
+Gradient Boosting
+Comparison & Practical Use
+[page 2]
+04 /2 1 /2 0 2 6
+2
+Why combine multiple models ?
+## Motivation &  Ensemble Idea 1
+3
+Motivation & Ensemble Idea
+■ Definition of Ensembles :
+• Machine learning technique that combines multiple models to  make better predictions • Each model is called a base learner • Output is a combination (average, vote) of base predictions
+4
+[page 3]
+04 /2 1 /2 0 2 6
+3
+## Why Use Ensembles ?
+1. Single algorithms are not fixed
+■ Even one training algorithm produces different models  depending on :
+• Training data (different split or subsets) • Hyperparameters (learning rate, tree depth) • Random initialisations
+2. Consequence of variability
+■ Different models from the same algorithm will have different:
+• Bias : systematic error from oversimplification • Variance : sensitivity to small changes in training data • Irreducible error : noise inherent in the data
+5
+Why Use Ensembles ?
+3. Ensemble solution
+■ By combining several diverse models, ensemble methods can:
+• Reduce overall error • Preserve each model’s strengths • Often lower variance without increasing bias too much
+6
+[page 4]
+04 /2 1 /2 0 2 6
+4
+## Simple Numeric Illustration
+■ Predicting a  small  house (true price = $200K):
+■ 3 models :
+• Tree A (specialist on small ) : $205k • Tree B (specialist on large) : $260k • Tree C (generalist) : $220k • Ensemble average :  $228k
+■ The ensemble error ($28K) is:
+■ Worse than Tree A alone ($5K error)
+■ But much better than Tree B alone ($60K error)
+■ And much more stable across different house sizes than any  single tree
+7
+Advantages
+■ Greater diversity → More accurate ensemble
+■ Under-regularized (overfitting) models work well in ensembles
+• Overfitting models are  high variance, low bias . Combine diverse  overfitting models → variance cancels, low bias remains
+■ Alternative to dimensionality reduction
+8
+[page 5]
+04 /2 1 /2 0 2 6
+5
+## Types of Ensemble Models
+  Two Branches of Ensemble Learning :
+Parallel vs. Sequential Methods
+Parallel
+■ Train each base learner  independently of all others
+■ Training can happen  simultaneously
+■ Results combined at the end
+■ Order of training irrelevant
+Ex : Random Forest
+Sequential
+■ New model learns from the  mistakes of the previous one
+■ Each new model fixes prior  mistakes.
+■ Train in stages
+■ Order matters critically
+Ex : Gradient Boosting
+9
+Parallel
+10
+Sample 1
+Sample 2
+Sample N
+Model 1
+Model 2
+Model N
+Ensemble
+Model
+Sample 1
+Sample 2
+Sample N
+Model 1
+Model 2
+Model N
+Ensemble
+Model
+Sequential
+[page 6]
+04 /2 1 /2 0 2 6
+6
+## Ensemble Techniques
+■ Three most popular :
+• Bagging  • Boosting  • Stacking
+■ Other ensemble techniques include:
+• Blending • Weighted average ensembles • Voting ensembles • Super ensembles
+11
+Bagging
+■ Type:  Parallel + Homogeneous
+■ How it works :
+• Create multiple random samples of the training data • Train the same base algorithm on each sample independently • Combine predictions by voting (classification) or averaging  (regression)
+■ Famous algorithm : Random Forest
+12
+[page 7]
+04 /2 1 /2 0 2 6
+7
+## Boosting
+■ Type: Sequential + Homogeneous
+■ How it works:
+• Train first weak model on original data • Identify which examples it got wrong • Train next model to focus on those mistakes • Repeat for many stages • Combine all models with weighted voting
+■ Famous algorithms: AdaBoost, Gradient Boosting, XGBoost
+13
+Stacking
+■ Type: Typically Parallel + Heterogeneous
+■ How it works:
+• Train multiple different base models (SVM, decision tree, neural  network) on the same data • All base models make predictions • A separate meta-model learns how to best combine their  predictions
+■ Famous algorithm: SuperLearner
+14
+[page 8]
+04 /2 1 /2 0 2 6
+8
+Loan Example
+■ A client walks into a bank and asks to borrow money.
+■ The client submits a loan application.
+■ What the application contains:
+■ The client's financial profile : income, existing assets, debts, loan  amount requested, and other relevant information.
+■ The bank's challenge:
+■ Risk of client defaulting (fail to repay)
+■ Decide:  Approve  or  deny  the loan?
+Reducing variance through randomness and averaging
+## Random  Forest 2
+16
+[page 9]
+04 /2 1 /2 0 2 6
+9
+## Credit Score Example
+■ Input (X):
+• Application data (income, assets, debt, loan amount, etc.)
+■ Output (y):
+• 1 = Client will default (fail to repay) • 0 = Client will repay
+Proba of default Decision
+Yes/No
+Decision
+Yes/No
+Credit Score Example
+Experts
+Yes Yes No Yes No
+3Y 2N
+Yes
+[page 10]
+04 /2 1 /2 0 2 6
+10
+Decision
+Yes/No
+## Credit Score Example
+Models
+0.55 0.4 0.25 0.75 0.65
+h 1 h 2 h 4 h 3 h 5
+1 n   ෍ p _i
+Decision
+Yes/No
+Credit Score Example
+Random
+Forest
+1 n   ෍ p _i
+0.55 0.4 0.25 0.75 0.65
+[page 11]
+04 /2 1 /2 0 2 6
+11
+## Why Random Forest Needs Diversity – Not Identical Trees
+■ Random forest needs diversity, not identical trees
+■ The problem with identical trees:
+■ If we take the same application (same set of features)
+■ Build trees using the same parameters
+■ Every tree will be exactly the same
+■ Five identical trees each output the same probability of default
+■ This is pointless : no benefit from combining them
+The Random Forest solution – inject diversity:
+■ Each tree gets a slightly different version of the data
+■ With 10 total features, each tree might only get 7 of them
+■ Different trees get different subsets of features
+■ Each tree sees a different “perspective” on the same application
+■ The result:
+• Trees make different predictions • Errors cancel out • Ensemble becomes stronger than any single tree
+[page 12]
+04 /2 1 /2 0 2 6
+12
+## Different Features Per Tree
+■ Scenario : 10 total features available (A through J). Each tree  randomly selects 7 features.
+■ Each tree gets a different subset of features
+■ No single tree sees all 10 features
+■ Each tree learns a different "perspective" on the same  application
+Features Used (7 out of 10) Tree
+A, B, C, D, E, F, G Tree 1
+A, C, E, G, H, I, J Tree 2
+B, D, F, H, I, J, A Tree 3
+Trees Can See Any Number of Features
+■ A tree can see 4 features. Or 2 features. Or 1 feature. Or any  number you choose.
+■ In Random Forest, you set ” max_features ” parameter:
+■ Example with 10 total features :
+Features per tree Setting
+Each tree sees 4 out of 10 max_features = 4
+Each tree sees 7 out of 10 max_features = 7
+Each tree sees all 10 (not  diverse, pointless) max_features = 10
+[page 13]
+04 /2 1 /2 0 2 6
+13
+## Tuning Number of Trees
+■ “n_estimators”  is a hyparameter that controls the number of trees
+■ For the credit score example :
+• The AUC increases sharply  • After n_estimators=50, no  increase in performance • Useless to train more than 50  trees in this case
+Tuning Trees Depth
+■ “max_depth”  is a hyparameter that controls the max depth of a  single tree
+■ For the credit score example :
+• Depth 10 wins • Depth 15 slightly worse deeper  is not always better • Depth 5 too shallow • Use 150+ trees for depth 10
+[page 14]
+04 /2 1 /2 0 2 6
+14
+Tuning Leaf Samples
+■ “min_samples_leaf”  is a  hyparameter that controls the  number of samples per leaf
+■ For the credit score example :
+• Low tree number : 3 and 5  samples best • 1,3 and 5 samples give best and  similar performances for 150+  trees  • 50 samples : worst
+Sequential learning: correcting errors step by step
+## Gradient  Boosting  3
+28
+[page 15]
+04 /2 1 /2 0 2 6
+15
+## Boosting
+■ Boosting : a different way of combining multiple models into one  ensemble
+Data
+Model 1
+Predictions 1
+Errors of
+model 1
+Model 2
+Predictions 2
+Errors of  model N-1
+Model N
+Predictions N
+Errors of
+model 2
+Model 3
+Predictions 3
+Final Prediction
+Gradient Boosting
+■ Gradient Boosting : Models used are trees
+■ Each new tree is trained to predict the errors made by the  current model
+■ The model improves by  adding these corrections step by step
+Data
+Tree 1
+Predictions 1
+Errors of
+model 1
+Tree 2
+Predictions 2
+Errors of  model N-1
+Tree N
+Predictions N
+Errors of
+model 2
+Tree 3
+Predictions 3
+Final Prediction
+[page 16]
+04 /2 1 /2 0 2 6
+|Size (m2) Price|Prediction|
+|---|---|
+|200k<br>100k<br>50|200k<br>100k<br>50|
+|200k<br>200k<br>100|200k<br>200k<br>100|
+|200k<br>300k<br>150|200k<br>300k<br>150|
+16
+## Illustrative Example
+■ Goal : Predict the price of a house
+Price Size (m2)
+100k 50
+200k 100
+300k 150
+Illustrative Example
+■ Step 1 : We begin with a constant prediction (mean price)
+■ Mean = 200k
+[page 17]
+04 /2 1 /2 0 2 6
+|Size (m2) Price Prediction Residuals|New pred|
+|---|---|
+|100k<br>-100k<br>200k<br>100k<br>50|100k<br>-100k<br>200k<br>100k<br>50|
+|200k<br>0<br>200k<br>200k<br>100|200k<br>0<br>200k<br>200k<br>100|
+|300k<br>+100k<br>200k<br>300k<br>150|300k<br>+100k<br>200k<br>300k<br>150|
+17
+## Illustrative Example
+■ Step 2 : Compute errors (residuals)
+■ Residual = True_value – predicted_value
+■ From residuals :
+• Small house : overestimated price • Big house : underestimated price
+Residuals Prediction Price Size (m2)
+-100k 200k 100k 50
+0 200k 200k 100
++100k 200k 300k 150
+Illustrative Example
+■ Step 3 : Train a tree on the errors
+■ The tree learns a simple rule :
+• If size is small  -> -100k • If size is medium  -> 0k • If size is large  -> +100k
+■ Step 4 : Update predictions
+■ New prediction = old prediction + correction
+[page 18]
+04 /2 1 /2 0 2 6
+18
+## Weak Learner – The building block
+■ A weak learner is a model that performs just slightly better than  random guessing.
+■ Example :
+• Tree with only 1 split (2 leaves) • Accuracy : 55-65% on binary classification • Using it on its own : not very useful
+■ A weak learner make many mistakes  by design
+Strong Learner – Final goal
+■ A strong learner is a model that achieves  high accuracy  (90– 95%+).
+■ Example :
+• Deep decision tree • Well-tuned neural network  • Gradient Boosting's final output
+  Building a strong learner  directly  is hard. Deep trees overfit.  Neural networks need lots of tuning.
+[page 19]
+04 /2 1 /2 0 2 6
+19
+## How Boosting Creates Strong from Weak
+■ Boosting combines  many weak learners sequentially , each  correcting the previous errors.
+■ Analogy : lifting a heavy box
+■ Weak + weak + weak +... = strong
+Many weak people One strong person
+Each adds small strength Tries alone → struggles
+Together = strong Risk of injury (overfitting)
+How Boosting Creates Strong from Weak
+[page 20]
+04 /2 1 /2 0 2 6
+20
+## Why Not Start Strong?
+■ Gradient Boosting Uses Weak Trees (Depth=3–5)
+■ If first tree is too strong (depth=15):
+• Makes very few errors • Nothing meaningful left for next trees • Overfits immediately • Can't correct gradually
+■ If first tree is weak (depth=3):
+• Makes  simple, predictable errors • Next tree easily learns those errors • Each tree adds a  small improvement • Learning rate controls the step size
+Learning Rate – The Problem
+■ What if the 1st tree is slightly/strongly wrong ?
+■ Problem :
+• Adding the  full  tree's prediction can be too aggressive. One bad  tree ruins everything.
+Prediction Step
+200k Initial guess
++100k (for large house) Tree 1 correction
+300k Final prediction
+[page 21]
+04 /2 1 /2 0 2 6
+|Size (m2) Price Prediction Residuals|New pred|
+|---|---|
+|200k + 0.5(-100k) = 150k<br>-100k<br>200k<br>100k<br>50|200k + 0.5(-100k) = 150k<br>-100k<br>200k<br>100k<br>50|
+|200k + 0.5 (0) = 0k<br>0<br>200k<br>200k<br>100|200k + 0.5 (0) = 0k<br>0<br>200k<br>200k<br>100|
+|200k + 0.5 (100) = 250k<br>+100k<br>200k<br>300k<br>150|200k + 0.5 (100) = 250k<br>+100k<br>200k<br>300k<br>150|
+|Low η|High η|
+|---|---|
+|Large, aggressive<br>Small, cautious<br>Step size per tree|Large, aggressive<br>Small, cautious<br>Step size per tree|
+|Fast, may overshoot<br>Gradual improvement<br>Training effect|Fast, may overshoot<br>Gradual improvement<br>Training effect|
+|High<br>Low<br>Risk of overfitting|High<br>Low<br>Risk of overfitting|
+|Fewer<br>More<br>Number of trees needed|Fewer<br>More<br>Number of trees needed|
+|Quickly fits<br>Slowly rises<br>Accuracy on training data|Quickly fits<br>Slowly rises<br>Accuracy on training data|
+|Can capture noise<br>Generalizes better<br>Accuracy on new data|Can capture noise<br>Generalizes better<br>Accuracy on new data|
+21
+## Learning Rate – The Solution
+■ The learning rate ( η)  allows to take small steps
+■ It controls how much of each tree's correction we add.
+■ New prediction = Old prediction +  η  × (Tree's correction)
+■ η  between 0 and 1
+■ Previous example with  η= 0.5
+High vs Low Learning Rate
+■ In gradient boosting, typical values between 0.01-0.3 depending  on the algorithm
+[page 22]
+04 /2 1 /2 0 2 6
+22
+Gradient Boosting Algorithms
+■ XGBoost : optimized, fast, widely used
+■ LightGBM : very fast, handles large datasets
+■ CatBoost : handles categorical features automatically
+■ GradientBoostingRegressor / Classifier (sklearn)
+When and why to use each method
+## Comparison &  Practical Use  4
+44
+[page 23]
+04 /2 1 /2 0 2 6
+|Feature Random Forest|Gradient Boosting|
+|---|---|
+|Sequential, each corrects<br>previous<br>Parallel, independent<br>How trees are built<br>Reduce bias<br>Reduce variance<br>Focus<br>Small trees (stumps)<br>Deep trees<br>Base learners<br>Higher if learning rate is<br>high<br>Lower<br>Risk of overfitting<br>High accuracy, fine-tuned<br>Quick, robust<br>Typical use|Sequential, each corrects<br>previous<br>Parallel, independent<br>How trees are built<br>Reduce bias<br>Reduce variance<br>Focus<br>Small trees (stumps)<br>Deep trees<br>Base learners<br>Higher if learning rate is<br>high<br>Lower<br>Risk of overfitting<br>High accuracy, fine-tuned<br>Quick, robust<br>Typical use|
+23
+## Random Forest vs Gradient Boosting
+Mechanism Comparison
+■ Random Forest:
+• Train many trees on  different random samples  (bagging)  • Predict =  average or majority vote • Trees don’t talk to each other
+■ Gradient Boosting:
+• Train trees  sequentially • Each tree  learns errors  of previous trees  • Predict =  sum of tree predictions
+[page 24]
+04 /2 1 /2 0 2 6
+24
+## Mechanism Comparison
+Intuition / Analogy
+■ Random Forest:
+• Asks many independent experts and average their answers →  reduces mistakes by averaging
+■ Gradient Boosting:
+• Asks an expert, see where they are wrong, then next expert  corrects the mistakes → builds stronger model gradually
+[page 25]
+04 /2 1 /2 0 2 6
+|Method Use Case|Strength|
+|---|---|
+|Easy to tune, less<br>overfitting<br>Quick robust solution<br>Random Forest<br>High accuracy, handles<br>tricky data<br>More accurate but more<br>sensitive to<br>hyperparameters<br>Gradient Boosting|Easy to tune, less<br>overfitting<br>Quick robust solution<br>Random Forest<br>High accuracy, handles<br>tricky data<br>More accurate but more<br>sensitive to<br>hyperparameters<br>Gradient Boosting|
+25
+## Practical Use Cases
