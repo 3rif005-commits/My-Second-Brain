@@ -40,6 +40,9 @@ export interface SkillDraft {
   multi_source?: MultiSource | null;
 }
 
+/** One preference "Learn from my edits" suggests (E12). */
+export interface StyleSuggestion { preference: string; evidence: string }
+
 export interface NewSkill extends SkillDraft {
   name: string;
 }
@@ -73,6 +76,10 @@ export const skillsApi = {
   original: (name: string) =>
     fetch(`/api/skills/${enc(name)}/original`)
       .then((r) => json<{ description: string; body: string; output: string | null }>(r)),
+  /** Suggestions only — the user adds what they want to Your style. */
+  learnStyle: (name: string) =>
+    fetch(`/api/skills/${enc(name)}/learn-style`, { method: "POST", headers: JSON_HEADERS, body: "{}" })
+      .then((r) => json<{ pairs: number; suggestions: StyleSuggestion[]; reason: string | null }>(r)),
   readFile: (name: string, path: string) =>
     fetch(`/api/skills/${enc(name)}/files/${path}`).then((r) => json<{ content: string }>(r)),
   writeFile: (name: string, path: string, content: string) =>

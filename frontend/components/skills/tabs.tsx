@@ -5,7 +5,8 @@
 // it renders. Tabs that hold their own unsaved work report it through
 // `reportDirty`, so switching skills still asks before throwing it away.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileText, GitCompare, PenLine, type LucideIcon } from "lucide-react";
+import { FileText, GitCompare, Palette, PenLine, type LucideIcon } from "lucide-react";
+import { STYLE_FILE, StyleTab } from "./StyleTab";
 import { Markdown } from "@/lib/markdown/Markdown";
 import { skillsApi, type Skill, type SkillDraft } from "@/lib/skills";
 import { diffStat, lineDiff } from "./lineDiff";
@@ -210,6 +211,12 @@ function OriginalTab({ skill, draft }: TabCtx) {
 
 export const TABS: SkillTab[] = [
   { id: "instructions", label: "Instructions", icon: PenLine, visible: () => true, render: (c) => <InstructionsTab {...c} /> },
+  {
+    // E12 — preferences added after the instructions; learned from edits.
+    id: "style", label: "Your style", icon: Palette,
+    visible: ({ skill }) => skill.files.includes(STYLE_FILE),
+    render: (c) => <StyleTab key={c.skill.name} {...c} />,
+  },
   {
     id: "files", label: "Files", icon: FileText,
     visible: ({ skill }) => skill.files.length > 0,

@@ -267,3 +267,12 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - A method the user may prefer differently is a setting plus a check, not a
   hard rule: the study guide's "Several sources" setting, a per-run word, and
   a card that says when a source came out thin and offers the other way (E9).
+- Keep what the AI wrote if you want to learn from the user's edits. A guide
+  lived only in the browser until insert, so edits had nothing to be
+  compared with (E12: `ai_outputs`).
+- A preference the model must add something for is followed only if it is
+  a requirement and it comes last. In the middle of the prompt, "end each
+  chapter with Key takeaways" reached 1 chapter in 11; restated at the end,
+  9 in 9 (E12).
+- Learned preferences are suggestions the user accepts, never applied on
+  their own: the learner also proposes side effects of real habits.

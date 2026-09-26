@@ -318,7 +318,12 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       (first: `define-terms`) lead xl-ai's AI menu over a selection, via an
       AI button now in the formatting toolbar; verified live on the inline
       model (`openai/gpt-4o-mini`). **Next**: the run card.
-- [ ] 5.2 **E12** learned style playbook.
+- [x] 5.2 **E12** student style — 2026-09-26: "Your style" file (after the
+      instructions, repeated at the end), AI versions recorded on insert
+      (migration 022, **user applies**), "Learn from my edits" suggests,
+      the student accepts. Simulated student: both habits found (+1 harmless
+      extra), guides follow them (Key takeaways 1/11 → 9/9 after the end
+      reminder), quality guard PASS. $0.34. Card: `experiments/E12-student-style.md`.
 - [ ] 5.3 Background agents (triggers, budgets, activity page) on the Batch API.
 - [ ] 5.4 Remote MCP server + per-user OAuth (the subscription bridge); MCP Apps UI.
 

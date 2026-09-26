@@ -530,6 +530,35 @@ def get_synthesis(note_id: str, authorization: str = Header()):
             "last_run": last_run_for_note(note_id)}
 
 
+class AiOutputRequest(BaseModel):
+    skill: str
+    html: str
+
+
+_ai_outputs_warned = False
+
+
+@router.post("/notes/{note_id}/ai-outputs")
+def record_ai_output(note_id: str, body: AiOutputRequest, authorization: str = Header()):
+    """Keep what the AI put into this note (E12) — so "Learn from my edits"
+    can later compare it with the note as the user left it. Best effort: a
+    failure here must never stand between the user and their note."""
+    global _ai_outputs_warned
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    try:
+        get_supabase().table("ai_outputs").insert({
+            "user_id": user_id, "note_id": note_id,
+            "skill": body.skill[:64], "html": body.html}).execute()
+    except Exception as e:                          # noqa: BLE001
+        if not _ai_outputs_warned:
+            logger.warning("ai_outputs not recorded — apply supabase/migrations/"
+                           "022_ai_outputs.sql (%s)", str(e)[:160])
+            _ai_outputs_warned = True
+        return {"recorded": False}
+    return {"recorded": True}
+
+
 @router.post("/notes/{note_id}/synthesis/applied")
 def mark_synthesis_applied(note_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)

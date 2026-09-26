@@ -139,3 +139,18 @@ test("the save bar stays clear of the AI button", async ({ page }) => {
   await page.getByRole("button", { name: "Discard" }).click();
   await expect(desc).toHaveValue(before);
 });
+
+test("the study guide: Several sources and Your style — learn suggests, nothing is saved", async ({ page }) => {
+  // E9 + E12. Free: with no edited guides the learner answers without a model.
+  await page.goto("/brain/settings/skills?skill=study-guide", { waitUntil: "networkidle" });
+  await expect(page.getByTestId("property-several-sources")).toContainText("Automatic", { timeout: 30_000 });
+  await page.getByRole("tab", { name: /your style/i }).click();
+  const style = page.getByRole("textbox", { name: "Your style" });
+  await expect(style).toBeVisible();
+  await expect(style).toHaveValue(/<!--/);                 // the explanation, never sent
+  await page.getByRole("button", { name: "Learn from my edits" }).click();
+  await expect(page.getByTestId("style-suggestions")).toBeVisible({ timeout: 60_000 });
+  fs.mkdirSync(OUT, { recursive: true });
+  await page.screenshot({ path: path.join(OUT, "05-your-style.png") });
+  await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();   // nothing changed
+});

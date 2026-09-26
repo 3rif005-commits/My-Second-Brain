@@ -87,6 +87,34 @@ that would otherwise be lost.
   a portrait of the author. Not every crop is a figure.
 """
 
+STYLE_EXTENSION = """
+THE STUDENT'S OWN STYLE — requirements they wrote or accepted in Settings →
+Skills. Apply every one of them to the whole guide; where one conflicts with
+the instructions above, the student's requirement wins:
+{style}
+"""
+
+#: Repeated at the very end, after the sources (E12): read only in the middle
+#: of the prompt, "end each chapter with Key takeaways" reached 1 chapter in 11.
+STYLE_REMINDER = """
+
+Before you write, re-read the student's own style — every guide must meet it:
+{style}"""
+
+
+def student_style() -> str:
+    """The study guide's "Your style" file (reference/style.md), comments
+    removed — empty when the student has written nothing (E12). Read at call
+    time, like the instructions."""
+    import re
+    from prompts._skill_text import skill_reference
+    try:
+        raw = skill_reference("study-guide", "style.md")
+    except OSError:
+        return ""
+    return re.sub(r"<!--.*?-->", "", raw, flags=re.S).strip()
+
+
 _NO_TEXT_BODY = ("(No transcript could be extracted for this source. The video "
                  "itself is attached to this request — watch it, derive your own "
                  "section timestamps, and use them as t: anchors for this source.)")
@@ -156,6 +184,9 @@ def build_note_synthesis_prompt(sources: list[dict],
     blocks = [_source_block(i, s, b)
               for i, (s, b) in enumerate(zip(sources, budgets), start=1)]
     figures = FIGURE_EXTENSION if has_figures else ""
+    wanted = student_style()
+    style = STYLE_EXTENSION.format(style=wanted) if wanted else ""
+    reminder = STYLE_REMINDER.format(style=wanted) if wanted else ""
     # Read now, not at import: the user's edit in Settings → Skills applies
     # to the next run without a restart.
     return f"""{skill_body("study-guide")}
@@ -163,7 +194,7 @@ def build_note_synthesis_prompt(sources: list[dict],
 {SYNTHESIS_EXTENSION}
 
 {ANCHOR_EXTENSION}
-{figures}
+{figures}{style}
 ---
 SOURCE MATERIAL — {len(sources)} source(s) attached to this note:
 
@@ -171,7 +202,7 @@ SOURCE MATERIAL — {len(sources)} source(s) attached to this note:
 ---
 
 Generate the synthesized mastery guide HTML, with one <h1> topic title and
-source-indexed data-anchor attributes on every <h3>, now:"""
+source-indexed data-anchor attributes on every <h3>, now:{reminder}"""
 
 
 #: Where the per-note part of the prompt begins. Everything before it — the

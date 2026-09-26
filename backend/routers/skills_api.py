@@ -315,6 +315,31 @@ def update_skill(name: str, payload: SkillPayload, authorization: str = Header()
     return _json(reg.get(name), bundled, user)
 
 
+@router.post("/{name}/learn-style")
+def learn_style(name: str, authorization: str = Header()):
+    """Suggest style preferences from how the user edited AI study guides
+    (E12). Suggestions only: the user accepts each into reference/style.md."""
+    user_id = get_user_id(authorization)
+    if name != MULTI_SOURCE_SKILL:
+        raise HTTPException(400, detail="only the study guide learns a style")
+    from prompts.note_synthesis import student_style
+    from services.workspace import style_learning
+    try:
+        pairs = style_learning.gather_pairs(user_id)
+    except Exception as e:                          # noqa: BLE001
+        if "ai_outputs" in str(e):
+            return {"pairs": 0, "suggestions": [],
+                    "reason": "Apply supabase/migrations/022_ai_outputs.sql first."}
+        raise
+    if not pairs:
+        return {"pairs": 0, "suggestions": [],
+                "reason": "No edited study guides yet. Put a guide in a note, "
+                          "edit it your way, then come back."}
+    suggestions = style_learning.learn_from_pairs(pairs, student_style(), user_id)
+    return {"pairs": len(pairs), "suggestions": suggestions,
+            "reason": None if suggestions else "Your edits show no consistent preference yet."}
+
+
 @router.delete("/{name}", status_code=204)
 def delete_skill(name: str, authorization: str = Header()):
     """Reset an edited built-in (the copy goes, the original is back), or

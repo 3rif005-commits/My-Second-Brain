@@ -49,6 +49,10 @@ Each of these is **one entry in a list**:
   `/study-guide quick`. The planner's instructions are a file of the skill
   (`reference/chapter-plan.md`, Files tab).
 
+- **Your style** tab — the study guide only (E12): `reference/style.md`,
+  added after the instructions; "Learn from my edits" suggests lines from how
+  the user edited AI guides (`POST /skills/study-guide/learn-style`).
+
 ## Rules the design keeps
 
 - Saving is explicit (⌘S / Save). Editing a built-in saves the user's own

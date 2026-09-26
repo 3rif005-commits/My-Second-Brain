@@ -503,6 +503,12 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
     // point at sources that note does not have.
     await deliver({ noteId, html: job.result.html, mode: "replace",
       sourceIds: own ? job.result.source_ids : [] });
+    // Keep what the AI wrote, so "Learn from my edits" can compare it with the
+    // note as the user leaves it (E12). Never waits, never blocks the insert.
+    void fetch(`/api/ws/notes/${noteId}/ai-outputs`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skill: job.skill, html: job.result.html }),
+    }).catch(() => {});
     patchJob(cardId, (j) => ({ ...j, applied: { noteId, title }, undoNote: undefined }));
   }
 
