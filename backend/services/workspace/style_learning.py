@@ -28,9 +28,9 @@ MAX_PAIRS = 10
 #: a note must have been touched this long after the insert to count as edited
 EDITED_AFTER_SECONDS = 60
 
-LEARN_PROMPT = """You are helping a student tune how an AI writes their study guides.
+LEARN_PROMPT = """You are helping a student tune how an AI writes their notes.
 
-Below, for each guide the AI wrote, is what the student changed afterwards:
+Below, for each result the AI wrote, is what the student changed afterwards:
 counts of each structure before -> after, and samples of text they removed or
 added. From these, suggest the student's STYLE PREFERENCES.
 
@@ -124,9 +124,9 @@ def learn_from_pairs(pairs: list[tuple[str, str]], existing: str = "",
     return out
 
 
-def gather_pairs(user_id: str) -> list[tuple[str, str]]:
-    """(AI version, the note as the student left it) for the recent guides
-    that were edited after the insert."""
+def gather_pairs(user_id: str, skill: str = SKILL) -> list[tuple[str, str]]:
+    """(AI version, the note as the student left it) for this skill's recent
+    results that were edited after the insert."""
     from datetime import datetime, timedelta
 
     from services.database import get_supabase
@@ -134,7 +134,7 @@ def gather_pairs(user_id: str) -> list[tuple[str, str]]:
 
     db = get_supabase()
     rows = (db.table("ai_outputs").select("note_id,html,created_at")
-            .eq("user_id", user_id).eq("skill", SKILL)
+            .eq("user_id", user_id).eq("skill", skill)
             .order("created_at", desc=True).limit(MAX_PAIRS).execute().data or [])
     if not rows:
         return []

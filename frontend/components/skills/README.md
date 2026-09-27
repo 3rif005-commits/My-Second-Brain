@@ -49,9 +49,10 @@ Each of these is **one entry in a list**:
   `/study-guide quick`. The planner's instructions are a file of the skill
   (`reference/chapter-plan.md`, Files tab).
 
-- **Your style** tab — the study guide only (E12): `reference/style.md`,
-  added after the instructions; "Learn from my edits" suggests lines from how
-  the user edited AI guides (`POST /skills/study-guide/learn-style`).
+- **Your style** tab — every skill (E12): `reference/style.md`, added after
+  its instructions (jobs also repeat it at the end of the prompt). For a job,
+  "Learn from my edits" suggests lines from how the user edited its results
+  (`POST /skills/{name}/learn-style`).
 
 ## Rules the design keeps
 

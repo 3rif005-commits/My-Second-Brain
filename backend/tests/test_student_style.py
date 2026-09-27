@@ -45,3 +45,29 @@ def test_the_style_is_repeated_at_the_very_end(tmp_path):
         prompt = build_note_synthesis_prompt(SRC)
     assert prompt.rstrip().endswith("End each chapter with Key takeaways.")
     assert prompt.count("End each chapter with Key takeaways.") == 2
+
+
+# ── every skill (2026-09-27) ────────────────────────────────────────────────
+
+def test_a_job_prompt_carries_its_style_after_the_body_and_at_the_end(tmp_path):
+    from services.agent.skills import Skill
+    from services.workspace.skill_run import build_prompt
+    ref = tmp_path / "flashcards" / "reference"
+    ref.mkdir(parents=True)
+    (ref / "style.md").write_text("At most 20 cards.\n", encoding="utf-8")
+    skill = Skill(name="flashcards", description="d", body="Write flashcards.",
+                  tools=None, priority=0, source_path=tmp_path / "x.md")
+    with patch("prompts._skill_text.USER_SKILLS_DIR", tmp_path):
+        prompt = build_prompt(skill, SRC)
+    assert prompt.startswith("Write flashcards.")
+    assert prompt.index("At most 20 cards.") < prompt.index("SOURCE MATERIAL")
+    assert prompt.rstrip().endswith("At most 20 cards.")
+
+
+def test_no_style_leaves_a_job_prompt_as_it_was():
+    from services.agent.skills import Skill
+    from services.workspace.skill_run import build_prompt
+    skill = Skill(name="flashcards", description="d", body="Write flashcards.",
+                  tools=None, priority=0, source_path=None)
+    prompt = build_prompt(skill, SRC)
+    assert prompt.endswith("Write it now:") and "OWN STYLE" not in prompt

@@ -68,7 +68,7 @@ def test_a_selection_skill_can_replace_instead_of_adding_below(client):
 def test_reference_files_are_listed_read_and_edited_as_a_copy(client):
     tc, user_dir, bundled = client
     s = _get(tc, "study-guide")
-    assert s["files"] == ["reference/markdown-variant.md"]
+    assert s["files"] == ["reference/markdown-variant.md", "reference/style.md"]   # every skill has Your style
     r = tc.get("/skills/study-guide/files/reference/markdown-variant.md", headers=H)
     assert r.json()["content"] == "Markdown rules.\n"
     r = tc.put("/skills/study-guide/files/reference/markdown-variant.md", headers=H,

@@ -154,3 +154,16 @@ test("the study guide: Several sources and Your style — learn suggests, nothin
   await page.screenshot({ path: path.join(OUT, "05-your-style.png") });
   await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();   // nothing changed
 });
+
+test("every skill has Your style; only a job can learn from edits — nothing is saved", async ({ page }) => {
+  // E12 for all skills (2026-09-27). Free and read-only.
+  for (const [name, canLearn] of [["flashcards", true], ["cite-everything", false]] as const) {
+    await page.goto(`/brain/settings/skills?skill=${name}`, { waitUntil: "networkidle" });
+    await page.getByRole("tab", { name: /your style/i }).click();
+    const style = page.getByRole("textbox", { name: "Your style" });
+    await expect(style).toBeVisible({ timeout: 30_000 });
+    await expect(style).toHaveValue(/<!--/);
+    await expect(page.getByRole("button", { name: "Learn from my edits" })).toHaveCount(canLearn ? 1 : 0);
+    await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+  }
+});

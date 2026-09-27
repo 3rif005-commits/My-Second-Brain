@@ -212,7 +212,8 @@ function OriginalTab({ skill, draft }: TabCtx) {
 export const TABS: SkillTab[] = [
   { id: "instructions", label: "Instructions", icon: PenLine, visible: () => true, render: (c) => <InstructionsTab {...c} /> },
   {
-    // E12 — preferences added after the instructions; learned from edits.
+    // E12 — every skill: preferences added after its instructions; a job
+    // can also learn them from how the user edits its results.
     id: "style", label: "Your style", icon: Palette,
     visible: ({ skill }) => skill.files.includes(STYLE_FILE),
     render: (c) => <StyleTab key={c.skill.name} {...c} />,

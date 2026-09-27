@@ -118,10 +118,13 @@ def build_prompt(skill: Skill, sources: list[dict],
                for s in sources]
     blocks = [_source_block(i, s, b)
               for i, (s, b) in enumerate(zip(sources, budgets), start=1)]
-    return (f"{skill.body}\n\n"
+    from prompts._skill_text import style_block, style_reminder
+    # The user's own style for this skill follows its instructions and is
+    # repeated at the very end (E12); nothing when they wrote none.
+    return (f"{skill.body}{style_block(skill.name)}\n\n"
             f"---\nSOURCE MATERIAL — {len(sources)} source(s) attached:\n\n"
             + "\n".join(blocks)
-            + "\n---\n\nWrite it now:")
+            + "\n---\n\nWrite it now:" + style_reminder(skill.name))
 
 
 def _blocks_for(note_id: str) -> tuple[list[dict], list[str]]:

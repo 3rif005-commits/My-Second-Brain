@@ -103,16 +103,10 @@ Before you write, re-read the student's own style — every guide must meet it:
 
 
 def student_style() -> str:
-    """The study guide's "Your style" file (reference/style.md), comments
-    removed — empty when the student has written nothing (E12). Read at call
-    time, like the instructions."""
-    import re
-    from prompts._skill_text import skill_reference
-    try:
-        raw = skill_reference("study-guide", "style.md")
-    except OSError:
-        return ""
-    return re.sub(r"<!--.*?-->", "", raw, flags=re.S).strip()
+    """The study guide's "Your style" lines — empty when the student has
+    written nothing (E12). Read at call time, like the instructions."""
+    from prompts._skill_text import skill_style
+    return skill_style("study-guide")
 
 
 _NO_TEXT_BODY = ("(No transcript could be extracted for this source. The video "

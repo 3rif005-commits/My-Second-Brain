@@ -159,3 +159,29 @@ def test_a_wrong_value_or_skill_is_refused(client):
     c = _get(tc, "cite-everything")
     assert tc.put("/skills/cite-everything", headers=H, json={
         "description": c["description"], "body": c["body"], "multi_source": "chapters"}).status_code == 400
+
+
+# ── E12 for every skill: "Your style" ───────────────────────────────────────
+
+def test_every_skill_has_a_style_file_even_before_it_is_written(client):
+    tc, _, _ = client
+    assert "reference/style.md" in _get(tc, "cite-everything")["files"]
+    r = tc.get("/skills/cite-everything/files/reference/style.md", headers=H)
+    assert r.status_code == 200 and "<!--" in r.json()["content"]      # the explanation
+
+
+def test_a_style_saved_for_any_skill_is_what_the_runtime_reads(client):
+    tc, user_dir, _ = client
+    r = tc.put("/skills/cite-everything/files/reference/style.md", headers=H,
+               json={"content": "<!-- mine -->\nCite with page numbers.\n"})
+    assert r.status_code == 200
+    with patch("prompts._skill_text.USER_SKILLS_DIR", user_dir):
+        from prompts._skill_text import skill_style, with_style
+        assert skill_style("cite-everything") == "Cite with page numbers."
+        assert with_style("cite-everything", "Cite every claim.").startswith("Cite every claim.")
+        assert "Cite with page numbers." in with_style("cite-everything", "Cite every claim.")
+
+
+def test_only_a_job_can_learn_from_edits(client):
+    tc, _, _ = client
+    assert tc.post("/skills/cite-everything/learn-style", headers=H).status_code == 400

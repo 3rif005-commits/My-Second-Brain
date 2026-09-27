@@ -1,9 +1,9 @@
 "use client";
 
-// E12 — the study guide's "Your style": preferences added AFTER the
-// instructions (which never change), and "Learn from my edits", which only
-// SUGGESTS lines from how the user edited AI guides. Nothing reaches a guide
-// until the user adds it here and saves.
+// E12 — every skill's "Your style": preferences added AFTER its instructions
+// (which stay as they are). For a job — whose results go into notes — "Learn
+// from my edits" SUGGESTS lines from how the user edited those results.
+// Nothing is used until the user adds it here and saves.
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Sparkles } from "lucide-react";
 import { skillsApi, type StyleSuggestion } from "@/lib/skills";
@@ -26,6 +26,8 @@ export function StyleTab({ skill, reportDirty, onSkillChanged }: TabCtx) {
   const [learning, setLearning] = useState(false);
   const [found, setFound] = useState<{ suggestions: StyleSuggestion[]; reason: string | null } | null>(null);
   const dirty = saved !== null && text !== saved;
+  // Only a job's results go into notes, so only a job has edits to learn from.
+  const canLearn = skill.where === "chat";
   useEffect(() => { reportDirty("style", dirty); }, [dirty, reportDirty]);
   useEffect(() => () => reportDirty("style", false), [reportDirty]);
 
@@ -57,7 +59,7 @@ export function StyleTab({ skill, reportDirty, onSkillChanged }: TabCtx) {
   return (
     <div className="space-y-3" data-testid="style-tab">
       <p className="text-[12.5px] leading-relaxed text-gray-500 dark:text-gray-400">
-        Your preferences for every study guide, one per line. They are added after the
+        Your preferences for this skill, one per line. They are added after its
         instructions, which stay as they are. Text between <code>&lt;!--</code> and <code>--&gt;</code> is
         never sent to the AI.
       </p>
@@ -67,12 +69,12 @@ export function StyleTab({ skill, reportDirty, onSkillChanged }: TabCtx) {
           bg-gray-50/80 dark:bg-white/[0.03] border border-gray-200/80 dark:border-white/10 outline-none
           focus:border-indigo-300 text-gray-800 dark:text-gray-100 disabled:opacity-50" />
       <div className="flex items-center gap-2">
-        <button type="button" onClick={learn} disabled={learning}
+        {canLearn && <button type="button" onClick={learn} disabled={learning}
           className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] ring-1 ring-gray-200
             dark:ring-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50">
           <Sparkles size={13} className="text-indigo-500" />
           {learning ? "Reading your edits…" : "Learn from my edits"}
-        </button>
+        </button>}
         {error && <span className="text-[12px] text-red-500">{error}</span>}
         <span className="ml-auto" />
         {dirty && (

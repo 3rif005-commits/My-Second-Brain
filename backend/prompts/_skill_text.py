@@ -42,3 +42,61 @@ def skill_meta(name: str) -> dict:
     if not sep or not head.startswith("---"):
         return {}
     return yaml.safe_load(head[3:]) or {}
+
+
+#: Every skill's "Your style" file (E12, all skills since 2026-09-27).
+STYLE_FILE = "reference/style.md"
+
+#: What a skill's style file holds before the user writes anything. Comments
+#: are never sent to the model.
+STYLE_TEMPLATE = """<!--
+Your style — your preferences for this skill, in your own words, one per line.
+Example: "Keep answers under five bullet points."
+These lines are added after the skill's instructions, which stay as they are.
+Text inside these comment marks is never sent to the AI.
+-->
+"""
+
+_STYLE_BLOCK = """
+
+YOUR STUDENT'S OWN STYLE — requirements they wrote or accepted in Settings →
+Skills. Apply every one of them; where one conflicts with the instructions
+above, the student's requirement wins:
+{style}
+"""
+
+_STYLE_REMINDER = """
+
+Before you write, re-read the student's own style — the result must meet it:
+{style}"""
+
+
+def skill_style(name: str) -> str:
+    """A skill's "Your style" lines, comments removed; "" when none. Read at
+    call time — a save in Settings applies to the next run."""
+    import re
+    try:
+        path = _first(USER_SKILLS_DIR / name / STYLE_FILE, SKILLS_DIR / name / STYLE_FILE)
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    return re.sub(r"<!--.*?-->", "", raw, flags=re.S).strip()
+
+
+def style_block(name: str) -> str:
+    """The style as a block that follows a skill's instructions ("" if none)."""
+    style = skill_style(name)
+    return _STYLE_BLOCK.format(style=style) if style else ""
+
+
+def style_reminder(name: str) -> str:
+    """The style again, for the very end of a prompt (E12: an additive
+    preference read only mid-prompt reached 1 chapter in 11; restated last,
+    9 in 9)."""
+    style = skill_style(name)
+    return _STYLE_REMINDER.format(style=style) if style else ""
+
+
+def with_style(name: str, body: str) -> str:
+    """A skill's instructions followed by the user's style for it."""
+    return body + style_block(name)

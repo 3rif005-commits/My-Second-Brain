@@ -73,8 +73,10 @@ def _raw_body(path: Path) -> str:
 
 
 def _files(name: str) -> list[str]:
-    """Reference files of a skill, built-in and edited copies together."""
-    found: set[str] = set()
+    """Reference files of a skill, built-in and edited copies together — and
+    always its "Your style" file (E12), which every skill reads."""
+    from prompts._skill_text import STYLE_FILE
+    found: set[str] = {STYLE_FILE}
     for root in (_BUNDLED_SKILLS_DIR / name, _USER_SKILLS_DIR / name):
         for d in REF_DIRS:
             if (root / d).is_dir():
@@ -95,7 +97,8 @@ def _file_path(name: str, rel: str) -> tuple[Path, Path]:
     if rel not in _files(name):
         raise HTTPException(404, detail=f"'{rel}' is not a file of '{name}'")
     user = _USER_SKILLS_DIR / name / rel
-    return (user if user.exists() else _BUNDLED_SKILLS_DIR / name / rel), user
+    bundled = _BUNDLED_SKILLS_DIR / name / rel
+    return (user if user.exists() else bundled), user
 
 
 def _json(s: Skill, bundled: set[str], user: set[str]) -> dict:
@@ -225,8 +228,9 @@ def list_selection_skills(authorization: str = Header()):
     every other editor AI request uses, so there is no second model path."""
     get_user_id(authorization)
     from services.workspace.skill_run import selection_skills
+    from prompts._skill_text import with_style
     return {"skills": [{"name": s.name, "description": s.description,
-                        "output": s.output, "prompt": s.body}
+                        "output": s.output, "prompt": with_style(s.name, s.body)}
                        for s in selection_skills()]}
 
 
@@ -246,6 +250,10 @@ def get_original(name: str, authorization: str = Header()):
 def read_file(name: str, rel: str, authorization: str = Header()):
     get_user_id(authorization)
     src, _ = _file_path(name, rel)
+    if not src.exists():
+        # A "Your style" file nobody wrote yet: its explanation, nothing sent.
+        from prompts._skill_text import STYLE_TEMPLATE
+        return {"path": rel, "content": STYLE_TEMPLATE}
     return {"path": rel, "content": src.read_text(encoding="utf-8")}
 
 
@@ -317,15 +325,20 @@ def update_skill(name: str, payload: SkillPayload, authorization: str = Header()
 
 @router.post("/{name}/learn-style")
 def learn_style(name: str, authorization: str = Header()):
-    """Suggest style preferences from how the user edited AI study guides
-    (E12). Suggestions only: the user accepts each into reference/style.md."""
+    """Suggest style preferences from how the user edited this skill's
+    results (E12) — any job whose result goes into a note. Suggestions only:
+    the user accepts each into its reference/style.md."""
     user_id = get_user_id(authorization)
-    if name != MULTI_SOURCE_SKILL:
-        raise HTTPException(400, detail="only the study guide learns a style")
-    from prompts.note_synthesis import student_style
+    reg, _, _ = _state()
+    skill = reg.get(name)
+    if skill is None:
+        raise HTTPException(404, detail=f"Skill '{name}' not found")
+    if _where(skill) != "chat":
+        raise HTTPException(400, detail="only a job's results go into notes to learn from")
+    from prompts._skill_text import skill_style
     from services.workspace import style_learning
     try:
-        pairs = style_learning.gather_pairs(user_id)
+        pairs = style_learning.gather_pairs(user_id, skill=name)
     except Exception as e:                          # noqa: BLE001
         if "ai_outputs" in str(e):
             return {"pairs": 0, "suggestions": [],
@@ -333,9 +346,9 @@ def learn_style(name: str, authorization: str = Header()):
         raise
     if not pairs:
         return {"pairs": 0, "suggestions": [],
-                "reason": "No edited study guides yet. Put a guide in a note, "
+                "reason": "No edited results yet. Put one in a note, "
                           "edit it your way, then come back."}
-    suggestions = style_learning.learn_from_pairs(pairs, student_style(), user_id)
+    suggestions = style_learning.learn_from_pairs(pairs, skill_style(name), user_id)
     return {"pairs": len(pairs), "suggestions": suggestions,
             "reason": None if suggestions else "Your edits show no consistent preference yet."}
 

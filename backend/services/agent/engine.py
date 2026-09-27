@@ -33,6 +33,7 @@ from services.ai.providers import Provider
 from services.ai import usage as usage_log
 from services.embedder import embed
 from services.retriever import retrieve
+from prompts._skill_text import with_style
 
 MAX_TOOL_CALLS_PER_TURN = 10
 # How many times the model may be handed tool results and asked again. Five is
@@ -329,7 +330,7 @@ async def run_turn(
     if workspace_note:
         system_prompt += "\n\n" + WORKSPACE_NOTICE
     turn_context = _turn_context(
-        [s.body for s in matched], knowledge_xml,
+        [with_style(s.name, s.body) for s in matched], knowledge_xml,
         workspace_sources if workspace_note else None)
     jobs: list[dict] = []
     if workspace_note:
@@ -637,7 +638,7 @@ async def _stream_loop(
                     # only instruct. Narrowing would mean re-sending the tool
                     # definitions, which invalidates the prompt cache for the
                     # rest of the turn — a worse trade than it sounds.
-                    _answer(slot, skill.body)
+                    _answer(slot, with_style(skill.name, skill.body))
                     tool_calls_made += 1
                     yield _ev({"type": "skill_active", "name": skill.name})
                     yield _ev({"type": "tool_result", "id": slot["id"],
