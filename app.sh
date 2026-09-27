@@ -23,6 +23,9 @@ MCP_LOG="/tmp/second-brain-mcp.log"
 MCP_PID_FILE="/tmp/second-brain-mcp.pid"
 # The public address the tunnel gives (./app.sh tunnel writes it here).
 MCP_URL_FILE="$HOME/.secondbrain/mcp-public-url"
+TUNNEL_PID_FILE="/tmp/second-brain-tunnel.pid"
+TUNNEL_LOG="/tmp/second-brain-tunnel.log"
+CLOUDFLARED="$(command -v cloudflared || echo "$HOME/.local/bin/cloudflared")"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; BLUE='\033[0;34m'; NC='\033[0m'
 ok()   { echo -e "${GREEN}✓${NC} $*"; }
@@ -80,6 +83,72 @@ kill_service() {
   wait_port_free "$port" "$name"
 }
 
+# The MCP server names its public address in its login metadata, so it is
+# (re)started with the tunnel's address while a tunnel runs, localhost otherwise.
+start_mcp() {
+  local public="http://localhost:$MCP_PORT"
+  if [[ -f "$MCP_URL_FILE" ]] && running "$TUNNEL_PID_FILE" 0; then
+    public="$(cat "$MCP_URL_FILE")"
+  fi
+  setsid bash -c "echo \$\$ > '$MCP_PID_FILE'; cd '$BACKEND_DIR' && source .venv/bin/activate && MCP_PUBLIC_URL='$public' exec uvicorn mcp_remote.server:app --port '$MCP_PORT'" \
+    > "$MCP_LOG" 2>&1 < /dev/null &
+  local i
+  for i in $(seq 1 30); do
+    curl -s -o /dev/null "http://localhost:$MCP_PORT/.well-known/oauth-authorization-server" && break
+    sleep 0.5
+  done
+  ok "MCP server started (port $MCP_PORT, public address $public) — logs: $MCP_LOG"
+}
+
+cmd_tunnel() {
+  if [[ "${2:-}" == "stop" ]]; then
+    if [[ -f "$TUNNEL_PID_FILE" ]]; then
+      kill -- "-$(cat "$TUNNEL_PID_FILE")" 2>/dev/null || kill "$(cat "$TUNNEL_PID_FILE")" 2>/dev/null
+      rm -f "$TUNNEL_PID_FILE"
+      ok "Tunnel stopped"
+    fi
+    rm -f "$MCP_URL_FILE"
+    kill_service "MCP server" "$MCP_PID_FILE" "$MCP_PORT"
+    start_mcp
+    return
+  fi
+  [[ -x "$CLOUDFLARED" ]] || { warn "cloudflared is not installed (expected at $CLOUDFLARED)"; return 1; }
+  if running "$TUNNEL_PID_FILE" 0; then
+    ok "Tunnel already running: $(cat "$MCP_URL_FILE" 2>/dev/null)"
+  else
+    info "Starting a free Cloudflare quick tunnel to the MCP server (port $MCP_PORT only) …"
+    setsid bash -c "echo \$\$ > '$TUNNEL_PID_FILE'; exec '$CLOUDFLARED' tunnel --no-autoupdate --url http://localhost:$MCP_PORT" \
+      > "$TUNNEL_LOG" 2>&1 < /dev/null &
+    local url="" i
+    for i in $(seq 1 60); do
+      url=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+      [[ -n "$url" ]] && break
+      sleep 1
+    done
+    if [[ -z "$url" ]]; then
+      warn "No tunnel address after 60s — see: tail -20 $TUNNEL_LOG"
+      return 1
+    fi
+    mkdir -p "$(dirname "$MCP_URL_FILE")"
+    echo "$url" > "$MCP_URL_FILE"
+    ok "Tunnel up: $url"
+  fi
+  # The login metadata must name the public address: restart the MCP server.
+  kill_service "MCP server" "$MCP_PID_FILE" "$MCP_PORT"
+  start_mcp
+  local public; public="$(cat "$MCP_URL_FILE")"
+  echo ""
+  echo -e "${BLUE}Connect an app to your Second Brain:${NC}"
+  echo "  claude.ai → Settings → Connectors → Add custom connector"
+  echo "    URL:  $public/mcp"
+  echo "  Then click Connect: your browser opens Second Brain's Allow page."
+  echo "  (Log in from THIS laptop's browser — the Allow page is on localhost.)"
+  echo ""
+  echo "  A quick tunnel's address changes each time it starts: re-add the connector"
+  echo "  after a restart.  Stop it with: ./app.sh tunnel stop"
+  echo ""
+}
+
 cmd_start() {
   echo ""
   echo -e "${BLUE}═══ Starting Second Brain ═══${NC}"
@@ -110,11 +179,7 @@ cmd_start() {
   if running "$MCP_PID_FILE" "$MCP_PORT"; then
     warn "MCP server already running on port $MCP_PORT"
   else
-    local public="http://localhost:$MCP_PORT"
-    [[ -f "$MCP_URL_FILE" ]] && public="$(cat "$MCP_URL_FILE")"
-    setsid bash -c "echo \$\$ > '$MCP_PID_FILE'; cd '$BACKEND_DIR' && source .venv/bin/activate && MCP_PUBLIC_URL='$public' exec uvicorn mcp_remote.server:app --port '$MCP_PORT'" \
-      > "$MCP_LOG" 2>&1 < /dev/null &
-    ok "MCP server started (port $MCP_PORT, public address $public) — logs: $MCP_LOG"
+    start_mcp
   fi
 
   if running "$FRONTEND_PID_FILE" "$FRONTEND_PORT"; then
@@ -158,6 +223,11 @@ cmd_stop() {
   kill_service "backend" "$BACKEND_PID_FILE" "$BACKEND_PORT"
   kill_service "frontend" "$FRONTEND_PID_FILE" "$FRONTEND_PORT"
   kill_service "MCP server" "$MCP_PID_FILE" "$MCP_PORT"
+  if [[ -f "$TUNNEL_PID_FILE" ]]; then
+    kill -- "-$(cat "$TUNNEL_PID_FILE")" 2>/dev/null || kill "$(cat "$TUNNEL_PID_FILE")" 2>/dev/null
+    rm -f "$TUNNEL_PID_FILE" "$MCP_URL_FILE"
+    ok "Stopped tunnel"
+  fi
   if [[ -x "$ROOT_DIR/llama.sh" ]]; then
     "$ROOT_DIR/llama.sh" stop
   fi
@@ -185,6 +255,9 @@ cmd_status() {
   else
     echo -e "  MCP       (port $MCP_PORT)  ${RED}○ stopped${NC}"
   fi
+  if running "$TUNNEL_PID_FILE" 0; then
+    echo -e "  Tunnel    ${GREEN}● running${NC}  $(cat "$MCP_URL_FILE" 2>/dev/null)/mcp"
+  fi
   echo ""
   if [[ -x "$ROOT_DIR/llama.sh" ]]; then
     "$ROOT_DIR/llama.sh" status
@@ -205,6 +278,7 @@ case "${1:-help}" in
   stop)   cmd_stop   ;;
   status) cmd_status ;;
   logs)   cmd_logs   ;;
+  tunnel) cmd_tunnel "$@" ;;
   *)
     echo ""
     echo -e "${BLUE}Usage:${NC} ./app.sh <command>"
@@ -213,6 +287,8 @@ case "${1:-help}" in
     echo "           add --prod for a built, much faster frontend (rebuild after code changes)"
     echo "  stop     Kill everything"
     echo "  status   Show what's running"
+    echo "  tunnel   Give the MCP server a public HTTPS address (claude.ai, ChatGPT…)"
+    echo "           ./app.sh tunnel stop  closes it"
     echo "  logs     Tail live logs from backend + frontend"
     echo ""
     ;;

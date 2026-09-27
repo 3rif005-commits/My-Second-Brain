@@ -43,9 +43,23 @@ Trash. Live (`mcp-remote`, 3 tests): an edit waits, Approve applies it; a
 delete is rejected and the note stays; Disconnect → the token answers 401.
 Leftover connections from runs before the /revoke fix were disconnected.
 
-## Phase 3 — the tunnel
+## Phase 3 — the tunnel — done
 `./app.sh tunnel`: install `cloudflared` (asks first), start a tunnel to
 port 8765, save its HTTPS address (`~/.secondbrain/mcp-public-url`), restart
 the MCP server with it, and print what to paste into claude.ai / ChatGPT.
 A free quick tunnel's address changes each start; a fixed one needs a
 Cloudflare account + domain.
+
+Done: `cloudflared` 2026.9.3 installed in `~/.local/bin` (with the user's OK).
+`./app.sh tunnel` starts a quick tunnel to port 8765 only, saves the address,
+restarts the MCP server with it, and prints the connector URL; `./app.sh
+tunnel stop` closes it; `./app.sh stop` closes it too; a saved address is
+never reused without a running tunnel. Verified from the internet side:
+login metadata served with the public issuer, `/mcp` 401 without a token,
+every main-backend path 404 through the tunnel, and the full live e2e (3
+tests: login, tools, approve/reject, disconnect) through the public address.
+The tunnel was closed after the test.
+
+Limits today: the Allow page is on localhost, so connect from this laptop's
+browser (after that the app works anywhere, e.g. claude.ai on a phone, while
+the laptop and tunnel run); a quick tunnel's address changes on each start.
