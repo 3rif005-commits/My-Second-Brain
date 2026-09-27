@@ -24,7 +24,8 @@ from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, Re
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
+from starlette.routing import Route
 
 from mcp_remote.oauth import SCOPE, SecondBrainOAuth, SupabaseStore
 
@@ -190,7 +191,22 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
         return JSONResponse({"redirect": redirect})
 
 
-    return mcp.streamable_http_app(), oauth
+    async def revoke(request: Request):
+        form = await request.form()
+        token, client_id = form.get("token"), form.get("client_id")
+        if not token or not client_id:
+            return JSONResponse({"error": "invalid_request"}, status_code=400)
+        try:
+            await asyncio.to_thread(oauth.disconnect, str(token), str(client_id),
+                                    form.get("client_secret"))
+        except PermissionError:
+            return JSONResponse({"error": "unauthorized_client"}, status_code=401)
+        return Response(status_code=200, headers={"Cache-Control": "no-store"})
+
+    app = mcp.streamable_http_app()
+    # Ours first: the SDK's /revoke refused public clients (see disconnect).
+    app.router.routes.insert(0, Route("/revoke", revoke, methods=["POST"]))
+    return app, oauth
 
 
 app, _oauth = build(SupabaseStore())

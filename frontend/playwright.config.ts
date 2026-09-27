@@ -81,6 +81,15 @@ export default defineConfig({
 
     // 4c. The run card's failure path. Free, but only meaningful against a
     //     backend started with MAX_USD_PER_RUN=0.001 (every job refused).
+    // The remote MCP server (5.4), live and free: Allow page, token, tools.
+    {
+      name: "mcp-remote",
+      testMatch: "**/mcp-remote-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      retries: 0,
+    },
+
     {
       name: "run-card",
       testMatch: "**/run-card-failure.spec.ts",

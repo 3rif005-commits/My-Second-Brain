@@ -195,3 +195,26 @@ def test_markdown_becomes_blocks():
     assert [(b["type"], b["content"][0]["text"]) for b in blocks] == [
         ("heading", "Title"), ("paragraph", "Some bold text more"),
         ("numberedListItem", "one"), ("quote", "quote")]
+
+
+def test_revoking_disconnects_the_app_even_without_a_client_secret(server):
+    """Chat apps are public clients: no secret. The SDK's /revoke answered
+    them 400 and the token kept working (found live)."""
+    c, _, _ = server
+    client_id, tok = _connect(c)
+    r = c.post("/revoke", data={"token": tok["refresh_token"], "client_id": client_id})
+    assert r.status_code == 200
+    status, _ = _call(c, tok["access_token"], "tools/list")
+    assert status == 401                                        # the access token died too
+    refresh = c.post("/token", data={"grant_type": "refresh_token", "client_id": client_id,
+                                     "refresh_token": tok["refresh_token"]})
+    assert refresh.status_code == 400
+
+
+def test_revoking_with_another_app_s_id_does_nothing(server):
+    c, _, _ = server
+    client_id, tok = _connect(c)
+    other = _register(c)
+    assert c.post("/revoke", data={"token": tok["access_token"], "client_id": other}).status_code == 200
+    status, _ = _call(c, tok["access_token"], "tools/list")
+    assert status == 200                                        # not another app's to revoke

@@ -25,6 +25,15 @@ access, with every edit/delete confirmed by the user in the app.
   token → tools), wrong PKCE refused, code single-use, refresh rotation, Deny,
   no token → 401, the Allow endpoints need a Second Brain login.
 
+- **Live** (`e2e/mcp-remote-live.spec.ts`, project `mcp-remote`, free):
+  against the running app — a test app registers, the real Allow page is
+  clicked, code + PKCE → token, then list / create / read / search as the
+  user (the note is deleted), then revoke → the token answers 401.
+- Found live: the MCP SDK's `/revoke` required a `client_secret` field that
+  public clients (chat apps) never send — 400, and the token kept working.
+  Our own `/revoke` now disconnects the app for that user (access and refresh
+  tokens), checking a secret only when the app has one.
+
 ## Phase 2 — edit and delete, confirmed in the app
 `update_note` / `delete_note` tools create a pending change; the app shows
 it (who asks, what changes) with Approve / Reject; only then it is applied.

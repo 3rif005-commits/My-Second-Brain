@@ -283,3 +283,9 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - Check the user's stack is stopped IMMEDIATELY before stopping anything. A
   status read minutes earlier said "stopped"; the user had started it since,
   and a stop/start test ran on their live app.
+- The remote MCP server is its own process on its own port: only that port
+  may go through a tunnel, never the main backend. Tools act only as the
+  user the token belongs to — never an id the app sends.
+- Test that revoking a token actually stops it. The MCP SDK's /revoke
+  refused public clients (no client_secret) with 400 and the token kept
+  working; found only by the live test, fixed with our own /revoke.

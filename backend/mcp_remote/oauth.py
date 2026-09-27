@@ -62,6 +62,7 @@ class Store(Protocol):
     def put_grant(self, row: dict) -> None: ...
     def get_grant(self, secret_hash: str) -> dict | None: ...
     def revoke(self, secret_hash: str) -> None: ...
+    def revoke_all(self, client_id: str, user_id: str) -> None: ...
 
 
 @dataclass
@@ -83,6 +84,10 @@ class MemoryStore:
     def revoke(self, h):
         if h in self.grants:
             self.grants[h]["revoked"] = True
+    def revoke_all(self, client_id, user_id):
+        for g in self.grants.values():
+            if g["client_id"] == client_id and str(g["user_id"]) == str(user_id):
+                g["revoked"] = True
 
 
 class SupabaseStore:
@@ -126,6 +131,10 @@ class SupabaseStore:
 
     def revoke(self, h):
         self._db().table("mcp_grants").update({"revoked": True}).eq("secret_hash", h).execute()
+
+    def revoke_all(self, client_id, user_id):
+        (self._db().table("mcp_grants").update({"revoked": True})
+         .eq("client_id", client_id).eq("user_id", user_id).execute())
 
 
 def _iso(epoch: float) -> str:
@@ -268,6 +277,22 @@ class SecondBrainOAuth:
 
     async def revoke_token(self, token: Any) -> None:
         self.store.revoke(_hash(token.token))
+
+    def disconnect(self, token: str, client_id: str, client_secret: str | None) -> None:
+        """/revoke (RFC 7009): revoking ANY token of an app disconnects that
+        app for that user — its access and refresh tokens alike. Unknown
+        tokens are ignored (the RFC answers 200 either way). The MCP SDK's
+        own handler required a client_secret field that public clients (chat
+        apps) do not send, answered 400, and the token kept working."""
+        info = self.store.get_client(client_id)
+        if not info:
+            return
+        secret = info.get("client_secret")
+        if secret and secret != client_secret:
+            raise PermissionError("client authentication failed")
+        g = self.store.get_grant(_hash(token))
+        if g and g["client_id"] == client_id:
+            self.store.revoke_all(client_id, str(g["user_id"]))
 
 
 def _host(url: str) -> str:
