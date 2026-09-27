@@ -110,3 +110,72 @@ test("an app logs in with Allow and uses the tools as this user", async ({ page,
     data: { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} } });
   expect(after.status()).toBe(401);
 });
+
+
+test("an app's edit and delete wait for approval in Settings → Connected apps", async ({ page, request }) => {
+  // Phase 2, live and free. Creates its own note, deletes it at the end.
+  test.setTimeout(180_000);
+  const reg = await request.post(`${MCP}/register`, { data: {
+    redirect_uris: [REDIRECT], client_name: "E2E approval app", token_endpoint_auth_method: "none",
+    grant_types: ["authorization_code", "refresh_token"], response_types: ["code"] } });
+  const clientId = (await reg.json()).client_id as string;
+  const verifier = crypto.randomBytes(48).toString("base64url");
+  const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
+  const auth = await request.get(`${MCP}/authorize`, { maxRedirects: 0, params: {
+    response_type: "code", client_id: clientId, redirect_uri: REDIRECT, code_challenge: challenge,
+    code_challenge_method: "S256", state: "e2e", scope: "brain" } });
+  let callback = "";
+  await page.route("http://localhost:9999/**", (route) => { callback = route.request().url(); return route.fulfill({ body: "ok" }); });
+  await page.goto(auth.headers()["location"]);
+  await page.getByRole("button", { name: "Allow" }).click();
+  await expect.poll(() => callback, { timeout: 30_000 }).toContain("code=");
+  const tok = await (await request.post(`${MCP}/token`, { form: { grant_type: "authorization_code",
+    code: new URL(callback).searchParams.get("code")!, redirect_uri: REDIRECT, client_id: clientId,
+    code_verifier: verifier } })).json();
+  const token = tok.access_token as string;
+
+  let noteId = "";
+  try {
+    noteId = (toolResult(await rpc(request, token, "tools/call", { name: "create_note",
+      arguments: { title: "E2E approval note (temporary)", content_markdown: "Old text." } })) as { note_id: string }).note_id;
+
+    const asked = toolResult(await rpc(request, token, "tools/call", { name: "update_note",
+      arguments: { note_id: noteId, content_markdown: "New text from the app.", reason: "e2e" } })) as
+      { change_id: string; message: string };
+    expect(asked.message).toContain("NOT DONE YET");
+    const before = toolResult(await rpc(request, token, "tools/call", { name: "get_note", arguments: { note_id: noteId } })) as { text: string };
+    expect(before.text).toContain("Old text.");                         // nothing changed yet
+
+    await page.goto("/brain/settings/connected-apps");
+    const card = page.getByTestId("pending-change").filter({ hasText: "E2E approval note" }).first();
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    await expect(card).toContainText("New text from the app.");
+    fs.mkdirSync(OUT, { recursive: true });
+    await page.screenshot({ path: path.join(OUT, "02-waiting-for-approval.png") });
+    await card.getByRole("button", { name: "Approve" }).click();
+    await expect(card).toBeHidden({ timeout: 30_000 });
+
+    const after = toolResult(await rpc(request, token, "tools/call", { name: "get_note", arguments: { note_id: noteId } })) as { text: string };
+    expect(after.text).toContain("New text from the app.");
+    const st = toolResult(await rpc(request, token, "tools/call", { name: "check_change", arguments: { change_id: asked.change_id } })) as { status: string };
+    expect(st.status).toBe("approved");
+
+    // a delete, rejected: the note stays
+    await rpc(request, token, "tools/call", { name: "delete_note", arguments: { note_id: noteId, reason: "e2e" } });
+    await page.reload();
+    const del = page.getByTestId("pending-change").filter({ hasText: "E2E approval note" }).first();
+    await del.getByRole("button", { name: "Reject" }).click();
+    await expect(del).toBeHidden({ timeout: 30_000 });
+    const still = toolResult(await rpc(request, token, "tools/call", { name: "get_note", arguments: { note_id: noteId } })) as { title?: string };
+    expect(still.title).toBe("E2E approval note (temporary)");
+
+    // disconnect from Settings: the token stops working
+    const row = page.locator("li").filter({ hasText: "E2E approval app" }).first();
+    await row.getByRole("button", { name: "Disconnect" }).click();
+    await expect.poll(async () => (await request.post(`${MCP}/mcp`, { headers: {
+      Authorization: `Bearer ${token}`, Accept: "application/json, text/event-stream", "Content-Type": "application/json" },
+      data: { jsonrpc: "2.0", id: 9, method: "tools/list", params: {} } })).status(), { timeout: 15_000 }).toBe(401);
+  } finally {
+    if (noteId) await page.request.delete(`/api/notes/${noteId}`);
+  }
+});

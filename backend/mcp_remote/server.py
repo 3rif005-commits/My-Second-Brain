@@ -10,8 +10,8 @@ tunnel, so the main backend's endpoints are never exposed. It serves:
                           Second Brain login)
 
 Every tool acts for the user the token belongs to — never for an id the app
-sends. Editing and deleting are not tools here: they need your approval in the
-app (phase 2).
+sends. Editing and deleting are only ASKED for: the change waits until you
+approve it in Settings → Connected apps (phase 2).
 """
 from __future__ import annotations
 
@@ -152,6 +152,63 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
             return {"error": "The note could not be saved."}
         return {"note_id": row["id"], "title": row["title"], "link": _link(row["id"])}
 
+
+    # Changing or deleting an existing note is only ever ASKED for: the user
+    # approves it in Settings → Connected apps. Said plainly, so the app does
+    # not report it as done (HARNESS.md: a held action is NOT done).
+    _WAITING = ("NOT DONE YET — waiting for the user to approve it in Second Brain "
+                "(Settings → Connected apps). Tell the user it is waiting for their "
+                "approval; you can check later with check_change.")
+
+    def _client() -> str:
+        return get_access_token().client_id
+
+    @mcp.tool()
+    async def update_note(note_id: str, content_markdown: str, title: str = "",
+                          reason: str = "") -> dict:
+        """ASK to replace an existing note's text (Markdown) and, optionally, its
+        title. Nothing changes until the user approves it in Second Brain."""
+        user_id, client_id = _user(), _client()
+        payload = {"content_markdown": content_markdown}
+        if title.strip():
+            payload["title"] = title.strip()[:200]
+
+        def run():
+            from services import connected_apps as apps
+            return apps.propose(user_id, client_id, note_id, "update", payload, reason)
+        try:
+            out = await asyncio.to_thread(run)
+        except ValueError as e:
+            return {"error": str(e)}
+        return {**out, "message": _WAITING}
+
+    @mcp.tool()
+    async def delete_note(note_id: str, reason: str = "") -> dict:
+        """ASK to move a note to the Trash. Nothing happens until the user
+        approves it in Second Brain; a deleted note can be restored."""
+        user_id, client_id = _user(), _client()
+
+        def run():
+            from services import connected_apps as apps
+            return apps.propose(user_id, client_id, note_id, "delete", None, reason)
+        try:
+            out = await asyncio.to_thread(run)
+        except ValueError as e:
+            return {"error": str(e)}
+        return {**out, "message": _WAITING}
+
+    @mcp.tool()
+    async def check_change(change_id: str) -> dict:
+        """Whether the user approved or rejected a change you asked for."""
+        user_id, client_id = _user(), _client()
+
+        def run():
+            from services import connected_apps as apps
+            return apps.status(user_id, client_id, change_id)
+        row = await asyncio.to_thread(run)
+        if not row:
+            return {"error": "No change with that id from this app."}
+        return {"change_id": row["id"], "status": row["status"], "action": row["action"]}
 
     # ── the Allow page's two calls (need the user's Second Brain login) ─────────
 

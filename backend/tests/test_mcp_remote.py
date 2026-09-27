@@ -117,7 +117,8 @@ def test_the_full_login_then_the_tools(server):
     status, data = _call(c, tok["access_token"], "tools/list")
     assert status == 200, data
     names = {t["name"] for t in data["result"]["tools"]}
-    assert names == {"search_notes", "list_notes", "get_note", "create_note"}
+    assert names == {"search_notes", "list_notes", "get_note", "create_note",
+                     "update_note", "delete_note", "check_change"}
 
 
 def test_the_tools_act_as_the_user_who_allowed(server):
@@ -218,3 +219,24 @@ def test_revoking_with_another_app_s_id_does_nothing(server):
     assert c.post("/revoke", data={"token": tok["access_token"], "client_id": other}).status_code == 200
     status, _ = _call(c, tok["access_token"], "tools/list")
     assert status == 200                                        # not another app's to revoke
+
+
+
+def test_an_edit_is_only_asked_for_and_says_so(server):
+    c, _, _ = server
+    client_id, tok = _connect(c)
+    seen = {}
+
+    def fake_propose(user_id, cid, note_id, action, payload, reason):
+        seen.update(user=user_id, client=cid, note=note_id, action=action, payload=payload)
+        return {"change_id": "ch1", "status": "pending", "note_title": "T"}
+    with patch("services.connected_apps.propose", side_effect=fake_propose), \
+         patch("services.agent.brain_tools._update_note") as write:
+        status, data = _call(c, tok["access_token"], "tools/call", {"name": "update_note",
+            "arguments": {"note_id": "n1", "content_markdown": "new text", "reason": "fix typo"}})
+    assert status == 200, data
+    write.assert_not_called()                                   # nothing written
+    assert seen == {"user": "u1", "client": client_id, "note": "n1", "action": "update",
+                    "payload": {"content_markdown": "new text"}}
+    text = json.dumps(data)
+    assert "NOT DONE YET" in text and "ch1" in text

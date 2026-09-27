@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
-from routers import gateway, notes, ingest, retrieval, internal, agent, agent_inline, agent_ingest, skills_api, mcp_api, note_sources, databases, db_import
+from routers import gateway, notes, ingest, retrieval, internal, agent, agent_inline, agent_ingest, skills_api, mcp_api, note_sources, databases, db_import, connected_apps
 from services.db.connection import close_pool
 from services.db.scheduler import start_scheduler, stop_scheduler
 
@@ -52,6 +52,7 @@ app.add_middleware(
 )
 
 app.include_router(notes.router)
+app.include_router(connected_apps.router)
 app.include_router(ingest.router)
 app.include_router(retrieval.router)
 app.include_router(agent.router)

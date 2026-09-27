@@ -8,6 +8,7 @@ const ALLOWED_PREFIXES = [
   "notes",   // /notes/{id}/{sources,synthesis,synthesize,anchors,chat}
   "sessions",
   "ai-providers",
+  "connected-apps",  // Settings → Connected apps (remote MCP, 5.4)
 ];
 
 async function proxy(req: Request, path: string[]) {
