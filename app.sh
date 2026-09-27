@@ -14,10 +14,15 @@ FRONTEND_DIR="$ROOT_DIR/frontend"
 
 BACKEND_PORT=8000
 FRONTEND_PORT=3000
+MCP_PORT=8765          # the remote MCP server — the only port a tunnel exposes
 BACKEND_LOG="/tmp/second-brain-backend.log"
 FRONTEND_LOG="/tmp/second-brain-frontend.log"
 BACKEND_PID_FILE="/tmp/second-brain-backend.pid"
 FRONTEND_PID_FILE="/tmp/second-brain-frontend.pid"
+MCP_LOG="/tmp/second-brain-mcp.log"
+MCP_PID_FILE="/tmp/second-brain-mcp.pid"
+# The public address the tunnel gives (./app.sh tunnel writes it here).
+MCP_URL_FILE="$HOME/.secondbrain/mcp-public-url"
 
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; BLUE='\033[0;34m'; NC='\033[0m'
 ok()   { echo -e "${GREEN}✓${NC} $*"; }
@@ -102,6 +107,16 @@ cmd_start() {
     fi
   fi
 
+  if running "$MCP_PID_FILE" "$MCP_PORT"; then
+    warn "MCP server already running on port $MCP_PORT"
+  else
+    local public="http://localhost:$MCP_PORT"
+    [[ -f "$MCP_URL_FILE" ]] && public="$(cat "$MCP_URL_FILE")"
+    setsid bash -c "echo \$\$ > '$MCP_PID_FILE'; cd '$BACKEND_DIR' && source .venv/bin/activate && MCP_PUBLIC_URL='$public' exec uvicorn mcp_remote.server:app --port '$MCP_PORT'" \
+      > "$MCP_LOG" 2>&1 < /dev/null &
+    ok "MCP server started (port $MCP_PORT, public address $public) — logs: $MCP_LOG"
+  fi
+
   if running "$FRONTEND_PID_FILE" "$FRONTEND_PORT"; then
     warn "Frontend already running on port $FRONTEND_PORT"
   else
@@ -142,6 +157,7 @@ cmd_stop() {
   echo ""
   kill_service "backend" "$BACKEND_PID_FILE" "$BACKEND_PORT"
   kill_service "frontend" "$FRONTEND_PID_FILE" "$FRONTEND_PORT"
+  kill_service "MCP server" "$MCP_PID_FILE" "$MCP_PORT"
   if [[ -x "$ROOT_DIR/llama.sh" ]]; then
     "$ROOT_DIR/llama.sh" stop
   fi
@@ -163,6 +179,11 @@ cmd_status() {
     echo -e "  Frontend  (port $FRONTEND_PORT)  ${GREEN}● running${NC}"
   else
     echo -e "  Frontend  (port $FRONTEND_PORT)  ${RED}○ stopped${NC}"
+  fi
+  if running "$MCP_PID_FILE" "$MCP_PORT"; then
+    echo -e "  MCP       (port $MCP_PORT)  ${GREEN}● running${NC}"
+  else
+    echo -e "  MCP       (port $MCP_PORT)  ${RED}○ stopped${NC}"
   fi
   echo ""
   if [[ -x "$ROOT_DIR/llama.sh" ]]; then

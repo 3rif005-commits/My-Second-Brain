@@ -3,6 +3,7 @@
 import { Logo } from "@/components/brand/Logo";
 import { useState } from "react";
 import Link from "next/link";
+import { safeNext } from "@/lib/safeNext";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -26,7 +27,7 @@ export default function LoginPage() {
       setError(data.error ?? "Sign in failed. Check your credentials.");
       setLoading(false);
     } else {
-      window.location.href = "/brain";
+      window.location.href = safeNext(new URLSearchParams(window.location.search).get("next"));
     }
   }
 

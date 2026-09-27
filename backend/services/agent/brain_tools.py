@@ -358,11 +358,20 @@ def _get_backlinks(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     return {"backlinks": rows}
 
 
+def _plain_text(blocks: list) -> str:
+    """The note's plain text, as the editor saves it beside the blocks. Notes
+    the AI wrote had none, so search and the index sweep (which indexes notes
+    with text) never saw them."""
+    from services.block_chunker import parse
+    return "\n".join(c["chunk_text"] for c in parse(blocks or []))
+
+
 def _create_note(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     payload = {
         "user_id": user_id,
         "title": args["title"],
         "content": args["blocks"],
+        "content_text": _plain_text(args["blocks"]),
         "topics": args.get("topics", []),
     }
     if args.get("collection_id"):
@@ -372,7 +381,8 @@ def _create_note(args: dict[str, Any], user_id: str) -> dict[str, Any]:
 
 
 def _update_note(args: dict[str, Any], user_id: str) -> dict[str, Any]:
-    update: dict[str, Any] = {"content": args["blocks"]}
+    update: dict[str, Any] = {"content": args["blocks"],
+                              "content_text": _plain_text(args["blocks"])}
     if "title" in args:
         update["title"] = args["title"]
     rows = (
