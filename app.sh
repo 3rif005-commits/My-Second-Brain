@@ -24,6 +24,29 @@ ok()   { echo -e "${GREEN}✓${NC} $*"; }
 info() { echo -e "${BLUE}→${NC} $*"; }
 warn() { echo -e "${YELLOW}!${NC} $*"; }
 
+port_busy() {
+  ss -ltnH "sport = :$1" 2>/dev/null | grep -q . && return 0
+  lsof -ti ":$1" &>/dev/null
+}
+
+# Wait until nothing listens on the port. `stop` used to return while uvicorn
+# was still shutting down; the next `start` saw the port busy, printed
+# "Backend already running" and skipped it — and the app answered 500.
+wait_port_free() {
+  local port=$1 name=$2 i
+  for i in $(seq 1 30); do
+    port_busy "$port" || return 0
+    sleep 0.5
+  done
+  local stuck; stuck=$( (lsof -ti ":$port" 2>/dev/null; ss -ltnpH "sport = :$port" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2) | sort -u | tr '\n' ' ')
+  if [[ -n "$stuck" ]]; then
+    kill -9 $stuck 2>/dev/null || true
+    sleep 1
+  fi
+  port_busy "$port" && { warn "$name: port $port is still in use"; return 1; }
+  return 0
+}
+
 running() {
   local pid_file=$1 port=$2
   if [[ -f "$pid_file" ]]; then
@@ -49,6 +72,7 @@ kill_service() {
     kill $leftover 2>/dev/null || true
     ok "Cleaned up port $port"
   fi
+  wait_port_free "$port" "$name"
 }
 
 cmd_start() {
@@ -64,8 +88,18 @@ cmd_start() {
     # stop can end the whole group (setsid may fork, making $! the wrong pid).
     setsid bash -c "echo \$\$ > '$BACKEND_PID_FILE'; cd '$BACKEND_DIR' && source .venv/bin/activate && exec uvicorn main:app --port '$BACKEND_PORT' --reload" \
       > "$BACKEND_LOG" 2>&1 < /dev/null &
-    sleep 0.5
-    ok "Backend started (pid $(cat "$BACKEND_PID_FILE")) — logs: $BACKEND_LOG"
+    # Say "started" only once it answers — a backend that died on start
+    # used to be reported as started, and the app showed errors.
+    local i up=0
+    for i in $(seq 1 40); do
+      curl -s -o /dev/null "http://localhost:$BACKEND_PORT/health" && { up=1; break; }
+      sleep 0.5
+    done
+    if [[ $up -eq 1 ]]; then
+      ok "Backend started (pid $(cat "$BACKEND_PID_FILE")) — logs: $BACKEND_LOG"
+    else
+      warn "Backend did not answer after 20s — see: tail -30 $BACKEND_LOG"
+    fi
   fi
 
   if running "$FRONTEND_PID_FILE" "$FRONTEND_PORT"; then

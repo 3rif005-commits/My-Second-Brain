@@ -276,3 +276,10 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
   9 in 9 (E12).
 - Learned preferences are suggestions the user accepts, never applied on
   their own: the learner also proposes side effects of real habits.
+- `./app.sh stop` waits until each port is free (force-killing a stuck
+  process), and `start` says "started" only once the backend answers. Stop
+  returned while uvicorn was still shutting down; the next start saw port
+  8000 busy, skipped the backend, and every page answered 500.
+- Check the user's stack is stopped IMMEDIATELY before stopping anything. A
+  status read minutes earlier said "stopped"; the user had started it since,
+  and a stop/start test ran on their live app.
