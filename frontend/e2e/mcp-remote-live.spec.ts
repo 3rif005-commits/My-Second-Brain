@@ -78,7 +78,7 @@ test("an app logs in with Allow and uses the tools as this user", async ({ page,
   try {
     const tools = await rpc(request, token, "tools/list");
     expect(tools.result.tools.map((t: { name: string }) => t.name).sort())
-      .toEqual(["create_note", "get_note", "list_notes", "search_notes"]);
+      .toEqual(["check_change", "create_note", "delete_note", "get_note", "list_notes", "search_notes", "update_note"]);
 
     const listed = toolResult(await rpc(request, token, "tools/call",
       { name: "list_notes", arguments: { limit: 5 } })) as { note_id: string }[];

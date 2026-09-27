@@ -34,9 +34,14 @@ access, with every edit/delete confirmed by the user in the app.
   Our own `/revoke` now disconnects the app for that user (access and refresh
   tokens), checking a secret only when the app has one.
 
-## Phase 2 — edit and delete, confirmed in the app
-`update_note` / `delete_note` tools create a pending change; the app shows
-it (who asks, what changes) with Approve / Reject; only then it is applied.
+## Phase 2 — edit and delete, confirmed in the app — done
+`update_note` / `delete_note` only ask (migration 024); the reply says NOT
+DONE YET; `check_change` reports the decision. Settings → Connected apps shows
+each waiting change (app, note, reason, text now vs after) with Approve /
+Reject, and each connected app with Disconnect. An approved delete goes to the
+Trash. Live (`mcp-remote`, 3 tests): an edit waits, Approve applies it; a
+delete is rejected and the note stays; Disconnect → the token answers 401.
+Leftover connections from runs before the /revoke fix were disconnected.
 
 ## Phase 3 — the tunnel
 `./app.sh tunnel`: install `cloudflared` (asks first), start a tunnel to
