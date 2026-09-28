@@ -14,6 +14,14 @@ from services import database
 TABLE = "ai_jobs"
 #: states a job can still be cancelled from
 CANCELLABLE = ("queued", "submitted")
+#: still asking something of the user, or still on its way
+OPEN_STATES = ("queued", "submitted", "ready", "failed", "budget_blocked", "needs_you")
+#: over — the history table
+HISTORY_STATES = ("applied", "discarded", "cancelled", "expired", "skipped")
+#: rows a person may delete from their history
+DELETABLE = HISTORY_STATES + ("failed", "budget_blocked")
+#: how long an unapplied result waits, and how long any row is kept
+RESULT_DAYS, ROW_DAYS = 30, 90
 #: what the UI needs to list a job — never the full result body
 LIST_COLUMNS = ("id,note_id,skill,focus,status,trigger,price_mode,run_after,"
                 "shown_estimate_usd,cap_usd,model,ran_late,actual_usd,"
@@ -50,6 +58,44 @@ def list_for_user(user_id: str, *, note_id: str | None = None,
     if statuses:
         q = q.in_("status", list(statuses))
     return q.order("created_at", desc=True).limit(limit).execute().data or []
+
+
+def history(user_id: str, *, since: str, skill: str | None = None, trigger: str | None = None,
+            status: str | None = None, limit: int = 300) -> list[dict]:
+    q = (_t().select(LIST_COLUMNS).eq("user_id", user_id).gte("created_at", since)
+         .in_("status", [status] if status in HISTORY_STATES else list(HISTORY_STATES)))
+    if skill:
+        q = q.eq("skill", skill)
+    if trigger:
+        q = q.eq("trigger", trigger)
+    return q.order("created_at", desc=True).limit(limit).execute().data or []
+
+
+def delete(job_id: str, user_id: str) -> bool:
+    rows = (_t().delete().eq("id", job_id).eq("user_id", user_id)
+            .in_("status", list(DELETABLE)).execute().data or [])
+    return bool(rows)
+
+
+def sweep(now: datetime) -> dict:
+    """Retention: an unapplied result is kept 30 days, then its body is removed
+    (the row stays, saying so); rows in a final state go after 90 days."""
+    from datetime import timedelta
+    stale = (_t().update({"status": "discarded", "result_html": None,
+                          "discarded_at": now.isoformat(),
+                          "error": f"Result removed after {RESULT_DAYS} days"})
+             .eq("status", "ready").lte("finished_at", (now - timedelta(days=RESULT_DAYS)).isoformat())
+             .execute().data or [])
+    gone = (_t().delete().in_("status", list(HISTORY_STATES + ("failed", "budget_blocked")))
+            .lte("created_at", (now - timedelta(days=ROW_DAYS)).isoformat()).execute().data or [])
+    return {"results_removed": len(stale), "rows_deleted": len(gone)}
+
+
+def count_open(user_id: str) -> dict:
+    rows = (_t().select("status").eq("user_id", user_id)
+            .in_("status", ["ready", "failed", "budget_blocked", "needs_you"]).execute().data or [])
+    return {"ready": sum(r["status"] == "ready" for r in rows),
+            "needs_you": sum(r["status"] != "ready" for r in rows)}
 
 
 def due(now: str, limit: int = 5) -> list[dict]:

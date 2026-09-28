@@ -137,3 +137,104 @@ def test_list_filters_by_note_and_status(env):
     client.post(f"/jobs/{a}/cancel", headers=AUTH)
     jobs = client.get("/jobs?note_id=n1&status=queued", headers=AUTH).json()["jobs"]
     assert len(jobs) == 1 and jobs[0]["status"] == "queued"
+
+
+# ── Activity, settings, badge, detail, delete ────────────────────────────────
+
+def _row(db, **over):
+    jobs = db.tables.setdefault("ai_jobs", [])
+    row = {"id": f"x{len(jobs)}", "user_id": "u1", "note_id": "n1",
+           "skill": "flashcards", "focus": "", "status": "applied", "trigger": "run_later",
+           "price_mode": "normal", "created_at": datetime.now(timezone.utc).isoformat(),
+           "actual_usd": 0.04, "live_equivalent_usd": None, "source_ids": [], "result_meta": {}}
+    row.update(over)
+    jobs.append(row)
+    return row
+
+
+def test_activity_separates_what_is_open_from_history_and_adds_note_titles(env):
+    client, db = env
+    _row(db, id="r", status="ready")
+    _row(db, id="q", status="queued")
+    _row(db, id="a", status="applied")
+    _row(db, id="old", status="applied",
+         created_at=(datetime.now(timezone.utc) - timedelta(days=60)).isoformat())
+    body = client.get("/jobs/activity", headers=AUTH).json()
+    assert {j["id"] for j in body["open"]} == {"r", "q"}
+    assert [j["id"] for j in body["history"]] == ["a"]           # 30 days by default
+    assert body["open"][0]["note_title"] == "Lecture 10"
+    assert body["monthly_cap_usd"] == 5.0 and body["month_spent_usd"] == 0
+    wide = client.get("/jobs/activity?days=90", headers=AUTH).json()
+    assert {j["id"] for j in wide["history"]} == {"a", "old"}
+
+
+def test_an_open_job_shows_however_old_it_is(env):
+    client, db = env
+    _row(db, id="stuck", status="failed",
+         created_at=(datetime.now(timezone.utc) - timedelta(days=80)).isoformat())
+    body = client.get("/jobs/activity?days=7", headers=AUTH).json()
+    assert [j["id"] for j in body["open"]] == ["stuck"]
+
+
+def test_activity_filters_the_history(env):
+    client, db = env
+    _row(db, id="a", skill="flashcards", status="applied")
+    _row(db, id="b", skill="study-guide", status="cancelled", trigger="schedule")
+    ids = lambda q: [j["id"] for j in client.get(f"/jobs/activity?{q}", headers=AUTH).json()["history"]]
+    assert ids("skill=study-guide") == ["b"]
+    assert ids("trigger=schedule") == ["b"]
+    assert ids("status=applied") == ["a"]
+    assert ids("status=queued") == ["a", "b"] or ids("status=queued") == ["b", "a"]   # not a history state: ignored
+
+
+def test_activity_claims_a_saving_only_for_batch_jobs_that_have_both_prices(env):
+    client, db = env
+    _row(db, id="b1", price_mode="batch", actual_usd=0.04, live_equivalent_usd=0.08)
+    _row(db, id="n1x", price_mode="normal", actual_usd=0.08, live_equivalent_usd=0.08)
+    _row(db, id="b2", price_mode="batch", actual_usd=0.04, live_equivalent_usd=None)
+    assert client.get("/jobs/activity", headers=AUTH).json()["saved_usd"] == 0.04
+
+
+def test_the_badge_counts_results_and_problems_but_not_jobs_still_waiting(env):
+    client, db = env
+    for st in ("ready", "ready", "failed", "budget_blocked", "queued", "applied"):
+        _row(db, status=st)
+    assert client.get("/jobs/badge", headers=AUTH).json() == {"ready": 2, "needs_you": 2}
+
+
+def test_the_monthly_limit_can_be_read_and_changed(env):
+    client, db = env
+    db.tables["profiles"] = [{"id": "u1", "preferences": {}}]
+    assert client.get("/jobs/settings", headers=AUTH).json()["monthly_cap_usd"] == 5.0
+    put = client.put("/jobs/settings", json={"monthly_cap_usd": 0.01}, headers=AUTH)
+    assert put.json()["monthly_cap_usd"] == 0.01
+    assert client.get("/jobs/settings", headers=AUTH).json()["monthly_cap_usd"] == 0.01
+    bad = client.put("/jobs/settings", json={"monthly_cap_usd": 0}, headers=AUTH)
+    assert bad.status_code == 400 and "between" in bad.json()["detail"]["error"]
+
+
+def test_detail_names_the_sources_the_job_was_made_from(env):
+    client, db = env
+    db.tables["note_resources"] = [{"id": "s1", "title": "Slides.pdf"}, {"id": "s2", "title": "Notes"}]
+    _row(db, id="d", source_ids=["s1"])
+    assert client.get("/jobs/d/detail", headers=AUTH).json() == {"sources": [{"id": "s1", "title": "Slides.pdf"}]}
+
+
+def test_a_finished_job_can_be_deleted_but_a_waiting_one_cannot(env):
+    client, db = env
+    _row(db, id="done", status="applied")
+    _row(db, id="waiting", status="queued")
+    assert client.delete("/jobs/done", headers=AUTH).status_code == 200
+    assert client.delete("/jobs/waiting", headers=AUTH).status_code == 409
+    assert [r["id"] for r in db.tables["ai_jobs"]] == ["waiting"]
+    with patch("routers.jobs.get_user_id", return_value="intruder"):
+        assert client.delete("/jobs/waiting", headers=AUTH).status_code == 404
+
+
+def test_applying_or_discarding_drops_the_stored_result(env):
+    client, db = env
+    a = _row(db, id="a", status="ready", result_html="<p>x</p>")
+    b = _row(db, id="b", status="ready", result_html="<p>y</p>")
+    client.post("/jobs/a/applied", json={"note_id": "n1"}, headers=AUTH)
+    client.post("/jobs/b/discard", headers=AUTH)
+    assert a["result_html"] is None and b["result_html"] is None

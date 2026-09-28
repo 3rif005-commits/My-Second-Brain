@@ -35,6 +35,7 @@ class Query:
         self._payload = None
         self._order = None
         self._limit = None
+        self._range = None
 
     def select(self, *_):
         self._op = "select"
@@ -58,6 +59,19 @@ class Query:
 
     def in_(self, col, vals):
         self._filters.append(lambda r: r.get(col) in vals)
+        return self
+
+    def gte(self, col, val):
+        self._filters.append(lambda r: r.get(col) is not None and r.get(col) >= val)
+        return self
+
+    def like(self, col, pattern):
+        prefix = pattern.rstrip("%")
+        self._filters.append(lambda r: str(r.get(col) or "").startswith(prefix))
+        return self
+
+    def range(self, start, end):
+        self._range = (start, end)
         return self
 
     def lte(self, col, val):
@@ -98,6 +112,8 @@ class Query:
         if self._order:
             col, desc = self._order
             hit = sorted(hit, key=lambda r: r.get(col) or "", reverse=desc)
+        if self._range is not None:
+            hit = hit[self._range[0]: self._range[1] + 1]
         if self._limit is not None:
             hit = hit[: self._limit]
         return SimpleNamespace(data=[copy.deepcopy(r) for r in hit])

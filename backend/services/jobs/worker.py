@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from services import database
 from services.ai import budget as budget_guard
-from services.jobs import store
+from services.jobs import caps, store
 from services.workspace import skill_run
 
 logger = logging.getLogger(__name__)
@@ -47,11 +47,30 @@ def _note(note_id: str | None) -> dict | None:
     return rows[0]
 
 
+#: the retention sweep is cheap but not per-minute cheap
+SWEEP_EVERY = timedelta(hours=6)
+_last_sweep: datetime | None = None
+
+
+def maybe_sweep(now: datetime) -> None:
+    global _last_sweep
+    if _last_sweep is not None and now - _last_sweep < SWEEP_EVERY:
+        return
+    _last_sweep = now
+    try:
+        done = store.sweep(now)
+        if any(done.values()):
+            logger.info("jobs retention: %s", done)
+    except Exception:                                    # noqa: BLE001
+        logger.exception("jobs retention sweep failed")
+
+
 def run_due(now: datetime | None = None) -> list[dict]:
     """Recover stuck jobs, then run what is due. Returns one event per job that
     reached a state the user should hear about:
     {"kind": "ready"|"failed"|"budget_blocked"|"cancelled", "job": row, "note_title": str}."""
     now = now or datetime.now(timezone.utc)
+    maybe_sweep(now)
     events = recover_stuck(now)
     for job in store.due(_iso(now), limit=PER_TICK):
         try:
@@ -92,6 +111,13 @@ def run_one(job: dict, now: datetime) -> dict | None:
         return None
 
     title = note.get("title") or ""
+    # Before the model is asked: the price NOW (the model or the sources may have
+    # changed since it was queued) against this job's limit and the monthly one.
+    why = caps.preflight(job["user_id"], _estimate_now(job), job.get("cap_usd"), now)
+    if why:
+        row = store.transition(job["id"], "submitted", status="budget_blocked",
+                               finished_at=store.now_iso(), error=why)
+        return {"kind": "budget_blocked", "job": row, "note_title": title} if row else None
     try:
         result = skill_run.produce_skill_result(
             job["note_id"], job["user_id"], job["skill"], job.get("focus") or "",
@@ -118,6 +144,20 @@ def run_one(job: dict, now: datetime) -> dict | None:
     return {"kind": "ready", "job": row, "note_title": title} if row else None
 
 
+def _estimate_now(job: dict) -> float | None:
+    """What this job would cost if it started now; the price shown at queue time
+    when the estimate cannot be made (better a stale number than none)."""
+    try:
+        priced = next((j for j in skill_run.chat_skills(job["note_id"], job["user_id"])
+                       if j.get("skill") == job["skill"]), None)
+        if priced is not None:
+            return priced.get("usd")
+    except Exception:                                    # noqa: BLE001
+        logger.warning("job %s: could not re-price, using the queued estimate", job.get("id"),
+                       exc_info=True)
+    return job.get("shown_estimate_usd")
+
+
 def notification_for(event: dict) -> dict:
     """The bell entry for an event: message, link, source."""
     job, kind = event["job"], event["kind"]
@@ -127,7 +167,7 @@ def notification_for(event: dict) -> dict:
     message = {
         "ready": f"{what}{target} is ready",
         "failed": f"{what}{target} failed — {job.get('error') or 'unknown error'}",
-        "budget_blocked": f"{what}{target} was not started — {job.get('error') or 'over the limit'}",
+        "budget_blocked": f"{what}{target}: {job.get('error') or 'not started — over the limit'}",
         "cancelled": f"{what}{target} was cancelled — {job.get('cancel_reason') or ''}".rstrip(" —"),
     }[kind]
     return {"message": message[:300], "link": link, "source": f"job:{job['id']}"}

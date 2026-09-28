@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from routers.ingest import get_user_id
 from services.ai.router import pick
 from services.database import get_supabase
-from services.jobs import store, worker
+from services.jobs import caps, store, worker
 from services.jobs.notify import notify
 from services.workspace import skill_run
 
@@ -37,6 +37,10 @@ class QueueRequest(BaseModel):
 
 class AppliedRequest(BaseModel):
     note_id: str | None = None
+
+
+class SettingsRequest(BaseModel):
+    monthly_cap_usd: float
 
 
 def _fail(status: int, message: str):
@@ -122,6 +126,64 @@ def list_jobs(authorization: str = Header(), note_id: str | None = None,
     return {"jobs": store.list_for_user(user_id, note_id=note_id, statuses=statuses)}
 
 
+def _with_note_titles(rows: list[dict]) -> list[dict]:
+    ids = sorted({r["note_id"] for r in rows if r.get("note_id")})
+    titles: dict[str, str] = {}
+    if ids:
+        for n in (get_supabase().table("notes").select("id,title").in_("id", ids)
+                  .execute().data or []):
+            titles[n["id"]] = n.get("title") or "Untitled"
+    return [{**r, "note_title": titles.get(r.get("note_id") or "")} for r in rows]
+
+
+@router.get("/activity")
+def activity(authorization: str = Header(), skill: str | None = None,
+             trigger: str | None = None, status: str | None = None, days: int = 30):
+    """Everything the Activity page shows: what is open (any age), the history
+    (filtered), and the header totals."""
+    user_id = get_user_id(authorization)
+    days = min(max(days, 1), store.ROW_DAYS)
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    open_rows = store.list_for_user(user_id, statuses=store.OPEN_STATES, limit=100)
+    history = store.history(user_id, since=since, skill=skill, trigger=trigger, status=status)
+    saved = sum((r.get("live_equivalent_usd") or 0) - (r.get("actual_usd") or 0)
+                for r in history if r.get("price_mode") == "batch"
+                and r.get("actual_usd") is not None and r.get("live_equivalent_usd") is not None
+                and r["created_at"] >= caps.month_start().isoformat())
+    return {
+        "open": _with_note_titles(open_rows),
+        "history": _with_note_titles(history),
+        "month_spent_usd": caps.month_spend(user_id),
+        "monthly_cap_usd": caps.get_monthly_cap(user_id),
+        "saved_usd": round(max(saved, 0.0), 4),
+    }
+
+
+@router.get("/badge")
+def badge(authorization: str = Header()):
+    """How many results and problems are waiting — the sidebar's dot."""
+    return store.count_open(get_user_id(authorization))
+
+
+@router.get("/settings")
+def get_settings(authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    return {"monthly_cap_usd": caps.get_monthly_cap(user_id),
+            "default_monthly_cap_usd": caps.DEFAULT_MONTHLY_CAP_USD,
+            "min_usd": caps.MIN_CAP, "max_usd": caps.MAX_CAP,
+            "month_spent_usd": caps.month_spend(user_id)}
+
+
+@router.put("/settings")
+def put_settings(body: SettingsRequest, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    try:
+        cap = caps.set_monthly_cap(user_id, body.monthly_cap_usd)
+    except ValueError as e:
+        _fail(400, str(e))
+    return {"monthly_cap_usd": cap, "month_spent_usd": caps.month_spend(user_id)}
+
+
 @router.get("/{job_id}")
 def get_job(job_id: str, authorization: str = Header()):
     """The full job, result included. Opening a ready result is what the
@@ -131,6 +193,31 @@ def get_job(job_id: str, authorization: str = Header()):
     if row["status"] == "ready" and not row.get("opened_at"):
         store.transition(job_id, "ready", opened_at=store.now_iso())
     return {k: v for k, v in row.items() if k not in ("source_hash", "dedupe_key")}
+
+
+@router.get("/{job_id}/detail")
+def job_detail(job_id: str, authorization: str = Header()):
+    """What the Activity page's expanded row adds to the list row: which sources
+    the job was made from."""
+    user_id = get_user_id(authorization)
+    row = _job(job_id, user_id)
+    ids = row.get("source_ids") or []
+    sources = []
+    if ids:
+        sources = [{"id": r["id"], "title": r.get("title") or "Untitled"} for r in
+                   (get_supabase().table("note_resources").select("id,title")
+                    .in_("id", ids).execute().data or [])]
+    return {"sources": sources}
+
+
+@router.delete("/{job_id}")
+def delete_job(job_id: str, authorization: str = Header()):
+    """Remove a finished job from the history (and any result it still holds)."""
+    user_id = get_user_id(authorization)
+    _job(job_id, user_id)
+    if not store.delete(job_id, user_id):
+        _fail(409, "A job that is waiting or running cannot be deleted — cancel it first.")
+    return {"ok": True}
 
 
 @router.post("/{job_id}/cancel")
@@ -171,7 +258,7 @@ def discard_job(job_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     _job(job_id, user_id)
     row = store.transition(job_id, ("ready", "failed", "budget_blocked", "expired"),
-                           status="discarded", discarded_at=store.now_iso())
+                           status="discarded", discarded_at=store.now_iso(), result_html=None)
     if not row:
         _fail(409, "There is nothing to discard.")
     return _brief(row)
@@ -182,8 +269,9 @@ def mark_applied(job_id: str, body: AppliedRequest, authorization: str = Header(
     """The client calls this after it put the result in a note."""
     user_id = get_user_id(authorization)
     _job(job_id, user_id)
+    # The note now holds the text; keeping a second copy here would only grow the table.
     row = store.transition(job_id, "ready", status="applied", applied_at=store.now_iso(),
-                           applied_note_id=body.note_id)
+                           applied_note_id=body.note_id, result_html=None)
     if not row:
         _fail(409, "This result is not waiting to be applied.")
     return _brief(row)
