@@ -49,7 +49,9 @@ test("Run later: queue → Run now → Background result card → Put in note �
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "More ways to run" }).click();
     const later = page.getByRole("menuitem", { name: /run later/i });
-    await expect(later).toContainText(/(Normal price|Free|Price unknown) .*runs (tonight|tomorrow) at 22:00/);
+    // What the server says the job would cost: half price now that the provider has a
+    // batch API. The wording changes with the provider, the shape does not.
+    await expect(later).toContainText(/(Normal price|Half price|Free|Price unknown) .*(runs|sent) (tonight|tomorrow) at 22:00/, { timeout: 30_000 });
     await expect(later).not.toContainText("0.000");
     await page.screenshot({ path: path.join(OUT, "01-run-later-menu.png") });
     await later.click();
@@ -63,7 +65,7 @@ test("Run later: queue → Run now → Background result card → Put in note �
     // ── run it now → the same result card, labelled Background ───────────
     await waiting.getByRole("button", { name: /run now/i }).click();
     const ready = page.getByTestId("background-ready");
-    await expect(ready).toBeVisible({ timeout: 300_000 });
+    await expect(ready).toBeVisible({ timeout: 900_000 });     // a batch usually takes minutes, may take longer
     await expect(page.getByTestId("job-badge")).toContainText(/Background · ready/);
     await page.screenshot({ path: path.join(OUT, "03-ready.png") });
 

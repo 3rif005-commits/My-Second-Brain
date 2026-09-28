@@ -4,6 +4,7 @@
 // one finishes, the same result card a live job gets, labelled "Background".
 // The server is the truth (the list survives a reload and a closed tab), so
 // this keeps no history of its own: it asks, shows, and asks again.
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Clock, Loader2, Play, X } from "lucide-react";
 import { useToast } from "@/app/providers";
@@ -46,9 +47,18 @@ export function BackgroundJobs(props: Props) {
   const [error, setError] = useState<string | null>(null);
   const wanted = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("job");
 
+  // Results the user has put in a note this visit. The server stops listing an
+  // applied job, but its card holds the Undo — it stays until the user leaves.
+  const pinned = useRef(new Map<string, BgJob>());
+  useEffect(() => { pinned.current.clear(); }, [noteId]);
+
   const refresh = useCallback(async () => {
-    try { setJobs(await listJobs(noteId)); setError(null); }
-    catch (e) { setError(e instanceof Error ? e.message : "Could not load background jobs"); }
+    try {
+      const list = await listJobs(noteId);
+      const kept = [...pinned.current.values()].filter((p) => !list.some((j) => j.id === p.id));
+      setJobs([...list, ...kept]);
+      setError(null);
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not load background jobs"); }
   }, [noteId]);
 
   useEffect(() => { setJobs([]); }, [noteId]);
@@ -76,7 +86,7 @@ export function BackgroundJobs(props: Props) {
     <div className="px-3 pt-3 space-y-2" data-testid="background-jobs">
       {jobs.map((j) => j.status === "ready"
         ? <ReadyCard key={j.id} job={j} title={title} focused={j.id === wanted}
-            {...props} onDone={refresh} />
+            {...props} onDone={refresh} onApplied={(j) => pinned.current.set(j.id, j)} />
         : <WaitingCard key={j.id} job={j} focused={j.id === wanted} onChanged={refresh} />)}
       {error && <p className="text-[11.5px] text-amber-700 dark:text-amber-300">{error}</p>}
     </div>
@@ -134,7 +144,7 @@ function WaitingCard({ job, focused, onChanged }: {
             await cancelJob(job.id);
             // A batch the provider already started may still be charged; say so. A toast,
             // not text on the card: the card disappears the moment the job is cancelled.
-            if (sent) showToast("Cancelled. Anything the provider had already finished is still charged.");
+            if (sent) showToast("Cancelled. Anything the provider had already finished is still charged.", "info");
           })} disabled={busy} className={quiet}>
             <X size={12} /> Cancel
           </button>
@@ -143,6 +153,12 @@ function WaitingCard({ job, focused, onChanged }: {
           <button onClick={() => void act(() => discardJob(job.id))} disabled={busy} className={quiet}>
             <X size={12} /> Cancel
           </button>
+        )}
+        {job.status === "budget_blocked" && (
+          <Link href="/brain/settings/background-jobs"
+            className={`${chip} ring-1 ring-gray-200 dark:ring-white/10 text-gray-700 dark:text-gray-200`}>
+            Change limit
+          </Link>
         )}
         {trouble && job.status !== "needs_you" && (
           <button onClick={() => void act(() => discardJob(job.id))} disabled={busy} className={quiet}>
@@ -155,8 +171,13 @@ function WaitingCard({ job, focused, onChanged }: {
   );
 }
 
-function ReadyCard({ job, noteId, title, focused, pageNoteId, inWorkspace, onApply, onUndo, onOpen, onAgain, onDone }:
-  Props & { job: BgJob; title: string; focused: boolean; onDone: () => Promise<void> }) {
+function ReadyCard({ job, noteId, title, focused, pageNoteId, inWorkspace, onApply, onUndo, onOpen, onAgain, onDone, onApplied }:
+  Props & { job: BgJob; title: string; focused: boolean; onDone: () => Promise<void>;
+            onApplied: (job: BgJob) => void }) {
+  const { showToast } = useToast();
+  // The server takes an apply once. After an Undo the user may insert again:
+  // that is the note's business now, not a second apply to record.
+  const recorded = useRef(false);
   const [pj, setPj] = useState<PanelJob | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -205,10 +226,16 @@ function ReadyCard({ job, noteId, title, focused, pageNoteId, inWorkspace, onApp
           void (async () => {
             try {
               await onApply(shown, target);
-              await markJobApplied(job.id, target);
-              announceJobsChanged();
+              if (!recorded.current) {
+                await markJobApplied(job.id, target);
+                recorded.current = true;
+                onApplied(job);              // keep the card (and its Undo) past the next refresh
+                announceJobsChanged();
+              }
               setPj((p) => p && { ...p, applied: { noteId: target, title: target === noteId ? title : "the note" },
                 undoNote: undefined });
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : "Could not put it in the note", "error");
             } finally { setBusy(false); }
           })();
         }}

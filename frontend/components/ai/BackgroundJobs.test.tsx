@@ -100,7 +100,7 @@ describe("BackgroundJobs — batch and price decisions", () => {
     expect(await screen.findByText(/Sent · half price · usually under an hour, at most 24 hours/)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: /Cancel/ }));
     // a toast: the card itself is gone as soon as the job is cancelled
-    await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/still charged/)));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/still charged/), "info"));   // calm, not an error
   });
 
   it("does not warn about charges when a live job is cancelled", async () => {
@@ -134,6 +134,63 @@ describe("BackgroundJobs — batch and price decisions", () => {
     render(<BackgroundJobs {...props} />);
     await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
     expect(f).toHaveBeenCalledWith("/api/ws/jobs/j1/discard", expect.objectContaining({ method: "POST" }));
+  });
+});
+
+describe("BackgroundJobs — after Insert", () => {
+  const readyJob = job({ status: "ready", finished_at: new Date().toISOString() });
+  const server = (jobsAfterApply: BgJob[]) => {
+    let applied = false;
+    return vi.fn(async (url: string) => {
+      if (url.endsWith("/applied")) { applied = true; return json({ ...readyJob, status: "applied" }); }
+      if (url.endsWith("/jobs/j1")) return json({ ...readyJob, result_html: "<p>x</p>", source_ids: [], result_meta: {} });
+      return json({ jobs: applied ? jobsAfterApply : [readyJob] });
+    });
+  };
+
+  it("keeps the card and its Undo when the next refresh no longer lists the job", async () => {
+    vi.stubGlobal("fetch", server([]));                       // the server stops listing an applied job
+    const { rerender } = render(<BackgroundJobs {...props} refreshKey={0} />);
+    await userEvent.click(await screen.findByRole("button", { name: /Insert into this note/ }));
+    await screen.findByText(/In “Lecture 10”/);
+    rerender(<BackgroundJobs {...props} refreshKey={1} />);   // a refresh, as the poll would do
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter((c) => String(c[0]).includes("status=")).length).toBeGreaterThan(1));
+    expect(screen.getByText(/In “Lecture 10”/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Undo/ })).toBeTruthy();
+  });
+
+  it("puts it back after an Undo, and inserting again does not record a second apply", async () => {
+    const f = server([]);
+    vi.stubGlobal("fetch", f);
+    props.onApply.mockClear();
+    render(<BackgroundJobs {...props} />);
+    await userEvent.click(await screen.findByRole("button", { name: /Insert into this note/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Undo/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Insert into this note/ }));
+    await waitFor(() => expect(props.onApply).toHaveBeenCalledTimes(2));
+    const recorded = f.mock.calls.filter((c) => String(c[0]).endsWith("/applied")).length;
+    expect(recorded).toBe(1);
+  });
+
+  it("says so when putting it in the note fails, instead of doing nothing", async () => {
+    vi.stubGlobal("fetch", server([]));
+    showToast.mockClear();
+    props.onApply.mockRejectedValueOnce(new Error("The note is read-only"));
+    render(<BackgroundJobs {...props} />);
+    await userEvent.click(await screen.findByRole("button", { name: /Insert into this note/ }));
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith("The note is read-only", "error"));
+    expect(screen.queryByText(/In “/)).toBeNull();
+  });
+});
+
+describe("BackgroundJobs — a job refused by the limit", () => {
+  it("says why, points at the limit, and can be dismissed", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ jobs: [job({ status: "budget_blocked",
+      error: "Not started — about $0.03 would pass your $0.01 monthly limit ($1.50 spent this month)" })] })));
+    render(<BackgroundJobs {...props} />);
+    expect(await screen.findByText(/would pass your \$0\.01 monthly limit \(\$1\.50 spent this month\)/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Change limit" })).toHaveAttribute("href", "/brain/settings/background-jobs");
+    expect(screen.getByRole("button", { name: /Dismiss/ })).toBeTruthy();
   });
 });
 

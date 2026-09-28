@@ -98,7 +98,7 @@ export default defineConfig({
       testMatch: "**/background-jobs-live.spec.ts",
       dependencies: ["auth-setup"],
       use: { storageState: AUTH_FILE },
-      timeout: 540_000,
+      timeout: 1_200_000,
       retries: 0,
     },
 
