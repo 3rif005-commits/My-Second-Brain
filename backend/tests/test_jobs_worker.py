@@ -159,3 +159,28 @@ def test_the_bell_message_names_the_job_the_note_and_the_link():
     assert n["message"] == 'Study guide for "Lecture 10" is ready'
     assert n["link"] == "/brain/workspace/n1?job=j1"
     assert n["source"] == "job:j1"
+
+
+@pytest.mark.asyncio
+async def test_a_bell_that_never_answers_does_not_hold_up_the_next_job():
+    """The scheduler runs one jobs pass at a time; a hung database write here
+    would stop every later job."""
+    import asyncio
+    from services.jobs import notify as notify_mod
+
+    async def hang(_events):
+        await asyncio.sleep(30)
+
+    with patch.object(notify_mod, "_write", hang):
+        await asyncio.wait_for(notify_mod.notify([{"kind": "ready", "job": {}}], timeout=0.05), 2)
+
+
+@pytest.mark.asyncio
+async def test_a_bell_error_is_swallowed():
+    from services.jobs import notify as notify_mod
+
+    async def boom(_events):
+        raise RuntimeError("db down")
+
+    with patch.object(notify_mod, "_write", boom):
+        await notify_mod.notify([{"kind": "ready", "job": {}}])

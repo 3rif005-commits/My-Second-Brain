@@ -90,6 +90,18 @@ export default defineConfig({
       retries: 0,
     },
 
+    // Background jobs (5.3), live: Run later → card → Run now → result card
+    // labelled Background → Put in note → Undo; then queue + Cancel. Spends one
+    // small call (the tiny test PDF); deletes its note.
+    {
+      name: "background-jobs",
+      testMatch: "**/background-jobs-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      timeout: 540_000,
+      retries: 0,
+    },
+
     {
       name: "run-card",
       testMatch: "**/run-card-failure.spec.ts",
