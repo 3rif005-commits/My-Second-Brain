@@ -102,6 +102,18 @@ export default defineConfig({
       retries: 0,
     },
 
+    // Background jobs, M2: the monthly limit refuses a job BEFORE any model is
+    // called (free), and the refusal shows on the Activity page, sidebar and bell.
+    // Restores the limit it changes; deletes its note and job.
+    {
+      name: "background-activity",
+      testMatch: "**/background-activity-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      timeout: 300_000,
+      retries: 0,
+    },
+
     {
       name: "run-card",
       testMatch: "**/run-card-failure.spec.ts",

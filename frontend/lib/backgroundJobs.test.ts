@@ -67,3 +67,51 @@ describe("agoText", () => {
     expect(agoText(null, now)).toBe("");
   });
 });
+
+import { costLine, costText, monthLine, timeline, triggerText, whenShort, type ActivityJob } from "./backgroundJobs";
+
+const done = (over: Partial<ActivityJob> = {}): ActivityJob => ({
+  id: "j", note_id: "n", skill: "flashcards", focus: "", status: "applied", trigger: "run_later",
+  price_mode: "normal", run_after: at(22).toISOString(), shown_estimate_usd: 0.04, actual_usd: 0.041,
+  model: null, ran_late: false, error: null, cancel_reason: null, result_title: null,
+  created_at: at(15).toISOString(), finished_at: null, note_title: "Lecture 10",
+  live_equivalent_usd: null, result_meta: {}, started_at: null, applied_at: null, discarded_at: null, ...over });
+
+describe("costText", () => {
+  it("is $0 for a job that never reached the model, free for local, unknown for unpriced", () => {
+    expect(costText(done({ status: "cancelled", actual_usd: null }))).toBe("$0");
+    expect(costText(done({ status: "budget_blocked", actual_usd: null }))).toBe("$0");
+    expect(costText(done({ status: "applied", actual_usd: 0, price_mode: "local" }))).toBe("free");
+    expect(costText(done({ status: "applied", actual_usd: null }))).toBe("price unknown");
+    expect(costText(done({ actual_usd: 0.041 }))).toBe("$0.04");
+  });
+});
+
+describe("costLine", () => {
+  it("claims a saving only for batch jobs with both prices", () => {
+    expect(costLine(done({ price_mode: "batch", actual_usd: 0.041, live_equivalent_usd: 0.082 })))
+      .toBe("Paid $0.04 · the same job run now would be $0.08 · saved $0.04");
+    expect(costLine(done({ price_mode: "normal", actual_usd: 0.08, live_equivalent_usd: 0.08 }))).toBe("Paid $0.08");
+    expect(costLine(done({ price_mode: "batch", actual_usd: 0.04, live_equivalent_usd: null }))).toBe("Paid $0.04");
+    expect(costLine(done({ price_mode: "normal", actual_usd: null }))).toBe("Price unknown");
+    expect(costLine(done({ price_mode: "local", actual_usd: null }))).toBe("Free");
+  });
+});
+
+describe("monthLine", () => {
+  it("shows spent of cap, and the saving only when there is one", () => {
+    expect(monthLine(0.43, 5, 0.39)).toBe("This month: $0.43 of $5.00 · saved $0.39");
+    expect(monthLine(0, 5, 0)).toBe("This month: $0 of $5.00");
+  });
+});
+
+describe("words", () => {
+  it("names the trigger, the day and the timeline", () => {
+    expect(triggerText("source_added")).toBe("New source");
+    expect(triggerText("mystery")).toBe("mystery");
+    expect(whenShort(at(22, 25).toISOString(), at(15))).toMatch(/22:00$/);
+    expect(whenShort(new Date(2026, 7, 1, 9).toISOString(), at(15))).toMatch(/Aug|1/);
+    const t = timeline(done({ started_at: at(22).toISOString(), applied_at: at(23).toISOString() }));
+    expect(t.map((s) => s.label)).toEqual(["queued", "started", "applied"]);
+  });
+});

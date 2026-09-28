@@ -19,6 +19,7 @@ import {
   FileUp,
   Table2,
   Settings,
+  Activity as ActivityIcon,
 } from "lucide-react";
 import { useTheme, useToast } from "@/app/providers";
 import { createClient } from "@/lib/supabase/client";
@@ -27,6 +28,7 @@ import { useCollections } from "@/lib/hooks/useCollections";
 import { useTrash } from "@/lib/hooks/useTrash";
 import { NoteTree } from "./NoteTree";
 import { NotificationsBell } from "./NotificationsBell";
+import { useJobBadge } from "@/components/activity/useJobBadge";
 import { CsvImport, type CsvImportHandle } from "./CsvImport";
 import { Logo } from "@/components/brand/Logo";
 
@@ -145,6 +147,7 @@ export function Sidebar({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const jobsWaiting = useJobBadge();
   const { resolvedTheme, setTheme } = useTheme();
   const { showToast } = useToast();
   const [mounted, setMounted] = useState(false);
@@ -315,6 +318,18 @@ export function Sidebar({
           icon={LayoutGrid}
           active={pathname?.startsWith("/brain/workspace") ?? false}
           onClick={() => navigate("/brain/workspace")}
+        />
+        <NavItem
+          label="Activity"
+          icon={ActivityIcon}
+          active={pathname?.startsWith("/brain/activity") ?? false}
+          onClick={() => navigate("/brain/activity")}
+          trailing={jobsWaiting > 0 ? (
+            <span data-testid="activity-badge" aria-label={`${jobsWaiting} waiting`}
+              className="min-w-[16px] h-4 px-1 rounded-full bg-indigo-500 text-white text-[10px] font-semibold flex items-center justify-center">
+              {jobsWaiting > 9 ? "9+" : jobsWaiting}
+            </span>
+          ) : undefined}
         />
         <NavItem
           label="Settings"

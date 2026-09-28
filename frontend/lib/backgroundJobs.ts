@@ -152,3 +152,111 @@ export const runJobNow = (id: string) => call<BgJob>(`/${id}/run-now`, { method:
 export const discardJob = (id: string) => call<BgJob>(`/${id}/discard`, { method: "POST" });
 export const markJobApplied = (id: string, noteId: string | null) =>
   call<BgJob>(`/${id}/applied`, { method: "POST", body: JSON.stringify({ note_id: noteId }) });
+
+// ── the Activity page ───────────────────────────────────────────────────────
+
+export interface ActivityJob extends BgJob {
+  note_title: string | null;
+  live_equivalent_usd: number | null;
+  result_meta: Record<string, unknown>;
+  started_at: string | null;
+  applied_at: string | null;
+  discarded_at: string | null;
+}
+
+export interface Activity {
+  /** Waiting on the user or still on its way — whatever its age. */
+  open: ActivityJob[];
+  history: ActivityJob[];
+  month_spent_usd: number;
+  monthly_cap_usd: number;
+  saved_usd: number;
+}
+
+export interface ActivityFilters { skill?: string; trigger?: string; status?: string; days?: number }
+
+export interface JobSettings {
+  monthly_cap_usd: number;
+  default_monthly_cap_usd: number;
+  min_usd: number;
+  max_usd: number;
+  month_spent_usd: number;
+}
+
+export const TRIGGER_WORDS: Record<string, string> = {
+  run_later: "Run later", source_added: "New source", schedule: "Schedule",
+};
+export const triggerText = (t: string) => TRIGGER_WORDS[t] ?? t;
+
+export const STATE_WORDS: Record<JobStatus, string> = {
+  queued: "Queued", submitted: "Running", ready: "Ready", applied: "Applied",
+  discarded: "Discarded", failed: "Failed", cancelled: "Cancelled", expired: "Expired",
+  budget_blocked: "Not started", needs_you: "Needs you", skipped: "Skipped",
+};
+
+/** Sections of the page, in the order a person should look at them. */
+export const NEEDS_YOU: JobStatus[] = ["needs_you", "budget_blocked", "failed"];
+export const IN_PROGRESS: JobStatus[] = ["queued", "submitted"];
+
+/** What was charged, for the History column. A job that never reached the
+ *  model cost $0; a local one is free; a run whose price is unknown says so. */
+export function costText(job: Pick<BgJob, "status" | "price_mode" | "actual_usd">): string {
+  if (job.actual_usd === null) {
+    if (["cancelled", "expired", "skipped", "budget_blocked", "queued", "failed"].includes(job.status)) return "$0";
+    return job.price_mode === "local" ? "free" : "price unknown";
+  }
+  return usdText(job.actual_usd);
+}
+
+/** The honest cost line for an expanded row. A saving is claimed only when the
+ *  job ran at batch price AND both prices are known. */
+export function costLine(job: Pick<ActivityJob, "price_mode" | "actual_usd" | "live_equivalent_usd">): string {
+  const { price_mode: mode, actual_usd: paid, live_equivalent_usd: live } = job;
+  if (paid === null) return mode === "local" ? "Free" : "Price unknown";
+  if (paid === 0) return "Free";
+  if (mode === "batch" && live !== null && live > paid) {
+    return `Paid ${usdText(paid)} · the same job run now would be ${usdText(live)} · saved ${usdText(live - paid)}`;
+  }
+  return `Paid ${usdText(paid)}`;
+}
+
+/** "Sun 22:00" inside a week, "Sep 12" beyond. */
+export function whenShort(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso);
+  const days = (now.getTime() - d.getTime()) / 86_400_000;
+  if (days < 7 && days > -7) {
+    return `${d.toLocaleDateString(undefined, { weekday: "short" })} ${clockText(d)}`;
+  }
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** "This month: $0.43 of $5.00 · saved $0.39" */
+export function monthLine(spent: number, cap: number, saved: number): string {
+  const base = `This month: ${spent === 0 ? "$0" : usdText(spent)} of ${usdText(cap)}`;
+  return saved > 0 ? `${base} · saved ${usdText(saved)}` : base;
+}
+
+/** What each timestamp of a job says, in order — the expanded row's timeline. */
+export function timeline(job: ActivityJob): { label: string; at: string }[] {
+  const steps: [string, string | null][] = [
+    ["queued", job.created_at], ["started", job.started_at], ["finished", job.finished_at],
+    ["applied", job.applied_at], ["discarded", job.discarded_at]];
+  return steps.filter((s): s is [string, string] => !!s[1])
+    .map(([label, at]) => ({ label, at: clockText(new Date(at)) + ` (${whenShort(at)})` }));
+}
+
+export const EMPTY_ACTIVITY =
+  "Nothing has run in the background yet. In any chat, type /study-guide and choose Run later.";
+
+export const getActivity = (f: ActivityFilters = {}) => {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(f)) if (v !== undefined && v !== "") q.set(k, String(v));
+  return call<Activity>(`/activity${q.size ? `?${q}` : ""}`);
+};
+export const getBadge = () => call<{ ready: number; needs_you: number }>("/badge");
+export const getJobSettings = () => call<JobSettings>("/settings");
+export const putJobSettings = (monthly_cap_usd: number) =>
+  call<{ monthly_cap_usd: number; month_spent_usd: number }>("/settings",
+    { method: "PUT", body: JSON.stringify({ monthly_cap_usd }) });
+export const deleteJob = (id: string) => call<{ ok: boolean }>(`/${id}`, { method: "DELETE" });
+export const getJobDetail = (id: string) => call<{ sources: { id: string; title: string }[] }>(`/${id}/detail`);
