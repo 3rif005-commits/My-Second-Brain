@@ -12,7 +12,7 @@ transition, tests touching the user's real notes clean up after themselves.
 |---|-----------|--------|
 | M1 | Run later (normal/local price): `ai_jobs` + migration 025, worker tick, API, bell, card in note, split send button, Cancel | ✅ done, live-verified |
 | M2 | Activity page + caps | ✅ done, live-verified |
-| M3 | Batch mode (Anthropic Message Batches) | todo |
+| M3 | Batch mode (Anthropic Message Batches) | in progress |
 | M4 | When a source is added | todo |
 | M5 | Schedules + staleness | todo |
 
@@ -51,3 +51,18 @@ Activity shows background jobs only; the header's month total counts all AI from
 - 2026-09-28 · M2 frontend + live pass GREEN (`--project=background-activity`, free, 2.5 min). Limit set to $0.01 in Settings (nonsense refused) → Run later → Run now → refused BEFORE the model ("Not started — about $0.05 would pass your $0.01 monthly limit ($1.48 spent this month)") on the card, in the bell, under Needs you on Activity, and as the sidebar badge → Dismiss → History (Discarded, $0) → expanded row → delete. Limit restored to $5. M1 live re-run after the M2 changes: green ($0.01).
 - Found live (all fixed): (1) a dismissed refusal showed cost "price unknown" — the worker now records $0 for a job that never reached the model, cancel-while-queued too; a running job's cancel stays unknown; failed shows "—". (2) "Not started — Not started —" doubled. (3) sidebar badge stayed at 1 after Dismiss until the next 45 s poll → `jobs:changed` event. (4) expanded row said "Made from: sources no longer available" for a job that never ran → line hidden. (5) timeline printed each time twice.
 - Tests: backend jobs suite 58; frontend 246 in lib/activity/ai/sidebar.
+
+## M3 pieces (migration 026 — ai_runs.price_mode — user applies before the paid run)
+Decisions: batch is decided at queue time and shown before the click (`GET /jobs/quote` = the same
+decision the queue makes); only single-call jobs (flashcards, compare-sources, study-guide 1–2 sources);
+a rise >25% since queuing → `needs_you`; provider down at submit → retry 3× over ~10 min then fail, never
+switch provider; expired/errored batches cost $0; crash between send and save → look the batch up by custom_id.
+- [x] migration 026, `batch` capability on anthropic, `services/jobs/batch.py` adapter (submit/poll/collect/cancel/recent)
+- [x] `skill_run.batch_call / batch_eligible / finish_batch`, `usage.record_batch_run`
+- [x] worker: plan_for, submit, poll/collect, needs_you, expired, reconcile + 25 tests (4 mutations verified to fail them)
+- [x] router: quote, batch queue, cancel-at-provider, accept-price + tests; hermetic_planning fixture (a jobs test had read the real project)
+- [ ] frontend: quote in the ▾ menu, "(now $x)", Sent/expired/needs-you wording + actions, Activity
+- [ ] live: free-side pass (queue → Sent → cancel) and ONE paid batch run (~$0.05), compare with ai_runs
+
+## Log (M3)
+- 2026-09-28 · M3 backend done: 91 jobs tests green. Found: worker tests were reading the real Supabase (modules that import get_supabase by name bypass the conftest guard) → `hermetic_planning`; `no_real_batch_api` guard so no test can send a paid batch.

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -405,3 +406,80 @@ def produce_skill_result(note_id: str, user_id: str, name: str,
             "output_tokens": sum(r.get("output_tokens") or 0 for r in rows),
             "usd": round(sum(spent), 4) if spent else None}
 
+
+
+# ── one request, sent later ──────────────────────────────────────────────────
+#
+# A provider's batch API answers ONE request at half price, some time later.
+# A job can use it only if it is a single call: a flat instruction plus the
+# note's sources, one document back. `batch_call` builds exactly the request
+# `produce_skill_result` would have sent live, and `finish_batch` turns the
+# answer into the same result — so a batch result and a live one are the same
+# thing to the card, the apply flow and Undo.
+
+@dataclass
+class BatchCall:
+    messages: list[dict]
+    max_tokens: int
+    source_ids: list[str]
+
+
+def batch_eligible(name: str, source_count: int, focus: str = "") -> bool:
+    """Is this job a single call? A study guide from many sources is written
+    chapter by chapter (several calls, each needing the last) — it cannot be
+    one batch request, so it runs live at the normal price and says so."""
+    skill = registry().get(name)
+    if skill is None or not skill.output:
+        return False
+    if name == STUDY_GUIDE:
+        from services.workspace import synthesis
+        chosen, _ = split_method(focus)
+        return synthesis.resolve_method(source_count, chosen) == "single"
+    return True
+
+
+def batch_call(note_id: str, user_id: str, name: str, focus: str = "") -> BatchCall | None:
+    """The request the job would send now, or None when it cannot be one call.
+    Raises ValueError, with a reason, when it cannot run at all."""
+    skill = registry().get(name)
+    if skill is None or not skill.output:
+        raise ValueError(f"No job named {name!r}.")
+    blocks, source_ids = _blocks_for(note_id)
+    blocked = _runnable(skill, len(source_ids))
+    if blocked:
+        raise ValueError(f"{job_title(name)}: {blocked}.")
+    if not batch_eligible(name, len(blocks), focus):
+        return None
+    if name == STUDY_GUIDE:
+        from prompts.note_synthesis import build_note_synthesis_prompt
+        from services.workspace import synthesis
+        _, focus = split_method(focus)
+        prompt = _focused(build_note_synthesis_prompt(blocks), focus)
+        return BatchCall(synthesis.synthesis_messages(prompt), OUTPUT_CAP, source_ids)
+    return BatchCall([{"role": "user", "content": _focused(build_prompt(skill, blocks), focus)}],
+                     OUTPUT_CAP, source_ids)
+
+
+def finish_batch(name: str, text: str, truncated: bool,
+                 blocks: list[dict] | None = None) -> dict:
+    """The answer to a batch request → the same fields `produce_skill_result`
+    returns (html, truncated, method, check). Raises ValueError with a reason a
+    person can read when the answer is unusable."""
+    if name == STUDY_GUIDE:
+        from services.workspace import synthesis
+        from services.workspace.guide_check import check_guide
+        from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML
+        html = _strip_fences(text)
+        if not synthesis._looks_like_a_mastery_guide(html):
+            raise ValueError("The answer was not a complete study guide. "
+                             "Run it now to try again at the normal price.")
+        check = check_guide(html, blocks, truncated) if blocks else None
+        if truncated:
+            html += TRUNCATION_NOTICE_HTML
+        return {"html": html, "truncated": truncated, "method": "single", "check": check}
+    answer = _strip_fences(text)
+    if not answer.strip():
+        raise ValueError("The model returned nothing.")
+    if truncated:
+        answer = answer.rstrip() + "\n\n" + TRUNCATION_NOTICE_MD
+    return {"html": markdown_to_html(answer), "truncated": truncated, "method": None, "check": None}

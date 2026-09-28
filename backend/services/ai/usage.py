@@ -245,3 +245,44 @@ def _write_row(provider: str | None, model: str | None, usage: Usage,
             # log said nothing, and the scoreboard looked merely empty.
             _seen_write_errors.add(message[:80])
             logger.warning("ai_runs insert failed: %s", message[:200])
+
+
+def record_batch_run(provider: str | None, model: str | None, *, user_id: str, note_id: str | None,
+                     skill: str | None, input_tokens: int, output_tokens: int,
+                     cache_read_tokens: int = 0, cache_write_tokens: int = 0,
+                     discount: float = 0.5) -> tuple[float | None, float | None]:
+    """Log a request that went through a provider's batch API.
+
+    Returns (paid, live): what it cost at the batch price, and what the same
+    tokens would have cost live. Both None when the model has no published
+    price — an unknown price is never turned into a saving. `estimated_usd` on
+    the row is the amount actually paid, so month totals and the monthly limit
+    are the real bill.
+
+    The `price_mode` column needs migration 026. Until it is applied the row is
+    still written, without it: cost accounting must not depend on a migration.
+    """
+    live = estimate_usd(model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens)
+    paid = round(live * discount, 6) if live is not None else None
+    row = {
+        "user_id": _as_uuid(user_id), "surface": "workspace", "job": "skill", "skill": skill,
+        "trigger": "background", "note_id": _as_uuid(note_id), "provider": provider,
+        "model": model, "status": "ok", "error": None, "latency_ms": None,
+        "input_tokens": input_tokens, "output_tokens": output_tokens,
+        "cache_read_tokens": cache_read_tokens, "cache_write_tokens": cache_write_tokens,
+        "estimated_usd": paid, "usage_reported": True,
+    }
+    RECENT.append({**row, "price_mode": "batch"})
+    from services.database import get_supabase
+    try:
+        get_supabase().table("ai_runs").insert({**row, "price_mode": "batch"}).execute()
+    except Exception as e:                      # noqa: BLE001
+        logger.warning("ai_runs batch row with price_mode failed (%s); apply "
+                       "supabase/migrations/026_ai_runs_price_mode.sql. Writing it without.",
+                       str(e)[:160])
+        try:
+            get_supabase().table("ai_runs").insert(row).execute()
+        except Exception as e2:                 # noqa: BLE001
+            logger.error("ai_runs batch row NOT written — the month total will miss it: %s",
+                         str(e2)[:200])
+    return paid, live

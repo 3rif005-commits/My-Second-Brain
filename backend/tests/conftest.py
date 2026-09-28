@@ -50,6 +50,31 @@ def neutral_provider_config(monkeypatch):
     monkeypatch.setattr(settings, "custom_llm_price_out", None)
 
 
+@pytest.fixture(autouse=True)
+def no_real_batch_api(monkeypatch):
+    """No test may send a real request to a provider's batch API.
+
+    A batch is paid work that outlives the test, and this machine's .env holds a
+    real Anthropic key. With no adapters registered, `batch.adapter_for` finds
+    none and every job plans at the normal price. A test of batch behaviour
+    installs its own fake adapter.
+    """
+    monkeypatch.setattr("services.jobs.batch._ADAPTERS", {})
+
+
+@pytest.fixture
+def hermetic_planning(monkeypatch):
+    """The jobs worker plans a job from live services: the provider chain, the
+    note's sources, the priced skill list. Modules that import `get_supabase`
+    by name bypass the autouse guard above, so without this a jobs test reads
+    the real project (it did — a query for the uuid "n1"). Nothing is found;
+    a test that cares patches what it needs on top."""
+    monkeypatch.setattr("services.jobs.worker.pick", lambda *a, **k: None)
+    monkeypatch.setattr("services.jobs.worker.list_providers", lambda *a, **k: [])
+    monkeypatch.setattr("services.workspace.skill_run.ready_sources", lambda *a, **k: [])
+    monkeypatch.setattr("services.workspace.skill_run.chat_skills", lambda *a, **k: [])
+
+
 @pytest.fixture
 def tmp_skills_dir(tmp_path):
     """A temp directory with no skills, ready to be populated."""

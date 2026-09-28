@@ -8,6 +8,8 @@ import pytest
 from services.jobs import caps, store, worker
 from tests.fake_db import FakeDB
 
+pytestmark = pytest.mark.usefixtures("hermetic_planning")
+
 NOW = datetime(2026, 9, 28, 22, 0, tzinfo=timezone.utc)
 
 

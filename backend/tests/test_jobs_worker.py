@@ -14,6 +14,8 @@ from services.ai.budget import BudgetExceeded
 from services.jobs import store, worker
 from tests.fake_db import FakeDB
 
+pytestmark = pytest.mark.usefixtures("hermetic_planning")
+
 NOW = datetime(2026, 9, 28, 22, 0, tzinfo=timezone.utc)
 RESULT = {"skill": "flashcards", "title": "Flashcards", "html": "<p>cards</p>",
           "source_ids": ["s1"], "truncated": False, "method": None, "check": None,

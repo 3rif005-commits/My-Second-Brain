@@ -27,7 +27,9 @@ DEFAULT_MODELS = {
 
 CAPABILITIES = {
     "gemini": {"text", "vision", "video_native", "long_context"},
-    "anthropic": {"text", "vision", "long_context"},
+    # "batch": the provider has an asynchronous half-price API. A capability
+    # flag on the provider, never a check for a model name.
+    "anthropic": {"text", "vision", "long_context", "batch"},
     "openai": {"text", "vision", "long_context"},
     "openai_compatible": {"text"},   # conservative: unknown gateway models
     "local": {"text"},

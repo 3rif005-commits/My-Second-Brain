@@ -1,11 +1,12 @@
 """The jobs API: queue with a price, list, cancel, discard, applied — and who may."""
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+from services.ai.providers import Provider
 from tests.fake_db import FakeDB
 
 AUTH = {"Authorization": "Bearer fake"}
@@ -16,8 +17,8 @@ PRICED = {"skill": "flashcards", "usd": 0.04, "model": "claude-haiku-4-5", "runn
 def env():
     fake = FakeDB(notes=[{"id": "n1", "user_id": "u1", "title": "Lecture 10", "deleted_at": None},
                          {"id": "n2", "user_id": "someone-else", "title": "X", "deleted_at": None}])
-    provider = SimpleNamespace(provider="anthropic")
-    with patch("services.database.get_supabase", return_value=fake), \
+    provider = Provider("anthropic", capabilities={"text"})          # no batch API unless a test adds one
+    with patch("routers.jobs.skill_run.ready_sources", return_value=[{"id": "s1"}]), patch("services.database.get_supabase", return_value=fake), \
          patch("routers.jobs.get_supabase", return_value=fake), \
          patch("routers.jobs.get_user_id", return_value="u1"), \
          patch("routers.jobs.pick", return_value=provider), \
@@ -42,7 +43,7 @@ def test_queueing_stores_the_price_the_user_was_shown(env):
 
 def test_a_local_model_is_marked_local(env):
     client, _ = env
-    with patch("routers.jobs.pick", return_value=SimpleNamespace(provider="local")):
+    with patch("routers.jobs.pick", return_value=Provider("local", capabilities={"text"})):
         assert _queue(client).json()["price_mode"] == "local"
 
 
@@ -247,3 +248,96 @@ def test_cancelling_a_running_job_does_not_claim_it_cost_nothing(env):
     db.tables["ai_jobs"][0]["status"] = "submitted"
     res = client.post(f"/jobs/{jid}/cancel", headers=AUTH)
     assert res.json()["status"] == "cancelled" and res.json().get("actual_usd") is None
+
+
+# ── batch mode at the API ────────────────────────────────────────────────────
+
+def test_a_batch_job_is_queued_at_half_price_with_the_live_price_beside_it(env):
+    client, db = env
+    with patch("routers.jobs.batch.adapter_for", return_value=object()), \
+         patch("routers.jobs.skill_run.batch_eligible", return_value=True), \
+         patch("routers.jobs.skill_run.ready_sources", return_value=[{"id": "s1"}]):
+        job = _queue(client).json()
+    assert job["price_mode"] == "batch"
+    assert job["shown_estimate_usd"] == 0.02 and job["live_equivalent_usd"] == 0.04
+
+
+def test_a_job_that_is_not_one_call_is_queued_at_the_normal_price(env):
+    client, _ = env
+    with patch("routers.jobs.batch.adapter_for", return_value=object()), \
+         patch("routers.jobs.skill_run.batch_eligible", return_value=False), \
+         patch("routers.jobs.skill_run.ready_sources", return_value=[{"id": "s1"}] * 3):
+        job = _queue(client).json()
+    assert job["price_mode"] == "normal" and job["shown_estimate_usd"] == 0.04
+    assert job["live_equivalent_usd"] is None
+
+
+def test_a_provider_without_a_batch_api_queues_at_the_normal_price(env):
+    client, _ = env
+    assert _queue(client).json()["price_mode"] == "normal"          # conftest registers no adapters
+
+
+def test_cancelling_a_sent_batch_tells_the_provider(env):
+    client, db = env
+    jid = _queue(client).json()["id"]
+    db.tables["ai_jobs"][0].update(status="submitted", provider_batch_id="batch-9")
+    adapter = MagicMock()
+    with patch("routers.jobs.worker._provider_for", return_value=object()), \
+         patch("routers.jobs.batch.adapter_for", return_value=adapter):
+        res = client.post(f"/jobs/{jid}/cancel", headers=AUTH)
+    assert res.json()["status"] == "cancelled" and res.json().get("actual_usd") is None
+    adapter.cancel.assert_called_once()
+    assert adapter.cancel.call_args.args[1] == "batch-9"
+
+
+def test_a_provider_that_cannot_cancel_does_not_stop_the_cancel(env):
+    client, db = env
+    jid = _queue(client).json()["id"]
+    db.tables["ai_jobs"][0].update(status="submitted", provider_batch_id="batch-9")
+    adapter = MagicMock()
+    adapter.cancel.side_effect = RuntimeError("503")
+    with patch("routers.jobs.worker._provider_for", return_value=object()), \
+         patch("routers.jobs.batch.adapter_for", return_value=adapter):
+        res = client.post(f"/jobs/{jid}/cancel", headers=AUTH)
+    assert res.status_code == 200 and db.tables["ai_jobs"][0]["status"] == "cancelled"
+
+
+def test_accepting_a_higher_price_queues_the_job_at_that_price_and_runs_it(env):
+    client, db = env
+    jid = _queue(client).json()["id"]
+    db.tables["ai_jobs"][0].update(status="needs_you", error="Price went up",
+                                   result_meta={"was_usd": 0.04, "now_usd": 0.08, "now_mode": "normal"})
+    with patch("routers.jobs.worker.run_one", return_value=None) as run:
+        res = client.post(f"/jobs/{jid}/accept-price", headers=AUTH)
+    row = db.tables["ai_jobs"][0]
+    assert res.status_code == 200 and row["status"] == "queued"
+    assert row["shown_estimate_usd"] == 0.08 and row["price_mode"] == "normal" and row["error"] is None
+    run.assert_called_once()
+    assert client.post(f"/jobs/{jid}/accept-price", headers=AUTH).status_code == 409   # only once
+
+
+def test_accepting_a_price_is_only_for_a_job_that_asked(env):
+    client, _ = env
+    jid = _queue(client).json()["id"]
+    assert client.post(f"/jobs/{jid}/accept-price", headers=AUTH).status_code == 409
+
+
+def test_the_quote_is_the_same_decision_the_queue_makes(env):
+    client, _ = env
+    q = lambda: client.get("/jobs/quote?note_id=n1&skill=flashcards", headers=AUTH).json()
+    assert q() == {"price_mode": "normal", "usd": 0.04, "live_usd": 0.04, "model": "claude-haiku-4-5"}
+    with patch("routers.jobs.batch.adapter_for", return_value=object()), \
+         patch("routers.jobs.skill_run.batch_eligible", return_value=True):
+        quoted = q()
+        queued = _queue(client).json()
+    assert quoted == {"price_mode": "batch", "usd": 0.02, "live_usd": 0.04, "model": "claude-haiku-4-5"}
+    assert (queued["price_mode"], queued["shown_estimate_usd"]) == ("batch", 0.02)   # shown = queued
+
+
+def test_a_quote_for_a_job_that_cannot_run_says_why(env):
+    client, _ = env
+    with patch("routers.jobs.skill_run.chat_skills",
+               return_value=[{**PRICED, "runnable": "no sources are ready yet"}]):
+        res = client.get("/jobs/quote?note_id=n1&skill=flashcards", headers=AUTH)
+    assert res.status_code == 400 and "no sources are ready yet" in res.json()["detail"]["error"]
+    assert client.get("/jobs/quote?note_id=n2&skill=flashcards", headers=AUTH).status_code == 404

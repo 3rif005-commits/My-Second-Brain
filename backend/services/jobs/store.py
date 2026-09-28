@@ -113,7 +113,14 @@ def transition(job_id: str, expected: str | tuple[str, ...], **fields: Any) -> d
 
 
 def stuck_running(older_than_iso: str) -> list[dict]:
-    """Live jobs marked `submitted` whose process died (no batch id to poll)."""
-    return (_t().select("id,user_id,note_id,skill,result_title").eq("status", "submitted")
-            .is_("provider_batch_id", "null").lte("started_at", older_than_iso)
-            .execute().data or [])
+    """Jobs marked `submitted` with no batch id to poll, whose process died —
+    a live run that never finished, or a batch that may have been sent."""
+    return (_t().select("id,user_id,note_id,skill,price_mode,provider,started_at")
+            .eq("status", "submitted").is_("provider_batch_id", "null")
+            .lte("started_at", older_than_iso).execute().data or [])
+
+
+def sent_batches() -> list[dict]:
+    """Batches on their way: the provider has them, we are waiting to collect."""
+    return (_t().select("*").eq("status", "submitted")
+            .not_.is_("provider_batch_id", "null").execute().data or [])

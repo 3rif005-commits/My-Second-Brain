@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from routers.ingest import get_user_id
 from services.ai.router import pick
 from services.database import get_supabase
-from services.jobs import caps, store, worker
+from services.jobs import batch, caps, store, worker
 from services.jobs.notify import notify
 from services.workspace import skill_run
 
@@ -81,6 +81,43 @@ def eligible_skill(name: str):
     return skill
 
 
+def _quote(user_id: str, note_id: str, skill, focus: str) -> dict:
+    """What a job would cost and how it would run — the ONE decision both the
+    price shown before the click and the job that is queued come from, so what
+    the user is shown is what they get. A provider with a batch API and a job
+    that is a single call go at half price; a local model is free; anything else
+    runs at the normal price. Raises 400 with the reason when it cannot run."""
+    priced = next((j for j in skill_run.chat_skills(note_id, user_id)
+                   if j.get("skill") == skill.name), None) or {}
+    if priced.get("runnable"):
+        _fail(400, f"{skill_run.job_title(skill.name)}: {priced['runnable']}.")
+    provider = pick("summarize_text", user_id)
+    live = priced.get("usd")
+    if provider and provider.provider == "local":
+        mode = "local"
+    elif (batch.adapter_for(provider)
+          and skill_run.batch_eligible(skill.name, len(skill_run.ready_sources(note_id)), focus)):
+        mode = "batch"
+    else:
+        mode = "normal"
+    shown = round(live * batch.DISCOUNT, 6) if mode == "batch" and live is not None else live
+    return {"provider": provider, "priced": priced, "live_usd": live, "price_mode": mode,
+            "usd": shown, "model": priced.get("model")}
+
+
+@router.get("/quote")
+def quote_job(note_id: str, skill: str, authorization: str = Header(), focus: str = ""):
+    """The price line's numbers, before anything is queued."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    sk = eligible_skill(skill)
+    if sk is None:
+        _fail(400, f"{skill!r} cannot run in the background.")
+    q = _quote(user_id, note_id, sk, focus)
+    return {"price_mode": q["price_mode"], "usd": q["usd"], "live_usd": q["live_usd"],
+            "model": q["model"]}
+
+
 @router.post("")
 def queue_job(body: QueueRequest, authorization: str = Header()):
     user_id = get_user_id(authorization)
@@ -102,19 +139,16 @@ def queue_job(body: QueueRequest, authorization: str = Header()):
             _fail(400, "A job can wait at most 14 days.")
         run_after = max(run_after, now)
 
-    priced = next((j for j in skill_run.chat_skills(body.note_id, user_id)
-                   if j.get("skill") == skill.name), None) or {}
-    if priced.get("runnable"):
-        _fail(400, f"{skill_run.job_title(skill.name)}: {priced['runnable']}.")
-
-    provider = pick("summarize_text", user_id)
+    quote = _quote(user_id, body.note_id, skill, body.focus)
     from core.config import settings
+    provider, priced, live, mode, shown = (quote[k] for k in
+                                           ("provider", "priced", "live_usd", "price_mode", "usd"))
     row = store.create(
         user_id, note_id=body.note_id, skill=skill.name, focus=body.focus.strip(),
-        trigger="run_later", run_after=run_after.isoformat(),
-        price_mode="local" if provider and provider.provider == "local" else "normal",
-        shown_estimate_usd=priced.get("usd"), cap_usd=settings.max_usd_per_run or None,
-        model=priced.get("model"), provider=provider.provider if provider else None)
+        trigger="run_later", run_after=run_after.isoformat(), price_mode=mode,
+        shown_estimate_usd=shown, live_equivalent_usd=live if mode == "batch" else None,
+        cap_usd=settings.max_usd_per_run or None,
+        model=quote["model"], provider=provider.provider if provider else None)
     return _brief(row)
 
 
@@ -231,7 +265,37 @@ def cancel_job(job_id: str, authorization: str = Header()):
                            finished_at=store.now_iso(), cancel_reason="by you", **extra)
     if not row:
         _fail(409, "This job has already finished.")
+    if before.get("provider_batch_id"):
+        # Tell the provider too. Best effort: the job is cancelled here either way,
+        # and anything the provider had already finished is still charged.
+        try:
+            provider = worker._provider_for(before)
+            adapter = batch.adapter_for(provider)
+            if adapter:
+                adapter.cancel(provider, before["provider_batch_id"])
+        except Exception:                                # noqa: BLE001
+            logger.warning("could not cancel batch %s at the provider", before["provider_batch_id"],
+                           exc_info=True)
     return _brief(row)
+
+
+@router.post("/{job_id}/accept-price")
+def accept_price(job_id: str, background: BackgroundTasks, authorization: str = Header()):
+    """Run a job at the higher price the user was just told about."""
+    user_id = get_user_id(authorization)
+    row = _job(job_id, user_id)
+    meta = row.get("result_meta") or {}
+    if row["status"] != "needs_you" or meta.get("now_usd") is None:
+        _fail(409, "This job is not waiting for a price decision.")
+    now = datetime.now(timezone.utc)
+    queued = store.transition(
+        job_id, "needs_you", status="queued", run_after=now.isoformat(),
+        shown_estimate_usd=meta["now_usd"], price_mode=meta.get("now_mode") or "normal",
+        error=None, result_meta={}, finished_at=None)
+    if not queued:
+        _fail(409, "This job is not waiting for a price decision.")
+    background.add_task(_run_and_notify, queued, now)
+    return _brief(queued)
 
 
 @router.post("/{job_id}/run-now")

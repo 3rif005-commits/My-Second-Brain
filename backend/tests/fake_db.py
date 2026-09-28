@@ -61,6 +61,21 @@ class Query:
         self._filters.append(lambda r: r.get(col) in vals)
         return self
 
+    @property
+    def not_(self):
+        outer = self
+
+        class _Not:
+            def is_(self, col, val):
+                want_null = val == "null"
+                outer._filters.append(lambda r: (r.get(col) is None) != want_null)
+                return outer
+
+            def in_(self, col, vals):
+                outer._filters.append(lambda r: r.get(col) not in vals)
+                return outer
+        return _Not()
+
     def gte(self, col, val):
         self._filters.append(lambda r: r.get(col) is not None and r.get(col) >= val)
         return self
