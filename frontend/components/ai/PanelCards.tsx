@@ -90,7 +90,7 @@ export function GuideCheckLine({ result, busy, onRetryDeep }: {
   );
 }
 
-export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, onApply, onUndo, onRetry, onRetryDeep, onDiscard, onOpen }: {
+export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, badge, onApply, onUndo, onRetry, onRetryDeep, onDiscard, onOpen }: {
   job: PanelJob;
   /** The note open behind the panel, if any. */
   pageNoteId: string | null;
@@ -98,6 +98,8 @@ export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, onApply, onUn
   inWorkspace?: boolean;
   /** Another turn is running: actions that start one wait. */
   busy: boolean;
+  /** A quiet label for where it came from, e.g. "Background · ready 3h ago". */
+  badge?: string;
   onApply: (noteId: string) => void;
   onUndo: () => void;
   onRetry: () => void;
@@ -121,6 +123,7 @@ export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, onApply, onUn
         {job.focus && <span className="text-[11px] text-gray-400 truncate">· {job.focus}</span>}
         <span className="ml-auto text-[11px] text-gray-400 shrink-0">
           {!r && !job.error && <>Writing… <Elapsed since={job.startedAt} /></>}
+          {r && badge && <span data-testid="job-badge">{badge}</span>}
         </span>
         {r && (
           <button onClick={() => { void copyResult(r.html); setCopied(true); setTimeout(() => setCopied(false), 1500); }}

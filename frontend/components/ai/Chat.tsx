@@ -12,12 +12,13 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Send, History, SquarePen, X, Smartphone, Cloud, Check, SlidersHorizontal, Sparkles,
-  Paperclip, FileText, FilePlus2, Link2, Upload, Settings2,
+  Paperclip, FileText, FilePlus2, Link2, Upload, Settings2, ChevronDown, Clock,
 } from "lucide-react";
 import { MessageList, type StreamItem } from "./MessageList";
 import { ThreadHistory } from "./ThreadHistory";
 import { useMode, type Mode } from "./ModeToggle";
 import { PanelJobCard, type PanelJob } from "./PanelCards";
+import { BackgroundJobs } from "./BackgroundJobs";
 import {
   attachAndProcess, attachmentName, attachmentsTitle, parseLink, readNote, usePanelContext,
   type Attachment, type PanelScope,
@@ -27,6 +28,7 @@ import {
 } from "@/lib/chatJobs";
 import { ACCEPTED_WORKSPACE_FILES, jobTitle, type Citation } from "@/lib/workspace";
 import { answerToHtml } from "@/lib/answerToHtml";
+import { priceLine, queueJob, tonight, type BgJob } from "@/lib/backgroundJobs";
 import { offerDraft, stageDraft, undoDraft, type NoteDraft } from "@/lib/noteDraft";
 
 const ACCEPTED_EXT = ACCEPTED_WORKSPACE_FILES.split(",");
@@ -76,6 +78,11 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   const [internalThreadId, setInternalThreadId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  // Run later (5.3): the menu beside Send, and a nudge so the panel's list of
+  // background jobs shows a new one at once.
+  const [laterOpen, setLaterOpen] = useState(false);
+  const [bgRefresh, setBgRefresh] = useState(0);
+  const laterRef = useRef<HTMLDivElement>(null);
   const threadId = controlledThreadId !== undefined ? controlledThreadId : internalThreadId;
   const [mode, setMode] = useMode();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -495,20 +502,27 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
     router.push(`/brain/${d.noteId}`);
   }
 
-  async function applyJob(cardId: string, job: PanelJob, noteId: string) {
+  /** Put a job's result in a note, and keep what the AI wrote so "Learn from
+   *  my edits" can compare it later (E12). Live and background results share it. */
+  async function putResultInNote(job: PanelJob, noteId: string) {
     if (!job.result) return;
     const own = noteId === job.noteId;
-    const title = own ? job.noteTitle : (await readNote(noteId)).title;
     // Page anchors point at the job note's sources; elsewhere they would
     // point at sources that note does not have.
     await deliver({ noteId, html: job.result.html, mode: "replace",
       sourceIds: own ? job.result.source_ids : [] });
-    // Keep what the AI wrote, so "Learn from my edits" can compare it with the
-    // note as the user leaves it (E12). Never waits, never blocks the insert.
+    // Never waits, never blocks the insert.
     void fetch(`/api/ws/notes/${noteId}/ai-outputs`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ skill: job.skill, html: job.result.html }),
     }).catch(() => {});
+  }
+
+  async function applyJob(cardId: string, job: PanelJob, noteId: string) {
+    if (!job.result) return;
+    const own = noteId === job.noteId;
+    const title = own ? job.noteTitle : (await readNote(noteId)).title;
+    await putResultInNote(job, noteId);
     patchJob(cardId, (j) => ({ ...j, applied: { noteId, title }, undoNote: undefined }));
   }
 
@@ -536,6 +550,42 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
       : { ...it, undoNote: out === "edited"
           ? "You've edited the note since — use Ctrl+Z in the note."
           : "Open the note to undo it there (Ctrl+Z)." });
+  }
+
+  // ── Run later ───────────────────────────────────────────────────────────
+  // A job typed as /name can wait until tonight instead of running now.
+  const pendingCmd = /(^|\s)\//.test(input) && !attachments.length ? parseCommand(input, jobs) : null;
+  const laterJob = pendingCmd ? jobs.find((j) => j.skill === pendingCmd.skill) : undefined;
+  const laterNoteId = activeScope?.noteId ?? (pageNoteId && pageSources ? pageNoteId : null);
+
+  useEffect(() => {
+    if (!laterOpen) return;
+    function onDown(e: MouseEvent) {
+      if (laterRef.current && !laterRef.current.contains(e.target as Node)) setLaterOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [laterOpen]);
+
+  async function queueLater() {
+    setLaterOpen(false);
+    if (!pendingCmd || !laterNoteId) return;
+    const query = input.trim();
+    setError(null);
+    try {
+      const at = tonight();
+      const queued: BgJob = await queueJob({ noteId: laterNoteId, skill: pendingCmd.skill,
+        focus: pendingCmd.focus, runAfter: at });
+      setItems((prev) => [...prev,
+        { kind: "user", id: uid(), content: query },
+        { kind: "notice", id: uid(),
+          content: `Queued · ${jobTitle(queued.skill)} · ${priceLine(queued.price_mode,
+            queued.shown_estimate_usd, at)}` }]);
+      setInput("");
+      setBgRefresh((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not queue it");
+    }
   }
 
   function completeJob(skill: string) {
@@ -654,6 +704,23 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 bg-white/50 dark:bg-white/[0.02]" role="log" aria-live="polite">
+        {pageNoteId && (
+          <BackgroundJobs
+            noteId={pageNoteId}
+            noteTitle={workspace?.title}
+            pageNoteId={pageNoteId}
+            inWorkspace={!!workspace}
+            refreshKey={bgRefresh}
+            onApply={putResultInNote}
+            onUndo={(noteId) => undoDraft(noteId)}
+            onOpen={(href) => router.push(href)}
+            onAgain={(j) => {
+              void queueJob({ noteId: j.note_id ?? pageNoteId, skill: j.skill, focus: j.focus, runAfter: null })
+                .then(() => setBgRefresh((n) => n + 1))
+                .catch((e) => setError(e instanceof Error ? e.message : "Could not queue it"));
+            }}
+          />
+        )}
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-4 shadow-lg">
@@ -923,6 +990,34 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
               </div>
             )}
           </div>
+
+          {pendingCmd && laterNoteId && (
+            <div ref={laterRef} className="relative shrink-0">
+              <button type="button" onClick={() => setLaterOpen((v) => !v)} disabled={loading}
+                aria-label="More ways to run" aria-haspopup="menu" aria-expanded={laterOpen}
+                className="w-6 h-8 -mr-1 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/10">
+                <ChevronDown size={14} />
+              </button>
+              {laterOpen && (
+                <div role="menu" className="absolute bottom-full right-0 mb-2 w-72 rounded-xl bg-white dark:bg-gray-800 ring-1 ring-gray-200 dark:ring-white/10 shadow-lg z-20 overflow-hidden">
+                  <button type="button" role="menuitem" onClick={() => { setLaterOpen(false); send(); }}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5">
+                    <div className="text-[13px] font-medium text-gray-800 dark:text-gray-100">Run now</div>
+                    <div className="text-[11.5px] text-gray-400">Watch it work</div>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => void queueLater()}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 border-t border-gray-100 dark:border-white/5">
+                    <div className="flex items-center gap-1.5 text-[13px] font-medium text-gray-800 dark:text-gray-100">
+                      <Clock size={12} /> Run later
+                    </div>
+                    <div className="text-[11.5px] text-gray-400">
+                      {priceLine("normal", laterJob?.usd ?? null, tonight())}
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <button
             type="submit"

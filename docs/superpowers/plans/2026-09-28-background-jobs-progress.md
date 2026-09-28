@@ -23,10 +23,11 @@ transition, tests touching the user's real notes clean up after themselves.
 - [x] scheduler: `_tick_jobs` + notifications
 - [x] `routers/jobs.py` — queue / list / get / cancel / run-now / discard / applied
 - [x] backend tests (fake store, fake clock)
-- [ ] frontend: api + price line formatter
-- [ ] frontend: split send button + queued card
-- [ ] frontend: Background result card in the note's AI panel
+- [x] frontend: api + price line formatter
+- [x] frontend: split send button + queued card
+- [x] frontend: Background result card in the note's AI panel
 - [ ] live browser pass (needs migration 025 applied)
 
 ## Log
 - 2026-09-28 · M1 backend done: store, worker (claim, late, stuck recovery, additive-only), scheduler tick, /jobs API, 26 tests (in-memory table, `tests/fake_db.py`). Full suite: 1811 passed, 0 failed (448 errors = pre-existing, need the local pgtest Postgres on :55432).
+- 2026-09-28 · M1 frontend done: `lib/backgroundJobs.ts` (price line, times, API), `components/ai/BackgroundJobs.tsx` (queued/running/failed cards + the normal result card labelled Background), split send button (Run now / Run later), `jobs` on the API proxy. 12 new vitest tests; 207 pass in components/ai + lib; tsc clean on own files. **Live pass waits for migration 025.**
