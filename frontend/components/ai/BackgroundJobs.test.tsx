@@ -2,6 +2,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const showToast = vi.fn();
+vi.mock("@/app/providers", () => ({ useToast: () => ({ showToast }) }));
 vi.mock("./panelSources", () => ({ readNote: vi.fn().mockResolvedValue({ title: "Lecture 10", empty: false }) }));
 
 import { BackgroundJobs } from "./BackgroundJobs";
@@ -97,16 +99,19 @@ describe("BackgroundJobs — batch and price decisions", () => {
     render(<BackgroundJobs {...props} />);
     expect(await screen.findByText(/Sent · half price · usually under an hour, at most 24 hours/)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: /Cancel/ }));
-    expect(await screen.findByText(/anything the provider had already finished is still charged/)).toBeTruthy();
+    // a toast: the card itself is gone as soon as the job is cancelled
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/still charged/)));
   });
 
   it("does not warn about charges when a live job is cancelled", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) =>
       url.includes("/cancel") ? json(job({ status: "cancelled" }))
         : json({ jobs: [job({ status: "queued" })] })));
+    showToast.mockClear();
     render(<BackgroundJobs {...props} />);
     await userEvent.click(await screen.findByRole("button", { name: /Cancel/ }));
-    await waitFor(() => expect(screen.queryByText(/still charged/)).toBeNull());
+    await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalledWith("/api/ws/jobs/j1/cancel", expect.anything()));
+    expect(showToast).not.toHaveBeenCalled();          // nothing had started, nothing to be charged
   });
 
   it("asks before running at a higher price, and the button names the price", async () => {
@@ -129,5 +134,25 @@ describe("BackgroundJobs — batch and price decisions", () => {
     render(<BackgroundJobs {...props} />);
     await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
     expect(f).toHaveBeenCalledWith("/api/ws/jobs/j1/discard", expect.objectContaining({ method: "POST" }));
+  });
+});
+
+describe("BackgroundJobs — a job just queued", () => {
+  it("shows at once, before the list comes back, and is not shown twice when it does", async () => {
+    let release: (v: Response) => void = () => {};
+    const slow = new Promise<Response>((res) => { release = res; });
+    vi.stubGlobal("fetch", vi.fn(() => slow));
+    const seed = job({ id: "new", status: "queued" });
+    render(<BackgroundJobs {...props} seed={seed} />);
+    expect(await screen.findByText(/Queued · runs/)).toBeTruthy();          // the list has not answered yet
+    release(json({ jobs: [seed] }));
+    await waitFor(() => expect(screen.getAllByTestId("background-job-card")).toHaveLength(1));
+  });
+
+  it("ignores a job that belongs to another note", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ jobs: [] })));
+    const { container } = render(<BackgroundJobs {...props} seed={job({ note_id: "other" })} />);
+    await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
+    expect(container.firstChild).toBeNull();
   });
 });

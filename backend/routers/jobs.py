@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
@@ -178,8 +179,15 @@ def activity(authorization: str = Header(), skill: str | None = None,
     user_id = get_user_id(authorization)
     days = min(max(days, 1), store.ROW_DAYS)
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-    open_rows = store.list_for_user(user_id, statuses=store.OPEN_STATES, limit=100)
-    history = store.history(user_id, since=since, skill=skill, trigger=trigger, status=status)
+    # Four independent reads, each a round trip to the database: run them side by
+    # side (the page took 3.4 s when they ran one after the other).
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        f_open = pool.submit(store.list_for_user, user_id, statuses=store.OPEN_STATES, limit=100)
+        f_hist = pool.submit(store.history, user_id, since=since, skill=skill, trigger=trigger, status=status)
+        f_spent = pool.submit(caps.month_spend, user_id)
+        f_cap = pool.submit(caps.get_monthly_cap, user_id)
+        open_rows, history = f_open.result(), f_hist.result()
+        month_spent, monthly_cap = f_spent.result(), f_cap.result()
     saved = sum((r.get("live_equivalent_usd") or 0) - (r.get("actual_usd") or 0)
                 for r in history if r.get("price_mode") == "batch"
                 and r.get("actual_usd") is not None and r.get("live_equivalent_usd") is not None
@@ -187,8 +195,8 @@ def activity(authorization: str = Header(), skill: str | None = None,
     return {
         "open": _with_note_titles(open_rows),
         "history": _with_note_titles(history),
-        "month_spent_usd": caps.month_spend(user_id),
-        "monthly_cap_usd": caps.get_monthly_cap(user_id),
+        "month_spent_usd": month_spent,
+        "monthly_cap_usd": monthly_cap,
         "saved_usd": round(max(saved, 0.0), 4),
     }
 

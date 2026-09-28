@@ -74,7 +74,7 @@ test("half-price batch: quote → sent → cancel one → the other returns → 
     const secondCard = page.getByTestId("background-job-card").filter({ hasText: /Sent · half price/ });
     await expect(secondCard).toHaveCount(1, { timeout: 90_000 });
     await secondCard.getByRole("button", { name: /cancel/i }).click();
-    await expect(page.getByText(/anything the provider had already finished is still charged/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Anything the provider had already finished is still charged/)).toBeVisible({ timeout: 30_000 });
     await expect.poll(async () => (await (await page.request.get(`/api/ws/jobs/${second.id}`)).json()).status,
       { timeout: 30_000 }).toBe("cancelled");
     await page.screenshot({ path: path.join(OUT, "02-cancelled-batch.png") });
@@ -120,7 +120,11 @@ test("half-price batch: quote → sent → cancel one → the other returns → 
     console.log(`BATCH RESULT shown≈$${shown} paid=$${done.actual_usd} live=$${done.live_equivalent_usd}`);
     expect(errors, `page errors: ${errors.join(" | ")}`).toHaveLength(0);
   } finally {
-    for (const id of jobIds) await page.request.delete(`/api/ws/jobs/${id}`, { timeout: 30_000 }).catch(() => {});
+    // A job still waiting cannot be deleted: cancel first (a no-op for finished ones).
+    for (const id of jobIds) {
+      await page.request.post(`/api/ws/jobs/${id}/cancel`, { timeout: 30_000 }).catch(() => {});
+      await page.request.delete(`/api/ws/jobs/${id}`, { timeout: 30_000 }).catch(() => {});
+    }
     if (noteId) await page.request.delete(`/api/notes/${noteId}`, { timeout: 30_000 }).catch(() => {});
   }
 });

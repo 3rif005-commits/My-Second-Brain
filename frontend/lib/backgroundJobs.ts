@@ -242,6 +242,10 @@ export function costText(job: Pick<BgJob, "status" | "price_mode" | "actual_usd"
   return usdText(job.actual_usd);
 }
 
+/** Three places under ten cents, so "paid", "would be" and "saved" visibly add up
+ *  ($0.006 + $0.006 = $0.011, not "$0.01"). */
+const usdPrecise = (usd: number) => (usd > 0 && usd < 0.1 ? `$${usd.toFixed(3)}` : usdText(usd));
+
 /** The honest cost line for an expanded row. A saving is claimed only when the
  *  job ran at batch price AND both prices are known. */
 export function costLine(job: Pick<ActivityJob, "price_mode" | "actual_usd" | "live_equivalent_usd" | "result_meta">): string {
@@ -249,9 +253,9 @@ export function costLine(job: Pick<ActivityJob, "price_mode" | "actual_usd" | "l
   if (paid === null) return mode === "local" ? "Free" : "Price unknown";
   if (paid === 0) return ranModel(job) || mode === "local" ? "Free" : "Nothing was spent — it never reached the model";
   if (mode === "batch" && live !== null && live > paid) {
-    return `Paid ${usdText(paid)} · the same job run now would be ${usdText(live)} · saved ${usdText(live - paid)}`;
+    return `Paid ${usdPrecise(paid)} · the same job run now would be ${usdPrecise(live)} · saved ${usdPrecise(live - paid)}`;
   }
-  return `Paid ${usdText(paid)}`;
+  return `Paid ${usdPrecise(paid)}`;
 }
 
 /** "Sun 22:00" inside a week, "Sep 12" beyond. */

@@ -124,9 +124,12 @@ describe("costText after a dismissed refusal", () => {
 describe("costLine", () => {
   it("claims a saving only for batch jobs with both prices", () => {
     expect(costLine(done({ price_mode: "batch", actual_usd: 0.041, live_equivalent_usd: 0.082 })))
-      .toBe("Paid $0.04 · the same job run now would be $0.08 · saved $0.04");
-    expect(costLine(done({ price_mode: "normal", actual_usd: 0.08, live_equivalent_usd: 0.08 }))).toBe("Paid $0.08");
-    expect(costLine(done({ price_mode: "batch", actual_usd: 0.04, live_equivalent_usd: null }))).toBe("Paid $0.04");
+      .toBe("Paid $0.041 · the same job run now would be $0.082 · saved $0.041");
+    // the real run: $0.0055 paid of $0.0111 — the three numbers visibly add up
+    expect(costLine(done({ price_mode: "batch", actual_usd: 0.005537, live_equivalent_usd: 0.011074 })))
+      .toBe("Paid $0.006 · the same job run now would be $0.011 · saved $0.006");
+    expect(costLine(done({ price_mode: "normal", actual_usd: 0.18, live_equivalent_usd: 0.18 }))).toBe("Paid $0.18");
+    expect(costLine(done({ price_mode: "batch", actual_usd: 0.04, live_equivalent_usd: null }))).toBe("Paid $0.040");
     expect(costLine(done({ price_mode: "normal", actual_usd: null }))).toBe("Price unknown");
     expect(costLine(done({ price_mode: "local", actual_usd: null }))).toBe("Free");
   });

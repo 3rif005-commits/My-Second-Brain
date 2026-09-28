@@ -83,7 +83,7 @@ describe("ActivityPage", () => {
     expect(row).toHaveTextContent("$0.04");
     await userEvent.click(row);
     const detail = await screen.findByTestId("history-detail");
-    expect(detail).toHaveTextContent("Paid $0.04 · the same job run now would be $0.08 · saved $0.04");
+    expect(detail).toHaveTextContent("Paid $0.041 · the same job run now would be $0.082 · saved $0.041");
     expect(detail).toHaveTextContent("claude-haiku-4-5");
     expect(detail).toHaveTextContent("1,200 tokens");
     await waitFor(() => expect(detail).toHaveTextContent("Made from: Slides.pdf"));

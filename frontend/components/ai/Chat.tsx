@@ -82,6 +82,8 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   // background jobs shows a new one at once.
   const [laterOpen, setLaterOpen] = useState(false);
   const [bgRefresh, setBgRefresh] = useState(0);
+  // The job just queued, shown at once while the list is fetched again.
+  const [seedJob, setSeedJob] = useState<BgJob | null>(null);
   const laterRef = useRef<HTMLDivElement>(null);
   // What Run later would cost and how it would run — asked of the server when
   // the menu opens, so "half price" is only ever said when it will be true.
@@ -595,6 +597,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
           content: `Queued · ${jobTitle(queued.skill)} · ${priceLine(queued.price_mode,
             queued.shown_estimate_usd, at, new Date(), queued.live_equivalent_usd)}` }]);
       setInput("");
+      setSeedJob(queued);
       setBgRefresh((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not queue it");
@@ -724,6 +727,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             pageNoteId={pageNoteId}
             inWorkspace={!!workspace}
             refreshKey={bgRefresh}
+            seed={seedJob}
             onApply={putResultInNote}
             onUndo={(noteId) => undoDraft(noteId)}
             onOpen={(href) => router.push(href)}
@@ -1023,10 +1027,11 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                     <div className="flex items-center gap-1.5 text-[13px] font-medium text-gray-800 dark:text-gray-100">
                       <Clock size={12} /> Run later{quote?.price_mode === "batch" ? " — half price" : ""}
                     </div>
+                    {/* Never a guess: until the server says how it would run, say so. */}
                     <div className="text-[11.5px] text-gray-400" data-testid="later-price">
                       {quote
                         ? priceLine(quote.price_mode, quote.usd, tonight(), new Date(), quote.live_usd)
-                        : priceLine("normal", laterJob?.usd ?? null, tonight())}
+                        : "Checking the price…"}
                     </div>
                   </button>
                 </div>

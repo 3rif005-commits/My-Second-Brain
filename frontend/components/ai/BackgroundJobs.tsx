@@ -6,6 +6,7 @@
 // this keeps no history of its own: it asks, shows, and asks again.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Clock, Loader2, Play, X } from "lucide-react";
+import { useToast } from "@/app/providers";
 import { PanelJobCard, type PanelJob } from "./PanelCards";
 import { readNote } from "./panelSources";
 import {
@@ -28,6 +29,8 @@ interface Props {
   inWorkspace: boolean;
   /** Bumped when the composer queues a job, so it shows up at once. */
   refreshKey: number;
+  /** The job that was just queued: shown immediately, before the list comes back. */
+  seed?: BgJob | null;
   /** Put a finished result in a note (the same path a live result takes). */
   onApply: (job: PanelJob, noteId: string) => Promise<void>;
   onUndo: (noteId: string) => Promise<string>;
@@ -48,7 +51,12 @@ export function BackgroundJobs(props: Props) {
     catch (e) { setError(e instanceof Error ? e.message : "Could not load background jobs"); }
   }, [noteId]);
 
-  useEffect(() => { setJobs([]); void refresh(); }, [refresh, refreshKey]);
+  useEffect(() => { setJobs([]); }, [noteId]);
+  useEffect(() => { void refresh(); }, [refresh, refreshKey]);
+  useEffect(() => {
+    const s = props.seed;
+    if (s && s.note_id === noteId) setJobs((prev) => (prev.some((j) => j.id === s.id) ? prev : [s, ...prev]));
+  }, [props.seed, noteId]);
 
   const active = jobs.some((j) => j.status === "queued" || j.status === "submitted");
   useEffect(() => {
@@ -78,6 +86,7 @@ export function BackgroundJobs(props: Props) {
 function WaitingCard({ job, focused, onChanged }: {
   job: BgJob; focused: boolean; onChanged: () => Promise<void>;
 }) {
+  const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const running = job.status === "submitted";
@@ -123,8 +132,9 @@ function WaitingCard({ job, focused, onChanged }: {
         {(job.status === "queued" || running) && (
           <button onClick={() => void act(async () => {
             await cancelJob(job.id);
-            // A batch the provider already started may still be charged; say so.
-            if (sent) setNote("Cancelling… anything the provider had already finished is still charged.");
+            // A batch the provider already started may still be charged; say so. A toast,
+            // not text on the card: the card disappears the moment the job is cancelled.
+            if (sent) showToast("Cancelled. Anything the provider had already finished is still charged.");
           })} disabled={busy} className={quiet}>
             <X size={12} /> Cancel
           </button>
