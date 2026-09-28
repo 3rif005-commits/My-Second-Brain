@@ -13,7 +13,7 @@ transition, tests touching the user's real notes clean up after themselves.
 | M1 | Run later (normal/local price): `ai_jobs` + migration 025, worker tick, API, bell, card in note, split send button, Cancel | ✅ done, live-verified |
 | M2 | Activity page + caps | ✅ done, live-verified |
 | M3 | Batch mode (Anthropic Message Batches) | ✅ done, live-verified (real batch, half price confirmed) |
-| M4 | When a source is added | todo |
+| M4 | When a source is added | in progress |
 | M5 | Schedules + staleness | todo |
 
 ## M1 pieces
@@ -70,3 +70,19 @@ switch provider; expired/errored batches cost $0; crash between send and save �
 - Found by the browser walkthrough (all fixed): (1) the ▾ menu showed a guessed "Normal price" for several seconds while the quote loaded → "Checking the price…"; (2) the queued card appeared ~8 s late → shown at once; (3) cost line's numbers didn't add up ($0.01 next to $0.006) → 3 places under ten cents; (4) Activity took 3.4 s → 0.3 s (queries in parallel); (5) the cancel warning vanished with the card → toast (info style, not red); (6) panel card for a refused job had no way to the limit → "Change limit" link; (7) an inserted result's card (and its Undo) disappeared at the next refresh, sometimes before "In “note”" showed → applied cards are kept until you leave, a second Insert after Undo doesn't record a second apply, a failed insert now says why.
 - Tooling notes: `./app.sh start --prod` started from a background shell leaves no frontend (the server dies with the shell) — build with `npm run build`, start with `setsid … npm run start`. Two profiles exist in the DB: scripts must take the user from the note, not `profiles[0]`. The stack was found fully stopped mid-session (not caused by these changes).
 - Tests: backend jobs 92; frontend 261 in lib/activity/ai/sidebar/settings.
+
+## M4 pieces (migration 027 — next_check_at + one-trigger-per-note — user applies)
+Decisions (spec §2.2/§7): per-note opt-in only, global `workspace_on_drop` stays `suggest`
+(does not conflict — this is an explicit trigger the user turned on for THIS note); settle
+rule fires once, 2 min after the LAST source settles (debounced, so 3 files = 1 job); dedupe
+key = (skill, note, sorted ready source ids) — a second trigger for the same key attaches to
+the existing open job instead of creating one; note deleted → its trigger is disabled.
+- [ ] migration 027 (user applies)
+- [ ] `services/jobs/triggers.py` — CRUD, debounce (`touch_settle`), fire due triggers, dedupe
+- [ ] wire `touch_settle` into `processor.py` next to the existing `maybe_synthesize` call
+- [ ] worker: `_tick_triggers` alongside `_tick_jobs`
+- [ ] API: `GET/PUT /notes/{id}/trigger`, list for the rail
+- [ ] frontend: SourceRail "When I add a source here: Suggest ▾" line + status
+- [ ] live: drop 2 sources on a free-model note with the trigger on → 1 job (no paid call needed)
+
+## Log (M4)
