@@ -90,7 +90,7 @@ export function GuideCheckLine({ result, busy, onRetryDeep }: {
   );
 }
 
-export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, badge, onApply, onUndo, onRetry, onRetryDeep, onDiscard, onOpen }: {
+export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, badge, warning, onApply, onUndo, onRetry, onRetryDeep, onDiscard, onOpen }: {
   job: PanelJob;
   /** The note open behind the panel, if any. */
   pageNoteId: string | null;
@@ -100,6 +100,8 @@ export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, badge, onAppl
   busy: boolean;
   /** A quiet label for where it came from, e.g. "Background · ready 3h ago". */
   badge?: string;
+  /** The sources have changed since this was made — shown before it is put in a note. */
+  warning?: string;
   onApply: (noteId: string) => void;
   onUndo: () => void;
   onRetry: () => void;
@@ -156,6 +158,9 @@ export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, badge, onAppl
             {resultSummary(r.html) ? ` · ${resultSummary(r.html)}` : ""}
             {r.truncated && <span className="text-amber-600"> · cut off at the length limit</span>}
           </p>
+          {!job.applied && warning && (
+            <p className="text-[11.5px] text-amber-700 dark:text-amber-300" data-testid="stale-warning">{warning}</p>
+          )}
           {!job.applied && <GuideCheckLine result={r} busy={busy} onRetryDeep={onRetryDeep} />}
           {preview && (
             <iframe

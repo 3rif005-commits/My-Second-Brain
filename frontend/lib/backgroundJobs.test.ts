@@ -153,3 +153,28 @@ describe("words", () => {
     expect(t[0].at).not.toContain("(");           // one time per step, not two
   });
 });
+
+import { cadenceText, scheduleLine, type Cadence } from "./backgroundJobs";
+
+describe("cadenceText", () => {
+  it("names the day and time in words", () => {
+    expect(cadenceText({ frequency: "weekly", weekdays: [7], time_of_day: "22:00", start_date: "2026-09-06" }))
+      .toBe("Every week on Sunday at 22:00 (UTC)");
+    expect(cadenceText({ frequency: "daily", time_of_day: "09:00", start_date: "2026-09-06" }))
+      .toBe("Every day at 09:00 (UTC)");
+  });
+});
+
+describe("scheduleLine", () => {
+  const weekly: Cadence = { frequency: "weekly", weekdays: [7], time_of_day: "22:00", start_date: "2026-09-06" };
+  it("shows the run price, the month total, and the cap, matching the spec's own arithmetic", () => {
+    expect(scheduleLine("batch", 0.04, weekly, 1.0))
+      .toBe("Half price · ≈$0.04 a run · at most ≈$0.16 a month · stops at $1.00");
+    expect(scheduleLine("normal", 0.05, { ...weekly, frequency: "daily" }, 2))
+      .toBe("Normal price · ≈$0.05 a run · at most ≈$1.50 a month · stops at $2.00");
+  });
+  it("is honest about free and unknown", () => {
+    expect(scheduleLine("local", 0, weekly, 1)).toBe("Free · stops at $1.00");
+    expect(scheduleLine("normal", null, weekly, 1)).toBe("Normal price · price unknown · stops at $1.00");
+  });
+});

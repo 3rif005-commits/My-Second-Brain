@@ -159,9 +159,11 @@ export const listJobs = (noteId: string, statuses: JobStatus[] = OPEN_STATES) =>
   call<{ jobs: BgJob[] }>(`?note_id=${encodeURIComponent(noteId)}&status=${statuses.join(",")}`)
     .then((r) => r.jobs);
 
+export interface Staleness { reason: "changed" | "deleted"; message: string }
+
 export const getJob = (id: string) =>
   call<BgJob & { result_html: string | null; source_ids: string[];
-    result_meta: Record<string, unknown> }>(`/${id}`);
+    result_meta: Record<string, unknown>; stale: Staleness | null }>(`/${id}`);
 
 /** The button on a job that waits for a price decision: "Run at $0.08". */
 export function acceptLabel(job: Pick<BgJob, "result_meta">): string {
@@ -314,3 +316,62 @@ export interface NoteTrigger { skill: string | null; skills: TriggerOption[] }
 export const getNoteTrigger = (noteId: string) => call<NoteTrigger>(`/notes/${noteId}/trigger`);
 export const putNoteTrigger = (noteId: string, skill: string | null) =>
   call<{ skill: string | null }>(`/notes/${noteId}/trigger`, { method: "PUT", body: JSON.stringify({ skill }) });
+
+// ── schedules ("on a schedule", harness 5.3 milestone 5) ─────────────────────
+
+export interface Cadence {
+  frequency: "daily" | "weekly";
+  weekdays?: number[];           // ISO weekday, 1=Monday..7=Sunday — weekly only
+  time_of_day: string;           // "HH:MM", UTC (this app has no per-user timezone anywhere)
+  start_date: string;            // "YYYY-MM-DD"
+  interval?: number;
+}
+
+export interface Schedule {
+  id: string;
+  note_id: string | null;
+  note_title: string | null;
+  skill: string;
+  cadence: Cadence;
+  month_cap_usd: number;
+  enabled: boolean;
+  paused_reason: string | null;
+  paused_kind: "month_cap" | "unopened" | null;
+  last_run_at: string | null;
+  next_check_at: string | null;
+  month_spent_usd: number;
+}
+
+const WEEKDAY_NAME: Record<number, string> = {
+  1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday", 7: "Sunday",
+};
+
+/** "Every week on Sunday at 22:00 (UTC)" / "Every day at 09:00 (UTC)". */
+export function cadenceText(c: Cadence): string {
+  const at = `at ${c.time_of_day} (UTC)`;
+  if (c.frequency === "daily") return `Every day ${at}`;
+  const day = c.weekdays?.[0] ? WEEKDAY_NAME[c.weekdays[0]] : "…";
+  return `Every week on ${day} ${at}`;
+}
+
+/** How many times a month this cadence runs, for the price line's rough total —
+ *  the same round numbers the spec's own example uses (4 weeks, 30 days). */
+const RUNS_PER_MONTH: Record<Cadence["frequency"], number> = { daily: 30, weekly: 4 };
+
+/** "Half price · ≈$0.04 a run · at most ≈$0.16 a month · stops at $1.00". */
+export function scheduleLine(mode: PriceMode, usd: number | null, cadence: Cadence, cap: number): string {
+  const per = mode === "batch" ? "Half price" : mode === "local" ? "Free" : "Normal price";
+  if (usd === null) return `${per} · price unknown · stops at ${usdText(cap)}`;
+  if (usd === 0) return `Free · stops at ${usdText(cap)}`;
+  const perMonth = usd * RUNS_PER_MONTH[cadence.frequency];
+  return `${per} · ≈${usdText(usd)} a run · at most ≈${usdText(perMonth)} a month · stops at ${usdText(cap)}`;
+}
+
+export const listSchedules = () => call<{ schedules: Schedule[] }>("/schedules").then((r) => r.schedules);
+export const createSchedule = (noteId: string, skill: string, cadence: Cadence, monthCapUsd: number) =>
+  call<Schedule>("/schedules", { method: "POST",
+    body: JSON.stringify({ note_id: noteId, skill, cadence, month_cap_usd: monthCapUsd }) });
+export const updateSchedule = (id: string, patch: Partial<{ skill: string; cadence: Cadence; month_cap_usd: number; enabled: boolean }>) =>
+  call<Schedule>(`/schedules/${id}`, { method: "PUT", body: JSON.stringify(patch) });
+export const deleteSchedule = (id: string) => call<{ ok: boolean }>(`/schedules/${id}`, { method: "DELETE" });
+export const resumeSchedule = (id: string) => call<Schedule>(`/schedules/${id}/resume`, { method: "POST" });

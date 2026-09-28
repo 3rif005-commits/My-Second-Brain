@@ -15,6 +15,7 @@ import {
   type BgJob,
 } from "@/lib/backgroundJobs";
 import type { JobResult } from "@/lib/chatJobs";
+import type { Staleness } from "@/lib/backgroundJobs";
 import { jobTitle } from "@/lib/workspace";
 
 const FAST_MS = 8_000;    // something is queued or running: look often
@@ -179,6 +180,7 @@ function ReadyCard({ job, noteId, title, focused, pageNoteId, inWorkspace, onApp
   // that is the note's business now, not a second apply to record.
   const recorded = useRef(false);
   const [pj, setPj] = useState<PanelJob | null>(null);
+  const [stale, setStale] = useState<Staleness | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -199,6 +201,7 @@ function ReadyCard({ job, noteId, title, focused, pageNoteId, inWorkspace, onApp
       };
       setPj({ skill: full.skill, title: jobTitle(full.skill), focus: full.focus,
         startedAt: Date.now(), noteId, noteTitle: title, result });
+      setStale(full.stale);
     }).catch((e) => { if (live) setFailed(e instanceof Error ? e.message : "Could not open the result"); });
     return () => { live = false; };
   }, [job.id, noteId, title]);
@@ -221,6 +224,7 @@ function ReadyCard({ job, noteId, title, focused, pageNoteId, inWorkspace, onApp
     <div ref={ref} className={focused ? "rounded-2xl ring-2 ring-indigo-300" : ""} data-testid="background-ready">
       <PanelJobCard
         job={shown} pageNoteId={pageNoteId} inWorkspace={inWorkspace} busy={busy} badge={label}
+        warning={stale?.message}
         onApply={(target) => {
           setBusy(true);
           void (async () => {

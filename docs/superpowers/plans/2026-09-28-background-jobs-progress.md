@@ -14,7 +14,7 @@ transition, tests touching the user's real notes clean up after themselves.
 | M2 | Activity page + caps | ✅ done, live-verified |
 | M3 | Batch mode (Anthropic Message Batches) | ✅ done, live-verified (real batch, half price confirmed) |
 | M4 | When a source is added | code complete, blocked on migration 027 for the live pass |
-| M5 | Schedules + staleness | backend done, frontend + live pass next |
+| M5 | Schedules + staleness | code complete, blocked on migrations 027+028 for the live pass |
 
 ## M1 pieces
 - [x] migration `025_ai_jobs.sql` (user applies)
@@ -108,10 +108,10 @@ dedupe key does NOT switch to (different job: same-ready-ids vs also-catches-re-
       `GET /jobs/{id}` now returns `stale`
 - [x] backend tests: 21 schedule + 8 stale (4 schedule mutations verified to fail them); jobs
       suite 153, full backend suite 1938 passed (unrelated pgtest errors unchanged)
-- [ ] frontend: stale banner on the ready card (done — see log); Settings → Background jobs
-      "Schedules" section (list, new-schedule form, pause/resume, delete); "Repeat weekly…"
-      entry from the Run-later menu — **deferred**, Settings is the primary entry point and
-      ships first
+- [x] frontend: stale banner on the ready card; Settings → Background jobs "Schedules" section
+      (list, new-schedule form reusing `GET /jobs/notes/{id}/trigger` for the Job dropdown and
+      `GET /jobs/quote` for the real price, pause/resume, delete). "Repeat weekly…" entry from
+      the Run-later menu — **deferred**, Settings is the primary entry point and ships first
 - [ ] live pass (needs migrations 027 AND 028 applied — neither is yet)
 - [ ] **explicitly deferred, not forgotten**: the AI-providers key-removal warning
       ("N background jobs use this key") — touches Settings → AI providers, a page outside
@@ -125,3 +125,10 @@ dedupe key does NOT switch to (different job: same-ready-ids vs also-catches-re-
   `source_signature` import got captured by `no_real_supabase`'s poisoned reference before
   any test patched it) — same fix pattern: patch the name the caller imported, not the
   module it came from.
+- 2026-09-28 · Frontend done: cadence reuses the exact `repeat_config` shape (and its UTC-only,
+  no-per-user-timezone convention) the app's existing recurring row-templates already use —
+  same wording pattern (`<input type="time">`, ISO weekdays 1=Mon..7=Sun) as
+  `components/database/AutomationEditor.tsx`. The schedule form's Job dropdown reuses
+  `GET /jobs/notes/{id}/trigger` (M4's endpoint) for eligibility/reasons, and `GET /jobs/quote`
+  for the real half-price/normal decision — no separate pricing path to keep in sync.
+  Frontend suite: 1207 passed, tsc clean.

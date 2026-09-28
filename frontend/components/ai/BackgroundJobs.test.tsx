@@ -213,3 +213,28 @@ describe("BackgroundJobs — a job just queued", () => {
     expect(container.firstChild).toBeNull();
   });
 });
+
+describe("BackgroundJobs — a stale result", () => {
+  it("warns when a source has changed since, before it is put in the note", async () => {
+    const ready = job({ status: "ready", finished_at: new Date().toISOString() });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      url.endsWith("/jobs/j1")
+        ? json({ ...ready, result_html: "<p>x</p>", source_ids: ["s1"], result_meta: {},
+                 stale: { reason: "changed", message: 'Made from an older version of "Slides.pdf".' } })
+        : json({ jobs: [ready] })));
+    render(<BackgroundJobs {...props} />);
+    expect(await screen.findByTestId("stale-warning")).toHaveTextContent('Made from an older version of "Slides.pdf".');
+    expect(screen.getByRole("button", { name: /Insert into this note/ })).toBeTruthy();   // still works
+  });
+
+  it("shows nothing extra when the sources have not changed", async () => {
+    const ready = job({ status: "ready", finished_at: new Date().toISOString() });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      url.endsWith("/jobs/j1")
+        ? json({ ...ready, result_html: "<p>x</p>", source_ids: ["s1"], result_meta: {}, stale: null })
+        : json({ jobs: [ready] })));
+    render(<BackgroundJobs {...props} />);
+    await screen.findByRole("button", { name: /Insert into this note/ });
+    expect(screen.queryByTestId("stale-warning")).toBeNull();
+  });
+});

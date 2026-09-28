@@ -1,19 +1,34 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/hooks/useNotes", () => ({ useNotes: () => ({ notes: [] }) }));
+
 import BackgroundJobsSettings from "./page";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const SETTINGS = { monthly_cap_usd: 5, default_monthly_cap_usd: 5, min_usd: 0.01, max_usd: 1000, month_spent_usd: 0.43 };
 
+/** Branches on the URL, like the real backend would — the page also mounts
+ *  SchedulesSection, which fetches its own endpoint. */
+function stub(extra?: (url: string, init?: RequestInit) => Response | undefined) {
+  const f = vi.fn(async (url: string, init?: RequestInit) => {
+    const hit = extra?.(url, init);
+    if (hit) return hit;
+    if (url.includes("/jobs/schedules")) return json({ schedules: [] });
+    if (init?.method === "PUT") return json({ monthly_cap_usd: 0.01, month_spent_usd: 0.43 });
+    return json(SETTINGS);
+  });
+  vi.stubGlobal("fetch", f);
+  return f;
+}
+
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("Settings → Background jobs", () => {
   it("shows the limit and what has been spent, and saves a new limit", async () => {
-    const f = vi.fn(async (_url: string, init?: RequestInit) =>
-      init?.method === "PUT" ? json({ monthly_cap_usd: 0.01, month_spent_usd: 0.43 }) : json(SETTINGS));
-    vi.stubGlobal("fetch", f);
+    const f = stub();
     render(<BackgroundJobsSettings />);
 
     const input = await screen.findByLabelText("Monthly limit in dollars");
@@ -31,7 +46,7 @@ describe("Settings → Background jobs", () => {
   });
 
   it("does not let a nonsense amount be saved", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => json(SETTINGS)));
+    stub();
     render(<BackgroundJobsSettings />);
     const input = await screen.findByLabelText("Monthly limit in dollars");
     await waitFor(() => expect(input).toHaveValue("5"));

@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getJobSettings, putJobSettings, usdText, type JobSettings } from "@/lib/backgroundJobs";
+import { SchedulesSection } from "@/components/settings/SchedulesSection";
 
 export default function BackgroundJobsSettings() {
   const [s, setS] = useState<JobSettings | null>(null);
@@ -69,6 +70,8 @@ export default function BackgroundJobsSettings() {
           </p>}
           {note && <p className={`mt-2 text-[12.5px] ${note.bad ? "text-red-600" : "text-emerald-600"}`} role="status" data-testid="settings-note">{note.text}</p>}
         </section>
+
+        <SchedulesSection />
       </div>
     </div>
   );
