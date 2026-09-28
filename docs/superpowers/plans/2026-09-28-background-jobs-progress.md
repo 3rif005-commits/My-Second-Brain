@@ -12,7 +12,7 @@ transition, tests touching the user's real notes clean up after themselves.
 |---|-----------|--------|
 | M1 | Run later (normal/local price): `ai_jobs` + migration 025, worker tick, API, bell, card in note, split send button, Cancel | ✅ done, live-verified |
 | M2 | Activity page + caps | ✅ done, live-verified |
-| M3 | Batch mode (Anthropic Message Batches) | in progress |
+| M3 | Batch mode (Anthropic Message Batches) | ✅ done, live-verified (real batch, half price confirmed) |
 | M4 | When a source is added | todo |
 | M5 | Schedules + staleness | todo |
 
@@ -61,8 +61,12 @@ switch provider; expired/errored batches cost $0; crash between send and save �
 - [x] `skill_run.batch_call / batch_eligible / finish_batch`, `usage.record_batch_run`
 - [x] worker: plan_for, submit, poll/collect, needs_you, expired, reconcile + 25 tests (4 mutations verified to fail them)
 - [x] router: quote, batch queue, cancel-at-provider, accept-price + tests; hermetic_planning fixture (a jobs test had read the real project)
-- [ ] frontend: quote in the ▾ menu, "(now $x)", Sent/expired/needs-you wording + actions, Activity
-- [ ] live: free-side pass (queue → Sent → cancel) and ONE paid batch run (~$0.05), compare with ai_runs
+- [x] frontend: quote in the ▾ menu, "(now $x)", Sent/expired/needs-you wording + actions, Activity
+- [x] live: free-side pass (queue → Sent → cancel) and ONE paid batch run (~$0.05), compare with ai_runs
 
 ## Log (M3)
 - 2026-09-28 · M3 backend done: 91 jobs tests green. Found: worker tests were reading the real Supabase (modules that import get_supabase by name bypass the conftest guard) → `hermetic_planning`; `no_real_batch_api` guard so no test can send a paid batch.
+- 2026-09-28 · M3 live GREEN on the final build: `background-activity` (free), `background-jobs` (7.9 min, now takes the batch path), `background-batch` (7.7 min: paid $0.005574 vs live $0.011149 — exactly half; one batch cancelled). Total real batch spend on the test account this session: $0.0219 over 4 runs. Also walked through in the user's real Chrome (GIF: background-jobs-walkthrough.gif in Downloads).
+- Found by the browser walkthrough (all fixed): (1) the ▾ menu showed a guessed "Normal price" for several seconds while the quote loaded → "Checking the price…"; (2) the queued card appeared ~8 s late → shown at once; (3) cost line's numbers didn't add up ($0.01 next to $0.006) → 3 places under ten cents; (4) Activity took 3.4 s → 0.3 s (queries in parallel); (5) the cancel warning vanished with the card → toast (info style, not red); (6) panel card for a refused job had no way to the limit → "Change limit" link; (7) an inserted result's card (and its Undo) disappeared at the next refresh, sometimes before "In “note”" showed → applied cards are kept until you leave, a second Insert after Undo doesn't record a second apply, a failed insert now says why.
+- Tooling notes: `./app.sh start --prod` started from a background shell leaves no frontend (the server dies with the shell) — build with `npm run build`, start with `setsid … npm run start`. Two profiles exist in the DB: scripts must take the user from the note, not `profiles[0]`. The stack was found fully stopped mid-session (not caused by these changes).
+- Tests: backend jobs 92; frontend 261 in lib/activity/ai/sidebar/settings.
