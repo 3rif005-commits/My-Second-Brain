@@ -9,7 +9,7 @@ import { Clock, Loader2, Play, X } from "lucide-react";
 import { PanelJobCard, type PanelJob } from "./PanelCards";
 import { readNote } from "./panelSources";
 import {
-  agoText, announceJobsChanged, cancelJob, discardJob, getJob, listJobs, markJobApplied, runJobNow, stateLine,
+  acceptLabel, acceptPrice, agoText, announceJobsChanged, cancelJob, discardJob, getJob, listJobs, markJobApplied, runJobNow, stateLine,
   type BgJob,
 } from "@/lib/backgroundJobs";
 import type { JobResult } from "@/lib/chatJobs";
@@ -82,6 +82,7 @@ function WaitingCard({ job, focused, onChanged }: {
   const [note, setNote] = useState<string | null>(null);
   const running = job.status === "submitted";
   const trouble = job.status === "failed" || job.status === "budget_blocked" || job.status === "needs_you";
+  const sent = running && job.price_mode === "batch";
 
   async function act(fn: () => Promise<unknown>) {
     setBusy(true); setNote(null);
@@ -113,12 +114,27 @@ function WaitingCard({ job, focused, onChanged }: {
             <Play size={12} /> Run now
           </button>
         )}
+        {job.status === "needs_you" && (
+          <button onClick={() => void act(() => acceptPrice(job.id))} disabled={busy}
+            className={`${chip} font-medium bg-indigo-600 text-white hover:bg-indigo-500`}>
+            <Play size={12} /> {acceptLabel(job)}
+          </button>
+        )}
         {(job.status === "queued" || running) && (
-          <button onClick={() => void act(() => cancelJob(job.id))} disabled={busy} className={quiet}>
+          <button onClick={() => void act(async () => {
+            await cancelJob(job.id);
+            // A batch the provider already started may still be charged; say so.
+            if (sent) setNote("Cancelling… anything the provider had already finished is still charged.");
+          })} disabled={busy} className={quiet}>
             <X size={12} /> Cancel
           </button>
         )}
-        {trouble && (
+        {job.status === "needs_you" && (
+          <button onClick={() => void act(() => discardJob(job.id))} disabled={busy} className={quiet}>
+            <X size={12} /> Cancel
+          </button>
+        )}
+        {trouble && job.status !== "needs_you" && (
           <button onClick={() => void act(() => discardJob(job.id))} disabled={busy} className={quiet}>
             <X size={12} /> Dismiss
           </button>

@@ -28,7 +28,7 @@ import {
 } from "@/lib/chatJobs";
 import { ACCEPTED_WORKSPACE_FILES, jobTitle, type Citation } from "@/lib/workspace";
 import { answerToHtml } from "@/lib/answerToHtml";
-import { priceLine, queueJob, tonight, type BgJob } from "@/lib/backgroundJobs";
+import { getQuote, priceLine, queueJob, tonight, type BgJob } from "@/lib/backgroundJobs";
 import { offerDraft, stageDraft, undoDraft, type NoteDraft } from "@/lib/noteDraft";
 
 const ACCEPTED_EXT = ACCEPTED_WORKSPACE_FILES.split(",");
@@ -83,6 +83,9 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   const [laterOpen, setLaterOpen] = useState(false);
   const [bgRefresh, setBgRefresh] = useState(0);
   const laterRef = useRef<HTMLDivElement>(null);
+  // What Run later would cost and how it would run — asked of the server when
+  // the menu opens, so "half price" is only ever said when it will be true.
+  const [quote, setQuote] = useState<Awaited<ReturnType<typeof getQuote>> | null>(null);
   const threadId = controlledThreadId !== undefined ? controlledThreadId : internalThreadId;
   const [mode, setMode] = useMode();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -559,6 +562,16 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   const laterNoteId = activeScope?.noteId ?? (pageNoteId && pageSources ? pageNoteId : null);
 
   useEffect(() => {
+    if (!laterOpen || !pendingCmd || !laterNoteId) { setQuote(null); return; }
+    let live = true;
+    setQuote(null);
+    void getQuote(laterNoteId, pendingCmd.skill, pendingCmd.focus)
+      .then((q) => { if (live) setQuote(q); }).catch(() => {});
+    return () => { live = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [laterOpen, laterNoteId, pendingCmd?.skill, pendingCmd?.focus]);
+
+  useEffect(() => {
     if (!laterOpen) return;
     function onDown(e: MouseEvent) {
       if (laterRef.current && !laterRef.current.contains(e.target as Node)) setLaterOpen(false);
@@ -580,7 +593,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
         { kind: "user", id: uid(), content: query },
         { kind: "notice", id: uid(),
           content: `Queued · ${jobTitle(queued.skill)} · ${priceLine(queued.price_mode,
-            queued.shown_estimate_usd, at)}` }]);
+            queued.shown_estimate_usd, at, new Date(), queued.live_equivalent_usd)}` }]);
       setInput("");
       setBgRefresh((n) => n + 1);
     } catch (e) {
@@ -1008,10 +1021,12 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                   <button type="button" role="menuitem" onClick={() => void queueLater()}
                     className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 border-t border-gray-100 dark:border-white/5">
                     <div className="flex items-center gap-1.5 text-[13px] font-medium text-gray-800 dark:text-gray-100">
-                      <Clock size={12} /> Run later
+                      <Clock size={12} /> Run later{quote?.price_mode === "batch" ? " — half price" : ""}
                     </div>
-                    <div className="text-[11.5px] text-gray-400">
-                      {priceLine("normal", laterJob?.usd ?? null, tonight())}
+                    <div className="text-[11.5px] text-gray-400" data-testid="later-price">
+                      {quote
+                        ? priceLine(quote.price_mode, quote.usd, tonight(), new Date(), quote.live_usd)
+                        : priceLine("normal", laterJob?.usd ?? null, tonight())}
                     </div>
                   </button>
                 </div>

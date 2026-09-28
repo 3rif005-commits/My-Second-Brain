@@ -341,3 +341,10 @@ def test_a_quote_for_a_job_that_cannot_run_says_why(env):
         res = client.get("/jobs/quote?note_id=n1&skill=flashcards", headers=AUTH)
     assert res.status_code == 400 and "no sources are ready yet" in res.json()["detail"]["error"]
     assert client.get("/jobs/quote?note_id=n2&skill=flashcards", headers=AUTH).status_code == 404
+
+
+def test_a_job_waiting_on_a_price_can_be_dismissed(env):
+    client, db = env
+    jid = _queue(client).json()["id"]
+    db.tables["ai_jobs"][0].update(status="needs_you", result_meta={"now_usd": 0.08, "now_mode": "normal"})
+    assert client.post(f"/jobs/{jid}/discard", headers=AUTH).json()["status"] == "discarded"

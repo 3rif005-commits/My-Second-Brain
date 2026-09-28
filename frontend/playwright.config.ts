@@ -114,6 +114,19 @@ export default defineConfig({
       retries: 0,
     },
 
+    // Background jobs, M3: a REAL half-price batch through the provider. Spends one
+    // small batch call (~$0.005–0.03 on the tiny test PDF) plus one cancelled
+    // batch. A batch usually ends in minutes but may take up to 24 h: the test
+    // waits up to 25 min for it. Deletes its note and jobs.
+    {
+      name: "background-batch",
+      testMatch: "**/background-batch-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      timeout: 1_800_000,
+      retries: 0,
+    },
+
     {
       name: "run-card",
       testMatch: "**/run-card-failure.spec.ts",

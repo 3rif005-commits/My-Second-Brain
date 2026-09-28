@@ -20,7 +20,11 @@ export interface BgJob {
   price_mode: PriceMode;
   run_after: string;
   shown_estimate_usd: number | null;
+  /** What the same job costs run live — set for a batch job, to show the saving. */
+  live_equivalent_usd?: number | null;
   actual_usd: number | null;
+  /** A job waiting on a price decision keeps the new price here. */
+  result_meta?: Record<string, unknown>;
   model: string | null;
   ran_late: boolean;
   error: string | null;
@@ -75,13 +79,19 @@ export function whenText(at: Date, now: Date = new Date()): string {
 }
 
 /** The one line shown before the click: price, and when it runs. Unknown is
- *  not free, and a local model says it needs this computer on. */
-export function priceLine(mode: PriceMode, usd: number | null, at: Date, now: Date = new Date()): string {
+ *  not free, a local model says it needs this computer on, and a batch job says
+ *  it will take a while — it is half price BECAUSE it is not instant. */
+export function priceLine(mode: PriceMode, usd: number | null, at: Date, now: Date = new Date(),
+                          liveUsd?: number | null): string {
   const when = whenText(at, now);
   if (mode === "local") return `Free · runs on this computer ${when} · needs the app running`;
   if (usd === 0) return `Free · runs ${when}`;
   if (usd === null) return `Price unknown · runs ${when}`;
-  return `${mode === "batch" ? "Half price" : "Normal price"} · ≈${usdText(usd)} · runs ${when}`;
+  if (mode === "batch") {
+    const was = liveUsd && liveUsd > usd ? ` (now ${usdText(liveUsd)})` : "";
+    return `Half price · ≈${usdText(usd)}${was} · sent ${when}, ready within a few hours`;
+  }
+  return `Normal price · ≈${usdText(usd)} · runs ${when}`;
 }
 
 /** What a job in the panel says about itself. */
@@ -93,7 +103,11 @@ export function stateLine(job: BgJob, now: Date = new Date()): string {
         ? "Queued · starting in a moment"
         : `Queued · runs ${whenText(at, now)}`;
     case "submitted":
-      return "Running now";
+      return job.price_mode === "batch"
+        ? "Sent · half price · usually under an hour, at most 24 hours"
+        : "Running now";
+    case "expired":
+      return job.error ?? "Not finished within 24 hours by the provider. Nothing was charged.";
     case "failed":
       return `Failed — ${job.error ?? "unknown error"}`;
     case "budget_blocked":
@@ -148,6 +162,17 @@ export const listJobs = (noteId: string, statuses: JobStatus[] = OPEN_STATES) =>
 export const getJob = (id: string) =>
   call<BgJob & { result_html: string | null; source_ids: string[];
     result_meta: Record<string, unknown> }>(`/${id}`);
+
+/** The button on a job that waits for a price decision: "Run at $0.08". */
+export function acceptLabel(job: Pick<BgJob, "result_meta">): string {
+  const now = job.result_meta?.now_usd;
+  return typeof now === "number" ? `Run at ${usdText(now)}` : "Run at the new price";
+}
+
+export const acceptPrice = (id: string) => call<BgJob>(`/${id}/accept-price`, { method: "POST" });
+export const getQuote = (noteId: string, skill: string, focus: string) =>
+  call<{ price_mode: PriceMode; usd: number | null; live_usd: number | null; model: string | null }>(
+    `/quote?note_id=${encodeURIComponent(noteId)}&skill=${encodeURIComponent(skill)}&focus=${encodeURIComponent(focus)}`);
 
 export const cancelJob = (id: string) => call<BgJob>(`/${id}/cancel`, { method: "POST" });
 export const runJobNow = (id: string) => call<BgJob>(`/${id}/run-now`, { method: "POST" });

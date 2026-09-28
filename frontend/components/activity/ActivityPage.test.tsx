@@ -128,3 +128,29 @@ describe("ActivityPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Not signed in");
   });
 });
+
+describe("ActivityPage — price decisions and expired batches", () => {
+  it("offers to run at the new price, or to cancel", async () => {
+    const f = stub(activity({ open: [job({ id: "p", status: "needs_you", actual_usd: null,
+      error: "Price went up: about $0.08 now (was about $0.04) — it will run on big-model",
+      result_meta: { now_usd: 0.08, now_mode: "normal" } })] }));
+    render(<ActivityPage />);
+    const needs = await screen.findByTestId("needs-you");
+    expect(needs).toHaveTextContent(/Price went up: about \$0\.08 now/);
+    await userEvent.click(within(needs).getByRole("button", { name: "Run at $0.08" }));
+    expect(f).toHaveBeenCalledWith("/api/ws/jobs/p/accept-price", expect.objectContaining({ method: "POST" }));
+    await userEvent.click(within(needs).getByRole("button", { name: "Cancel" }));
+    expect(f).toHaveBeenCalledWith("/api/ws/jobs/p/discard", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("shows an expired batch as costing nothing", async () => {
+    stub(activity({ history: [job({ status: "expired", actual_usd: 0, price_mode: "batch", result_meta: {},
+      error: "Not finished within 24 hours by the provider. Nothing was charged." })] }));
+    render(<ActivityPage />);
+    const row = await screen.findByTestId("history-row");
+    expect(row).toHaveTextContent("Expired");
+    expect(row).toHaveTextContent("$0");
+    await userEvent.click(row);
+    expect(await screen.findByTestId("history-detail")).toHaveTextContent("Nothing was charged");
+  });
+});

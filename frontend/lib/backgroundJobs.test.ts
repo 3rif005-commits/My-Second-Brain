@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agoText, clockText, priceLine, stateLine, tonight, usdText, whenText, type BgJob } from "./backgroundJobs";
+import { acceptLabel, agoText, clockText, priceLine, stateLine, tonight, usdText, whenText, type BgJob } from "./backgroundJobs";
 
 const at = (h: number, day = 28) => new Date(2026, 8, day, h, 0, 0);
 
@@ -33,7 +33,12 @@ describe("priceLine", () => {
   const now = at(15);
   it("shows the price mode, the estimate and when", () => {
     expect(priceLine("normal", 0.08, at(22), now)).toBe("Normal price · ≈$0.08 · runs tonight at 22:00");
-    expect(priceLine("batch", 0.04, at(22), now)).toBe("Half price · ≈$0.04 · runs tonight at 22:00");
+    expect(priceLine("batch", 0.04, at(22), now))
+      .toBe("Half price · ≈$0.04 · sent tonight at 22:00, ready within a few hours");
+    expect(priceLine("batch", 0.04, at(22), now, 0.08))
+      .toBe("Half price · ≈$0.04 (now $0.08) · sent tonight at 22:00, ready within a few hours");
+    // no "now" price when there is no saving to show
+    expect(priceLine("batch", 0.04, at(22), now, 0.04)).not.toContain("(now");
   });
   it("is honest about free, unknown and local", () => {
     expect(priceLine("normal", 0, at(22), now)).toBe("Free · runs tonight at 22:00");
@@ -53,12 +58,24 @@ describe("stateLine", () => {
     expect(stateLine(job({}), at(15))).toBe("Queued · runs tonight at 22:00");
     expect(stateLine(job({ run_after: at(15).toISOString() }), at(15))).toBe("Queued · starting in a moment");
     expect(stateLine(job({ status: "submitted" }))).toBe("Running now");
+    expect(stateLine(job({ status: "submitted", price_mode: "batch" })))
+      .toBe("Sent · half price · usually under an hour, at most 24 hours");
+    expect(stateLine(job({ status: "expired", error: null })))
+      .toBe("Not finished within 24 hours by the provider. Nothing was charged.");
     expect(stateLine(job({ status: "failed", error: "no sources are ready yet" }))).toBe("Failed — no sources are ready yet");
     expect(stateLine(job({ status: "cancelled", cancel_reason: "by you" }))).toBe("Cancelled — by you");
     // the server's refusal already begins "Not started" — never say it twice
     expect(stateLine(job({ status: "budget_blocked", error: "Not started — about $0.05 would pass your $0.01 monthly limit" })))
       .toBe("Not started — about $0.05 would pass your $0.01 monthly limit");
     expect(stateLine(job({ status: "budget_blocked", error: "over the monthly limit" }))).toBe("Not started — over the monthly limit");
+  });
+});
+
+describe("acceptLabel", () => {
+  it("names the price the user is asked to accept", () => {
+    expect(acceptLabel({ result_meta: { now_usd: 0.08 } })).toBe("Run at $0.08");
+    expect(acceptLabel({ result_meta: {} })).toBe("Run at the new price");
+    expect(acceptLabel({})).toBe("Run at the new price");
   });
 });
 

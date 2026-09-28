@@ -19,7 +19,7 @@ OPEN_STATES = ("queued", "submitted", "ready", "failed", "budget_blocked", "need
 #: over — the history table
 HISTORY_STATES = ("applied", "discarded", "cancelled", "expired", "skipped")
 #: rows a person may delete from their history
-DELETABLE = HISTORY_STATES + ("failed", "budget_blocked")
+DELETABLE = HISTORY_STATES + ("failed", "budget_blocked", "needs_you")
 #: how long an unapplied result waits, and how long any row is kept
 RESULT_DAYS, ROW_DAYS = 30, 90
 #: what the UI needs to list a job — never the full result body

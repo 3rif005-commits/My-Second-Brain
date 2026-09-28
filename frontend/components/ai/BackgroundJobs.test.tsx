@@ -87,3 +87,47 @@ describe("BackgroundJobs", () => {
     expect(await screen.findByText(/In “Lecture 10”/)).toBeTruthy();
   });
 });
+
+describe("BackgroundJobs — batch and price decisions", () => {
+  it("says a batch job was sent, and warns that cancelling may still be charged", async () => {
+    const f = vi.fn(async (url: string) =>
+      url.includes("/cancel") ? json(job({ status: "cancelled" }))
+        : json({ jobs: [job({ status: "submitted", price_mode: "batch" })] }));
+    vi.stubGlobal("fetch", f);
+    render(<BackgroundJobs {...props} />);
+    expect(await screen.findByText(/Sent · half price · usually under an hour, at most 24 hours/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: /Cancel/ }));
+    expect(await screen.findByText(/anything the provider had already finished is still charged/)).toBeTruthy();
+  });
+
+  it("does not warn about charges when a live job is cancelled", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      url.includes("/cancel") ? json(job({ status: "cancelled" }))
+        : json({ jobs: [job({ status: "queued" })] })));
+    render(<BackgroundJobs {...props} />);
+    await userEvent.click(await screen.findByRole("button", { name: /Cancel/ }));
+    await waitFor(() => expect(screen.queryByText(/still charged/)).toBeNull());
+  });
+
+  it("asks before running at a higher price, and the button names the price", async () => {
+    const f = vi.fn(async (url: string) =>
+      url.includes("/accept-price") ? json(job({ status: "queued" })) : json({ jobs: [job({
+        status: "needs_you", error: "Price went up: about $0.08 now (was about $0.04)",
+        result_meta: { was_usd: 0.04, now_usd: 0.08, now_mode: "normal" } })] }));
+    vi.stubGlobal("fetch", f);
+    render(<BackgroundJobs {...props} />);
+    expect(await screen.findByText(/Price went up: about \$0\.08 now/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Run at $0.08" }));
+    expect(f).toHaveBeenCalledWith("/api/ws/jobs/j1/accept-price", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("lets the user turn a price decision down", async () => {
+    const f = vi.fn(async (url: string) =>
+      url.includes("/discard") ? json(job({ status: "discarded" })) : json({ jobs: [job({
+        status: "needs_you", error: "Price went up", result_meta: { now_usd: 0.08 } })] }));
+    vi.stubGlobal("fetch", f);
+    render(<BackgroundJobs {...props} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(f).toHaveBeenCalledWith("/api/ws/jobs/j1/discard", expect.objectContaining({ method: "POST" }));
+  });
+});

@@ -324,7 +324,7 @@ async def _run_and_notify(row: dict, now: datetime) -> None:
 def discard_job(job_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
     _job(job_id, user_id)
-    row = store.transition(job_id, ("ready", "failed", "budget_blocked", "expired"),
+    row = store.transition(job_id, ("ready", "failed", "budget_blocked", "expired", "needs_you"),
                            status="discarded", discarded_at=store.now_iso(), result_html=None)
     if not row:
         _fail(409, "There is nothing to discard.")

@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, Clock, Loader2, Play, RotateCcw, Trash2, X } from "lucide-react";
 import {
-  IN_PROGRESS, NEEDS_YOU, EMPTY_ACTIVITY, STATE_WORDS, agoText, cancelJob, costLine, costText,
+  IN_PROGRESS, NEEDS_YOU, EMPTY_ACTIVITY, STATE_WORDS, acceptLabel, acceptPrice, agoText, cancelJob, costLine, costText,
   announceJobsChanged, deleteJob, discardJob, getActivity, getJobDetail, monthLine, queueJob, runJobNow, stateLine,
   timeline, triggerText, whenShort, type Activity, type ActivityFilters, type ActivityJob, type JobStatus,
 } from "@/lib/backgroundJobs";
@@ -88,10 +88,16 @@ export function ActivityPage() {
                   {j.status === "budget_blocked" && (
                     <Link href="/brain/settings/background-jobs" className={`${chip} ring-1 ring-gray-200 dark:ring-white/10 text-gray-700 dark:text-gray-200`}>Change limit</Link>
                   )}
-                  {j.note_id && (
+                  {j.status === "needs_you" && (
+                    <button className={`${chip} font-medium bg-indigo-600 text-white hover:bg-indigo-500`} disabled={busy === j.id}
+                      onClick={() => void act(j.id, () => acceptPrice(j.id))}><Play size={12} /> {acceptLabel(j)}</button>
+                  )}
+                  {j.note_id && j.status !== "needs_you" && (
                     <button className={quiet} disabled={busy === j.id} onClick={() => void again(j)}><RotateCcw size={12} /> Run again</button>
                   )}
-                  <button className={quiet} disabled={busy === j.id} onClick={() => void act(j.id, () => discardJob(j.id))}><X size={12} /> Dismiss</button>
+                  <button className={quiet} disabled={busy === j.id} onClick={() => void act(j.id, () => discardJob(j.id))}>
+                    <X size={12} /> {j.status === "needs_you" ? "Cancel" : "Dismiss"}
+                  </button>
                 </div>
               </Card>
             ))}
