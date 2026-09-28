@@ -240,3 +240,18 @@ def test_an_edit_is_only_asked_for_and_says_so(server):
                     "payload": {"content_markdown": "new text"}}
     text = json.dumps(data)
     assert "NOT DONE YET" in text and "ch1" in text
+
+
+def test_a_search_hit_carries_a_citation_link_to_its_block(server):
+    c, _, _ = server
+    _, tok = _connect(c)
+    hit = [{"id": "n1", "title": "Q-Learning", "content_text": "The Bellman equation…",
+            "deep_link": "/brain/n1#blk-7"}]
+    with patch("services.embedder.embed", return_value=[0.0]), \
+         patch("services.retriever.retrieve", return_value=hit):
+        status, data = _call(c, tok["access_token"], "tools/call",
+                             {"name": "search_notes", "arguments": {"query": "Q"}})
+    assert status == 200, data
+    text = json.dumps(data)
+    assert "[Q-Learning](http://localhost:3000/brain/n1#blk-7)" in text
+    assert "cite_rule" in text

@@ -41,8 +41,10 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
     mcp = FastMCP(
         "Second Brain",
         instructions=("The user's personal knowledge base. Search it before answering "
-                      "questions about their studies or notes, cite notes by title with "
-                      "their link, and save something only when the user asks to."),
+                      "questions about their studies or notes. Whenever you use a note, "
+                      "cite it with its `cite` Markdown link — the link opens the exact "
+                      "passage in Second Brain; never give a note's title without it. "
+                      "Save something only when the user asks to."),
         auth_server_provider=oauth,
         auth=AuthSettings(
             issuer_url=PUBLIC_URL,
@@ -77,9 +79,10 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
     # ── tools ───────────────────────────────────────────────────────────────────
 
     @mcp.tool()
-    async def search_notes(query: str, limit: int = 8) -> list[dict]:
+    async def search_notes(query: str, limit: int = 8) -> dict:
         """Search the user's notes by meaning and by words. Returns the best
-        passages with the note's title and a link."""
+        passages. Each has `cite`: a Markdown link to that exact passage in
+        Second Brain — put it in your answer next to anything taken from it."""
         user_id = _user()
 
         def run():
@@ -93,11 +96,18 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
             if key in seen:
                 continue
             seen.add(key)
-            out.append({"note_id": h["id"], "title": h["title"], "passage": h["content_text"],
-                        "link": f"{FRONTEND_URL}{h['deep_link']}"})
+            link = f"{FRONTEND_URL}{h['deep_link']}"
+            title = h["title"] or "Untitled"
+            out.append({"note_id": h["id"], "title": title, "passage": h["content_text"],
+                        "link": link, "cite": f"[{title}]({link})"})
             if len(out) >= max(1, min(limit, 15)):
                 break
-        return out
+        # Said inside the result, next to the passages: in the tool's
+        # description alone, claude.ai's model gave titles without links.
+        return {"cite_rule": ("In your answer, put each result's `cite` link next to "
+                              "what you take from it — it opens that exact passage in "
+                              "Second Brain."),
+                "results": out}
 
 
     @mcp.tool()
@@ -113,12 +123,14 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
                     .execute().data or [])
         rows = await asyncio.to_thread(run)
         return [{"note_id": r["id"], "title": r["title"] or "Untitled",
-                 "updated_at": r["updated_at"], "link": _link(r["id"])} for r in rows]
+                 "updated_at": r["updated_at"], "link": _link(r["id"]),
+                 "cite": f"[{r['title'] or 'Untitled'}]({_link(r['id'])})"} for r in rows]
 
 
     @mcp.tool()
     async def get_note(note_id: str) -> dict:
-        """One note's full text, by its id (from search_notes or list_notes)."""
+        """One note's full text, by its id (from search_notes or list_notes).
+        Cite it with the returned `cite` Markdown link."""
         user_id = _user()
 
         def run():
@@ -130,9 +142,10 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
         if not rows:
             return {"error": "No note with that id in this Second Brain."}
         r = rows[0]
-        return {"note_id": r["id"], "title": r["title"] or "Untitled",
+        title = r["title"] or "Untitled"
+        return {"note_id": r["id"], "title": title,
                 "text": (r["content_text"] or "")[:30000], "updated_at": r["updated_at"],
-                "link": _link(r["id"])}
+                "link": _link(r["id"]), "cite": f"[{title}]({_link(r['id'])})"}
 
 
     @mcp.tool()

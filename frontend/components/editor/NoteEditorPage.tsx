@@ -115,6 +115,27 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
   }, [note.id]);
 
   // ── drafts from the AI side panel (lib/noteDraft.ts) ─────────────────────
+  // A link to one block (/brain/<note>#<block id> — search results, citations,
+  // apps connected through MCP) scrolls to it and highlights it. The editor
+  // and its blocks render a moment after the page: wait for the block.
+  useEffect(() => {
+    let cancelled = false;
+    async function toHashBlock() {
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      if (!id) return;
+      for (let i = 0; i < 60 && !cancelled; i++) {
+        if (editorRef.current && document.querySelector(`[data-id="${CSS.escape(id)}"]`)) {
+          editorRef.current.scrollToBlock(id);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    }
+    void toHashBlock();
+    window.addEventListener("hashchange", toHashBlock);
+    return () => { cancelled = true; window.removeEventListener("hashchange", toHashBlock); };
+  }, [note.id]);
+
   // The last applied draft, so Undo can take it back — but only while the
   // document is still exactly what the draft left.
   const lastDraftRef = useRef<{ before: AnyBlock[]; after: string } | null>(null);

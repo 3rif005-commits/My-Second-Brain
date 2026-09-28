@@ -289,3 +289,9 @@ Progress: `docs/superpowers/plans/HARNESS_PROGRESS.md`
 - Test that revoking a token actually stops it. The MCP SDK's /revoke
   refused public clients (no client_secret) with 400 and the token kept
   working; found only by the live test, fixed with our own /revoke.
+- A citation rule the model must act on goes inside the tool RESULT, next to
+  the passages. In the tool's description and the server's instructions,
+  claude.ai's model still answered with titles only; with a `cite_rule` and a
+  ready `cite` link beside each passage, it linked unasked.
+- A deep link must land where it points: /brain/<note>#<block> opened the
+  note at the top until the note page scrolled to (and flashed) the block.
