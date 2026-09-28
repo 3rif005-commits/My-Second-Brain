@@ -13,7 +13,7 @@ transition, tests touching the user's real notes clean up after themselves.
 | M1 | Run later (normal/local price): `ai_jobs` + migration 025, worker tick, API, bell, card in note, split send button, Cancel | ✅ done, live-verified |
 | M2 | Activity page + caps | ✅ done, live-verified |
 | M3 | Batch mode (Anthropic Message Batches) | ✅ done, live-verified (real batch, half price confirmed) |
-| M4 | When a source is added | in progress |
+| M4 | When a source is added | code complete, blocked on migration 027 for the live pass |
 | M5 | Schedules + staleness | todo |
 
 ## M1 pieces
@@ -77,12 +77,14 @@ Decisions (spec §2.2/§7): per-note opt-in only, global `workspace_on_drop` sta
 rule fires once, 2 min after the LAST source settles (debounced, so 3 files = 1 job); dedupe
 key = (skill, note, sorted ready source ids) — a second trigger for the same key attaches to
 the existing open job instead of creating one; note deleted → its trigger is disabled.
-- [ ] migration 027 (user applies)
-- [ ] `services/jobs/triggers.py` — CRUD, debounce (`touch_settle`), fire due triggers, dedupe
-- [ ] wire `touch_settle` into `processor.py` next to the existing `maybe_synthesize` call
-- [ ] worker: `_tick_triggers` alongside `_tick_jobs`
-- [ ] API: `GET/PUT /notes/{id}/trigger`, list for the rail
-- [ ] frontend: SourceRail "When I add a source here: Suggest ▾" line + status
+- [x] migration 027 (user applies)
+- [x] `services/jobs/triggers.py` — CRUD, debounce (`touch_settle`), fire due triggers, dedupe
+- [x] wire `touch_settle` into `processor.py` next to the existing `maybe_synthesize` call
+- [x] worker: `_tick_triggers` alongside `_tick_jobs`
+- [x] API: `GET/PUT /notes/{id}/trigger`, list for the rail
+- [x] frontend: SourceRail "When I add a source here: Suggest ▾" line + status
 - [ ] live: drop 2 sources on a free-model note with the trigger on → 1 job (no paid call needed)
 
 ## Log (M4)
+- 2026-09-28 · M4 backend+frontend done: extracted `services/jobs/queue.py` (shared price/eligibility decision between "Run later" and a trigger firing, so a trigger never charges more than the number a click would have shown) — router tests retargeted accordingly, no behaviour change. `services/jobs/triggers.py` (debounced settle, dedupe by source set, deleted-note cleanup), wired into `processor.py`'s settle points (success AND failure — a failed source must not stall the debounce forever), a scheduler tick alongside `_tick_jobs`, `GET/PUT /jobs/notes/{id}/trigger`, and the rail's "When I add a source here" line (`SourceTrigger.tsx`). 18 new trigger tests (2 mutations verified to fail them) + 5 router tests; backend jobs suite 115, full backend suite 1900 passed (unrelated pgtest errors unchanged). Frontend: 1194 passed across the whole suite.
+- **Live pass blocked**: migration 027 (`ai_job_triggers.next_check_at` + one-trigger-per-note) is not applied yet — `next_check_at` does not exist on the live table. Checked directly against Supabase.

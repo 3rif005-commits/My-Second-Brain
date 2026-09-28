@@ -17,7 +17,10 @@ class FakeDB:
     DEFAULTS = {"ai_jobs": {"status": "queued", "attempts": 0, "ran_late": False,
                             "focus": "", "trigger": "run_later", "price_mode": "normal",
                             "provider_batch_id": None, "started_at": None,
-                            "source_ids": [], "result_meta": {}}}
+                            "source_ids": [], "result_meta": {}},
+                "ai_job_triggers": {"enabled": True, "paused_reason": None,
+                                    "next_check_at": None, "last_run_at": None,
+                                    "cadence": None, "month_cap_usd": 1.00}}
 
     def __init__(self, **tables: list[dict]):
         self.tables = {k: [copy.deepcopy(r) for r in v] for k, v in tables.items()}

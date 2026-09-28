@@ -27,6 +27,7 @@ from services.database import get_supabase
 from services.embedder import embed_batch
 from services.workspace import storage
 from services.workspace.dbretry import with_retry
+from services.jobs.triggers import touch_settle
 from services.workspace.synthesis import maybe_synthesize
 
 logger = logging.getLogger(__name__)
@@ -240,7 +241,21 @@ def process_resource(resource_id: str) -> None:
             maybe_synthesize(resource.get("note_id"))
         except Exception as e:
             logger.warning(f"source {resource_id}: synthesis trigger failed: {e}")
+        _touch_settle_safely(resource.get("note_id"))
 
     except Exception as e:
         logger.exception(f"resource {resource_id} processing failed")
         _set_status(resource_id, "failed", str(e)[:500])
+        # A source failing still counts as settling: a "when a source is
+        # added" trigger on the note must not wait forever for a file that
+        # will never turn ready.
+        _touch_settle_safely(resource.get("note_id"))
+
+
+def _touch_settle_safely(note_id: str | None) -> None:
+    if not note_id:
+        return
+    try:
+        touch_settle(note_id)
+    except Exception as e:                                    # noqa: BLE001
+        logger.warning(f"note {note_id}: background-job trigger touch failed: {e}")

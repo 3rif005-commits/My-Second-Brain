@@ -580,6 +580,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
                 </button>
               </div>
               <SourceRail
+                noteId={noteId}
                 sources={sources}
                 activeId={activeId}
                 onSelect={setActiveId}

@@ -305,3 +305,12 @@ export const JOBS_CHANGED = "jobs:changed";
 export const announceJobsChanged = () => {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(JOBS_CHANGED));
 };
+
+// ── "When I add a source here" (the rail's trigger, harness 5.3 milestone 4) ─
+
+export interface TriggerOption { skill: string; title: string; usd: number | null; runnable: string | null }
+export interface NoteTrigger { skill: string | null; skills: TriggerOption[] }
+
+export const getNoteTrigger = (noteId: string) => call<NoteTrigger>(`/notes/${noteId}/trigger`);
+export const putNoteTrigger = (noteId: string, skill: string | null) =>
+  call<{ skill: string | null }>(`/notes/${noteId}/trigger`, { method: "PUT", body: JSON.stringify({ skill }) });

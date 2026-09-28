@@ -15,9 +15,8 @@ from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 from pydantic import BaseModel
 
 from routers.ingest import get_user_id
-from services.ai.router import pick
 from services.database import get_supabase
-from services.jobs import batch, caps, store, worker
+from services.jobs import batch, caps, queue as job_queue, store, triggers, worker
 from services.jobs.notify import notify
 from services.workspace import skill_run
 
@@ -38,6 +37,10 @@ class QueueRequest(BaseModel):
 
 class AppliedRequest(BaseModel):
     note_id: str | None = None
+
+
+class TriggerRequest(BaseModel):
+    skill: str | None = None   # None (or omitted) means "Suggest" — turn it off
 
 
 class SettingsRequest(BaseModel):
@@ -70,40 +73,14 @@ def _brief(row: dict) -> dict:
             if k not in ("result_html", "source_ids", "source_hash", "dedupe_key")}
 
 
-def eligible_skill(name: str):
-    """A skill that can run unattended: it writes a document from the note's
-    sources and needs no person. Selection skills edit the user's own text, so
-    they stay live."""
-    skill = skill_run.registry().get(name)
-    if (skill is None or not skill.output
-            or skill.output in skill_run.SELECTION_OUTPUTS
-            or not (skill_run.CHAT_SURFACES & set(skill.surfaces))):
-        return None
-    return skill
-
-
 def _quote(user_id: str, note_id: str, skill, focus: str) -> dict:
-    """What a job would cost and how it would run — the ONE decision both the
-    price shown before the click and the job that is queued come from, so what
-    the user is shown is what they get. A provider with a batch API and a job
-    that is a single call go at half price; a local model is free; anything else
-    runs at the normal price. Raises 400 with the reason when it cannot run."""
-    priced = next((j for j in skill_run.chat_skills(note_id, user_id)
-                   if j.get("skill") == skill.name), None) or {}
-    if priced.get("runnable"):
-        _fail(400, f"{skill_run.job_title(skill.name)}: {priced['runnable']}.")
-    provider = pick("summarize_text", user_id)
-    live = priced.get("usd")
-    if provider and provider.provider == "local":
-        mode = "local"
-    elif (batch.adapter_for(provider)
-          and skill_run.batch_eligible(skill.name, len(skill_run.ready_sources(note_id)), focus)):
-        mode = "batch"
-    else:
-        mode = "normal"
-    shown = round(live * batch.DISCOUNT, 6) if mode == "batch" and live is not None else live
-    return {"provider": provider, "priced": priced, "live_usd": live, "price_mode": mode,
-            "usd": shown, "model": priced.get("model")}
+    """The router's error shape around the shared pricing decision
+    (`services.jobs.queue.price`) — the same one both `/quote` and queueing
+    use, so what a user is shown is what they get."""
+    try:
+        return job_queue.price(user_id, note_id, skill, focus)
+    except job_queue.QueueError as e:
+        _fail(400, str(e))
 
 
 @router.get("/quote")
@@ -111,7 +88,7 @@ def quote_job(note_id: str, skill: str, authorization: str = Header(), focus: st
     """The price line's numbers, before anything is queued."""
     user_id = get_user_id(authorization)
     _own_note(note_id, user_id)
-    sk = eligible_skill(skill)
+    sk = job_queue.eligible_skill(skill)
     if sk is None:
         _fail(400, f"{skill!r} cannot run in the background.")
     q = _quote(user_id, note_id, sk, focus)
@@ -123,7 +100,7 @@ def quote_job(note_id: str, skill: str, authorization: str = Header(), focus: st
 def queue_job(body: QueueRequest, authorization: str = Header()):
     user_id = get_user_id(authorization)
     _own_note(body.note_id, user_id)
-    skill = eligible_skill(body.skill)
+    skill = job_queue.eligible_skill(body.skill)
     if skill is None:
         _fail(400, f"{body.skill!r} cannot run in the background.")
 
@@ -142,8 +119,7 @@ def queue_job(body: QueueRequest, authorization: str = Header()):
 
     quote = _quote(user_id, body.note_id, skill, body.focus)
     from core.config import settings
-    provider, priced, live, mode, shown = (quote[k] for k in
-                                           ("provider", "priced", "live_usd", "price_mode", "usd"))
+    provider, live, mode, shown = (quote[k] for k in ("provider", "live_usd", "price_mode", "usd"))
     row = store.create(
         user_id, note_id=body.note_id, skill=skill.name, focus=body.focus.strip(),
         trigger="run_later", run_after=run_after.isoformat(), price_mode=mode,
@@ -169,6 +145,37 @@ def _with_note_titles(rows: list[dict]) -> list[dict]:
                   .execute().data or []):
             titles[n["id"]] = n.get("title") or "Untitled"
     return [{**r, "note_title": titles.get(r.get("note_id") or "")} for r in rows]
+
+
+@router.get("/notes/{note_id}/trigger")
+def get_trigger(note_id: str, authorization: str = Header()):
+    """The rail's line for this note: off, or which skill runs when a source
+    lands. `skills` lists what a trigger here may run, each with why not if
+    it currently could not."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    row = triggers.get(note_id, user_id)
+    offered = [{"skill": s["skill"], "title": skill_run.job_title(s["skill"]), "usd": s.get("usd"),
+               "runnable": s.get("runnable")}
+              for s in skill_run.chat_skills(note_id, user_id)
+              if job_queue.eligible_skill(s["skill"]) is not None]
+    return {"skill": row["skill"] if row else None, "skills": offered}
+
+
+@router.put("/notes/{note_id}/trigger")
+def put_trigger(note_id: str, body: TriggerRequest, authorization: str = Header()):
+    """Turn the trigger on (or change its skill) with `skill`, or off by
+    sending none — an explicit per-note choice; the global default
+    (`workspace_on_drop`) stays `suggest` either way."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    if body.skill is None:
+        triggers.clear_trigger(note_id, user_id)
+        return {"skill": None}
+    if job_queue.eligible_skill(body.skill) is None:
+        _fail(400, f"{body.skill!r} cannot run in the background.")
+    row = triggers.set_trigger(note_id, user_id, body.skill)
+    return {"skill": row["skill"]}
 
 
 @router.get("/activity")

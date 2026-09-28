@@ -21,7 +21,7 @@ def env():
     with patch("routers.jobs.skill_run.ready_sources", return_value=[{"id": "s1"}]), patch("services.database.get_supabase", return_value=fake), \
          patch("routers.jobs.get_supabase", return_value=fake), \
          patch("routers.jobs.get_user_id", return_value="u1"), \
-         patch("routers.jobs.pick", return_value=provider), \
+         patch("services.jobs.queue.pick", return_value=provider), \
          patch("routers.jobs.skill_run.chat_skills", return_value=[PRICED]):
         from main import app
         yield TestClient(app), fake
@@ -43,7 +43,7 @@ def test_queueing_stores_the_price_the_user_was_shown(env):
 
 def test_a_local_model_is_marked_local(env):
     client, _ = env
-    with patch("routers.jobs.pick", return_value=Provider("local", capabilities={"text"})):
+    with patch("services.jobs.queue.pick", return_value=Provider("local", capabilities={"text"})):
         assert _queue(client).json()["price_mode"] == "local"
 
 
@@ -348,3 +348,42 @@ def test_a_job_waiting_on_a_price_can_be_dismissed(env):
     jid = _queue(client).json()["id"]
     db.tables["ai_jobs"][0].update(status="needs_you", result_meta={"now_usd": 0.08, "now_mode": "normal"})
     assert client.post(f"/jobs/{jid}/discard", headers=AUTH).json()["status"] == "discarded"
+
+
+# ── the rail's trigger: GET/PUT /jobs/notes/{id}/trigger ─────────────────────
+
+def test_the_trigger_starts_off_and_lists_what_it_could_run(env):
+    client, _ = env
+    body = client.get("/jobs/notes/n1/trigger", headers=AUTH).json()
+    assert body["skill"] is None
+    assert body["skills"] == [{"skill": "flashcards", "title": "Flashcards", "usd": 0.04, "runnable": None}]
+
+
+def test_turning_it_on_then_off(env):
+    client, db = env
+    on = client.put("/jobs/notes/n1/trigger", json={"skill": "flashcards"}, headers=AUTH)
+    assert on.json() == {"skill": "flashcards"}
+    assert client.get("/jobs/notes/n1/trigger", headers=AUTH).json()["skill"] == "flashcards"
+    off = client.put("/jobs/notes/n1/trigger", json={}, headers=AUTH)
+    assert off.json() == {"skill": None}
+    assert client.get("/jobs/notes/n1/trigger", headers=AUTH).json()["skill"] is None
+
+
+def test_picking_a_skill_again_edits_the_same_trigger(env):
+    client, db = env
+    client.put("/jobs/notes/n1/trigger", json={"skill": "flashcards"}, headers=AUTH)
+    client.put("/jobs/notes/n1/trigger", json={"skill": "study-guide"}, headers=AUTH)
+    assert len(db.tables.get("ai_job_triggers", [])) == 1
+    assert client.get("/jobs/notes/n1/trigger", headers=AUTH).json()["skill"] == "study-guide"
+
+
+def test_a_selection_skill_cannot_be_set_as_a_trigger(env):
+    client, _ = env
+    res = client.put("/jobs/notes/n1/trigger", json={"skill": "define-terms"}, headers=AUTH)
+    assert res.status_code == 400
+
+
+def test_a_strangers_note_refuses_the_trigger(env):
+    client, _ = env
+    assert client.get("/jobs/notes/n2/trigger", headers=AUTH).status_code == 404
+    assert client.put("/jobs/notes/n2/trigger", json={"skill": "flashcards"}, headers=AUTH).status_code == 404

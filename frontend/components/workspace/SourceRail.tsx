@@ -12,6 +12,7 @@ import {
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PromptDialog } from "@/components/ui/PromptDialog";
 import { sourceColor, type NoteSource, type ResourceKind } from "@/lib/workspace";
+import { SourceTrigger } from "./SourceTrigger";
 
 const KIND_ICON = {
   youtube: PlaySquare,
@@ -47,6 +48,8 @@ function KindTile({ source }: { source: NoteSource }) {
 }
 
 interface SourceRailProps {
+  /** Whose rail this is — the trigger line is per note. */
+  noteId: string;
   sources: NoteSource[];
   activeId: string | null;
   onSelect: (id: string) => void;
@@ -58,7 +61,7 @@ interface SourceRailProps {
 }
 
 export function SourceRail({
-  sources, activeId, onSelect, onAddFiles, onAddUrl, onRemove, onRetry, busy,
+  noteId, sources, activeId, onSelect, onAddFiles, onAddUrl, onRemove, onRetry, busy,
 }: SourceRailProps) {
   const [showAdd, setShowAdd] = useState(false);
   const [showUrl, setShowUrl] = useState(false);
@@ -219,6 +222,8 @@ export function SourceRail({
           );
         })}
       </div>
+
+      <SourceTrigger noteId={noteId} />
 
       <input
         ref={fileInputRef}
