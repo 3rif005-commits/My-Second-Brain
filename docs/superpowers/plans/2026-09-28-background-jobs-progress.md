@@ -18,14 +18,15 @@ transition, tests touching the user's real notes clean up after themselves.
 
 ## M1 pieces
 - [x] migration `025_ai_jobs.sql` (user applies)
-- [ ] `services/jobs/store.py` — CRUD + claim
-- [ ] `services/jobs/worker.py` — run due jobs, recover stuck ones
-- [ ] scheduler: `_tick_jobs` + notifications
-- [ ] `routers/jobs.py` — queue / list / get / cancel / run-now / discard / applied
-- [ ] backend tests (fake store, fake clock)
+- [x] `services/jobs/store.py` — CRUD + claim
+- [x] `services/jobs/worker.py` — run due jobs, recover stuck ones
+- [x] scheduler: `_tick_jobs` + notifications
+- [x] `routers/jobs.py` — queue / list / get / cancel / run-now / discard / applied
+- [x] backend tests (fake store, fake clock)
 - [ ] frontend: api + price line formatter
 - [ ] frontend: split send button + queued card
 - [ ] frontend: Background result card in the note's AI panel
 - [ ] live browser pass (needs migration 025 applied)
 
 ## Log
+- 2026-09-28 · M1 backend done: store, worker (claim, late, stuck recovery, additive-only), scheduler tick, /jobs API, 26 tests (in-memory table, `tests/fake_db.py`). Full suite: 1811 passed, 0 failed (448 errors = pre-existing, need the local pgtest Postgres on :55432).

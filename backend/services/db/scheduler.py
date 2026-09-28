@@ -42,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 _TICK_INTERVAL_SECONDS = 60
 _JOB_ID = "db_scheduler_tick"
+_JOBS_JOB_ID = "background_jobs_tick"
 
 _scheduler: AsyncIOScheduler | None = None
 
@@ -157,6 +158,22 @@ async def _tick() -> None:
         logger.exception("scheduler tick failed")
 
 
+async def _tick_jobs() -> None:
+    """Background jobs (5.3): run what is due, then tell the user. A separate
+    scheduler job, not a pass inside `_tick`: `_tick` gives up when the database
+    pool is unavailable, and a queued job does not need the pool to run — only
+    its bell entry does. `max_instances=1` (below) means a slow job cannot pile
+    up a second copy of this tick behind it."""
+    from services.jobs import worker
+    from services.jobs.notify import notify
+    try:
+        events = await asyncio.to_thread(worker.run_due)
+    except Exception:
+        logger.exception("scheduler tick: background jobs pass failed")
+        return
+    await notify(events)
+
+
 def start_scheduler() -> None:
     """Idempotent: a second call while already running is a no-op (matches
     `get_pool()`'s own "creating it on first call" posture)."""
@@ -165,6 +182,8 @@ def start_scheduler() -> None:
         return
     scheduler = AsyncIOScheduler()
     scheduler.add_job(_tick, IntervalTrigger(seconds=_TICK_INTERVAL_SECONDS), id=_JOB_ID)
+    scheduler.add_job(_tick_jobs, IntervalTrigger(seconds=_TICK_INTERVAL_SECONDS),
+                      id=_JOBS_JOB_ID, max_instances=1, coalesce=True)
     scheduler.start()
     _scheduler = scheduler
 

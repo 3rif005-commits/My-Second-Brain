@@ -341,7 +341,7 @@ def _focused(prompt: str, focus: str) -> str:
 
 
 def produce_skill_result(note_id: str, user_id: str, name: str,
-                         focus: str = "") -> dict:
+                         focus: str = "", trigger: str = "user") -> dict:
     """Run one skill over the note's sources and RETURN the result.
 
     Raises ValueError with a reason a person can read when the job cannot run
@@ -360,7 +360,7 @@ def produce_skill_result(note_id: str, user_id: str, name: str,
 
     mark = len(usage_log.RECENT)
     with usage_log.annotate(surface="workspace", job="skill", skill=name,
-                            trigger="user", note_id=note_id, user_id=user_id), \
+                            trigger=trigger, note_id=note_id, user_id=user_id), \
          budget_guard.limit(settings.max_usd_per_run or None):
         if name == STUDY_GUIDE:
             from prompts.note_synthesis import build_note_synthesis_prompt

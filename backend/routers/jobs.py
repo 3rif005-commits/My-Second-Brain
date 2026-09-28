@@ -1,0 +1,189 @@
+"""Background jobs: queue a skill to run later, see the queue, cancel, apply.
+
+The worker (`services/jobs/worker.py`) runs due jobs from the scheduler tick;
+nothing here calls a model. Applying a result is done by the client through the
+existing note-editing path — the job only records that it happened.
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
+from pydantic import BaseModel
+
+from routers.ingest import get_user_id
+from services.ai.router import pick
+from services.database import get_supabase
+from services.jobs import store, worker
+from services.jobs.notify import notify
+from services.workspace import skill_run
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+#: a job cannot be queued for further out than this
+MAX_DELAY = timedelta(days=14)
+
+
+class QueueRequest(BaseModel):
+    note_id: str
+    skill: str
+    focus: str = ""
+    #: ISO time; omitted = as soon as the next tick
+    run_after: str | None = None
+
+
+class AppliedRequest(BaseModel):
+    note_id: str | None = None
+
+
+def _fail(status: int, message: str):
+    raise HTTPException(status_code=status, detail={"error": message})
+
+
+def _own_note(note_id: str, user_id: str) -> dict:
+    rows = (get_supabase().table("notes").select("id,title")
+            .eq("id", note_id).eq("user_id", user_id).is_("deleted_at", "null")
+            .limit(1).execute().data or [])
+    if not rows:
+        _fail(404, "Note not found")
+    return rows[0]
+
+
+def _job(job_id: str, user_id: str) -> dict:
+    row = store.get(job_id, user_id)
+    if not row:
+        _fail(404, "Job not found")
+    return row
+
+
+def _brief(row: dict) -> dict:
+    """A job without its result body — lists and receipts never carry the HTML."""
+    return {k: v for k, v in row.items()
+            if k not in ("result_html", "source_ids", "source_hash", "dedupe_key")}
+
+
+def eligible_skill(name: str):
+    """A skill that can run unattended: it writes a document from the note's
+    sources and needs no person. Selection skills edit the user's own text, so
+    they stay live."""
+    skill = skill_run.registry().get(name)
+    if (skill is None or not skill.output
+            or skill.output in skill_run.SELECTION_OUTPUTS
+            or not (skill_run.CHAT_SURFACES & set(skill.surfaces))):
+        return None
+    return skill
+
+
+@router.post("")
+def queue_job(body: QueueRequest, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    _own_note(body.note_id, user_id)
+    skill = eligible_skill(body.skill)
+    if skill is None:
+        _fail(400, f"{body.skill!r} cannot run in the background.")
+
+    now = datetime.now(timezone.utc)
+    run_after = now
+    if body.run_after:
+        try:
+            run_after = datetime.fromisoformat(body.run_after.replace("Z", "+00:00"))
+        except ValueError:
+            _fail(400, "run_after is not a time.")
+        if run_after.tzinfo is None:
+            run_after = run_after.replace(tzinfo=timezone.utc)
+        if run_after > now + MAX_DELAY:
+            _fail(400, "A job can wait at most 14 days.")
+        run_after = max(run_after, now)
+
+    priced = next((j for j in skill_run.chat_skills(body.note_id, user_id)
+                   if j.get("skill") == skill.name), None) or {}
+    if priced.get("runnable"):
+        _fail(400, f"{skill_run.job_title(skill.name)}: {priced['runnable']}.")
+
+    provider = pick("summarize_text", user_id)
+    from core.config import settings
+    row = store.create(
+        user_id, note_id=body.note_id, skill=skill.name, focus=body.focus.strip(),
+        trigger="run_later", run_after=run_after.isoformat(),
+        price_mode="local" if provider and provider.provider == "local" else "normal",
+        shown_estimate_usd=priced.get("usd"), cap_usd=settings.max_usd_per_run or None,
+        model=priced.get("model"), provider=provider.provider if provider else None)
+    return _brief(row)
+
+
+@router.get("")
+def list_jobs(authorization: str = Header(), note_id: str | None = None,
+              status: str | None = None):
+    user_id = get_user_id(authorization)
+    statuses = tuple(s for s in (status or "").split(",") if s) or None
+    return {"jobs": store.list_for_user(user_id, note_id=note_id, statuses=statuses)}
+
+
+@router.get("/{job_id}")
+def get_job(job_id: str, authorization: str = Header()):
+    """The full job, result included. Opening a ready result is what the
+    "you never opened the last 3" rule (M5) counts."""
+    user_id = get_user_id(authorization)
+    row = _job(job_id, user_id)
+    if row["status"] == "ready" and not row.get("opened_at"):
+        store.transition(job_id, "ready", opened_at=store.now_iso())
+    return {k: v for k, v in row.items() if k not in ("source_hash", "dedupe_key")}
+
+
+@router.post("/{job_id}/cancel")
+def cancel_job(job_id: str, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    _job(job_id, user_id)
+    row = store.transition(job_id, store.CANCELLABLE, status="cancelled",
+                           finished_at=store.now_iso(), cancel_reason="by you")
+    if not row:
+        _fail(409, "This job has already finished.")
+    return _brief(row)
+
+
+@router.post("/{job_id}/run-now")
+def run_now(job_id: str, background: BackgroundTasks, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    _job(job_id, user_id)
+    now = datetime.now(timezone.utc)
+    row = store.transition(job_id, "queued", run_after=now.isoformat())
+    if not row:
+        _fail(409, "This job is not waiting any more.")
+    background.add_task(_run_and_notify, row, now)
+    return _brief(row)
+
+
+async def _run_and_notify(row: dict, now: datetime) -> None:
+    try:
+        event = await asyncio.to_thread(worker.run_one, row, now)
+    except Exception:                                    # noqa: BLE001
+        logger.exception("run-now job %s crashed", row.get("id"))
+        return
+    if event:
+        await notify([event])
+
+
+@router.post("/{job_id}/discard")
+def discard_job(job_id: str, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    _job(job_id, user_id)
+    row = store.transition(job_id, ("ready", "failed", "budget_blocked", "expired"),
+                           status="discarded", discarded_at=store.now_iso())
+    if not row:
+        _fail(409, "There is nothing to discard.")
+    return _brief(row)
+
+
+@router.post("/{job_id}/applied")
+def mark_applied(job_id: str, body: AppliedRequest, authorization: str = Header()):
+    """The client calls this after it put the result in a note."""
+    user_id = get_user_id(authorization)
+    _job(job_id, user_id)
+    row = store.transition(job_id, "ready", status="applied", applied_at=store.now_iso(),
+                           applied_note_id=body.note_id)
+    if not row:
+        _fail(409, "This result is not waiting to be applied.")
+    return _brief(row)
