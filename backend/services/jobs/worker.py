@@ -99,7 +99,7 @@ def run_one(job: dict, now: datetime) -> dict | None:
     note = _note(job.get("note_id"))
     if note is None:
         row = store.transition(job["id"], "queued", status="cancelled",
-                               finished_at=store.now_iso(),
+                               finished_at=store.now_iso(), actual_usd=0,
                                cancel_reason="the note was deleted")
         return {"kind": "cancelled", "job": row, "note_title": ""} if row else None
 
@@ -115,8 +115,9 @@ def run_one(job: dict, now: datetime) -> dict | None:
     # changed since it was queued) against this job's limit and the monthly one.
     why = caps.preflight(job["user_id"], _estimate_now(job), job.get("cap_usd"), now)
     if why:
+        # Refused before the model: it cost nothing, and the row says so.
         row = store.transition(job["id"], "submitted", status="budget_blocked",
-                               finished_at=store.now_iso(), error=why)
+                               finished_at=store.now_iso(), error=why, actual_usd=0)
         return {"kind": "budget_blocked", "job": row, "note_title": title} if row else None
     try:
         result = skill_run.produce_skill_result(

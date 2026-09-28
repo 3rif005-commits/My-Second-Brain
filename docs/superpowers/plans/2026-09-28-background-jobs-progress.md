@@ -11,7 +11,7 @@ transition, tests touching the user's real notes clean up after themselves.
 | # | Milestone | Status |
 |---|-----------|--------|
 | M1 | Run later (normal/local price): `ai_jobs` + migration 025, worker tick, API, bell, card in note, split send button, Cancel | ✅ done, live-verified |
-| M2 | Activity page + caps | in progress |
+| M2 | Activity page + caps | ✅ done, live-verified |
 | M3 | Batch mode (Anthropic Message Batches) | todo |
 | M4 | When a source is added | todo |
 | M5 | Schedules + staleness | todo |
@@ -42,9 +42,12 @@ Activity shows background jobs only; the header's month total counts all AI from
 - [x] worker pre-flight → `budget_blocked` (before the model call) + tests
 - [x] API: `/jobs/activity` (filters, note titles, totals, badge counts), `/jobs/settings` GET/PUT, `/jobs/{id}/detail`, DELETE `/jobs/{id}`
 - [x] result body cleared on apply/discard; retention sweep (30 d results, 90 d rows) + tests
-- [ ] frontend: `/brain/activity` page (needs-you, ready, in progress, history + filters, expanded row, empty state), sidebar entry + badge
-- [ ] frontend: Settings → Background jobs (monthly cap)
-- [ ] live pass: cap $0.01 → queue → "Not started — … monthly limit" in Activity + bell; restore cap
+- [x] frontend: `/brain/activity` page (needs-you, ready, in progress, history + filters, expanded row, empty state), sidebar entry + badge
+- [x] frontend: Settings → Background jobs (monthly cap)
+- [x] live pass: cap $0.01 → queue → "Not started — … monthly limit" in Activity + bell; restore cap
 
 ## Log (M2)
 - 2026-09-28 · M2 backend done: caps (monthly $5 default in profiles.preferences, month spend paged over ai_runs), worker pre-flight re-prices at start and refuses BEFORE the model call, /jobs/activity|badge|settings|{id}/detail + DELETE, retention sweep every 6 h, result body dropped on apply/discard. 21 new tests; jobs suite 68 green.
+- 2026-09-28 · M2 frontend + live pass GREEN (`--project=background-activity`, free, 2.5 min). Limit set to $0.01 in Settings (nonsense refused) → Run later → Run now → refused BEFORE the model ("Not started — about $0.05 would pass your $0.01 monthly limit ($1.48 spent this month)") on the card, in the bell, under Needs you on Activity, and as the sidebar badge → Dismiss → History (Discarded, $0) → expanded row → delete. Limit restored to $5. M1 live re-run after the M2 changes: green ($0.01).
+- Found live (all fixed): (1) a dismissed refusal showed cost "price unknown" — the worker now records $0 for a job that never reached the model, cancel-while-queued too; a running job's cancel stays unknown; failed shows "—". (2) "Not started — Not started —" doubled. (3) sidebar badge stayed at 1 after Dismiss until the next 45 s poll → `jobs:changed` event. (4) expanded row said "Made from: sources no longer available" for a job that never ran → line hidden. (5) timeline printed each time twice.
+- Tests: backend jobs suite 58; frontend 246 in lib/activity/ai/sidebar.

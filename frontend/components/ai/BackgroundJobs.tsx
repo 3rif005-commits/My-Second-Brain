@@ -9,7 +9,7 @@ import { Clock, Loader2, Play, X } from "lucide-react";
 import { PanelJobCard, type PanelJob } from "./PanelCards";
 import { readNote } from "./panelSources";
 import {
-  agoText, cancelJob, discardJob, getJob, listJobs, markJobApplied, runJobNow, stateLine,
+  agoText, announceJobsChanged, cancelJob, discardJob, getJob, listJobs, markJobApplied, runJobNow, stateLine,
   type BgJob,
 } from "@/lib/backgroundJobs";
 import type { JobResult } from "@/lib/chatJobs";
@@ -85,7 +85,7 @@ function WaitingCard({ job, focused, onChanged }: {
 
   async function act(fn: () => Promise<unknown>) {
     setBusy(true); setNote(null);
-    try { await fn(); await onChanged(); }
+    try { await fn(); await onChanged(); announceJobsChanged(); }
     catch (e) { setNote(e instanceof Error ? e.message : "That did not work"); }
     finally { setBusy(false); }
   }
@@ -180,6 +180,7 @@ function ReadyCard({ job, noteId, title, focused, pageNoteId, inWorkspace, onApp
             try {
               await onApply(shown, target);
               await markJobApplied(job.id, target);
+              announceJobsChanged();
               setPj((p) => p && { ...p, applied: { noteId: target, title: target === noteId ? title : "the note" },
                 undoNote: undefined });
             } finally { setBusy(false); }
@@ -193,7 +194,7 @@ function ReadyCard({ job, noteId, title, focused, pageNoteId, inWorkspace, onApp
                 : "Open the note to undo it there (Ctrl+Z)." }));
         })}
         onRetry={() => onAgain(job)}
-        onDiscard={() => void discardJob(job.id).then(onDone)}
+        onDiscard={() => void discardJob(job.id).then(onDone).then(announceJobsChanged)}
         onOpen={onOpen}
       />
     </div>

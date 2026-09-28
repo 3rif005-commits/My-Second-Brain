@@ -27,7 +27,7 @@ describe("Settings → Background jobs", () => {
     await userEvent.click(save);
     expect(f).toHaveBeenCalledWith("/api/ws/jobs/settings", expect.objectContaining({
       method: "PUT", body: JSON.stringify({ monthly_cap_usd: 0.01 }) }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Saved — the limit is $0.01 a month.");
+    expect(await screen.findByTestId("settings-note")).toHaveTextContent("Saved — the limit is $0.01 a month.");
   });
 
   it("does not let a nonsense amount be saved", async () => {

@@ -89,6 +89,21 @@ describe("ActivityPage", () => {
     await waitFor(() => expect(detail).toHaveTextContent("Made from: Slides.pdf"));
   });
 
+  it("does not claim sources for a job that never ran, and tells the sidebar when something changed", async () => {
+    stub(activity({ history: [job({ status: "discarded", actual_usd: 0, result_meta: {} })] }),
+      (url) => url.includes("/detail") ? json({ sources: [] }) : undefined);
+    const heard = vi.fn();
+    window.addEventListener("jobs:changed", heard);
+    render(<ActivityPage />);
+    await userEvent.click(await screen.findByTestId("history-row"));
+    const detail = await screen.findByTestId("history-detail");
+    await waitFor(() => expect(detail).not.toHaveTextContent("Made from"));
+    expect(detail).toHaveTextContent("Nothing was spent");
+    await userEvent.click(screen.getByRole("button", { name: /delete from history/i }));
+    await waitFor(() => expect(heard).toHaveBeenCalled());
+    window.removeEventListener("jobs:changed", heard);
+  });
+
   it("asks the server for the filter the user picked", async () => {
     const f = stub(activity({ history: [job()] }));
     render(<ActivityPage />);

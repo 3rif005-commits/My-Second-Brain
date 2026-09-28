@@ -67,7 +67,7 @@ export default function BackgroundJobsSettings() {
           {s && <p className="mt-2 text-[12.5px] text-gray-500" data-testid="spent-line">
             Spent so far this month: {s.month_spent_usd === 0 ? "$0" : usdText(s.month_spent_usd)}.
           </p>}
-          {note && <p className={`mt-2 text-[12.5px] ${note.bad ? "text-red-600" : "text-emerald-600"}`} role="status">{note.text}</p>}
+          {note && <p className={`mt-2 text-[12.5px] ${note.bad ? "text-red-600" : "text-emerald-600"}`} role="status" data-testid="settings-note">{note.text}</p>}
         </section>
       </div>
     </div>

@@ -103,6 +103,7 @@ def test_over_the_monthly_limit_the_model_is_never_called(wdb):
     run.assert_not_called()
     row = wdb.tables["ai_jobs"][0]
     assert row["status"] == "budget_blocked" and "monthly limit" in row["error"]
+    assert row["actual_usd"] == 0                       # it cost nothing, and says so
     assert events[0]["kind"] == "budget_blocked"
     assert "monthly limit" in worker.notification_for(events[0])["message"]
 

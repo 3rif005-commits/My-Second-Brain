@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getBadge } from "@/lib/backgroundJobs";
+import { JOBS_CHANGED, getBadge } from "@/lib/backgroundJobs";
 
 export const BADGE_POLL_MS = 45_000;
 
@@ -16,7 +16,8 @@ export function useJobBadge(): number {
       .catch(() => {});
     void load();
     const t = setInterval(load, BADGE_POLL_MS);
-    return () => { live = false; clearInterval(t); };
+    window.addEventListener(JOBS_CHANGED, load);
+    return () => { live = false; clearInterval(t); window.removeEventListener(JOBS_CHANGED, load); };
   }, []);
   return count;
 }

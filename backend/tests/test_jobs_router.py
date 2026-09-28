@@ -83,6 +83,7 @@ def test_cancel_stops_a_waiting_job_and_a_finished_one_says_so(env):
     jid = _queue(client).json()["id"]
     res = client.post(f"/jobs/{jid}/cancel", headers=AUTH)
     assert res.json()["status"] == "cancelled" and res.json()["cancel_reason"] == "by you"
+    assert res.json()["actual_usd"] == 0             # cancelled while waiting: nothing spent
     assert client.post(f"/jobs/{jid}/cancel", headers=AUTH).status_code == 409
 
 
@@ -238,3 +239,11 @@ def test_applying_or_discarding_drops_the_stored_result(env):
     client.post("/jobs/a/applied", json={"note_id": "n1"}, headers=AUTH)
     client.post("/jobs/b/discard", headers=AUTH)
     assert a["result_html"] is None and b["result_html"] is None
+
+
+def test_cancelling_a_running_job_does_not_claim_it_cost_nothing(env):
+    client, db = env
+    jid = _queue(client).json()["id"]
+    db.tables["ai_jobs"][0]["status"] = "submitted"
+    res = client.post(f"/jobs/{jid}/cancel", headers=AUTH)
+    assert res.json()["status"] == "cancelled" and res.json().get("actual_usd") is None

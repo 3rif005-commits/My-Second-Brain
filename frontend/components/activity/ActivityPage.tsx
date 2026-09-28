@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, Clock, Loader2, Play, RotateCcw, Trash2, X } from "lucide-react";
 import {
   IN_PROGRESS, NEEDS_YOU, EMPTY_ACTIVITY, STATE_WORDS, agoText, cancelJob, costLine, costText,
-  deleteJob, discardJob, getActivity, getJobDetail, monthLine, queueJob, runJobNow, stateLine,
+  announceJobsChanged, deleteJob, discardJob, getActivity, getJobDetail, monthLine, queueJob, runJobNow, stateLine,
   timeline, triggerText, whenShort, type Activity, type ActivityFilters, type ActivityJob, type JobStatus,
 } from "@/lib/backgroundJobs";
 import { jobTitle } from "@/lib/workspace";
@@ -45,7 +45,7 @@ export function ActivityPage() {
 
   async function act(id: string, fn: () => Promise<unknown>) {
     setBusy(id); setError(null);
-    try { await fn(); await load(); }
+    try { await fn(); await load(); announceJobsChanged(); }
     catch (e) { setError(e instanceof Error ? e.message : "That did not work"); }
     finally { setBusy(null); }
   }
@@ -236,7 +236,9 @@ function HistoryRow({ job, open, busy, onToggle, onAgain, onDelete }: {
               {job.model ? `Model ${job.model}` : "Model unknown"} · {job.price_mode === "batch" ? "half price" : job.price_mode === "local" ? "local" : "normal price"}
               {tokens > 0 ? ` · ${tokens.toLocaleString()} tokens` : ""}
             </p>
-            <p>Made from: {sources === null ? "…" : sources.length ? sources.join(", ") : "sources no longer available"}</p>
+            {(sources === null || sources.length > 0) && (
+              <p>Made from: {sources === null ? "…" : sources.join(", ")}</p>
+            )}
             <p className="text-gray-400">{timeline(job).map((s) => `${s.label} ${s.at}`).join(" → ")}</p>
             {job.error && <p className="text-amber-700 dark:text-amber-300">{job.error}</p>}
             {job.cancel_reason && <p>Cancelled — {job.cancel_reason}</p>}

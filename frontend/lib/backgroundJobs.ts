@@ -97,7 +97,9 @@ export function stateLine(job: BgJob, now: Date = new Date()): string {
     case "failed":
       return `Failed — ${job.error ?? "unknown error"}`;
     case "budget_blocked":
-      return `Not started — ${job.error ?? "over the limit"}`;
+      // The server's sentence already begins "Not started — …".
+      return job.error ? (/^not started/i.test(job.error) ? job.error : `Not started — ${job.error}`)
+        : "Not started — over the limit";
     case "needs_you":
       return job.error ?? "Waiting for you";
     case "cancelled":
@@ -198,22 +200,29 @@ export const STATE_WORDS: Record<JobStatus, string> = {
 export const NEEDS_YOU: JobStatus[] = ["needs_you", "budget_blocked", "failed"];
 export const IN_PROGRESS: JobStatus[] = ["queued", "submitted"];
 
-/** What was charged, for the History column. A job that never reached the
- *  model cost $0; a local one is free; a run whose price is unknown says so. */
-export function costText(job: Pick<BgJob, "status" | "price_mode" | "actual_usd">): string {
+/** Did this job actually call a model? Its result records the tokens it used. */
+const ranModel = (job: { result_meta?: Record<string, unknown> }) =>
+  Number(job.result_meta?.input_tokens ?? 0) + Number(job.result_meta?.output_tokens ?? 0) > 0;
+
+/** What was charged, for the History column. A job that never reached the model
+ *  cost $0 (the worker records 0 for it); zero WITH tokens is a free model; a
+ *  failed run's spend is not recorded, so it shows a dash rather than a guess. */
+export function costText(job: Pick<BgJob, "status" | "price_mode" | "actual_usd"> & { result_meta?: Record<string, unknown> }): string {
   if (job.actual_usd === null) {
-    if (["cancelled", "expired", "skipped", "budget_blocked", "queued", "failed"].includes(job.status)) return "$0";
+    if (["cancelled", "expired", "skipped", "budget_blocked", "queued"].includes(job.status)) return "$0";
+    if (job.status === "failed" || !ranModel(job)) return "—";
     return job.price_mode === "local" ? "free" : "price unknown";
   }
+  if (job.actual_usd === 0 && !ranModel(job) && job.price_mode !== "local") return "$0";
   return usdText(job.actual_usd);
 }
 
 /** The honest cost line for an expanded row. A saving is claimed only when the
  *  job ran at batch price AND both prices are known. */
-export function costLine(job: Pick<ActivityJob, "price_mode" | "actual_usd" | "live_equivalent_usd">): string {
+export function costLine(job: Pick<ActivityJob, "price_mode" | "actual_usd" | "live_equivalent_usd" | "result_meta">): string {
   const { price_mode: mode, actual_usd: paid, live_equivalent_usd: live } = job;
   if (paid === null) return mode === "local" ? "Free" : "Price unknown";
-  if (paid === 0) return "Free";
+  if (paid === 0) return ranModel(job) || mode === "local" ? "Free" : "Nothing was spent — it never reached the model";
   if (mode === "batch" && live !== null && live > paid) {
     return `Paid ${usdText(paid)} · the same job run now would be ${usdText(live)} · saved ${usdText(live - paid)}`;
   }
@@ -242,7 +251,7 @@ export function timeline(job: ActivityJob): { label: string; at: string }[] {
     ["queued", job.created_at], ["started", job.started_at], ["finished", job.finished_at],
     ["applied", job.applied_at], ["discarded", job.discarded_at]];
   return steps.filter((s): s is [string, string] => !!s[1])
-    .map(([label, at]) => ({ label, at: clockText(new Date(at)) + ` (${whenShort(at)})` }));
+    .map(([label, at]) => ({ label, at: whenShort(at) }));
 }
 
 export const EMPTY_ACTIVITY =
@@ -260,3 +269,10 @@ export const putJobSettings = (monthly_cap_usd: number) =>
     { method: "PUT", body: JSON.stringify({ monthly_cap_usd }) });
 export const deleteJob = (id: string) => call<{ ok: boolean }>(`/${id}`, { method: "DELETE" });
 export const getJobDetail = (id: string) => call<{ sources: { id: string; title: string }[] }>(`/${id}/detail`);
+
+/** Fired after anything that changes what is waiting (dismiss, apply, cancel…),
+ *  so the sidebar's badge updates now instead of at its next poll. */
+export const JOBS_CHANGED = "jobs:changed";
+export const announceJobsChanged = () => {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(JOBS_CHANGED));
+};

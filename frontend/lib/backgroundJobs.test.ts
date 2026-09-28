@@ -55,6 +55,10 @@ describe("stateLine", () => {
     expect(stateLine(job({ status: "submitted" }))).toBe("Running now");
     expect(stateLine(job({ status: "failed", error: "no sources are ready yet" }))).toBe("Failed — no sources are ready yet");
     expect(stateLine(job({ status: "cancelled", cancel_reason: "by you" }))).toBe("Cancelled — by you");
+    // the server's refusal already begins "Not started" — never say it twice
+    expect(stateLine(job({ status: "budget_blocked", error: "Not started — about $0.05 would pass your $0.01 monthly limit" })))
+      .toBe("Not started — about $0.05 would pass your $0.01 monthly limit");
+    expect(stateLine(job({ status: "budget_blocked", error: "over the monthly limit" }))).toBe("Not started — over the monthly limit");
   });
 });
 
@@ -82,8 +86,21 @@ describe("costText", () => {
     expect(costText(done({ status: "cancelled", actual_usd: null }))).toBe("$0");
     expect(costText(done({ status: "budget_blocked", actual_usd: null }))).toBe("$0");
     expect(costText(done({ status: "applied", actual_usd: 0, price_mode: "local" }))).toBe("free");
-    expect(costText(done({ status: "applied", actual_usd: null }))).toBe("price unknown");
+    expect(costText(done({ status: "applied", actual_usd: null, result_meta: { input_tokens: 10, output_tokens: 5 } }))).toBe("price unknown");
     expect(costText(done({ actual_usd: 0.041 }))).toBe("$0.04");
+  });
+});
+
+describe("costText after a dismissed refusal", () => {
+  it("shows $0 for a job that never reached the model, wherever it ended up", () => {
+    expect(costText(done({ status: "discarded", actual_usd: 0, result_meta: {} }))).toBe("$0");
+    expect(costText(done({ status: "discarded", actual_usd: 0,
+      result_meta: { input_tokens: 800, output_tokens: 400 } }))).toBe("free");   // a free model that ran
+    expect(costText(done({ status: "failed", actual_usd: null }))).toBe("—");       // spend unknown, not $0
+  });
+  it("explains a zero in the expanded row", () => {
+    expect(costLine(done({ actual_usd: 0, result_meta: {} }))).toMatch(/never reached the model/);
+    expect(costLine(done({ actual_usd: 0, result_meta: { input_tokens: 5 } }))).toBe("Free");
   });
 });
 
@@ -113,5 +130,6 @@ describe("words", () => {
     expect(whenShort(new Date(2026, 7, 1, 9).toISOString(), at(15))).toMatch(/Aug|1/);
     const t = timeline(done({ started_at: at(22).toISOString(), applied_at: at(23).toISOString() }));
     expect(t.map((s) => s.label)).toEqual(["queued", "started", "applied"]);
+    expect(t[0].at).not.toContain("(");           // one time per step, not two
   });
 });

@@ -40,7 +40,7 @@ test("monthly limit: refused before the model, visible in Activity, sidebar and 
     await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();      // nonsense is refused
     await cap.fill("0.01");
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("status")).toContainText("Saved — the limit is $0.01 a month.");
+    await expect(page.getByTestId("settings-note")).toContainText("Saved — the limit is $0.01 a month.");
     await page.screenshot({ path: path.join(OUT, "01-settings.png") });
 
     // ── a note with one source, then queue and run a job ──────────────────
@@ -68,7 +68,7 @@ test("monthly limit: refused before the model, visible in Activity, sidebar and 
     await page.screenshot({ path: path.join(OUT, "02-refused-on-card.png") });
     const jobs = (await (await page.request.get(`/api/ws/jobs?note_id=${noteId}`)).json()).jobs;
     jobId = jobs[0].id;
-    expect(jobs[0].actual_usd).toBeNull();                                         // nothing was spent
+    expect(jobs[0].actual_usd).toBe(0);                                              // nothing was spent
 
     // the bell heard about it
     await expect.poll(async () => {
@@ -83,12 +83,14 @@ test("monthly limit: refused before the model, visible in Activity, sidebar and 
     await expect(needs).toContainText(/monthly limit/, { timeout: 30_000 });
     await expect(needs.getByRole("link", { name: /change limit/i })).toHaveAttribute("href", "/brain/settings/background-jobs");
     await expect(page.getByTestId("month-line")).toContainText(/This month: .* of \$0\.01/);
+    await expect(needs).not.toContainText("Not started — Not started");           // said once
     await expect(page.getByTestId("activity-badge")).toBeVisible();
     await page.screenshot({ path: path.join(OUT, "03-activity-needs-you.png") });
 
     // ── Dismiss → History → expand ────────────────────────────────────────
     await needs.getByRole("button", { name: /dismiss/i }).click();
     await expect(page.getByTestId("needs-you")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByTestId("activity-badge")).toHaveCount(0, { timeout: 10_000 });   // updates at once, not at the next poll
     const row = page.getByTestId("history-row").first();
     await expect(row).toContainText(/Discarded/);
     await expect(row).toContainText("$0");

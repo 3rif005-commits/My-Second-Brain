@@ -223,9 +223,12 @@ def delete_job(job_id: str, authorization: str = Header()):
 @router.post("/{job_id}/cancel")
 def cancel_job(job_id: str, authorization: str = Header()):
     user_id = get_user_id(authorization)
-    _job(job_id, user_id)
+    before = _job(job_id, user_id)
+    # Cancelled while still waiting, nothing was spent; a running job may have
+    # spent something already, so its cost stays unknown rather than "$0".
+    extra = {"actual_usd": 0} if before["status"] == "queued" else {}
     row = store.transition(job_id, store.CANCELLABLE, status="cancelled",
-                           finished_at=store.now_iso(), cancel_reason="by you")
+                           finished_at=store.now_iso(), cancel_reason="by you", **extra)
     if not row:
         _fail(409, "This job has already finished.")
     return _brief(row)
