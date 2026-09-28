@@ -14,7 +14,7 @@ transition, tests touching the user's real notes clean up after themselves.
 | M2 | Activity page + caps | ✅ done, live-verified |
 | M3 | Batch mode (Anthropic Message Batches) | ✅ done, live-verified (real batch, half price confirmed) |
 | M4 | When a source is added | code complete, blocked on migration 027 for the live pass |
-| M5 | Schedules + staleness | todo |
+| M5 | Schedules + staleness | backend done, frontend + live pass next |
 
 ## M1 pieces
 - [x] migration `025_ai_jobs.sql` (user applies)
@@ -88,3 +88,40 @@ the existing open job instead of creating one; note deleted → its trigger is d
 ## Log (M4)
 - 2026-09-28 · M4 backend+frontend done: extracted `services/jobs/queue.py` (shared price/eligibility decision between "Run later" and a trigger firing, so a trigger never charges more than the number a click would have shown) — router tests retargeted accordingly, no behaviour change. `services/jobs/triggers.py` (debounced settle, dedupe by source set, deleted-note cleanup), wired into `processor.py`'s settle points (success AND failure — a failed source must not stall the debounce forever), a scheduler tick alongside `_tick_jobs`, `GET/PUT /jobs/notes/{id}/trigger`, and the rail's "When I add a source here" line (`SourceTrigger.tsx`). 18 new trigger tests (2 mutations verified to fail them) + 5 router tests; backend jobs suite 115, full backend suite 1900 passed (unrelated pgtest errors unchanged). Frontend: 1194 passed across the whole suite.
 - **Live pass blocked**: migration 027 (`ai_job_triggers.next_check_at` + one-trigger-per-note) is not applied yet — `next_check_at` does not exist on the live table. Checked directly against Supabase.
+
+## M5 pieces
+Decisions: cadence reuses `services/db/templates.py`'s `repeat_config` shape verbatim
+(daily/weekly, UTC, no per-user timezone anywhere in this codebase — same gap the row-templates
+feature already documented and accepted) so `next_occurrence`/`seed_next_run_at` are reused, not
+reimplemented; catch-up POLICY differs from row templates on purpose — collapses to the latest
+occurrence, logs the rest as $0 `skipped` rows, instead of firing once per missed period; the two
+pauses (month cap, 3-unopened) are computed live each tick from `ai_jobs`, not a stored boolean,
+so a month-cap pause lifts itself once spend resets; Resume also marks the 3 stale results opened,
+or the very next tick would re-pause on the same 3. Stale check reuses `ai_jobs.source_hash`
+(present since migration 025, unused until now) + the new `source_signature` helper, which M4's
+dedupe key does NOT switch to (different job: same-ready-ids vs also-catches-re-extraction).
+- [x] migration 028 (`last_source_signature`, `paused_kind`) — user applies
+- [x] `services/workspace/synthesis.source_signature`, `services/jobs/stale.py` (staleness check)
+- [x] `services/jobs/schedule.py` (cadence CRUD, catch-up, skip-if-unchanged, both pauses)
+- [x] scheduler tick `_tick_job_schedules`
+- [x] API: `GET/POST /jobs/schedules`, `PUT/DELETE /jobs/schedules/{id}`, `POST .../resume`;
+      `GET /jobs/{id}` now returns `stale`
+- [x] backend tests: 21 schedule + 8 stale (4 schedule mutations verified to fail them); jobs
+      suite 153, full backend suite 1938 passed (unrelated pgtest errors unchanged)
+- [ ] frontend: stale banner on the ready card (done — see log); Settings → Background jobs
+      "Schedules" section (list, new-schedule form, pause/resume, delete); "Repeat weekly…"
+      entry from the Run-later menu — **deferred**, Settings is the primary entry point and
+      ships first
+- [ ] live pass (needs migrations 027 AND 028 applied — neither is yet)
+- [ ] **explicitly deferred, not forgotten**: the AI-providers key-removal warning
+      ("N background jobs use this key") — touches Settings → AI providers, a page outside
+      this feature; lowest-value item in the spec's own edge-case table
+
+## Log (M5)
+- 2026-09-28 · Stale check shipped end to end: `GET /jobs/{id}` returns `stale`, the ready
+  card shows the exact sentence ('Made from an older version of "Slides.pdf".' /
+  'Made from a source you have since deleted.'), Put in note still works either way. Found
+  and fixed the same import-order footgun as M4 (routers/jobs.py's new module-level
+  `source_signature` import got captured by `no_real_supabase`'s poisoned reference before
+  any test patched it) — same fix pattern: patch the name the caller imported, not the
+  module it came from.

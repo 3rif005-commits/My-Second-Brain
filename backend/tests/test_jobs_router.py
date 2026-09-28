@@ -18,7 +18,9 @@ def env():
     fake = FakeDB(notes=[{"id": "n1", "user_id": "u1", "title": "Lecture 10", "deleted_at": None},
                          {"id": "n2", "user_id": "someone-else", "title": "X", "deleted_at": None}])
     provider = Provider("anthropic", capabilities={"text"})          # no batch API unless a test adds one
-    with patch("routers.jobs.skill_run.ready_sources", return_value=[{"id": "s1"}]), patch("services.database.get_supabase", return_value=fake), \
+    with patch("routers.jobs.skill_run.ready_sources", return_value=[{"id": "s1"}]), \
+         patch("routers.jobs.source_signature", return_value="s1:2026-01-01"), \
+         patch("services.database.get_supabase", return_value=fake), \
          patch("routers.jobs.get_supabase", return_value=fake), \
          patch("routers.jobs.get_user_id", return_value="u1"), \
          patch("services.jobs.queue.pick", return_value=provider), \
@@ -105,6 +107,33 @@ def test_opening_a_ready_result_returns_it_and_marks_it_opened(env):
     body = client.get(f"/jobs/{jid}", headers=AUTH).json()
     assert body["result_html"] == "<p>x</p>"
     assert db.tables["ai_jobs"][0]["opened_at"]
+
+
+def test_queueing_stamps_the_sources_it_was_made_from(env):
+    client, db = env
+    with patch("routers.jobs.source_signature", return_value="s1:distinct-value"):
+        jid = _queue(client).json()["id"]
+    assert db.tables["ai_jobs"][0]["source_hash"] == "s1:distinct-value"
+
+
+def test_a_ready_job_says_whether_its_sources_have_changed_since(env):
+    client, db = env
+    jid = _queue(client).json()["id"]
+    db.tables["ai_jobs"][0].update(status="ready", result_html="<p>x</p>",
+                                   source_hash="s1:old", source_ids=["s1"])
+    with patch("routers.jobs.stale.check", return_value={"reason": "changed", "message": "stale!"}) as chk:
+        body = client.get(f"/jobs/{jid}", headers=AUTH).json()
+    assert body["stale"] == {"reason": "changed", "message": "stale!"}
+    chk.assert_called_once_with("s1:old", ["s1"], "n1")
+
+
+def test_a_job_not_ready_is_never_checked_for_staleness(env):
+    client, db = env
+    jid = _queue(client).json()["id"]
+    with patch("routers.jobs.stale.check") as chk:
+        body = client.get(f"/jobs/{jid}", headers=AUTH).json()
+    assert body["stale"] is None
+    chk.assert_not_called()
 
 
 def test_applied_and_discard_only_work_on_a_finished_job(env):
@@ -387,3 +416,64 @@ def test_a_strangers_note_refuses_the_trigger(env):
     client, _ = env
     assert client.get("/jobs/notes/n2/trigger", headers=AUTH).status_code == 404
     assert client.put("/jobs/notes/n2/trigger", json={"skill": "flashcards"}, headers=AUTH).status_code == 404
+
+
+# ── schedules: GET/POST /jobs/schedules, PUT/DELETE/{id}, resume ─────────────
+
+WEEKLY = {"frequency": "weekly", "weekdays": [7], "time_of_day": "22:00", "start_date": "2026-09-06"}
+
+
+def test_creating_a_schedule_and_listing_it_with_the_notes_title(env):
+    client, db = env
+    res = client.post("/jobs/schedules", json={"note_id": "n1", "skill": "flashcards",
+                                               "cadence": WEEKLY, "month_cap_usd": 2.0}, headers=AUTH)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["skill"] == "flashcards" and body["month_cap_usd"] == 2.0 and body["next_check_at"]
+    listed = client.get("/jobs/schedules", headers=AUTH).json()["schedules"]
+    assert len(listed) == 1 and listed[0]["note_title"] == "Lecture 10"
+    assert listed[0]["month_spent_usd"] == 0
+
+
+def test_a_bad_cadence_is_refused_with_the_reason(env):
+    client, _ = env
+    res = client.post("/jobs/schedules", json={"note_id": "n1", "skill": "flashcards",
+                                               "cadence": {"frequency": "monthly"}}, headers=AUTH)
+    assert res.status_code == 400 and "daily or weekly" in res.json()["detail"]["error"]
+
+
+def test_a_selection_skill_cannot_be_scheduled(env):
+    client, _ = env
+    res = client.post("/jobs/schedules", json={"note_id": "n1", "skill": "define-terms",
+                                               "cadence": WEEKLY}, headers=AUTH)
+    assert res.status_code == 400
+
+
+def test_updating_a_schedules_cap_and_deleting_it(env):
+    client, db = env
+    sid = client.post("/jobs/schedules", json={"note_id": "n1", "skill": "flashcards",
+                                              "cadence": WEEKLY}, headers=AUTH).json()["id"]
+    updated = client.put(f"/jobs/schedules/{sid}", json={"month_cap_usd": 3.5}, headers=AUTH)
+    assert updated.json()["month_cap_usd"] == 3.5
+    assert client.delete(f"/jobs/schedules/{sid}", headers=AUTH).status_code == 200
+    assert client.get("/jobs/schedules", headers=AUTH).json()["schedules"] == []
+
+
+def test_updating_a_strangers_schedule_404s(env):
+    client, db = env
+    sid = client.post("/jobs/schedules", json={"note_id": "n1", "skill": "flashcards",
+                                              "cadence": WEEKLY}, headers=AUTH).json()["id"]
+    with patch("routers.jobs.get_user_id", return_value="intruder"):
+        assert client.put(f"/jobs/schedules/{sid}", json={"month_cap_usd": 9}, headers=AUTH).status_code == 404
+        assert client.delete(f"/jobs/schedules/{sid}", headers=AUTH).status_code == 404
+
+
+def test_resuming_a_schedule(env):
+    client, db = env
+    sid = client.post("/jobs/schedules", json={"note_id": "n1", "skill": "flashcards",
+                                              "cadence": WEEKLY}, headers=AUTH).json()["id"]
+    db.tables["ai_job_triggers"][0].update(paused_reason="Paused — you haven't opened the last 3 results",
+                                          paused_kind="unopened")
+    res = client.post(f"/jobs/schedules/{sid}/resume", headers=AUTH)
+    assert res.json()["paused_reason"] is None
+    assert client.post("/jobs/schedules/does-not-exist/resume", headers=AUTH).status_code == 404

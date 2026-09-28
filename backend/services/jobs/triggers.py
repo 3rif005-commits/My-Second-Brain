@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from services import database
 from services.jobs import queue as job_queue
 from services.jobs import store
-from services.workspace.synthesis import _PENDING, ready_sources
+from services.workspace.synthesis import _PENDING, ready_sources, source_signature
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +146,6 @@ def fire_one(trigger: dict, now: datetime) -> dict | None:
         shown_estimate_usd=q["usd"], live_equivalent_usd=q["live_usd"] if q["price_mode"] == "batch" else None,
         cap_usd=settings.max_usd_per_run or None, model=q["model"],
         provider=q["provider"].provider if q["provider"] else None,
-        source_ids=ready_ids, dedupe_key=dedupe_key)
+        source_ids=ready_ids, dedupe_key=dedupe_key, source_hash=source_signature(note_id))
     _t().update({"last_run_at": now.isoformat()}).eq("id", trigger["id"]).execute()
     return row

@@ -31,6 +31,9 @@ def db(monkeypatch):
                   note_resources=[{"id": "s1", "note_id": "n1", "status": "ready", "order_index": 0}])
     monkeypatch.setattr(triggers, "ready_sources", lambda nid: [
         r for r in fake.tables["note_resources"] if r["note_id"] == nid and r["status"] == "ready"])
+    monkeypatch.setattr(triggers, "source_signature", lambda nid: ",".join(sorted(
+        f"{r['id']}:{r.get('updated_at', '')}" for r in fake.tables["note_resources"]
+        if r["note_id"] == nid and r["status"] == "ready")))
     monkeypatch.setattr(job_queue, "pick", lambda *a, **k: PROVIDER)
     monkeypatch.setattr(job_queue.skill_run, "chat_skills", lambda *a, **k: [PRICED])
     with patch("services.database.get_supabase", return_value=fake):

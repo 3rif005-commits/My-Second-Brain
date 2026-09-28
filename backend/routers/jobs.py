@@ -16,9 +16,10 @@ from pydantic import BaseModel
 
 from routers.ingest import get_user_id
 from services.database import get_supabase
-from services.jobs import batch, caps, queue as job_queue, store, triggers, worker
+from services.jobs import batch, caps, queue as job_queue, schedule as job_schedule, stale, store, triggers, worker
 from services.jobs.notify import notify
 from services.workspace import skill_run
+from services.workspace.synthesis import source_signature
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -41,6 +42,20 @@ class AppliedRequest(BaseModel):
 
 class TriggerRequest(BaseModel):
     skill: str | None = None   # None (or omitted) means "Suggest" — turn it off
+
+
+class ScheduleRequest(BaseModel):
+    note_id: str
+    skill: str
+    cadence: dict
+    month_cap_usd: float = 1.00
+
+
+class ScheduleUpdate(BaseModel):
+    skill: str | None = None
+    cadence: dict | None = None
+    month_cap_usd: float | None = None
+    enabled: bool | None = None
 
 
 class SettingsRequest(BaseModel):
@@ -125,7 +140,8 @@ def queue_job(body: QueueRequest, authorization: str = Header()):
         trigger="run_later", run_after=run_after.isoformat(), price_mode=mode,
         shown_estimate_usd=shown, live_equivalent_usd=live if mode == "batch" else None,
         cap_usd=settings.max_usd_per_run or None,
-        model=quote["model"], provider=provider.provider if provider else None)
+        model=quote["model"], provider=provider.provider if provider else None,
+        source_hash=source_signature(body.note_id))
     return _brief(row)
 
 
@@ -176,6 +192,68 @@ def put_trigger(note_id: str, body: TriggerRequest, authorization: str = Header(
         _fail(400, f"{body.skill!r} cannot run in the background.")
     row = triggers.set_trigger(note_id, user_id, body.skill)
     return {"skill": row["skill"]}
+
+
+def _schedule_brief(row: dict, note_title: str | None = None) -> dict:
+    return {"id": row["id"], "note_id": row.get("note_id"), "note_title": note_title,
+            "skill": row["skill"], "cadence": row.get("cadence"),
+            "month_cap_usd": row.get("month_cap_usd"), "enabled": row.get("enabled"),
+            "paused_reason": row.get("paused_reason"), "paused_kind": row.get("paused_kind"),
+            "last_run_at": row.get("last_run_at"), "next_check_at": row.get("next_check_at"),
+            "month_spent_usd": caps.trigger_month_spend(row["id"])}
+
+
+@router.get("/schedules")
+def list_schedules(authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    rows = job_schedule.list_schedules(user_id)
+    titles = {}
+    ids = [r["note_id"] for r in rows if r.get("note_id")]
+    if ids:
+        for n in get_supabase().table("notes").select("id,title").in_("id", ids).execute().data or []:
+            titles[n["id"]] = n.get("title") or "Untitled"
+    return {"schedules": [_schedule_brief(r, titles.get(r.get("note_id"))) for r in rows]}
+
+
+@router.post("/schedules")
+def create_schedule(body: ScheduleRequest, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    _own_note(body.note_id, user_id)
+    try:
+        row = job_schedule.create_schedule(user_id, body.note_id, body.skill, body.cadence, body.month_cap_usd)
+    except job_schedule.ScheduleError as e:
+        _fail(400, str(e))
+    return _schedule_brief(row)
+
+
+@router.put("/schedules/{trigger_id}")
+def put_schedule(trigger_id: str, body: ScheduleUpdate, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    try:
+        row = job_schedule.update_schedule(trigger_id, user_id, **fields)
+    except job_schedule.ScheduleError as e:
+        _fail(400, str(e))
+    if not row:
+        _fail(404, "Schedule not found")
+    return _schedule_brief(row)
+
+
+@router.delete("/schedules/{trigger_id}")
+def remove_schedule(trigger_id: str, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    if not job_schedule.delete_schedule(trigger_id, user_id):
+        _fail(404, "Schedule not found")
+    return {"ok": True}
+
+
+@router.post("/schedules/{trigger_id}/resume")
+def resume_schedule(trigger_id: str, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    row = job_schedule.resume(trigger_id, user_id)
+    if not row:
+        _fail(404, "Schedule not found")
+    return _schedule_brief(row)
 
 
 @router.get("/activity")
@@ -236,12 +314,19 @@ def put_settings(body: SettingsRequest, authorization: str = Header()):
 @router.get("/{job_id}")
 def get_job(job_id: str, authorization: str = Header()):
     """The full job, result included. Opening a ready result is what the
-    "you never opened the last 3" rule (M5) counts."""
+    "you never opened the last 3" rule counts. A ready job also carries
+    `stale`: whether the sources it was made from have since changed."""
     user_id = get_user_id(authorization)
     row = _job(job_id, user_id)
     if row["status"] == "ready" and not row.get("opened_at"):
         store.transition(job_id, "ready", opened_at=store.now_iso())
-    return {k: v for k, v in row.items() if k not in ("source_hash", "dedupe_key")}
+    stale_note = None
+    if row["status"] == "ready" and row.get("note_id"):
+        try:
+            stale_note = stale.check(row.get("source_hash"), row.get("source_ids") or [], row["note_id"])
+        except Exception:                                        # noqa: BLE001
+            logger.warning("job %s: staleness check failed", job_id, exc_info=True)
+    return {**{k: v for k, v in row.items() if k not in ("source_hash", "dedupe_key")}, "stale": stale_note}
 
 
 @router.get("/{job_id}/detail")

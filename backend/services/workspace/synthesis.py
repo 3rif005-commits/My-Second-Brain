@@ -89,6 +89,16 @@ def ready_sources(note_id: str) -> list[dict]:
             .order("order_index").execute().data or [])
 
 
+def source_signature(note_id: str) -> str:
+    """What "this note's material" means right now: every ready source, paired
+    with when it last changed. Re-extracting a source (a retry) bumps its
+    `updated_at` the same as adding or removing one — any of the three makes
+    a different signature. Used to tell a schedule "nothing changed" and to
+    flag a background result as made from an older version (harness 5.3)."""
+    rows = ready_sources(note_id)
+    return ",".join(sorted(f"{r['id']}:{r.get('updated_at') or ''}" for r in rows))
+
+
 def _write(note_id: str, user_id: str, patch: dict) -> None:
     # `applied_at` belongs to the draft that was applied, so any write that moves
     # this row to a new draft must clear it — a PostgREST upsert only touches the

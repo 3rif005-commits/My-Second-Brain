@@ -44,6 +44,7 @@ _TICK_INTERVAL_SECONDS = 60
 _JOB_ID = "db_scheduler_tick"
 _JOBS_JOB_ID = "background_jobs_tick"
 _TRIGGERS_JOB_ID = "background_job_triggers_tick"
+_SCHEDULES_JOB_ID = "background_job_schedules_tick"
 
 _scheduler: AsyncIOScheduler | None = None
 
@@ -186,6 +187,15 @@ async def _tick_job_triggers() -> None:
         logger.exception("scheduler tick: job triggers pass failed")
 
 
+async def _tick_job_schedules() -> None:
+    """Schedules (5.3, milestone 5): fire whichever are due."""
+    from services.jobs import schedule
+    try:
+        await asyncio.to_thread(schedule.fire_due)
+    except Exception:
+        logger.exception("scheduler tick: job schedules pass failed")
+
+
 def start_scheduler() -> None:
     """Idempotent: a second call while already running is a no-op (matches
     `get_pool()`'s own "creating it on first call" posture)."""
@@ -198,6 +208,8 @@ def start_scheduler() -> None:
                       id=_JOBS_JOB_ID, max_instances=1, coalesce=True)
     scheduler.add_job(_tick_job_triggers, IntervalTrigger(seconds=_TICK_INTERVAL_SECONDS),
                       id=_TRIGGERS_JOB_ID, max_instances=1, coalesce=True)
+    scheduler.add_job(_tick_job_schedules, IntervalTrigger(seconds=_TICK_INTERVAL_SECONDS),
+                      id=_SCHEDULES_JOB_ID, max_instances=1, coalesce=True)
     scheduler.start()
     _scheduler = scheduler
 

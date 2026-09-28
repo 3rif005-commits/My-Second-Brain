@@ -67,6 +67,21 @@ def month_spend(user_id: str, now: datetime | None = None) -> float:
         start += PAGE
 
 
+def trigger_month_spend(trigger_id: str, now: datetime | None = None) -> float:
+    """What THIS trigger has spent so far this calendar month — a schedule's
+    own $1/month default is judged against this, not the account total."""
+    since = month_start(now).isoformat()
+    total, start = 0.0, 0
+    while True:
+        rows = (database.get_supabase().table("ai_jobs").select("actual_usd")
+                .eq("trigger_id", trigger_id).gte("created_at", since)
+                .range(start, start + PAGE - 1).execute().data or [])
+        total += sum(float(r["actual_usd"]) for r in rows if r.get("actual_usd") is not None)
+        if len(rows) < PAGE:
+            return round(total, 6)
+        start += PAGE
+
+
 def preflight(user_id: str, estimate_usd: float | None, cap_usd: float | None,
               now: datetime | None = None) -> str | None:
     """Why this job must not start, or None. The sentence is the job's error."""
