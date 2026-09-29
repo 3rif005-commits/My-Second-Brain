@@ -325,7 +325,7 @@ The ~448 `test_db_*` / `test_note_row` errors are a missing local Postgres on
       extra), guides follow them (Key takeaways 1/11 → 9/9 after the end
       reminder), quality guard PASS. $0.34. Card: `experiments/E12-student-style.md`.
 - [x] 5.3 Background agents (triggers, budgets, activity page) on the Batch API — **done 2026-09-29**, all 5 milestones live-verified. See `docs/superpowers/specs/2026-09-28-background-jobs-design.md` and its progress ledger `docs/superpowers/plans/2026-09-28-background-jobs-progress.md` for the full record (Run later → Activity+caps → batch/half-price → source-added trigger → schedules).
-- [~] 5.4 Remote MCP server + per-user OAuth (the subscription bridge) — **done**, see `docs/superpowers/plans/2026-09-27-remote-mcp.md` (Phases 1-3, tunnel, edit/delete approval, live-tested). **Not done**: MCP Apps UI.
+- [~] 5.4 Remote MCP server + per-user OAuth (the subscription bridge) — **done**, see `docs/superpowers/plans/2026-09-27-remote-mcp.md` (Phases 1-3, tunnel, edit/delete approval, live-tested). **Done 2026-09-29**: MCP Apps UI (SEP-1865, ratified Jan 2026). See the design note below and `docs/superpowers/plans/2026-09-29-mcp-apps-ui.md`.
 
 ---
 

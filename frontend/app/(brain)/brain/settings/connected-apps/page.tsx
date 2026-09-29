@@ -4,7 +4,8 @@
 // Brain (claude.ai, ChatGPT… through the remote MCP server), and the edits or
 // deletes they asked for. Nothing changes in a note until you approve it; a
 // delete moves the note to the Trash.
-import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppWindow, Check, PencilLine, Trash2, X } from "lucide-react";
 
 interface App { client_id: string; name: string; connected_at: string }
@@ -21,6 +22,11 @@ export default function ConnectedAppsPage() {
   const [setup, setSetup] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  // A connected app's MCP Apps card links here with ?change=<id> (5.4) — the
+  // sandboxed view has no session of its own, so "Review in Second Brain"
+  // just brings the user to the exact waiting change, on the same real page.
+  const highlightId = useSearchParams().get("change");
+  const highlighted = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const r = await fetch("/api/ws/connected-apps");
@@ -29,6 +35,14 @@ export default function ConnectedAppsPage() {
     setApps(data.apps ?? []); setPending(data.pending ?? []); setSetup(data.setup ?? "");
   }, []);
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!highlightId || highlighted.current.has(highlightId)) return;
+    const el = document.getElementById(`change-${highlightId}`);
+    if (!el) return;                                    // not loaded yet, or already decided
+    highlighted.current.add(highlightId);
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [highlightId, pending]);
 
   async function decide(id: string, approve: boolean) {
     setBusy(id); setError("");
@@ -63,7 +77,11 @@ export default function ConnectedAppsPage() {
         {pending.length === 0 && <p className="text-sm text-gray-500">Nothing is waiting.</p>}
         <div className="space-y-3">
           {pending.map((c) => (
-            <div key={c.id} className="rounded-xl ring-1 ring-gray-200 dark:ring-white/10 p-4" data-testid="pending-change">
+            <div key={c.id} id={`change-${c.id}`} data-testid="pending-change"
+              className={`rounded-xl ring-1 p-4 transition-shadow ${
+                c.id === highlightId
+                  ? "ring-2 ring-indigo-400 shadow-[0_0_0_4px_rgba(99,102,241,0.15)]"
+                  : "ring-gray-200 dark:ring-white/10"}`}>
               <div className="flex items-center gap-2 text-sm">
                 {c.action === "delete" ? <Trash2 size={15} className="text-red-500" /> : <PencilLine size={15} className="text-indigo-500" />}
                 <span className="font-medium text-gray-900 dark:text-gray-100">

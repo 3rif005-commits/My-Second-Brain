@@ -23,6 +23,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _preview(text: str | None, limit: int = 280) -> str:
+    """A short excerpt for a card, not the model-facing full text — "…" only
+    when something was actually cut, never claimed otherwise."""
+    text = (text or "").strip()
+    return text[:limit] + "…" if len(text) > limit else text
+
+
 def _note(user_id: str, note_id: str) -> dict | None:
     rows = (get_supabase().table("notes").select("id,title,content_text,deleted_at")
             .eq("id", note_id).eq("user_id", user_id).execute().data or [])
@@ -40,7 +47,14 @@ def propose(user_id: str, client_id: str, note_id: str, action: str,
         "user_id": user_id, "client_id": client_id, "note_id": note_id,
         "action": action, "payload": payload or {}, "reason": (reason or "")[:500],
     }).execute().data[0]
-    return {"change_id": row["id"], "status": "pending", "note_title": note["title"]}
+    out = {"change_id": row["id"], "status": "pending", "note_title": note["title"],
+           "action": action,
+           # Short previews for the MCP Apps card (harness 5.4) — the tool's own
+           # response already has this text, so the view needs no extra call.
+           "current_text_preview": _preview(note["content_text"])}
+    if action == "update":
+        out["new_text_preview"] = _preview((payload or {}).get("content_markdown"))
+    return out
 
 
 def status(user_id: str, client_id: str, change_id: str) -> dict | None:

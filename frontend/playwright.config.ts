@@ -84,7 +84,7 @@ export default defineConfig({
     // The remote MCP server (5.4), live and free: Allow page, token, tools.
     {
       name: "mcp-remote",
-      testMatch: "**/mcp-remote-live.spec.ts",
+      testMatch: ["**/mcp-remote-live.spec.ts", "**/mcp-apps-live.spec.ts"],
       dependencies: ["auth-setup"],
       use: { storageState: AUTH_FILE },
       retries: 0,

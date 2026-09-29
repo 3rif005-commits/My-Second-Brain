@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from typing import Any
 from urllib.parse import urlparse
 
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -27,6 +28,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from mcp_remote.apps import MIME_TYPE as UI_MIME_TYPE
+from mcp_remote.apps import PENDING_CHANGE_HTML, RESOURCE_URI as PENDING_CHANGE_URI
 from mcp_remote.oauth import SCOPE, SecondBrainOAuth, SupabaseStore
 
 PUBLIC_URL = os.environ.get("MCP_PUBLIC_URL", "http://localhost:8765").rstrip("/")
@@ -62,6 +65,19 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
             allowed_hosts=sorted({"localhost:8765", "127.0.0.1:8765", _public_host}),
             allowed_origins=sorted({f"http://localhost:8765", PUBLIC_URL})),
     )
+
+
+    # MCP Apps (SEP-1865): a card for a pending change, shown inline in the
+    # host's chat when it supports the extension; a host that does not just
+    # shows the tool's own text result instead (the spec's own fallback).
+    @mcp.resource(
+        PENDING_CHANGE_URI, name="pending_change_card",
+        description="A read-only preview of a change waiting for the user's approval.",
+        mime_type=UI_MIME_TYPE,
+        meta={"ui": {"prefersBorder": True}},
+    )
+    def pending_change_resource() -> str:
+        return PENDING_CHANGE_HTML
 
 
     def _user() -> str:
@@ -176,9 +192,14 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
     def _client() -> str:
         return get_access_token().client_id
 
-    @mcp.tool()
+    _APPROVAL_UI = {"ui": {"resourceUri": PENDING_CHANGE_URI}}
+
+    def _reviewed(out: dict) -> dict:
+        return {**out, "message": _WAITING, "review_url": f"{FRONTEND_URL}/brain/settings/connected-apps"}
+
+    @mcp.tool(meta=_APPROVAL_UI, structured_output=True)
     async def update_note(note_id: str, content_markdown: str, title: str = "",
-                          reason: str = "") -> dict:
+                          reason: str = "") -> dict[str, Any]:
         """ASK to replace an existing note's text (Markdown) and, optionally, its
         title. Nothing changes until the user approves it in Second Brain."""
         user_id, client_id = _user(), _client()
@@ -193,10 +214,10 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
             out = await asyncio.to_thread(run)
         except ValueError as e:
             return {"error": str(e)}
-        return {**out, "message": _WAITING}
+        return _reviewed(out)
 
-    @mcp.tool()
-    async def delete_note(note_id: str, reason: str = "") -> dict:
+    @mcp.tool(meta=_APPROVAL_UI, structured_output=True)
+    async def delete_note(note_id: str, reason: str = "") -> dict[str, Any]:
         """ASK to move a note to the Trash. Nothing happens until the user
         approves it in Second Brain; a deleted note can be restored."""
         user_id, client_id = _user(), _client()
@@ -208,7 +229,7 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
             out = await asyncio.to_thread(run)
         except ValueError as e:
             return {"error": str(e)}
-        return {**out, "message": _WAITING}
+        return _reviewed(out)
 
     @mcp.tool()
     async def check_change(change_id: str) -> dict:

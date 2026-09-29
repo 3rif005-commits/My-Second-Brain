@@ -242,6 +242,69 @@ def test_an_edit_is_only_asked_for_and_says_so(server):
     assert "NOT DONE YET" in text and "ch1" in text
 
 
+def test_update_and_delete_point_at_the_pending_change_card(server):
+    """MCP Apps (5.4): the two tools that create a pending change carry the UI
+    meta a supporting host uses to render it inline; other tools don't."""
+    c, _, _ = server
+    _, tok = _connect(c)
+    status, data = _call(c, tok["access_token"], "tools/list")
+    assert status == 200, data
+    tools = {t["name"]: t for t in data["result"]["tools"]}
+    for name in ("update_note", "delete_note"):
+        assert tools[name]["_meta"]["ui"]["resourceUri"] == "ui://second-brain/pending-change"
+    for name in ("search_notes", "list_notes", "get_note", "create_note", "check_change"):
+        assert not (tools[name].get("_meta") or {}).get("ui")
+
+
+def test_the_pending_change_card_is_a_real_mcp_apps_resource(server):
+    c, _, _ = server
+    _, tok = _connect(c)
+    status, data = _call(c, tok["access_token"], "resources/read",
+                         {"uri": "ui://second-brain/pending-change"})
+    assert status == 200, data
+    content = data["result"]["contents"][0]
+    assert content["mimeType"] == "text/html;profile=mcp-app"
+    assert "ui/initialize" in content["text"]
+    assert "ui/notifications/tool-result" in content["text"]
+    assert "<script src" not in content["text"]          # no external script — nothing to CSP-allow
+
+
+def test_an_edit_carries_previews_and_a_review_link_for_the_card(server):
+    c, _, _ = server
+    _, tok = _connect(c)
+    note = {"id": "n1", "title": "Q-Learning", "content_text": "x" * 400, "deleted_at": None}
+    with patch("services.connected_apps._note", return_value=note), \
+         patch("services.connected_apps.get_supabase") as db:
+        db.return_value.table.return_value.insert.return_value.execute.return_value.data = [
+            {"id": "ch1"}]
+        status, data = _call(c, tok["access_token"], "tools/call", {"name": "update_note",
+            "arguments": {"note_id": "n1", "content_markdown": "y" * 400, "reason": "fix typo"}})
+    assert status == 200, data
+    assert "NOT DONE YET" in data["result"]["content"][0]["text"]     # a plain-text host still sees the message
+    result = data["result"]["structuredContent"]
+    assert result["action"] == "update" and result["change_id"] == "ch1"
+    assert result["current_text_preview"] == "x" * 280 + "…"
+    assert result["new_text_preview"] == "y" * 280 + "…"
+    assert result["review_url"] == "http://localhost:3000/brain/settings/connected-apps"
+
+
+def test_a_delete_carries_its_own_preview_but_no_after_text(server):
+    c, _, _ = server
+    _, tok = _connect(c)
+    note = {"id": "n1", "title": "Q-Learning", "content_text": "short text", "deleted_at": None}
+    with patch("services.connected_apps._note", return_value=note), \
+         patch("services.connected_apps.get_supabase") as db:
+        db.return_value.table.return_value.insert.return_value.execute.return_value.data = [
+            {"id": "ch2"}]
+        status, data = _call(c, tok["access_token"], "tools/call", {"name": "delete_note",
+            "arguments": {"note_id": "n1", "reason": "duplicate"}})
+    assert status == 200, data
+    result = data["result"]["structuredContent"]
+    assert result["action"] == "delete"
+    assert result["current_text_preview"] == "short text"
+    assert "new_text_preview" not in result
+
+
 def test_a_search_hit_carries_a_citation_link_to_its_block(server):
     c, _, _ = server
     _, tok = _connect(c)
