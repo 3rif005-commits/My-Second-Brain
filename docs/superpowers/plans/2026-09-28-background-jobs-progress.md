@@ -14,7 +14,7 @@ transition, tests touching the user's real notes clean up after themselves.
 | M2 | Activity page + caps | ✅ done, live-verified |
 | M3 | Batch mode (Anthropic Message Batches) | ✅ done, live-verified (real batch, half price confirmed) |
 | M4 | When a source is added | ✅ done, live-verified |
-| M5 | Schedules + staleness | code complete, blocked on migrations 027+028 for the live pass |
+| M5 | Schedules + staleness | ✅ done, live-verified |
 
 ## M1 pieces
 - [x] migration `025_ai_jobs.sql` (user applies)
@@ -141,3 +141,21 @@ dedupe key does NOT switch to (different job: same-ready-ids vs also-catches-re-
   `isVisible()` check — that raced and missed the button once). Added `aria-label` to
   `SourceTrigger`'s select (was unnamed for assistive tech — a real accessibility gap, not
   just a test convenience). Test note trashed, no leftover trigger or job rows.
+- 2026-09-29 · M5 live pass GREEN against the real backend, the real Supabase, and the real
+  scheduler tick (no mocks): `background-schedule-setup` (free) created a real weekly schedule
+  on a real note through the actual API. Its `next_check_at` was fast-forwarded to now directly
+  in the database (the only practical way to observe a weekly cadence without waiting a week);
+  everything AFTER that point — the scheduler noticing it, firing it, pricing it at half price
+  ($0.0266, correctly judged batch-eligible), stamping its `source_hash`, advancing
+  `next_check_at` to the next Sunday, and setting `last_run_at` — happened on its own, in the
+  live backend process, exactly as production would. The resulting `queued` job was cancelled
+  before the worker's next tick could send it, so this cost nothing real. A second fast-forward
+  with nothing changed produced the OTHER path: a $0 `skipped` row, "Skipped — nothing new since
+  last run" — proving skip-if-unchanged against real data, not a fake DB. Schedule, jobs, and the
+  test note were all removed afterward.
+- **Harness item 5.3 (background jobs) is now complete**: M1 (run later) → M2 (Activity + caps)
+  → M3 (batch/half price) → M4 (source-added trigger) → M5 (schedules + staleness), all five
+  live-verified against the real app. Remaining, by choice, for later: the "Repeat weekly…"
+  shortcut from the Run-later menu (Settings already covers schedule creation) and the
+  AI-providers key-removal warning (touches a page outside this feature; the spec's own
+  lowest-priority edge case).

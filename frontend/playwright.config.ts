@@ -127,6 +127,17 @@ export default defineConfig({
       retries: 0,
     },
 
+    // Background jobs, M5 live-pass helper: creates a real note + schedule
+    // and prints its ids for a companion script to fast-forward. Free.
+    {
+      name: "background-schedule-setup",
+      testMatch: "**/background-schedule-setup.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      timeout: 240_000,
+      retries: 0,
+    },
+
     // Background jobs, M4: "when a source is added", live and free — two
     // sources settling close together must produce one job, waiting out the
     // real 2-minute debounce and the scheduler's own tick. Trashes its note.
