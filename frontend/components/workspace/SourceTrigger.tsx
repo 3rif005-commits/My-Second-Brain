@@ -48,6 +48,7 @@ export function SourceTrigger({ noteId }: { noteId: string }) {
         <Clock size={11} className="shrink-0" />
         <span className="shrink-0">When I add a source here:</span>
         <select
+          aria-label="When I add a source here"
           value={skill ?? SUGGEST}
           disabled={loading || saving || runnable.length === 0}
           onChange={(e) => void choose(e.target.value)}

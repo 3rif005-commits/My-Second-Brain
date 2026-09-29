@@ -127,6 +127,18 @@ export default defineConfig({
       retries: 0,
     },
 
+    // Background jobs, M4: "when a source is added", live and free — two
+    // sources settling close together must produce one job, waiting out the
+    // real 2-minute debounce and the scheduler's own tick. Trashes its note.
+    {
+      name: "background-trigger",
+      testMatch: "**/background-trigger-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      timeout: 400_000,
+      retries: 0,
+    },
+
     {
       name: "run-card",
       testMatch: "**/run-card-failure.spec.ts",

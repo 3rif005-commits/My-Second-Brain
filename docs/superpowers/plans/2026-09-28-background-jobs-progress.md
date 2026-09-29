@@ -13,7 +13,7 @@ transition, tests touching the user's real notes clean up after themselves.
 | M1 | Run later (normal/local price): `ai_jobs` + migration 025, worker tick, API, bell, card in note, split send button, Cancel | ✅ done, live-verified |
 | M2 | Activity page + caps | ✅ done, live-verified |
 | M3 | Batch mode (Anthropic Message Batches) | ✅ done, live-verified (real batch, half price confirmed) |
-| M4 | When a source is added | code complete, blocked on migration 027 for the live pass |
+| M4 | When a source is added | ✅ done, live-verified |
 | M5 | Schedules + staleness | code complete, blocked on migrations 027+028 for the live pass |
 
 ## M1 pieces
@@ -132,3 +132,12 @@ dedupe key does NOT switch to (different job: same-ready-ids vs also-catches-re-
   `GET /jobs/notes/{id}/trigger` (M4's endpoint) for eligibility/reasons, and `GET /jobs/quote`
   for the real half-price/normal decision — no separate pricing path to keep in sync.
   Frontend suite: 1207 passed, tsc clean.
+- 2026-09-29 · M4 live pass GREEN (`--project=background-trigger`, free, waited the real 2-minute
+  debounce + scheduler tick, no fast-forward). Attach → turn on "New sources → Flashcards
+  (background)" in the rail → attach a second source → exactly one job (`trigger: source_added`),
+  not two. Found live: the account's sources panel was left collapsed from an earlier manual
+  session — the SourceTrigger select has no way to become visible until the rail is expanded;
+  the test now opens it first (`click()`'s own actionability retry, not a racy one-shot
+  `isVisible()` check — that raced and missed the button once). Added `aria-label` to
+  `SourceTrigger`'s select (was unnamed for assistive tech — a real accessibility gap, not
+  just a test convenience). Test note trashed, no leftover trigger or job rows.
