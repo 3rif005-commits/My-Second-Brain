@@ -113,6 +113,21 @@ def _insert_chunks(resource: dict, chunks: list[dict]) -> None:
 
 
 def process_resource(resource_id: str) -> None:
+    """Extract one source. Its text, figures and formulas go to models on the
+    note's behalf, so the note's privacy level applies (services/privacy.py)."""
+    from services import privacy
+    try:
+        owner = (get_supabase().table("note_resources").select("note_id,user_id")
+                 .eq("id", resource_id).limit(1).execute().data or [])
+    except Exception:                                    # noqa: BLE001
+        owner = []
+    if not owner:
+        return _process_resource(resource_id)
+    with privacy.handling([owner[0]["note_id"]], str(owner[0]["user_id"])):
+        return _process_resource(resource_id)
+
+
+def _process_resource(resource_id: str) -> None:
     db = get_supabase()
     rows = db.table("note_resources").select("*").eq("id", resource_id).execute().data
     if not rows:

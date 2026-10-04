@@ -16,8 +16,17 @@ from mcp_remote.server import build
 REDIRECT = "http://localhost:9999/callback"
 
 
+#: Note levels the privacy gate sees in these tests (services/privacy.py):
+#: every note is personal unless a test marks it private.
+PRIVATE: set[str] = set()
+
+
 @pytest.fixture
-def server():
+def server(monkeypatch):
+    from services import privacy
+    PRIVATE.clear()
+    monkeypatch.setattr(privacy, "fetch_levels", lambda ids, uid: {
+        i: {"level": "private" if i in PRIVATE else "personal", "title": i} for i in ids})
     store = MemoryStore()
     app, oauth = build(store, public_url="http://localhost:8765",
                        frontend_url="http://localhost:3000")
@@ -318,3 +327,25 @@ def test_a_search_hit_carries_a_citation_link_to_its_block(server):
     text = json.dumps(data)
     assert "[Q-Learning](http://localhost:3000/brain/n1#blk-7)" in text
     assert "cite_rule" in text
+
+
+def test_a_private_note_never_reaches_a_connected_app(server):
+    c, _, _ = server
+    _, tok = _connect(c)
+    PRIVATE.add("n2")
+    hits = [{"id": "n1", "title": "Q-Learning", "content_text": "Bellman", "deep_link": "/brain/n1"},
+            {"id": "n2", "title": "Health log", "content_text": "SECRET-DIAGNOSIS", "deep_link": "/brain/n2"}]
+    with patch("services.embedder.embed", return_value=[0.0]), \
+         patch("services.retriever.retrieve", return_value=hits):
+        _, data = _call(c, tok["access_token"], "tools/call",
+                        {"name": "search_notes", "arguments": {"query": "Q"}})
+    text = json.dumps(data)
+    assert "Q-Learning" in text and "SECRET-DIAGNOSIS" not in text and "Health log" not in text
+
+    note = {"id": "n2", "title": "Health log", "content_text": "SECRET-DIAGNOSIS", "deleted_at": None}
+    with patch("services.connected_apps._note", return_value=note), \
+         patch("services.connected_apps.get_supabase") as db:
+        _, data = _call(c, tok["access_token"], "tools/call", {"name": "delete_note",
+            "arguments": {"note_id": "n2"}})
+        db.return_value.table.return_value.insert.assert_not_called()
+    assert "private" in json.dumps(data) and "SECRET-DIAGNOSIS" not in json.dumps(data)

@@ -181,3 +181,159 @@ def refuse_note(note_id: str | None, user_id: str, provider) -> str | None:
     return (f"This note is {level}, and the editor AI runs on {where}, which "
             f"may only see {ceiling} notes. Change the note's privacy level, "
             "or ask about it in chat on Local.")
+
+
+# ---- whole-note work: synthesis, skills, jobs, source processing -----------
+#
+# Chat cuts its context to fit the provider (scope + filter_rows). Work that
+# runs over one note's sources cannot be cut — the sources ARE the job — so it
+# goes the other way: the job declares which notes it reads (`handling`), and
+# the provider must be allowed to see all of them. `router.candidates` skips
+# providers that may not, so a private note's job falls to the local model
+# where the job allows one; `check_provider`, called by every client entry
+# point, refuses the send if anything still gets through. Nothing here relies
+# on the caller choosing a provider correctly.
+
+class PrivacyBlocked(RuntimeError):
+    """User-facing: the request would send notes to a provider not allowed to
+    see them."""
+
+
+@dataclass
+class Need:
+    level: str
+    user_id: str
+    untrusted: frozenset[str]
+    titles: list[str] = field(default_factory=list)
+
+
+_need: ContextVar[Need | None] = ContextVar("privacy_need", default=None)
+
+
+def _untrusted(user_id: str) -> frozenset[str]:
+    from services.routing.policy import load
+    return frozenset(load(user_id)["privacy"]["untrusted"])
+
+
+@contextmanager
+def handling(note_ids: Iterable[str | None], user_id: str) -> Iterator[Need]:
+    """Everything inside reads these notes. Nests: the strictest level wins."""
+    ids = sorted({str(i) for i in note_ids if i})
+    found = fetch_levels(ids, user_id) if ids else {}
+    if found is None:                                   # fail closed
+        level, titles = "private", []
+    else:
+        # A note not found (just created, or not this user's) adds nothing:
+        # its text is not what the job sends.
+        levels = [v["level"] for v in found.values()] or ["open"]
+        level = max(levels, key=lambda lv: _RANK[lv])
+        titles = [v["title"] or "Untitled" for v in found.values() if v["level"] == level]
+    outer = _need.get()
+    if outer is not None and _RANK[outer.level] > _RANK[level]:
+        level, titles = outer.level, outer.titles
+    need = Need(level=level, user_id=user_id, untrusted=_untrusted(user_id),
+                titles=titles)
+    token = _need.set(need)
+    try:
+        yield need
+    finally:
+        _need.reset(token)
+
+
+def needed() -> Need | None:
+    return _need.get()
+
+
+def blocks(p) -> str | None:
+    """Why this provider may not take the current work, or None."""
+    need = _need.get()
+    if need is None or need.level == "open":
+        return None
+    ceiling = ceiling_for(p, need.untrusted)
+    if allows(ceiling, need.level):
+        return None
+    which = f"“{need.titles[0]}”" if len(need.titles) == 1 else "this note"
+    where = getattr(p, "label", "") or p.provider
+    return (f"{which} is {need.level}, and {where} may only see {ceiling} notes. "
+            + ("Run it on the local model, or change the note's privacy level."
+               if need.level == "private" else
+               "Trust the provider in Settings → Routing → Privacy, or change the note's level."))
+
+
+def check_provider(p) -> None:
+    """Called by every client entry point just before a request is sent."""
+    msg = blocks(p)
+    if msg:
+        raise PrivacyBlocked(msg)
+
+
+def _owner(note_id: str) -> str:
+    from services.database import get_supabase
+    try:
+        rows = (get_supabase().table("notes").select("user_id")
+                .eq("id", note_id).limit(1).execute().data or [])
+    except Exception:                                    # noqa: BLE001
+        rows = []
+    return str(rows[0]["user_id"]) if rows else ""
+
+
+def reads_note(fn):
+    """Decorator for `fn(note_id, user_id, ...)` — or `fn(note_id, ...)`, when
+    the owner is looked up — that sends the note's sources to a model. Works
+    on plain functions and on async generators."""
+    import functools
+    import inspect
+
+    params = list(inspect.signature(fn).parameters)
+    has_user = len(params) > 1 and params[1] == "user_id"
+
+    def _ids(args, kwargs) -> tuple[str, str]:
+        note_id = str(args[0] if args else kwargs.get("note_id") or "")
+        if has_user:
+            user_id = args[1] if len(args) > 1 else kwargs.get("user_id")
+        else:
+            user_id = _owner(note_id) if note_id else ""
+        return note_id, str(user_id or "")
+
+    if inspect.isasyncgenfunction(fn):
+        @functools.wraps(fn)
+        async def agen(*args, **kwargs):
+            note_id, user_id = _ids(args, kwargs)
+            with handling([note_id], user_id):
+                async for item in fn(*args, **kwargs):
+                    yield item
+        return agen
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        note_id, user_id = _ids(args, kwargs)
+        with handling([note_id], user_id):
+            return fn(*args, **kwargs)
+    return wrapper
+
+
+# ---- apps outside this one (MCP: Claude, ChatGPT, desktop clients) -----------
+
+#: An app the user connected is treated like a trusted cloud provider: it sees
+#: open and personal notes, never private ones.
+OUTSIDE_APP_CEILING = "personal"
+
+
+def for_outside_app(rows: list[dict], user_id: str, id_key: str = "id") -> list[dict]:
+    """Rows an outside app may receive."""
+    with scope(OUTSIDE_APP_CEILING, user_id):
+        return filter_rows(rows, id_key=id_key)
+
+
+def outside_app_may_see(note_id: str, user_id: str) -> bool:
+    return bool(for_outside_app([{"id": note_id}], user_id))
+
+
+def filter_query_result(result: dict, user_id: str) -> dict:
+    """A database query result (rows, or grouped rows) for an outside app."""
+    if isinstance(result.get("rows"), list):
+        result["rows"] = for_outside_app(result["rows"], user_id)
+    for g in result.get("groups") or []:
+        if isinstance(g, dict) and isinstance(g.get("rows"), list):
+            g["rows"] = for_outside_app(g["rows"], user_id)
+    return result

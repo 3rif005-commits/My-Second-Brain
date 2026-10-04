@@ -139,13 +139,15 @@ def gather_pairs(user_id: str, skill: str = SKILL) -> list[tuple[str, str]]:
     if not rows:
         return []
     notes = {str(n["id"]): n for n in (
-        db.table("notes").select("id,content,updated_at,deleted_at")
+        db.table("notes").select("id,content,updated_at,deleted_at,local_only")
         .in_("id", list({str(r["note_id"]) for r in rows})).eq("user_id", user_id)
         .execute().data or [])}
     pairs, seen = [], set()
     for r in rows:
         note = notes.get(str(r["note_id"]))
         if not note or note.get("deleted_at") or str(r["note_id"]) in seen:
+            continue
+        if note.get("local_only"):                  # private: never sent to learn from
             continue
         seen.add(str(r["note_id"]))                 # the latest guide per note
         inserted = datetime.fromisoformat(str(r["created_at"]).replace("Z", "+00:00"))

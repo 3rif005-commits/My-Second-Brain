@@ -24,6 +24,7 @@ from pathlib import Path
 
 from core.config import settings
 from prompts.note_synthesis import TOTAL_SOURCE_BUDGET, _source_block, split_budget
+from services import privacy
 from services.agent.skills import Skill, SkillRegistry
 from services.ai import budget as budget_guard
 from services.ai import usage as usage_log
@@ -137,6 +138,7 @@ def _blocks_for(note_id: str) -> tuple[list[dict], list[str]]:
     return blocks, [s["id"] for s in sources]
 
 
+@privacy.reads_note
 def estimate(note_id: str, user_id: str, skill: Skill,
              loaded: tuple[list[dict], list[str]] | None = None) -> dict:
     """What this skill would cost on this note. No model call. `loaded` is the
@@ -194,6 +196,7 @@ def _runnable(skill: Skill, source_count: int,
     return "comparing needs at least two sources"
 
 
+@privacy.reads_note
 def run_skill(note_id: str, user_id: str, skill_name: str,
               mode: str = "replace") -> None:
     """Run one skill over the note's sources and leave a draft behind.
@@ -341,6 +344,7 @@ def _focused(prompt: str, focus: str) -> str:
             "Follow every instruction above, and shape the result around it.")
 
 
+@privacy.reads_note
 def produce_skill_result(note_id: str, user_id: str, name: str,
                          focus: str = "", trigger: str = "user") -> dict:
     """Run one skill over the note's sources and RETURN the result.
@@ -438,6 +442,7 @@ def batch_eligible(name: str, source_count: int, focus: str = "") -> bool:
     return True
 
 
+@privacy.reads_note
 def batch_call(note_id: str, user_id: str, name: str, focus: str = "") -> BatchCall | None:
     """The request the job would send now, or None when it cannot be one call.
     Raises ValueError, with a reason, when it cannot run at all."""

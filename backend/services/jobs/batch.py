@@ -18,6 +18,7 @@ import httpx
 
 from services.ai.client import _anthropic_headers, _anthropic_payload
 from services.ai.providers import Provider
+from services import privacy
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,7 @@ def parse_results(jsonl: str) -> dict[str, Outcome]:
 class AnthropicBatches:
     def submit(self, p: Provider, custom_id: str, messages: list[dict], max_tokens: int) -> str:
         """Send one request as its own batch; returns the batch id."""
+        privacy.check_provider(p)
         params = _anthropic_payload(p, messages, max_tokens, stream=False)
         body = {"requests": [{"custom_id": custom_id, "params": params}]}
         return _check(httpx.post(API, headers=_anthropic_headers(p), json=body, timeout=TIMEOUT))["id"]

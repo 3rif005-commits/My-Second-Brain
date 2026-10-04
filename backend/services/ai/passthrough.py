@@ -26,6 +26,7 @@ from services.ai import budget as budget_guard
 from services.ai import usage as usage_log
 from services.ai.providers import Provider
 from services.ai.router import candidates
+from services import privacy
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,7 @@ async def stream_passthrough(provider: Provider, payload: dict, *, surface: str,
     An error response is converted into one SSE `error` event, because a client
     that receives nothing at all shows the user nothing at all.
     """
+    privacy.check_provider(provider)
     url, headers, default_model = endpoint_for(provider)
     body = {**payload, "model": model or default_model, "stream": True}
     request_chars = len(json.dumps(body, default=str))

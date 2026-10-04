@@ -21,6 +21,7 @@ from core.config import settings
 from prompts.note_synthesis import (build_note_synthesis_prompt, cache_split,
                                      split_budget)
 from prompts.note_synthesis_md import build_markdown_synthesis_prompt
+from services import privacy
 from services.ai.client import complete, last_call_truncated
 from services.ai import budget as budget_guard
 from services.ai import usage as usage_log
@@ -206,6 +207,7 @@ def _prompt_overhead_chars(markdown: bool = False) -> int:
         return 8_000
 
 
+@privacy.reads_note
 def estimate_synthesis(note_id: str, user_id: str, method: str | None = None) -> dict:
     """What one synthesis over this note's ready sources would cost.
 
@@ -395,6 +397,7 @@ def synthesis_messages(prompt: str, cache: bool | None = None) -> list[dict]:
         {"type": "text", "text": rest}]}]
 
 
+@privacy.reads_note
 def run_synthesis(note_id: str, mode: str = "replace",
                   trigger: str = "user") -> None:
     """`trigger` only reaches the run log: it is how "what did auto-generation

@@ -83,6 +83,10 @@ _gemini_client = None
 
 def _embed_gemini(text: str) -> list[float]:
     global _gemini_client
+    # Embedding a note sends its text to Google: same rule as any model call.
+    from services import privacy
+    from services.ai.providers import Provider
+    privacy.check_provider(Provider("gemini", label="Gemini embeddings"))
     from google import genai
     from google.genai import types as genai_types
     if _gemini_client is None:

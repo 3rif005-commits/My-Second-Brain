@@ -32,6 +32,7 @@ from services.ai.client import (
     _openai_url, _raise_stream_error, _to_anthropic, _to_openai_messages,
 )
 from services.ai.providers import Provider
+from services import privacy
 
 _TIMEOUT = 300
 
@@ -430,6 +431,7 @@ async def stream_agent(p: Provider, messages: list[dict],
                        tools: list[dict] | None = None,
                        max_tokens: int = 2048) -> AsyncIterator[dict[str, Any]]:
     """One model turn for the agent loop, as provider-agnostic events."""
+    privacy.check_provider(p)
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         if p.provider == "anthropic":
             async for ev in _stream_anthropic(client, p, messages, tools or [],

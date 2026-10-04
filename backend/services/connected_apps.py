@@ -43,6 +43,10 @@ def propose(user_id: str, client_id: str, note_id: str, action: str,
     note = _note(user_id, note_id)
     if not note:
         raise ChangeError("No note with that id in this Second Brain.")
+    # The approval card carries the note's text back to the app.
+    from services import privacy
+    if not privacy.outside_app_may_see(note_id, user_id):
+        raise ChangeError("That note is private: outside apps cannot read or change it.")
     row = get_supabase().table("mcp_pending_changes").insert({
         "user_id": user_id, "client_id": client_id, "note_id": note_id,
         "action": action, "payload": payload or {}, "reason": (reason or "")[:500],

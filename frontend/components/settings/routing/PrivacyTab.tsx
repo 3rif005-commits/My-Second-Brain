@@ -102,8 +102,10 @@ export function PrivacyTab({ policy, onChange, targets }: Props) {
           ))}
         </div>
         <p className="mt-2 text-[12px] text-gray-400">
-          Covered now: chat and the workspace panel, the agent’s note tools, and the editor AI. Ingest and
-          background jobs are not routed yet.
+          Applies everywhere notes reach a model: chat and the workspace panel, note tools, the editor AI,
+          study guides and other skills, background jobs, source processing, indexing, and apps you connect
+          over MCP (they never see Private notes). A job on a Private note runs on the local model, or
+          stops and says why.
         </p>
       </section>
     </div>

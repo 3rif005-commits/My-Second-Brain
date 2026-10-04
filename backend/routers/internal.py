@@ -10,6 +10,7 @@ from core.config import settings
 from models.database import QueryRequest
 from routers.databases import get_database, list_databases, query_rows
 from routers.ingest import get_user_id
+from services import privacy
 from services.agent.brain_tools import coerce_property_write, require_uuid
 from services.database import get_supabase
 from services.db import rows as rows_service
@@ -53,7 +54,7 @@ def internal_search(body: SearchRequest, x_internal_key: str = Header()):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Embedding failed: {e}")
 
-    results = retrieve(query_embedding, body.user_id)
+    results = privacy.for_outside_app(retrieve(query_embedding, body.user_id), body.user_id)
     return {"results": results[: body.top_k]}
 
 
@@ -72,6 +73,8 @@ def internal_get_note(body: NoteRequest, x_internal_key: str = Header()):
     )
     if _res is None or not _res.data:
         raise HTTPException(status_code=404, detail="Note not found")
+    if not privacy.outside_app_may_see(body.note_id, body.user_id):
+        raise HTTPException(status_code=403, detail="That note is private: it stays on the user's device.")
     return _res.data
 
 
@@ -88,7 +91,7 @@ def internal_list_notes(user_id: str, x_internal_key: str = Header()):
         .limit(100)
         .execute()
     )
-    return {"notes": result.data or []}
+    return {"notes": privacy.for_outside_app(result.data or [], user_id)}
 
 
 @router.post("/reindex-note")
@@ -234,7 +237,8 @@ async def internal_query_database(
         result = await query_rows(
             body.data_source_id, query_body, user_id=body.user_id, conn=conn
         )
-    return result.model_dump(mode="json", exclude_none=True)
+    return privacy.filter_query_result(
+        result.model_dump(mode="json", exclude_none=True), body.user_id)
 
 
 @router.post("/db/create_row")
@@ -301,6 +305,9 @@ async def internal_update_row(body: UpdateRowRequest, x_internal_key: str = Head
         require_uuid(body.note_id, "note_id")
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    if not privacy.outside_app_may_see(body.note_id, body.user_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "That row is private: outside apps cannot read or change it.")
 
     pool = await get_pool()
     async with pool.acquire() as conn:

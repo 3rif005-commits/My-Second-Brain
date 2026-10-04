@@ -127,6 +127,14 @@ def formula_to_latex(image_bytes: bytes, user_id: str) -> str:
     from services.ai.router import candidates, complete_with_fallback
 
     if not candidates("formula_ocr", user_id):
+        from services import privacy
+        if privacy.needed() is not None:
+            # Providers exist but the note's privacy level rules them out.
+            from services.ai.providers import list_providers
+            why = next((privacy.blocks(p) for p in list_providers(user_id)
+                        if "vision" in p.capabilities and privacy.blocks(p)), None)
+            if why:
+                raise CaptureError(why)
         raise CaptureError(
             "No vision-capable AI provider configured. Add a Gemini/OpenAI/Anthropic "
             "key in Settings → AI Providers to enable formula → LaTeX."

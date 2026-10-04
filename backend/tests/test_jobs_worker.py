@@ -152,7 +152,9 @@ def test_the_worker_writes_nothing_outside_the_jobs_table(db):
     with patch.object(worker.skill_run, "produce_skill_result", return_value=RESULT):
         worker.run_due(NOW)
     assert db.tables["notes"] == before_notes
-    assert set(db.tables) <= {"ai_jobs", "notes"}
+    # routing_policies is read (which providers the note's level allows), never written
+    assert not db.tables.get("routing_policies")
+    assert set(db.tables) - {"routing_policies"} <= {"ai_jobs", "notes"}
 
 
 def test_the_bell_message_names_the_job_the_note_and_the_link():

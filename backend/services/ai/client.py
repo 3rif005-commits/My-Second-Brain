@@ -22,6 +22,7 @@ import httpx
 
 from services.ai import usage as usage_log
 from services.ai.providers import Provider
+from services import privacy
 
 _TIMEOUT = 300
 
@@ -239,6 +240,9 @@ def last_call_truncated() -> bool:
 def complete(p: Provider, messages: list[dict], max_tokens: int = 4096) -> str:
     """Every completion in the app comes through here, so this is where the run
     log is written — one place, no call site to forget."""
+    # Before anything leaves: a job reading a private note never reaches a
+    # provider that may not see it, whoever picked the provider.
+    privacy.check_provider(p)
     # estimate_chars covers the failure path (a call that dies mid-stream still
     # spent its input); on success the estimate is redone below with the real
     # output length, unless the provider reported actual usage.
@@ -379,6 +383,7 @@ async def stream(p: Provider, messages: list[dict],
     """Same run-log contract as complete(): one row per call, whatever the
     provider. The accumulator lives for the whole generator, so a chat turn is
     one row rather than one per delta."""
+    privacy.check_provider(p)
     out_chars = 0
     with usage_log.track(p.provider, p.model,
                          estimate_chars=(_messages_chars(messages), 0)) as u:

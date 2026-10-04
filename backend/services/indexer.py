@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from services import privacy
 from services.block_chunker import parse as parse_blocks
 from services.database import get_supabase
 from services.db.properties.format import format_property_value
@@ -151,6 +152,7 @@ def _with_property_preamble(note_id: str, user_id: str, blocks: list[dict]) -> l
     return [preamble_chunk, *renumbered]
 
 
+@privacy.reads_note
 def index_note(note_id: str, user_id: str) -> bool:
     """Fetch, chunk, embed and describe a single note. Returns True on success."""
     db = get_supabase()

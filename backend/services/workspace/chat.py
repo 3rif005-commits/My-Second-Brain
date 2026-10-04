@@ -17,6 +17,7 @@ import logging
 import re
 from typing import Any, AsyncIterator
 
+from services import privacy
 from services.database import get_supabase
 from services.embedder import embed
 from services.hybrid_search import fuse
@@ -175,6 +176,7 @@ def skills_notice(skills: list[dict]) -> str:
         f"- {s['skill']}: {s.get('description', '')}" for s in skills))
 
 
+@privacy.reads_note
 async def run_skill_in_chat(note_id: str, user_id: str, name: str, focus: str = "",
                             picked: bool = False) -> AsyncIterator[dict[str, Any]]:
     """One job, as chat events: skill_start, then result (or error)."""
@@ -190,6 +192,7 @@ async def run_skill_in_chat(note_id: str, user_id: str, name: str, focus: str = 
     yield {"type": "result", **result}
 
 
+@privacy.reads_note
 async def run_note_chat(
     note_id: str,
     user_id: str,

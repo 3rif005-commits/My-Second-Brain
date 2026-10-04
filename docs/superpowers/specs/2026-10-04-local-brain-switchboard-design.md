@@ -315,5 +315,14 @@ The architecture doesn't depend on it. To get going with daily use:
   cloud turn sees a placeholder instead.
 - **Frontend:** `Auto ▾` chip, route badge + "why" popover with Ask again on, privacy
   prompt, note Privacy selector (replaces Local-only), Settings → Routing (5 tabs).
-- **Not yet routed:** ingest, workspace synthesis, background jobs (Activity / Privacy tab
-  say so). Rule → spec deviation: rules reorder with up/down buttons, not drag.
+- **P3 privacy (same day):** whole-note work cannot be cut to fit a provider, so it
+  declares its notes (`privacy.handling` / `@privacy.reads_note`): synthesis, skills,
+  batch + background jobs, source processing (formula OCR), indexing, Gemini embeddings.
+  `router.candidates` drops providers the note's level rules out (a private note's job
+  falls to local), and every client entry point (`complete`, `stream`, `stream_agent`,
+  passthrough, batch submit) calls `check_provider` before sending. Connected apps (remote
+  MCP + the desktop MCP server's /internal endpoints) are treated as a trusted cloud
+  provider: they never receive private notes, and cannot propose changes to them.
+- **Still not switchboard-routed** (they pick providers by the old chain, under the gate):
+  synthesis, skills, jobs. Ingest only creates new notes. Rules reorder with up/down
+  buttons, not drag.

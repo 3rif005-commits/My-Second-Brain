@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+from services import privacy
 from services import database
 from services.ai import budget as budget_guard
 from services.ai import usage as usage_log
@@ -153,6 +154,13 @@ def _provider_for(job: dict) -> Provider | None:
 
 
 def run_one(job: dict, now: datetime) -> dict | None:
+    """One due job. It reads its note's sources, so the note's privacy level
+    rules out providers before one is planned or sent to."""
+    with privacy.handling([job.get("note_id")], str(job.get("user_id") or "")):
+        return _run_one(job, now)
+
+
+def _run_one(job: dict, now: datetime) -> dict | None:
     note = _note(job.get("note_id"))
     if note is None:
         row = store.transition(job["id"], "queued", status="cancelled",
@@ -321,6 +329,13 @@ def _collect(job: dict) -> dict | None:
 
 
 def plan_for(job: dict) -> dict:
+    """The plan under the job's note's privacy level (a private note plans on
+    the local model). See _plan_for."""
+    with privacy.handling([job.get("note_id")], str(job.get("user_id") or "")):
+        return _plan_for(job)
+
+
+def _plan_for(job: dict) -> dict:
     """How this job would run if it started now, and what that costs: the price
     mode, the provider and model, the amount at that mode, and the live amount.
     Any failure to look falls back to the normal price with the queued estimate —

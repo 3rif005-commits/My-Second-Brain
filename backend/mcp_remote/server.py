@@ -20,6 +20,7 @@ import os
 from typing import Any
 from urllib.parse import urlparse
 
+from services import privacy
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.fastmcp import FastMCP
@@ -106,6 +107,8 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
             from services.retriever import retrieve
             return retrieve(embed(query), user_id, query=query)
         hits = await asyncio.to_thread(run)
+        # Private notes never leave this machine — this app is outside it.
+        hits = await asyncio.to_thread(privacy.for_outside_app, hits, user_id)
         out, seen = [], set()
         for h in hits:
             key = (h["id"], h["content_text"][:80])
@@ -138,6 +141,7 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
                     .order("updated_at", desc=True).limit(max(1, min(limit, 100)))
                     .execute().data or [])
         rows = await asyncio.to_thread(run)
+        rows = await asyncio.to_thread(privacy.for_outside_app, rows, user_id)
         return [{"note_id": r["id"], "title": r["title"] or "Untitled",
                  "updated_at": r["updated_at"], "link": _link(r["id"]),
                  "cite": f"[{r['title'] or 'Untitled'}]({_link(r['id'])})"} for r in rows]
@@ -155,6 +159,8 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
                     .eq("id", note_id).eq("user_id", user_id).is_("deleted_at", "null")
                     .execute().data or [])
         rows = await asyncio.to_thread(run)
+        if rows and not await asyncio.to_thread(privacy.outside_app_may_see, note_id, user_id):
+            return {"error": "That note is private: it stays on the user's device."}
         if not rows:
             return {"error": "No note with that id in this Second Brain."}
         r = rows[0]

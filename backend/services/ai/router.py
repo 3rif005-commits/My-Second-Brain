@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from services import privacy
 from services.ai.providers import Provider, list_providers
 
 _JOB_CHAINS: dict[str, list[str]] = {
@@ -41,6 +42,9 @@ def candidates(job: str, user_id: str, providers: list[Provider] | None = None) 
     pool = providers if providers is not None else list_providers(user_id)
     if job in _NO_LOCAL:
         pool = [p for p in pool if p.provider != "local"]
+    # A job declared as reading a private (or personal) note only gets
+    # providers allowed to see it — for a private note, the local model.
+    pool = [p for p in pool if privacy.blocks(p) is None]
     out: list[Provider] = []
     for cap in chain:
         for p in pool:
@@ -108,7 +112,17 @@ def complete_with_fallback(job: str, user_id: str, messages: list[dict],
     from services.ai import usage as usage_log
 
     errors: list[str] = []
-    for p in with_model_override(candidates(job, user_id), model_override):
+    chain = with_model_override(candidates(job, user_id), model_override)
+    if not chain and privacy.needed() is not None:
+        # Every provider was ruled out by the note's level: say that, not
+        # "none configured".
+        everyone = with_model_override(
+            [p for p in list_providers(user_id)
+             if job not in _NO_LOCAL or p.provider != "local"], model_override)
+        reasons = [privacy.blocks(p) for p in everyone]
+        raise privacy.PrivacyBlocked(next((r for r in reasons if r), "This note's privacy "
+                                          "level rules out every provider for this job."))
+    for p in chain:
         try:
             # Each attempt is its own run row: a fallback chain that burned two
             # providers cost two calls, and the log should say so.
