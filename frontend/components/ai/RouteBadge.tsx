@@ -5,6 +5,7 @@
 // (§5.3). Both only report what the server decided; neither changes a level.
 import { useEffect, useRef, useState } from "react";
 import { Cloud, Info, Lock, ShieldAlert } from "lucide-react";
+import { addWordRule, SLOTS, type Slot } from "@/lib/routing";
 
 export interface RouteInfo {
   decision_id?: string | null;
@@ -125,12 +126,60 @@ export function RouteBadge({ route, onRerun, busy }: BadgeProps) {
               </div>
             </div>
           )}
+          <RuleFromAnswer current={route.slot} />
           <a href="/brain/settings/routing" className="mt-2 block text-indigo-600 hover:underline dark:text-indigo-400">
             Routing settings
           </a>
         </div>
       )}
     </div>
+  );
+}
+
+/** "Always send messages mentioning … to …" — a rule, saved at the top. */
+function RuleFromAnswer({ current }: { current: string }) {
+  const [words, setWords] = useState("");
+  const [slot, setSlot] = useState<Slot>(current === "strong" ? "fast" : "strong");
+  const [state, setState] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function add() {
+    if (!words.trim()) return;
+    setBusy(true);
+    try {
+      const v = await addWordRule(words.trim(), slot);
+      setState(`Rule added (v${v}).`);
+      setWords("");
+    } catch (e) {
+      setState(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="mt-2.5 border-t border-gray-100 pt-2 dark:border-gray-700"
+      onSubmit={(e) => { e.preventDefault(); void add(); }}>
+      <p className="mb-1 text-gray-400">Always send messages mentioning</p>
+      <div className="flex gap-1">
+        <label className="sr-only" htmlFor="rule-words">Words</label>
+        <input id="rule-words" value={words} onChange={(e) => setWords(e.target.value)}
+          placeholder="words, comma separated"
+          className="h-7 min-w-0 flex-1 rounded-md border border-gray-200 bg-transparent px-1.5 text-[12px]
+            text-gray-800 dark:border-gray-600 dark:text-gray-100" />
+        <label className="sr-only" htmlFor="rule-slot">To</label>
+        <select id="rule-slot" value={slot} onChange={(e) => setSlot(e.target.value as Slot)}
+          className="h-7 rounded-md border border-gray-200 bg-transparent px-1 text-[12px] text-gray-800
+            dark:border-gray-600 dark:text-gray-100">
+          {SLOTS.map((s) => <option key={s} value={s}>to {slotLabel(s)}</option>)}
+        </select>
+        <button disabled={busy || !words.trim()}
+          className="h-7 rounded-md bg-gray-900 px-2 text-[12px] text-white disabled:opacity-40 dark:bg-white dark:text-gray-900">
+          Add
+        </button>
+      </div>
+      {state && <p className="mt-1 text-[11.5px] text-gray-500" aria-live="polite">{state}</p>}
+    </form>
   );
 }
 

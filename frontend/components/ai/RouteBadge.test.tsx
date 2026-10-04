@@ -61,3 +61,25 @@ describe("modeRequest", () => {
     expect(modeRequest("strong")).toEqual({ mode: "auto", slot: "strong" });
   });
 });
+
+describe("a rule from an answer", () => {
+  it("saves 'messages mentioning … → slot' at the top of the rules", async () => {
+    const { waitFor } = await import("@testing-library/react");
+    const policy = { slots: {}, rules: [{ id: "big-context", enabled: true, kind: "context_over", value: 30000, use: "long" }],
+      default_slot: "fast", instructions: "", privacy: { untrusted: [], when_private_needed: "ask" },
+      brain: { kind: "rules_only", timeout_ms: 2500, provider: "" } };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ policy })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ version: 4, policy })));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RouteBadge route={{ slot: "fast", on_device: false }} />);
+    fireEvent.click(screen.getByRole("button"));
+    fireEvent.change(screen.getByLabelText("Words"), { target: { value: "proof" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(screen.getByText("Rule added (v4).")).toBeTruthy());
+    const saved = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(saved.policy.rules[0]).toMatchObject({ kind: "message_matches", value: "proof", use: "strong" });
+    expect(saved.policy.rules[1].id).toBe("big-context");
+    vi.unstubAllGlobals();
+  });
+});

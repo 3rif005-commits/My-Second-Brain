@@ -119,3 +119,16 @@ export const routingApi = {
     return call<DecisionLog>(`/decisions${qs.size ? `?${qs}` : ""}`);
   },
 };
+
+/** "Always send messages mentioning … to …", from an answer's route popover.
+ *  Goes first, so it beats the rules already there; saved as a new version. */
+export async function addWordRule(words: string, slot: Slot): Promise<number> {
+  const { policy } = await routingApi.policy();
+  let n = 1;
+  while (policy.rules.some((r) => r.id === `from-chat-${n}`)) n += 1;
+  const rule: Rule = { id: `from-chat-${n}`, enabled: true, kind: "message_matches",
+    value: words, use: slot };
+  const saved = await routingApi.save({ ...policy, rules: [rule, ...policy.rules] },
+    `Rule from chat: ${words} → ${SLOT_NAME[slot]}`);
+  return saved.version;
+}

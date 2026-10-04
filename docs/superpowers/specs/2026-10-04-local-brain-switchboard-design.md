@@ -326,3 +326,8 @@ The architecture doesn't depend on it. To get going with daily use:
 - **Still not switchboard-routed** (they pick providers by the old chain, under the gate):
   synthesis, skills, jobs. Ingest only creates new notes. Rules reorder with up/down
   buttons, not drag.
+- **P2 extras:** `python -m evals.routing_brain` scores a brain against
+  `evals/corpus/routing_queries.json` (50 questions labelled with the slot the user would
+  pick — edit them) and prints agreement, median/p95 latency and misses; pass = >= 80% and
+  median <= 1 s. The route popover's "Always send messages mentioning … to …" saves a word
+  rule at the top of the rules (a new policy version).

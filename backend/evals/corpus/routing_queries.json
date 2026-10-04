@@ -1,0 +1,205 @@
+{
+ "_about": "Routing brain check (spec §8): the slot YOU would pick for each question under the default instructions. Edit the labels to your own judgment — the score is agreement with you.",
+ "cases": [
+  {
+   "query": "hi",
+   "slot": "local"
+  },
+  {
+   "query": "thanks!",
+   "slot": "local"
+  },
+  {
+   "query": "good morning",
+   "slot": "local"
+  },
+  {
+   "query": "what's the title of my note on gradient descent?",
+   "slot": "local"
+  },
+  {
+   "query": "rephrase this sentence more simply: the gradient points uphill",
+   "slot": "local"
+  },
+  {
+   "query": "suggest three tags for a note about Q-learning",
+   "slot": "local"
+  },
+  {
+   "query": "fix the spelling: recieve, seperate, occured",
+   "slot": "local"
+  },
+  {
+   "query": "what did I write about my blood pressure last week?",
+   "slot": "local"
+  },
+  {
+   "query": "summarize my notes on the family budget",
+   "slot": "local"
+  },
+  {
+   "query": "where did I save my wifi password note?",
+   "slot": "local"
+  },
+  {
+   "query": "translate 'learning rate' into French",
+   "slot": "local"
+  },
+  {
+   "query": "list the notes I tagged 'exam'",
+   "slot": "local"
+  },
+  {
+   "query": "how much did I spend on rent according to my notes?",
+   "slot": "local"
+  },
+  {
+   "query": "when is my mom's birthday in my notes?",
+   "slot": "local"
+  },
+  {
+   "query": "make this bullet shorter: neural networks are function approximators",
+   "slot": "local"
+  },
+  {
+   "query": "what's my doctor's appointment date?",
+   "slot": "local"
+  },
+  {
+   "query": "give this note a better title: untitled ML stuff",
+   "slot": "local"
+  },
+  {
+   "query": "what is overfitting?",
+   "slot": "fast"
+  },
+  {
+   "query": "explain the difference between a list and a tuple in Python",
+   "slot": "fast"
+  },
+  {
+   "query": "what does the softmax function do?",
+   "slot": "fast"
+  },
+  {
+   "query": "summarize the main idea of backpropagation",
+   "slot": "fast"
+  },
+  {
+   "query": "what are the pros and cons of k-means?",
+   "slot": "fast"
+  },
+  {
+   "query": "explain what an epoch is in training",
+   "slot": "fast"
+  },
+  {
+   "query": "what is the bias-variance tradeoff, briefly?",
+   "slot": "fast"
+  },
+  {
+   "query": "how does dropout reduce overfitting?",
+   "slot": "fast"
+  },
+  {
+   "query": "what's the difference between precision and recall?",
+   "slot": "fast"
+  },
+  {
+   "query": "give me five flashcards on convolutional layers",
+   "slot": "fast"
+  },
+  {
+   "query": "what is a Markov decision process?",
+   "slot": "fast"
+  },
+  {
+   "query": "explain Big-O notation with an example",
+   "slot": "fast"
+  },
+  {
+   "query": "what does a learning rate scheduler do?",
+   "slot": "fast"
+  },
+  {
+   "query": "define entropy in information theory",
+   "slot": "fast"
+  },
+  {
+   "query": "what is the role of the discount factor in Q-learning?",
+   "slot": "fast"
+  },
+  {
+   "query": "what is gradient clipping?",
+   "slot": "fast"
+  },
+  {
+   "query": "prove that the eigenvalues of a symmetric matrix are real",
+   "slot": "strong"
+  },
+  {
+   "query": "derive the gradient of the cross-entropy loss with softmax step by step",
+   "slot": "strong"
+  },
+  {
+   "query": "derive the Bellman optimality equation from first principles",
+   "slot": "strong"
+  },
+  {
+   "query": "plan a two-week revision schedule across all my ML lecture notes",
+   "slot": "strong"
+  },
+  {
+   "query": "write a complete study guide for lecture 10 with worked examples",
+   "slot": "strong"
+  },
+  {
+   "query": "compare every optimizer I have notes on and recommend one for my project, this is important",
+   "slot": "strong"
+  },
+  {
+   "query": "prove that gradient descent converges for convex L-smooth functions",
+   "slot": "strong"
+  },
+  {
+   "query": "find contradictions between my notes on regularization and the lecture slides",
+   "slot": "strong"
+  },
+  {
+   "query": "design an experiment to test whether batch norm helps my model, with a full analysis plan",
+   "slot": "strong"
+  },
+  {
+   "query": "derive the closed-form solution of ridge regression",
+   "slot": "strong"
+  },
+  {
+   "query": "show that k-means always converges in a finite number of steps",
+   "slot": "strong"
+  },
+  {
+   "query": "synthesize everything I know about reinforcement learning into one structured overview",
+   "slot": "strong"
+  },
+  {
+   "query": "work through the math of PCA from the covariance matrix to the projection",
+   "slot": "strong"
+  },
+  {
+   "query": "it's important: check my proof that the sum of two convex functions is convex",
+   "slot": "strong"
+  },
+  {
+   "query": "build a dependency map of the concepts across all my deep learning notes",
+   "slot": "strong"
+  },
+  {
+   "query": "explain and prove the universal approximation theorem at a high level, rigorously",
+   "slot": "strong"
+  },
+  {
+   "query": "write exam-style questions with full solutions covering my whole probability course",
+   "slot": "strong"
+  }
+ ]
+}
