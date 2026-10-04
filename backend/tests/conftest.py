@@ -62,6 +62,35 @@ def no_real_batch_api(monkeypatch):
     monkeypatch.setattr("services.jobs.batch._ADAPTERS", {})
 
 
+@pytest.fixture(autouse=True)
+def route_via_get_provider(monkeypatch, request):
+    """Chat turns pick their model through the switchboard (services/routing).
+    The engine tests predate it and choose the model by patching
+    `services.agent.engine.get_provider`; this keeps them testing the tool
+    loop they were written for: the route is whatever that patch returns, at
+    the `private` ceiling so the privacy gate filters nothing and looks
+    nothing up. Routing and privacy tests opt out with `@pytest.mark.real_routing`.
+    """
+    if "real_routing" in request.keywords:
+        return
+
+    async def _route(policy, user_id, signals, manual_slot=None, agent=True):
+        from models.agent import Mode
+        from services.agent import engine
+        from services.routing.switchboard import NoProvider, Route
+        mode = Mode.LOCAL if manual_slot == "local" else Mode.API
+        try:
+            p = engine.get_provider(mode, task="chat", user_id=user_id)
+        except RuntimeError as e:          # the switchboard's own failure type
+            raise NoProvider(str(e)) from e
+        return Route(slot=manual_slot or "fast", provider=p, decided_by="rule",
+                     reason="test", ceiling="private")
+
+    monkeypatch.setattr("services.routing.switchboard.route", _route)
+    monkeypatch.setattr("services.privacy.fetch_levels", lambda ids, uid: {})
+    monkeypatch.setattr("services.routing.log.record", lambda *a, **k: None)
+
+
 @pytest.fixture
 def hermetic_planning(monkeypatch):
     """The jobs worker plans a job from live services: the provider chain, the

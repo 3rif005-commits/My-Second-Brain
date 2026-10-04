@@ -10,6 +10,7 @@ const ALLOWED_PREFIXES = [
   "ai-providers",
   "connected-apps",  // Settings → Connected apps (remote MCP, 5.4)
   "jobs",            // background jobs: queue, list, cancel, apply (5.3)
+  "routing",         // Settings → Routing: policy, test bench, decisions
 ];
 
 async function proxy(req: Request, path: string[]) {

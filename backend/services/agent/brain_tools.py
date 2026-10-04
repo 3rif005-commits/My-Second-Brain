@@ -16,6 +16,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from models.database import QueryRequest
+from services import privacy
 from services.database import get_supabase
 from services.db import rows as rows_service
 from services.db.connection import get_pool
@@ -269,14 +270,8 @@ async def execute_brain_tool(
     this function -- confirmed by grep, see task-49-report.md) now `await`
     this call accordingly.
     """
-    if tool == "brain.search_brain":
-        return _search_brain(args, user_id)
-    if tool == "brain.get_note":
-        return _get_note(args, user_id)
-    if tool == "brain.list_notes":
-        return _list_notes(args, user_id)
-    if tool == "brain.get_backlinks":
-        return _get_backlinks(args, user_id)
+    if tool in _READS:
+        return _withhold(tool, await _read_tool(tool, args, user_id))
     if tool == "brain.create_note":
         return _create_note(args, user_id)
     if tool == "brain.update_note":
@@ -289,17 +284,65 @@ async def execute_brain_tool(
         return _link_notes(args, user_id)
     if tool == "brain.delete_note":
         return _delete_note(args, user_id)
-    if tool == "brain.list_databases":
-        return await _list_databases(args, user_id)
-    if tool == "brain.get_database_schema":
-        return await _get_database_schema(args, user_id)
-    if tool == "brain.query_database":
-        return await _query_database(args, user_id)
     if tool == "brain.create_row":
         return await _create_row(args, user_id)
     if tool == "brain.update_row":
         return await _update_row(args, user_id)
     raise ValueError(f"Unknown brain tool: {tool}")
+
+
+#: Tools that read notes. Their results pass through the privacy gate before
+#: the model sees them (see services/privacy.py).
+_READS = {"brain.search_brain", "brain.get_note", "brain.list_notes",
+          "brain.get_backlinks", "brain.list_databases",
+          "brain.get_database_schema", "brain.query_database"}
+
+
+async def _read_tool(tool: str, args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    if tool == "brain.search_brain":
+        return _search_brain(args, user_id)
+    if tool == "brain.get_note":
+        return _get_note(args, user_id)
+    if tool == "brain.list_notes":
+        return _list_notes(args, user_id)
+    if tool == "brain.get_backlinks":
+        return _get_backlinks(args, user_id)
+    if tool == "brain.list_databases":
+        return await _list_databases(args, user_id)
+    if tool == "brain.get_database_schema":
+        return await _get_database_schema(args, user_id)
+    return await _query_database(args, user_id)
+
+
+def _withhold(tool: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Drop notes above this request's privacy ceiling from a read tool's
+    result, and say how many were held back — a model that is told nothing
+    retries the search. Database schemas and the database list carry no note
+    content, so they pass as they are."""
+    if privacy.current() is None:
+        return result
+    before = len(privacy.current().withheld)
+    if tool == "brain.get_note":
+        if result and not privacy.filter_rows([result]):
+            return {"id": result.get("id"), "withheld": True,
+                    "note": "This note is private and stays on the user's device."}
+        return result
+    for key in ("matches", "notes", "backlinks", "rows"):
+        if isinstance(result.get(key), list):
+            result[key] = privacy.filter_rows(result[key])
+    for group in result.get("groups") or []:
+        if isinstance(group, dict) and isinstance(group.get("rows"), list):
+            group["rows"] = privacy.filter_rows(group["rows"])
+    held = len(privacy.current().withheld) - before
+    if held:
+        result["withheld_private"] = held
+    return result
+
+
+def get_note_meta(note_id: str, user_id: str) -> dict[str, Any]:
+    """The note row for permission checks — not sent to a model, so it does
+    not pass the privacy gate."""
+    return _get_note({"id": note_id}, user_id)
 
 
 def _search_brain(args: dict[str, Any], user_id: str) -> dict[str, Any]:

@@ -122,6 +122,7 @@ def check(
     *,
     untrusted_context: bool = False,
     approvals: Collection[str] = (),
+    private_context: bool = False,
 ) -> Allow | Deny | NeedsApproval:
     """Decide whether a tool call is permitted.
 
@@ -134,6 +135,8 @@ def check(
             retrieved note text (ingested from PDFs, websites, transcripts) or
             an MCP server's output
         approvals: approval keys the user granted on the client for this turn
+        private_context: this turn runs on the device with private notes in
+            reach — anything sent to an MCP server could carry them out
     """
     is_mcp = tool.startswith("mcp.")
 
@@ -164,6 +167,16 @@ def check(
             return Allow()
         return NeedsApproval(
             reason="Deleting is permanent — confirm it in the app first.",
+            key=key,
+        )
+
+    # Private notes stay on the device; an MCP server is off the device.
+    if private_context and is_mcp:
+        if key in approvals:
+            return Allow()
+        return NeedsApproval(
+            reason=("This turn can read your private notes — confirm before "
+                    "anything is sent to an outside server."),
             key=key,
         )
 

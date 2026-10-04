@@ -12,6 +12,10 @@ class Tier(str, Enum):
 
 
 class Mode(str, Enum):
+    # AUTO lets the switchboard decide (services/routing). API is the older
+    # client's "cloud" choice and now means the same as AUTO; LOCAL pins the
+    # turn to the on-device model.
+    AUTO = "auto"
     LOCAL = "local"
     API = "api"
 
@@ -99,6 +103,10 @@ StreamEvent = TypeAdapter(
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant", "system"]
     content: str
+    # Set by the client on an answer the route event marked `private_used`:
+    # it was written from private notes on the device, so a later turn that
+    # runs in the cloud sends a placeholder instead of its text.
+    private: bool = False
 
 
 class AgentRequest(BaseModel):
@@ -111,6 +119,16 @@ class AgentRequest(BaseModel):
     # Approval keys ("<tool>:<target id>") the user granted in the UI after a
     # previous turn asked. Never written by the model — that is the point.
     approvals: list[str] = Field(default_factory=list)
+    # Routing (services/routing). `slot` is a manual pick from the composer
+    # ("local", "fast", "strong", ...); None lets the switchboard decide.
+    slot: str | None = None
+    # Private note ids the user let through to the cloud for this request
+    # only, from the privacy prompt. Like approvals: client-only, never model.
+    release: list[str] = Field(default_factory=list)
+    # The user chose "send without them" on the privacy prompt.
+    withheld_ok: bool = False
+    # Decision id of the answer this request re-runs on another slot.
+    override_of: str | None = None
     # Workspace only: run this job directly (the `/name` command) — no model
     # turn, the result comes back as a card. `focus` is the rest of the line.
     job: str | None = None

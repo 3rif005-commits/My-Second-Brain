@@ -17,7 +17,7 @@ import uuid
 from typing import Any, AsyncIterator
 
 from models.agent import AgentRequest, Mode, Tier
-from services.agent.brain_tools import BRAIN_TOOL_SCHEMAS, execute_brain_tool
+from services.agent.brain_tools import BRAIN_TOOL_SCHEMAS, execute_brain_tool, get_note_meta
 from services.agent.mcp_client import (
     McpServerConfig, discover_tools, call_tool as mcp_call_tool, log_tool_call
 )
@@ -26,6 +26,13 @@ from services.agent.permissions import (
     Deny, NeedsApproval, check as permission_check
 )
 from services.agent.skills import SkillRegistry, classify_skills
+from services import privacy
+from services.routing import log as routing_log
+from services.routing import policy as routing_policy
+from services.routing import switchboard
+from services.routing.policy import SLOTS
+from services.routing.rules import Signals
+from services.routing.switchboard import NoProvider
 from core.config import settings
 from services.ai import budget as budget_guard
 from services.ai.agent_stream import stream_agent
@@ -259,6 +266,38 @@ def _ev(payload: dict) -> dict:
     return payload
 
 
+PRIVATE_ANSWER_PLACEHOLDER = ("[An earlier answer here was written on the device "
+                              "from private notes; its text stays there.]")
+
+
+def _history(messages, on_device: bool) -> list[dict]:
+    """The thread as the model sees it: role and content only. A cloud model
+    gets a placeholder for answers that were written from private notes."""
+    out = []
+    for m in messages:
+        content = m.content
+        if m.private and not on_device:
+            content = PRIVATE_ANSWER_PLACEHOLDER
+        out.append({"role": m.role, "content": content})
+    return out
+
+
+def _route_event(route, decision_id: str | None, *, withheld: dict[str, str],
+                 sent: int, private_used: bool, waiting: bool = False) -> dict:
+    """Where this answer runs and why — the route badge in the UI."""
+    return {
+        "type": "route", "decision_id": decision_id, "slot": route.slot,
+        "provider": getattr(route.provider, "label", "") or route.provider.provider,
+        "model": getattr(route.provider, "model", ""), "decided_by": route.decided_by,
+        "reason": route.reason, "rule_id": route.rule_id,
+        "confidence": route.confidence, "latency_ms": route.latency_ms,
+        "on_device": route.is_local, "sent": sent,
+        "withheld": [{"id": i, "title": t} for i, t in withheld.items()],
+        "private_used": private_used, "waiting": waiting,
+        "notes": route.notes,
+    }
+
+
 async def run_turn(
     request: AgentRequest,
     user_id: str,
@@ -266,27 +305,23 @@ async def run_turn(
 ) -> AsyncIterator[dict[str, Any]]:
     thread_id = request.thread_id or str(uuid.uuid4())
     message_id = str(uuid.uuid4())
-    tier = _tier_for_mode(request.mode)
 
     workspace_note = (request.current_note_id
                       if request.surface == "workspace" else None)
 
-    # 1. Retrieve context. In the workspace: the open note's own sources,
-    #    numbered for [n] citations. Elsewhere: the whole brain's notes.
-    citations: list[dict] = []
-    workspace_sources = ""
+    # 1. Retrieve context — unfiltered. The privacy gate cuts it once the
+    #    route is known (step 3), because what may be sent depends on where.
+    #    In the workspace: the open note's own sources, numbered for [n]
+    #    citations. Elsewhere: the whole brain's notes.
+    notes: list[dict] = []
+    ws_chunks: list[dict] = []
+    ws_titles: dict[str, str] = {}
     if workspace_note:
-        notes = []
         try:
-            from services.workspace.chat import (
-                citations_payload, source_excerpts, workspace_chunks,
-            )
-            chunks, titles = workspace_chunks(request.query, workspace_note, user_id)
-            citations = citations_payload(chunks, titles)
-            workspace_sources = source_excerpts(chunks, titles)
+            from services.workspace.chat import workspace_chunks
+            ws_chunks, ws_titles = workspace_chunks(request.query, workspace_note, user_id)
         except Exception as e:
             yield _ev({"type": "error", "content": f"retrieval failed: {e}"})
-        yield _ev({"type": "context", "notes": [], "citations": citations})
     else:
         try:
             embedding = embed(request.query)
@@ -294,8 +329,6 @@ async def run_turn(
         except Exception as e:
             notes = []
             yield _ev({"type": "error", "content": f"retrieval failed: {e}"})
-
-        yield _ev({"type": "context", "notes": notes})
 
     # 2. Skill activation. Under "index" disclosure nothing is pasted in: the
     #    prompt carries the catalogue and the model asks for what it needs.
@@ -316,6 +349,112 @@ async def run_turn(
     )
     for s in matched:
         yield _ev({"type": "skill_active", "name": s.name})
+
+    # 3. Route, then cut the context to what may travel there.
+    policy = routing_policy.load(user_id)
+    ids = sorted({str(n["id"]) for n in notes if n.get("id")}
+                 | ({workspace_note} if workspace_note else set()))
+    levels = privacy.fetch_levels(ids, user_id) if ids else {}
+    if levels is not None:
+        # Known levels ride on the rows, so the gate does not look them up again.
+        notes = [{**n, "sensitivity": levels[str(n["id"])]["level"]}
+                 if str(n.get("id")) in levels else n for n in notes]
+    ws_title = ((levels or {}).get(workspace_note or "") or {}).get("title") or "this note"
+    signals = Signals(
+        surface=request.surface, query=request.query,
+        query_chars=len(request.query),
+        est_tokens=usage_log.tokens_from_chars(
+            sum(len(m.content) for m in request.messages)
+            + sum(len(n.get("content_text") or "") for n in notes)
+            + sum(len(c.get("chunk_text") or "") for c in ws_chunks)),
+        retrieved=len(notes) + len(ws_chunks),
+        private_hits=sum(1 for i in ids if levels is None
+                         or (levels.get(i) or {}).get("level") == "private"),
+    )
+    manual = request.slot if request.slot in SLOTS else (
+        "local" if request.mode == Mode.LOCAL else None)
+    try:
+        route = await switchboard.route(policy, user_id, signals, manual_slot=manual)
+    except NoProvider as e:
+        yield _ev({"type": "error", "content": str(e)})
+        yield _ev({"type": "done", "thread_id": thread_id,
+                   "message_id": message_id})
+        return
+
+    release = set(request.release)
+    candidates = notes + ([{"id": workspace_note, "title": ws_title,
+                            **({"sensitivity": levels[workspace_note]["level"]}
+                               if levels and workspace_note in levels else {})}]
+                          if workspace_note and ws_chunks else [])
+    with privacy.scope(route.ceiling, user_id, release) as dry:
+        privacy.filter_rows(candidates)
+    if dry.withheld and not route.is_local and not request.withheld_ok:
+        action = policy["privacy"]["when_private_needed"]
+        if action == "local":
+            try:
+                local = switchboard.resolve_slot("local", policy, user_id)
+            except NoProvider:
+                local = None
+            if local is not None:
+                route.slot, route.provider, route.ceiling = "local", local, "private"
+                route.reason += "; needs private notes, so on device"
+        elif action == "ask":
+            decision_id = routing_log.record(
+                user_id, route, surface=request.surface, thread_id=thread_id,
+                message_id=message_id, signals=signals.public(), sent=0,
+                withheld=len(dry.withheld), released=0,
+                override_of=request.override_of)
+            yield _ev(_route_event(route, decision_id, withheld=dry.withheld,
+                                   sent=0, private_used=False, waiting=True))
+            yield _ev({"type": "privacy_needed", "slot": route.slot,
+                       "model": route.provider.model,
+                       "withheld": [{"id": i, "title": t}
+                                    for i, t in dry.withheld.items()]})
+            yield _ev({"type": "done", "thread_id": thread_id,
+                       "message_id": message_id})
+            return
+        # "drop": carry on — the gate below holds them back.
+
+    tier = Tier.INTERNAL_LOCAL if route.is_local else Tier.INTERNAL_API
+    with privacy.scope(route.ceiling, user_id, release) as scope:
+        async for ev in _routed_turn(request, user_id, skill_registry, route,
+                                     policy, signals, scope, notes, ws_chunks,
+                                     ws_titles, ws_title, workspace_note,
+                                     matched, by_index, tier, thread_id,
+                                     message_id):
+            yield ev
+
+
+async def _routed_turn(request: AgentRequest, user_id: str,
+                       skill_registry: SkillRegistry, route, policy: dict,
+                       signals: Signals, scope, notes: list[dict],
+                       ws_chunks: list[dict], ws_titles: dict[str, str],
+                       ws_title: str, workspace_note: str | None, matched,
+                       by_index: bool, tier: Tier, thread_id: str,
+                       message_id: str) -> AsyncIterator[dict[str, Any]]:
+    """The rest of a chat turn, inside the privacy scope the route chose:
+    everything read from here on — the prompt's notes and every tool result —
+    is cut to the route's ceiling."""
+    notes = privacy.filter_rows(notes)
+    citations: list[dict] = []
+    workspace_sources = ""
+    if workspace_note:
+        if ws_chunks and privacy.check_note(workspace_note, ws_title):
+            from services.workspace.chat import citations_payload, source_excerpts
+            citations = citations_payload(ws_chunks, ws_titles)
+            workspace_sources = source_excerpts(ws_chunks, ws_titles)
+        yield _ev({"type": "context", "notes": [], "citations": citations})
+    else:
+        yield _ev({"type": "context", "notes": notes})
+
+    private_used = route.is_local or bool(scope.released_used)
+    decision_id = routing_log.record(
+        user_id, route, surface=request.surface, thread_id=thread_id,
+        message_id=message_id, signals=signals.public(), sent=len(scope.sent),
+        withheld=len(scope.withheld), released=len(scope.released_used),
+        override_of=request.override_of)
+    yield _ev(_route_event(route, decision_id, withheld=scope.withheld,
+                           sent=len(scope.sent), private_used=private_used))
 
     # 3. Build system prompt + tool schemas. The system prompt holds only
     #    what is the same on every message; this message's skills, notes and
@@ -338,6 +477,10 @@ async def run_turn(
             from services.workspace.skill_run import chat_skills
             jobs = [j for j in chat_skills(workspace_note, user_id) if not j.get("runnable")]
         except Exception:                          # noqa: BLE001
+            jobs = []
+        # A job reads all of the note's sources on its own path; a note the
+        # gate held back offers none.
+        if workspace_note in scope.withheld:
             jobs = []
 
     # Restrict tool list per active-skill whitelists. If no skill restricts,
@@ -367,20 +510,13 @@ async def run_turn(
     if jobs:
         all_tool_schemas = all_tool_schemas + [workspace_job_tool(jobs)]
 
-    # 4. Pick the provider
-    try:
-        provider = get_provider(request.mode, task="chat", user_id=user_id)
-    except RuntimeError as e:
-        yield _ev({"type": "error", "content": str(e)})
-        yield _ev({"type": "done", "thread_id": thread_id,
-                  "message_id": message_id})
-        return
+    provider = route.provider
 
     messages_payload = [{"role": "system", "content": system_prompt}]
     messages_payload += _with_turn_context(
-        [m.model_dump() for m in request.messages], turn_context)
+        _history(request.messages, on_device=route.is_local), turn_context)
 
-    # 5. Drive the streaming loop
+    # 4. Drive the streaming loop
     tool_calls_made = 0
     with usage_log.annotate(surface=request.surface, job="agent",
                             trigger="user", user_id=user_id,
@@ -401,13 +537,14 @@ async def run_turn(
             untrusted_context=bool(notes) or bool(workspace_note),
             approvals=set(request.approvals),
             workspace_note=workspace_note,
+            private_context=private_used,
         ):
             yield ev
 
     if workspace_note:
         yield _ev({"type": "citations", "citations": citations})
 
-    # 6. Done
+    # 5. Done
     yield _ev({"type": "done", "thread_id": thread_id, "message_id": message_id})
 
 
@@ -533,6 +670,7 @@ async def _stream_loop(
     approvals: set[str] | None = None,
     skill_registry: "SkillRegistry | None" = None,
     workspace_note: str | None = None,
+    private_context: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """The agent loop: stream a model turn, run whatever tools it asked for,
     feed the results back, and go round again until it answers in text.
@@ -687,15 +825,14 @@ async def _stream_loop(
             target_id = args.get("id") or args.get("note_id")
             if target_id and tool != "brain.search_brain":
                 try:
-                    note_meta = await execute_brain_tool(
-                        "brain.get_note", args={"id": target_id}, user_id=user_id
-                    )
+                    note_meta = get_note_meta(target_id, user_id)
                 except Exception:
                     note_meta = None
 
             decision = permission_check(tool, tier, args, note_meta,
                                         untrusted_context=untrusted_context,
-                                        approvals=approvals)
+                                        approvals=approvals,
+                                        private_context=private_context)
             if isinstance(decision, NeedsApproval):
                 # Not a failure: the call is legal, it just needs a human. The
                 # client shows a Confirm button and replays the turn with this

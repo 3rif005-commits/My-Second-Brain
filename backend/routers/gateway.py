@@ -20,19 +20,25 @@ from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
 from routers.ingest import get_user_id
+from services import privacy
 from services.ai.passthrough import pick_openai_provider, stream_passthrough
 
 router = APIRouter(prefix="/v1", tags=["gateway"])
 
 
 @router.post("/chat/completions")
-async def chat_completions(body: dict, authorization: str = Header()):
+async def chat_completions(body: dict, authorization: str = Header(),
+                           note_id: str | None = None):
     user_id = get_user_id(authorization)
     try:
         provider = pick_openai_provider(user_id)
     except RuntimeError as e:
         # 503, not 500: nothing is broken, nothing is configured.
         raise HTTPException(status_code=503, detail={"error": str(e)})
+    # The editor sends the whole open note; a private one stays home.
+    refusal = privacy.refuse_note(note_id, user_id, provider)
+    if refusal:
+        raise HTTPException(status_code=403, detail={"error": refusal})
 
     async def stream():
         try:

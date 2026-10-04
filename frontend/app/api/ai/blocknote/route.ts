@@ -11,10 +11,14 @@ export async function POST(req: Request) {
   }
 
   const fastApiUrl = process.env.FASTAPI_URL ?? "http://localhost:8000";
+  // The open note: the backend refuses a note above the provider's privacy
+  // ceiling before the document is sent anywhere.
+  const noteId = new URL(req.url).searchParams.get("noteId");
+  const qs = noteId ? `?note_id=${encodeURIComponent(noteId)}` : "";
 
   let res: Response;
   try {
-    res = await fetch(`${fastApiUrl}/agent/inline`, {
+    res = await fetch(`${fastApiUrl}/agent/inline${qs}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

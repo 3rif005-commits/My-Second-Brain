@@ -18,11 +18,12 @@ so inline spend is logged and budgeted without anything being rewritten.
 from __future__ import annotations
 
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
 from core.config import settings
 from routers.ingest import get_user_id
+from services import privacy
 from services.ai.passthrough import stream_passthrough
 from services.ai.providers import Provider
 
@@ -64,10 +65,18 @@ def _inline_provider() -> Provider:
 async def agent_inline(
     body: dict,
     authorization: str = Header(),
+    note_id: str | None = None,
 ):
-    """OpenAI-compatible streaming endpoint for xl-ai inline editor AI."""
+    """OpenAI-compatible streaming endpoint for xl-ai inline editor AI.
+
+    `note_id` is the open note: the editor sends the whole document, so a note
+    above this provider's privacy ceiling is refused before anything is sent.
+    """
     user_id = get_user_id(authorization)
     endpoint = _inline_endpoint()
+    refusal = privacy.refuse_note(note_id, user_id, _inline_provider())
+    if refusal:
+        raise HTTPException(status_code=403, detail={"error": refusal})
 
     async def stream():
         try:
