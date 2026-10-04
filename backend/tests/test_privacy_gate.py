@@ -239,3 +239,25 @@ def test_inline_endpoint_returns_403_before_sending(monkeypatch):
     r = TestClient(main.app).post("/agent/inline?note_id=p1", json={"messages": []},
                                   headers={"Authorization": "Bearer t"})
     assert r.status_code == 403 and "private" in r.text and not called
+
+
+def test_a_replayed_question_is_not_saved_twice(monkeypatch):
+    from fastapi.testclient import TestClient
+    import main
+    from routers import agent as agent_router
+    saved = []
+    monkeypatch.setattr(agent_router, "get_user_id", lambda a: "u1")
+    monkeypatch.setattr(agent_router, "_append_user_message_to_thread",
+                        lambda tid, uid, body: saved.append(body.query))
+    monkeypatch.setattr(agent_router, "_append_assistant_message_to_thread", lambda *a, **k: None)
+
+    async def turn(body, user_id, skill_registry):
+        yield {"type": "done"}
+    monkeypatch.setattr(agent_router, "run_turn", turn)
+    c = TestClient(main.app)
+    msg = [{"role": "user", "content": "q"}]
+    c.post("/agent", headers={"Authorization": "Bearer t"},
+           json={"thread_id": "t1", "query": "q", "messages": msg})
+    c.post("/agent", headers={"Authorization": "Bearer t"},
+           json={"thread_id": "t1", "query": "q", "messages": msg, "withheld_ok": True})
+    assert saved == ["q"]

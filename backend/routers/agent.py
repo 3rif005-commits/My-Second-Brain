@@ -38,8 +38,11 @@ async def agent_endpoint(
     registry = _get_registry()
 
     thread_id = body.thread_id or str(uuid.uuid4())
-    # Append user message to thread (or create thread)
-    _append_user_message_to_thread(thread_id, user_id, body)
+    # Append user message to thread (or create thread). A replay of the same
+    # question — an approval, a privacy choice, "Ask again on" — is already there.
+    replay = bool(body.approvals or body.release or body.withheld_ok or body.override_of)
+    if not (replay and body.thread_id):
+        _append_user_message_to_thread(thread_id, user_id, body)
 
     if body.job and body.surface == "workspace" and body.current_note_id:
         return StreamingResponse(_job_stream(body, user_id, thread_id),
