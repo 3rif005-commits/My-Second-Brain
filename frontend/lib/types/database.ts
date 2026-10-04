@@ -51,10 +51,15 @@ export interface Note {
   is_indexed: boolean;
   is_public: boolean;
   local_only: boolean;
+  /** Who may see it (migration 029): open → any provider, personal → trusted
+   *  cloud providers, private → this device only. Absent before 029. */
+  sensitivity?: Sensitivity;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export type Sensitivity = "open" | "personal" | "private";
 
 export interface NoteIndex {
   id: string;
@@ -113,6 +118,7 @@ export type NoteUpdate = Partial<
     | "is_indexed"
     | "is_public"
     | "local_only"
+    | "sensitivity"
     | "position"
   >
 >;

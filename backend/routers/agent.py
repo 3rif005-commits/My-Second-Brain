@@ -47,16 +47,20 @@ async def agent_endpoint(
 
     async def stream():
         last_assistant_text = ""
+        route: dict | None = None
         async for ev in run_turn(body, user_id=user_id, skill_registry=registry):
             # Override thread_id with our own so the row matches the SSE
             if ev.get("type") == "done":
                 ev = {**ev, "thread_id": thread_id}
             if ev.get("type") == "text":
                 last_assistant_text += ev["content"]
+            if ev.get("type") == "route":
+                route = ev
             yield "data: " + json.dumps(ev) + "\n\n"
 
         # Persist assistant message after stream completes
-        _append_assistant_message_to_thread(thread_id, last_assistant_text)
+        _append_assistant_message_to_thread(thread_id, last_assistant_text,
+                                            route=route)
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(stream(), media_type="text/event-stream")
@@ -110,7 +114,13 @@ def _append_user_message_to_thread(
         }).execute()
 
 
-def _append_assistant_message_to_thread(thread_id: str, content: str) -> None:
+#: What the thread keeps of a route event: enough to redraw the badge.
+_ROUTE_KEPT = ("decision_id", "slot", "provider", "model", "decided_by",
+               "reason", "on_device")
+
+
+def _append_assistant_message_to_thread(thread_id: str, content: str,
+                                        route: dict | None = None) -> None:
     if not content:
         return
     supabase = get_supabase()
@@ -124,7 +134,13 @@ def _append_assistant_message_to_thread(thread_id: str, content: str) -> None:
     existing = _res.data if _res is not None else None
     if not existing:
         return
-    messages = existing["messages"] + [{"role": "assistant", "content": content}]
+    message: dict = {"role": "assistant", "content": content}
+    if route:
+        # `private`: written from private notes — a later cloud turn gets a
+        # placeholder instead of this text (engine._history).
+        message["private"] = bool(route.get("private_used"))
+        message["route"] = {k: route.get(k) for k in _ROUTE_KEPT}
+    messages = existing["messages"] + [message]
     update: dict = {"messages": messages}
     # First assistant reply → set a short auto-title if the title was the
     # truncated user query.

@@ -1,6 +1,6 @@
 # Local Brain — Switchboard Routing (design, for approval)
 
-**Status:** draft for approval · 2026-10-04 · nothing built yet
+**Status:** approved with the proposed defaults (§11) · P0 + P1 built 2026-10-04, P2 brain plug-in built (rules_only default) · see §12
 **Decisions so far (user):** Switchboard (A) first, orchestrator (B) later · design the app
 architecture independent of today's hardware; the device solution may be temporary and
 must be easy to remove · **privacy is a goal** — the app will hold a whole digital life ·
@@ -26,7 +26,7 @@ routing gets better.
 | `ModeToggle` (Local / API) chosen by hand per thread | `Auto` by default; manual pick still possible |
 | Any retrieved note can be sent to any provider | Sensitivity labels; a gate strips Private content from cloud payloads |
 | Routing is invisible | Each answer shows where it ran, why, and what was withheld |
-| BlockNote AI calls Gemini straight from Next.js | Every call goes through the backend gateway (needed for the privacy guarantee) |
+| Editor AI sends the open note to its provider whatever the note's level | Editor AI refuses a note above its provider's ceiling |
 
 ## 3. Core concepts
 
@@ -257,8 +257,8 @@ executes unchanged. `Mode` gains `auto`; `local`/`api` stay working for old thre
 ### Call sites, in order
 
 1. Chat (`run_turn`) — first.
-2. Inline editor AI and **BlockNote AI** (currently Gemini direct from Next.js — must move
-   behind the backend, or Private notes can leak through it).
+2. Inline editor AI and BlockNote AI — both already go through the backend; they now refuse
+   a note above their provider's ceiling (they are not routed: one fixed provider each).
 3. Ingest, workspace synthesis, background jobs, MCP-server tool calls.
 
 Until a call site goes through the switchboard, it is labelled "not routed" in Activity, so
@@ -275,9 +275,8 @@ The architecture doesn't depend on it. To get going with daily use:
 
 ## 9. Security preconditions
 
-- **Fix the agent confirm-flag hole first.** `services/agent/permissions.py` trusts a
-  model-supplied `confirm`; injected PDF text can satisfy it. Confirmation must come from
-  the client. Phase B (brain with tools) is blocked on this.
+- The agent confirm-flag hole was already fixed (approvals come from the client). New: a
+  turn with private notes in reach needs approval for any MCP call (they leave the device).
 - The privacy gate filters by labels in code. A model — brain or answering model — can
   never raise its own access.
 - The decision log stores reasons and counts, not note content.
@@ -301,3 +300,20 @@ The architecture doesn't depend on it. To get going with daily use:
 4. **Slot set**: are `local / fast / strong / vision / long` the right five?
 5. **Badge detail**: always show cost on the badge, or only in the ⓘ popover?
 6. **Order**: P0 (privacy) before P1 (switchboard), as proposed?
+
+## 12. As built (2026-10-04)
+
+- **Defaults taken:** Personal for content, *ask* when a private note is needed, cloud brain
+  off, the five slots, privacy first.
+- **Backend:** `services/privacy.py` (gate, fail-closed), `services/routing/` (policy,
+  rules, brain, switchboard, log), `routers/routing.py`, migration `029_privacy_routing.sql`.
+  `local_only` only blocked tool calls before; retrieved local-only notes went into cloud
+  prompts. Now retrieval, workspace sources and every read tool pass the gate.
+- **Ask flow:** the turn stops before any model call and emits `privacy_needed`; the
+  client re-sends with `slot=local`, `withheld_ok`, or `release=[ids]` (client-only, like
+  approvals). Answers written from private notes are stored with `private: true` and a
+  cloud turn sees a placeholder instead.
+- **Frontend:** `Auto ▾` chip, route badge + "why" popover with Ask again on, privacy
+  prompt, note Privacy selector (replaces Local-only), Settings → Routing (5 tabs).
+- **Not yet routed:** ingest, workspace synthesis, background jobs (Activity / Privacy tab
+  say so). Rule → spec deviation: rules reorder with up/down buttons, not drag.

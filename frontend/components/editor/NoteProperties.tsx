@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ChevronRight, X } from "lucide-react";
 import type { Note } from "@/lib/types/database";
-import { LocalOnlyBadge } from "./LocalOnlyBadge";
+import { PrivacyLevel } from "./PrivacyLevel";
 
 const MASTERY_ORDER = [
   "not_started",
@@ -91,10 +91,10 @@ export function NoteProperties({ note }: Props) {
 
       {expanded && (
         <div className="mt-2 space-y-2 pl-3 border-l border-gray-100 dark:border-gray-700">
-          {/* Local only */}
+          {/* Privacy: which models may read this note */}
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400 w-16 shrink-0">Visibility</span>
-            <LocalOnlyBadge noteId={note.id} initialValue={note.local_only ?? false} />
+            <span className="text-xs text-gray-400 w-16 shrink-0">Privacy</span>
+            <PrivacyLevel noteId={note.id} sensitivity={note.sensitivity} localOnly={note.local_only ?? false} />
           </div>
 
           {/* Mastery */}

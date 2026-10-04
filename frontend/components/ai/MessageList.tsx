@@ -9,6 +9,7 @@ import { ToolEvent } from "./ToolEvent";
 import { SkillBadge } from "./SkillBadge";
 import { UploadCard, type PanelJob } from "./PanelCards";
 import { Answer } from "./Answer";
+import { RouteBadge, type RouteInfo } from "./RouteBadge";
 import type { UploadFile } from "./panelSources";
 
 export type StreamItem =
@@ -18,7 +19,14 @@ export type StreamItem =
        *  and the answer can be inserted into that note. */
       citations?: Citation[]; scopeNoteId?: string;
       /** Where Insert put it; `undoNote` says why Undo could not. */
-      inserted?: string; undoNote?: string }
+      inserted?: string; undoNote?: string;
+      /** Where it ran and why (routing). `private`: written from private
+       *  notes on the device — a later cloud turn gets a placeholder. */
+      route?: RouteInfo; private?: boolean;
+      /** The question it answers — "Ask again on…" replays it. */
+      query?: string }
+  | { kind: "privacy"; id: string; query: string; withheld: { id: string; title: string }[];
+      slot: string; model?: string; scopeNoteId?: string; resolved?: string }
   | { kind: "job"; id: string; job: PanelJob }
   | { kind: "upload"; id: string; title: string; files: UploadFile[] }
   | { kind: "notice"; id: string; content: string }
@@ -35,12 +43,17 @@ interface Props {
   renderJob?: (item: Extract<StreamItem, { kind: "job" }>) => ReactNode;
   /** Actions under a finished answer, e.g. Insert into note. */
   renderAnswerActions?: (item: Extract<StreamItem, { kind: "assistant" }>) => ReactNode;
+  /** The privacy prompt carries the panel's actions. */
+  renderPrivacy?: (item: Extract<StreamItem, { kind: "privacy" }>) => ReactNode;
+  /** Ask an answer's question again on another slot. */
+  onRerun?: (item: Extract<StreamItem, { kind: "assistant" }>, slot: string) => void;
+  busy?: boolean;
   /** In the workspace: [n] become chips that jump to the cited page. */
   onCitation?: (c: Citation) => void;
   colorIndex?: Map<string, number>;
 }
 
-export function MessageList({ items, onApprove, renderJob, renderAnswerActions, onCitation, colorIndex }: Props) {
+export function MessageList({ items, onApprove, renderJob, renderAnswerActions, renderPrivacy, onRerun, busy, onCitation, colorIndex }: Props) {
   return (
     <div className="px-4 py-5 flex flex-col gap-4">
       {items.map((item) => {
@@ -56,6 +69,10 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
 
         if (item.kind === "job") {
           return <div key={item.id}>{renderJob?.(item)}</div>;
+        }
+
+        if (item.kind === "privacy") {
+          return <div key={item.id}>{renderPrivacy?.(item)}</div>;
         }
 
         if (item.kind === "upload") {
@@ -108,6 +125,10 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
               </div>
               {item.streaming && (
                 <span className="inline-block w-0.5 h-[1em] bg-indigo-400 animate-pulse ml-0.5 align-middle rounded-full" />
+              )}
+              {item.route && (
+                <RouteBadge route={item.route} busy={busy}
+                  onRerun={onRerun && item.query && !item.streaming ? (slot) => onRerun(item, slot) : undefined} />
               )}
               {!item.streaming && item.content && renderAnswerActions?.(item)}
             </div>

@@ -57,14 +57,22 @@ export async function PATCH(req: Request, { params }: Params) {
   if (body.is_public !== undefined)      update.is_public = body.is_public;
   if (body.position !== undefined)       update.position = body.position;
   if (typeof body.local_only === "boolean") update.local_only = body.local_only;
+  if (["open", "personal", "private"].includes(body.sensitivity)) update.sensitivity = body.sensitivity;
 
-  const { data, error } = await supabase
+  const write = (u: NoteUpdate) => supabase
     .from("notes")
-    .update(update)
+    .update(u)
     .eq("id", noteId)
     .eq("user_id", user.id)
     .select()
     .single();
+  let { data, error } = await write(update);
+  // Before migration 029 there is no sensitivity column; local_only is the
+  // same fact for "private", so the setting still holds where it matters.
+  if (error && update.sensitivity && /sensitivity/.test(error.message)) {
+    const { sensitivity, ...rest } = update;
+    ({ data, error } = await write({ ...rest, local_only: sensitivity === "private" }));
+  }
 
   if (error || !data) {
     return NextResponse.json({ error: error?.message ?? "Not found" }, { status: 404 });

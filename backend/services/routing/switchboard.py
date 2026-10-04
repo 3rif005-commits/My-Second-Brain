@@ -118,7 +118,8 @@ async def route(policy: dict[str, Any], user_id: str, signals: rules_mod.Signals
             else:
                 slot = policy["default_slot"]
                 decided_by = "fallback" if d.error else "rule"
-                reason = "default" if not d.error else f"default ({d.error})"
+                reason = ("no rule matched — your default" if not d.error
+                          else f"your default ({d.error})")
                 if d.error:
                     notes.append(d.error)
 

@@ -11,12 +11,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Send, History, SquarePen, X, Smartphone, Cloud, Check, SlidersHorizontal, Sparkles,
+  Send, History, SquarePen, X, Smartphone, Cloud, Check, Sparkles, Route, Lock, Zap, Brain, Eye, BookOpen,
   Paperclip, FileText, FilePlus2, Link2, Upload, Settings2, ChevronDown, Clock,
 } from "lucide-react";
 import { MessageList, type StreamItem } from "./MessageList";
 import { ThreadHistory } from "./ThreadHistory";
-import { useMode, type Mode } from "./ModeToggle";
+import { modeRequest, useMode, type Mode } from "./ModeToggle";
+import { PrivacyPrompt, slotLabel, type RouteInfo } from "./RouteBadge";
 import { PanelJobCard, type PanelJob } from "./PanelCards";
 import { BackgroundJobs } from "./BackgroundJobs";
 import {
@@ -66,8 +67,12 @@ interface ChatProps {
 
 
 const MODEL_OPTIONS: { value: Mode; label: string; desc: string; icon: React.ReactNode }[] = [
-  { value: "local", label: "Local", desc: "On-device · private", icon: <Smartphone size={14} /> },
-  { value: "api",   label: "Cloud", desc: "Faster · smarter",    icon: <Cloud size={14} /> },
+  { value: "auto",   label: "Auto",   desc: "Your rules decide · private stays home", icon: <Route size={14} /> },
+  { value: "local",  label: "Local",  desc: "On this device · nothing leaves",        icon: <Smartphone size={14} /> },
+  { value: "fast",   label: "Fast",   desc: "Cheap cloud model",                      icon: <Zap size={14} /> },
+  { value: "strong", label: "Strong", desc: "Best reasoning",                         icon: <Brain size={14} /> },
+  { value: "vision", label: "Vision", desc: "Images and figures",                     icon: <Eye size={14} /> },
+  { value: "long",   label: "Long",   desc: "Very large context",                     icon: <BookOpen size={14} /> },
 ];
 
 export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, workspace, focusNonce, prefill }: ChatProps = {}) {
@@ -233,7 +238,8 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (m: any, i: number) => m.role === "user"
           ? { kind: "user" as const, id: `h-${i}`, content: m.content }
-          : { kind: "assistant" as const, id: `h-${i}`, content: m.content }
+          : { kind: "assistant" as const, id: `h-${i}`, content: m.content,
+              route: m.route as RouteInfo | undefined, private: m.private === true }
       );
       setItems(loaded);
     })();
@@ -249,6 +255,37 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
     send(undefined, { query, approvals: [approvalKey] });
   }
 
+  /** Ask a question again without a new bubble: from the privacy prompt or
+   *  an answer's "Ask again on". */
+  async function replay(query: string, beforeId: string, where: PanelScope | null,
+                        route: NonNullable<Parameters<typeof stream>[1]["route"]>) {
+    if (loading) return;
+    lastQueryRef.current = query;
+    setError(null);
+    setLoading(true);
+    const ctl = new AbortController();
+    abortRef.current = ctl;
+    try {
+      await stream(query, { where, route, beforeId, signal: ctl.signal });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function choosePrivacy(item: Extract<StreamItem, { kind: "privacy" }>,
+                         choice: "local" | "without" | "once") {
+    const where = item.scopeNoteId ? (activeScope?.noteId === item.scopeNoteId ? activeScope
+      : { noteId: item.scopeNoteId, title: "" }) : null;
+    const said = choice === "local" ? "Answered on this device."
+      : choice === "without" ? "Sent without the private notes."
+      : "Sent once — the notes stay private.";
+    patchItem(item.id, (it) => it.kind === "privacy" ? { ...it, resolved: said } : it);
+    void replay(item.query, item.id, where,
+      choice === "local" ? { slot: "local" }
+      : choice === "without" ? { withheld_ok: true }
+      : { release: item.withheld.map((w) => w.id) });
+  }
+
   const patchItem = (id: string, fn: (it: StreamItem) => StreamItem) =>
     setItems((prev) => prev.map((it) => (it.id === id ? fn(it) : it)));
   const patchJob = (id: string, fn: (j: PanelJob) => PanelJob) =>
@@ -256,11 +293,24 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   const notice = (content: string) =>
     setItems((prev) => [...prev, { kind: "notice", id: uid(), content }]);
 
-  /** The conversation so far, as the agent reads it. */
-  function history(query: string) {
+  /** The conversation so far, as the agent reads it. `beforeId` replays a
+   *  question: only what came before it, without the question itself (it is
+   *  added back as the last message). Private answers keep their flag so a
+   *  cloud turn gets a placeholder instead of their text. */
+  function history(query: string, beforeId?: string) {
+    let list = items;
+    if (beforeId) {
+      const at = items.findIndex((i) => i.id === beforeId);
+      list = at >= 0 ? items.slice(0, at) : items;
+      const convo = list.filter((i) => i.kind === "user" || i.kind === "assistant");
+      const last = convo[convo.length - 1];
+      if (last?.kind === "user") list = list.filter((i) => i.id !== last.id);
+    }
     return [
-      ...items.filter((i) => i.kind === "user" || i.kind === "assistant")
-        .map((i) => ({ role: i.kind, content: (i as { content: string }).content })),
+      ...list.flatMap((i) => i.kind === "user" ? [{ role: "user", content: i.content }]
+        : i.kind === "assistant" && i.content
+          ? [{ role: "assistant", content: i.content, ...(i.private ? { private: true } : {}) }]
+          : []),
       { role: "user", content: query },
     ];
   }
@@ -270,13 +320,17 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   async function stream(
     query: string,
     opts: { where?: PanelScope | null; job?: { skill: string; focus: string; cardId: string };
-            approvals?: string[]; signal?: AbortSignal },
+            approvals?: string[]; signal?: AbortSignal;
+            /** Routing overrides from the privacy prompt or "Ask again on". */
+            route?: { slot?: string; release?: string[]; withheld_ok?: boolean; override_of?: string };
+            /** Replaying a question: history stops before this item. */
+            beforeId?: string },
   ) {
     const assistantId = uid();
     let pickedCard: string | null = null;
     if (!opts.job) {
       setItems((prev) => [...prev, { kind: "assistant", id: assistantId, content: "", streaming: true,
-        scopeNoteId: opts.where?.noteId }]);
+        scopeNoteId: opts.where?.noteId, query }]);
     }
     try {
       const res = await fetch("/api/agent", {
@@ -286,9 +340,12 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
         body: JSON.stringify({
           thread_id: threadId,
           query,
-          mode,
+          ...(opts.route?.slot ? modeRequest(opts.route.slot as Mode) : modeRequest(mode)),
+          release: opts.route?.release ?? [],
+          withheld_ok: opts.route?.withheld_ok ?? false,
+          ...(opts.route?.override_of ? { override_of: opts.route.override_of } : {}),
           approvals: opts.approvals ?? [],
-          messages: history(query),
+          messages: history(query, opts.beforeId),
           ...(opts.where ? { surface: "workspace", current_note_id: opts.where.noteId } : {}),
           ...(opts.job ? { job: opts.job.skill, focus: opts.job.focus } : {}),
         }),
@@ -315,7 +372,18 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
           try { ev = JSON.parse(raw); } catch { continue; }
           const card = opts.job?.cardId;
 
-          if (ev.type === "text") {
+          if (ev.type === "route") {
+            const route = ev as unknown as RouteInfo;
+            patchItem(assistantId, (it) => it.kind === "assistant"
+              ? { ...it, route, private: route.private_used === true } : it);
+          } else if (ev.type === "privacy_needed") {
+            // Nothing was sent: the question waits for the user's choice.
+            const prompt: StreamItem = { kind: "privacy", id: uid(), query,
+              withheld: ev.withheld as { id: string; title: string }[],
+              slot: ev.slot as string, model: ev.model as string | undefined,
+              scopeNoteId: opts.where?.noteId };
+            setItems((prev) => [...prev.filter((p) => p.id !== assistantId), prompt]);
+          } else if (ev.type === "text") {
             patchItem(assistantId, (it) => it.kind === "assistant"
               ? { ...it, content: it.content + (ev.content as string) } : it);
           } else if ((ev.type === "context" || ev.type === "citations") && ev.citations) {
@@ -756,6 +824,20 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
           <MessageList
             items={items}
             onApprove={approve}
+            busy={loading}
+            renderPrivacy={(it) => (
+              <PrivacyPrompt withheld={it.withheld} slot={it.slot} model={it.model}
+                resolved={it.resolved} busy={loading}
+                onLocal={() => choosePrivacy(it, "local")}
+                onWithout={() => choosePrivacy(it, "without")}
+                onOnce={() => choosePrivacy(it, "once")} />
+            )}
+            onRerun={(it, slot) => {
+              const where = it.scopeNoteId ? (activeScope?.noteId === it.scopeNoteId ? activeScope
+                : { noteId: it.scopeNoteId, title: "" }) : null;
+              void replay(it.query!, it.id, where,
+                { slot, override_of: it.route?.decision_id ?? undefined });
+            }}
             onCitation={workspace?.onCitation}
             colorIndex={workspace?.colorIndex}
             renderJob={(it) => (
@@ -965,20 +1047,22 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             <button
               type="button"
               onClick={() => setModeMenuOpen((v) => !v)}
-              aria-label={`AI model: ${mode}`}
-              className={`p-1.5 rounded-lg transition-colors ${
+              aria-label={`Where answers run: ${slotLabel(mode === "auto" ? "Auto" : mode)}`}
+              aria-haspopup="menu" aria-expanded={modeMenuOpen}
+              className={`inline-flex items-center gap-1 h-7 px-2 rounded-lg text-[11.5px] font-medium transition-colors ${
                 modeMenuOpen
                   ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-500"
-                  : "text-gray-400 hover:text-indigo-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  : "text-gray-500 hover:text-indigo-500 hover:bg-gray-100 dark:hover:bg-gray-700"
               }`}
             >
-              <SlidersHorizontal size={14} />
+              {mode === "local" ? <Lock size={12} /> : mode === "auto" ? <Route size={12} /> : <Cloud size={12} />}
+              {mode === "auto" ? "Auto" : slotLabel(mode)}
             </button>
 
             {modeMenuOpen && (
-              <div className="absolute bottom-full mb-2 right-0 w-52 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden z-20">
+              <div className="absolute bottom-full mb-2 right-0 w-60 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden z-20">
                 <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                  Model
+                  Where answers run
                 </p>
                 {MODEL_OPTIONS.map((opt) => (
                   <button
@@ -1003,7 +1087,12 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                     {mode === opt.value && <Check size={13} className="shrink-0 text-indigo-500" />}
                   </button>
                 ))}
-                <div className="h-1" />
+                <button type="button"
+                  onClick={() => { setModeMenuOpen(false); router.push("/brain/settings/routing"); }}
+                  className="w-full flex items-center gap-1.5 px-3 h-8 text-left text-[12px] text-gray-500
+                    hover:text-indigo-600 hover:bg-gray-50 dark:hover:bg-white/5 border-t border-gray-100 dark:border-gray-700">
+                  <Settings2 size={12} /> Routing settings
+                </button>
               </div>
             )}
           </div>

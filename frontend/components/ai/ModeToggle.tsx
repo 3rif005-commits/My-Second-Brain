@@ -2,38 +2,34 @@
 
 import { useEffect, useState } from "react";
 
-export type Mode = "local" | "api";
+/** Where a chat turn runs. "auto" lets the backend's switchboard decide (rules,
+ *  then the brain); "local" pins it to the on-device model; the rest pin a
+ *  role whose model is set in Settings → Routing → Targets. */
+export type Mode = "auto" | "local" | "fast" | "strong" | "vision" | "long";
+
+export const MODES: Mode[] = ["auto", "local", "fast", "strong", "vision", "long"];
 
 const KEY = "secondbrain:mode";
 
+/** The request fields a mode becomes. */
+export function modeRequest(mode: Mode): { mode: "auto" | "local"; slot?: string } {
+  if (mode === "auto" || mode === "local") return { mode };
+  return { mode: "auto", slot: mode };
+}
+
 export function useMode(): [Mode, (m: Mode) => void] {
-  const [mode, setMode] = useState<Mode>("api");
+  const [mode, setMode] = useState<Mode>("auto");
   useEffect(() => {
-    const v = localStorage.getItem(KEY) as Mode | null;
-    if (v === "local" || v === "api") setMode(v);
+    try {
+      const v = localStorage.getItem(KEY);
+      // "api" was the old Cloud choice; the switchboard now picks the cloud model.
+      if (v === "api") setMode("auto");
+      else if (v && (MODES as string[]).includes(v)) setMode(v as Mode);
+    } catch { /* storage blocked: keep the default */ }
   }, []);
   const update = (m: Mode) => {
     setMode(m);
-    localStorage.setItem(KEY, m);
+    try { localStorage.setItem(KEY, m); } catch { /* not remembered, still applied */ }
   };
   return [mode, update];
-}
-
-interface Props {
-  mode: Mode;
-  onChange: (m: Mode) => void;
-}
-
-export function ModeToggle({ mode, onChange }: Props) {
-  return (
-    <button
-      onClick={() => onChange(mode === "local" ? "api" : "local")}
-      title={`Current mode: ${mode}. Click to switch.`}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-      aria-label={`AI mode: ${mode}`}
-    >
-      <span className="text-sm" aria-hidden>{mode === "local" ? "📱" : "☁️"}</span>
-      <span className="capitalize">{mode}</span>
-    </button>
-  );
 }

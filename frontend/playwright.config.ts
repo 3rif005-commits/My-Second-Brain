@@ -32,6 +32,16 @@ export default defineConfig({
     },
 
     // 3. Note CRUD tests — run WITH the saved auth session
+    // Routing: Settings → Routing, the Auto chip, route badges. One tiny
+    // cloud answer; deletes the threads it makes.
+    {
+      name: "routing-live",
+      testMatch: "**/routing-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      retries: 0,
+    },
+
     {
       name: "notes-crud",
       testMatch: "**/02-notes-crud.spec.ts",

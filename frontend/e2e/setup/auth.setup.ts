@@ -16,7 +16,9 @@ setup("authenticate", async ({ page }) => {
   await page.click('button[type="submit"]');
 
   // Wait for redirect to /brain — confirms login succeeded
-  await page.waitForURL("**/brain", { timeout: 15000 });
+  // 60s: the dev server compiles /brain on first visit, which takes longer
+  // than 15s on a 2-core machine.
+  await page.waitForURL("**/brain", { timeout: 60_000 });
   expect(page.url()).toContain("/brain");
 
   // Save auth cookies + localStorage
