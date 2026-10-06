@@ -1,0 +1,40 @@
+# Render blueprint for the Second Brain API (the whole backend, main:app).
+#
+# Cloud has no llama.cpp: generation goes to Claude, embeddings to Gemini.
+# Set the secret env vars in the Render dashboard, not in this file.
+services:
+  - type: web
+    name: second-brain-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: DATABASE_ROWS_ENABLED
+        value: "true"
+      - key: API_PROVIDER
+        value: anthropic
+      - key: EMBEDDER_PROVIDER
+        value: gemini
+      # Must match the deployed frontend origin exactly (CORS allow-list).
+      - key: FRONTEND_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      # Supabase pooler string, port 6543.
+      - key: DATABASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: INTERNAL_API_KEY
+        generateValue: true
