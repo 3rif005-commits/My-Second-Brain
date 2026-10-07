@@ -34,6 +34,16 @@ export default defineConfig({
     // 3. Note CRUD tests — run WITH the saved auth session
     // Routing: Settings → Routing, the Auto chip, route badges. One tiny
     // cloud answer; deletes the threads it makes.
+    // Ledger B3: an unknown block type survives load + autosave. Creates and
+    // permanently deletes its own fixture note.
+    {
+      name: "unknown-block-live",
+      testMatch: "**/unknown-block-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      retries: 0,
+    },
+
     {
       name: "routing-live",
       testMatch: "**/routing-live.spec.ts",
