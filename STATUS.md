@@ -664,3 +664,38 @@ found while building the M0 harness (unrelated to this feature, not yet addresse
 `005_notion_phase.sql` uses `CREATE POLICY IF NOT EXISTS` (invalid in every Postgres
 version — `anon_read_public_notes` was probably never created); `010_mcp_servers.sql`
 collides with `009_ai_substrate.sql` (migration set not replayable from 001 in order).
+
+---
+
+## Send to Notion (push-only mirror) — DESIGN, awaiting approval (2026-10-07)
+
+> Research `docs/notion-sync/RESEARCH.md` · matrix `FIDELITY_MATRIX.md` · ledger
+> `DIVERGENCE_LEDGER.md` · design `DESIGN.md` (+ `mockups/index.html`) · `ROBUSTNESS.md`
+> (ADRs, tests, failure modes) · progress ledger `docs/notion-sync/PROGRESS.md`.
+> **No feature code yet.** Push only: Second Brain → Notion, never pulled back.
+> Every milestone ships on its own and is tested with a THROWAWAY Notion workspace
+> (`NOTION_TEST_TOKEN`, root page named `SB-TEST-…`), never your real one.
+
+Common test prefix (backend): `cd backend && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 venv/bin/python -m pytest -p asyncio`
+App: `./app.sh status` first (never stop a running stack you didn't start), then `./app.sh start`.
+
+| M | What ships | Depends | Test it |
+|---|---|---|---|
+| 0 | **Groundwork.** Live tests T1–T10 against the test workspace (cassettes recorded); `services/secrets.py` (Fernet); migration `030_notion_sync.sql` (+ proof SELECT); ledger fix **B3** (unknown blocks kept, not deleted) | your test token; migration applied by you | `… tests/notion_sync/contract -v` · `… tests/test_secrets.py` · in Supabase SQL editor: the migration's proof row |
+| 1 | **Connect + send ONE plain note faithfully, with dry-run preview.** Settings → Notion connect (token, pick root); note ••• → "Send to Notion…" review panel; text blocks (paragraph, headings 1–4, lists, to-do, toggle, quote, code, divider, inline styles, links); mapping table; re-send = 0 writes | M0 | `… tests/notion_sync -k "m1 or idempotent"` · browser: create a note "SB-TEST note", ••• → Send → check preview shows *Exact* → Send → Open in Notion ↗ → Send again → "Nothing to send" · delete the test note |
+| 2 | **Every block type + files.** Callouts, math, columns, tables, media upload (dedup, 1-h attach), covers/icons, checkpoint/button/opaque fallbacks + markers; golden files for every type; coverage guard | 1 | `… tests/notion_sync/golden tests/notion_sync/test_coverage_guard.py` · `python -m evals.notion_roundtrip --fixture all-blocks` (test workspace) |
+| 3 | **Hierarchy (D1) + mentions + moves/renames/deletes→archive.** Collections → pages/containers, two-pass mentions, move API, `🗄 Deleted in Second Brain` | 2 | `… -k "hierarchy or mention or archive"` · browser: send a test collection with 2 notes that mention each other; mention opens the right Notion page; trash one note → next preview lists it unchecked |
+| 4 | **Changed-in-Notion protection.** Cheap + deep edit check, Needs-you tab, side-by-side diff, Overwrite / Skip / Send as copy, per-item pause | 3 | `… -k notion_side_edit` (all 3 choices; Skip = 0 writes) · browser: edit the mirrored test page in Notion, re-send → diff appears |
+| 5 | **Background engine hardening.** Runs/items, phases + deps, crash reconcile, token bucket + Retry-After, cursors, kill switch, Activity + Retry failed, notifications | 4 | `… -k "crash or ratelimit or killswitch"` (fault injection at every request) · measure: `python -m evals.notion_scale --notes 500` (test workspace) |
+| 6 | **Databases.** Schemas (24 types), rows, relations (dual), rollups, formulas + snapshot (D3), unique_id, files props, order property | 5 | `… tests/notion_sync/databases` · round-trip fixture DB with every property type |
+| 7 | **Views.** All 10 creatable types, filters/sorts/groups, feed→list fallback, inline DBs in position (T3) | 6 | `… -k views` · browser: open the test DB in Notion, check each view |
+| 8 | **Status everywhere + auto-sync.** Sidebar dots, header chip, DB column, ⌘K, multi-select, rules (on change / daily), privacy D4 in auto mode | 7 | `npx playwright test e2e/notion-sync.spec.ts` (creates + deletes its own fixture note) |
+| 9 | **The rest of the brain.** Workspace source files (opt-in), threads, skills (D5), "whole brain" send | 8 | `… -k "threads or skills or sources"` · whole-brain dry run on the test workspace with a fixture brain |
+| 10 | **Change detection.** Daily canary, contract tests in CI, `NOTION_CHANGES.md` process | 9 | `python -m evals.notion_canary` → Health card ✓ |
+| 11 | **Local backup archive** `.sbz` + `tools.restore --dry-run` + scheduled retention (can be moved earlier, it doesn't depend on Notion) | IR from 1 | `python -m tools.backup --out /tmp/sb.sbz && python -m tools.restore /tmp/sb.sbz --dry-run` |
+| — | Divergence fixes you approve: **B1** (interactive blocks out of localStorage), **B2** (24-h capture URLs) | — | per fix |
+
+**Decisions waiting on you:** D1 (how notes land: recommended *tree of databases*), D2 (deletes
+listed unchecked → archive page), D3 (formula + snapshot), D4 (Notion = trusted, private blocked),
+D5 (whole-brain includes), which ledger bugs to fix (B1–B3 recommended), and a throwaway test
+workspace token.

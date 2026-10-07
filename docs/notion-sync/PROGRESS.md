@@ -11,7 +11,7 @@
 | 3 | DIVERGENCE_LEDGER.md | done (B1-B7, U1-U5 for user) | |
 | 4 | DESIGN.md + mockups | done (mockups/index.html) | |
 | 5 | ROBUSTNESS.md | done | |
-| 6 | STATUS.md milestone plan | not started | |
+| 6 | STATUS.md milestone plan | done — STOP, awaiting approval | |
 
 ## Facts established
 - 2026-10-07: no Notion API integration in repo (grep for api.notion.com / @notionhq / notion-client outside venvs: zero hits; "notion" hits are "Notion-style" comments only).
