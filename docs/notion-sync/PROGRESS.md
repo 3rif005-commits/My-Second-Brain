@@ -20,5 +20,8 @@
 - D1 = **Tree of databases** (collection page → inline "Notes" DB of its notes; sub-collections as child pages; root "Notes" DB for un-filed notes).
 - D3 = **Formula + snapshot** property.
 - Divergence fixes approved: **B1** (interactive blocks out of localStorage), **B3** (keep unknown blocks), **B2** (24-h capture URLs). B5 not chosen (Notion token still uses new encrypted storage).
-- U1–U4: user wants to review one by one (presented in chat 2026-10-07; answers pending).
-- Still open: D2 (deletes), D4 (privacy ceiling), D5 (whole-brain includes), test workspace token, overall approval to start M0.
+- U1–U4: reviewed one by one, user chose the recommendation for each = **keep as-is** (no app changes).
+- D2 = **deletes listed unchecked in the dry run; if ticked, page moved to `🗄 Deleted in Second Brain`** (never `in_trash`).
+- D4 = **Notion is a trusted cloud destination (ceiling `personal`)**; private notes blocked, per-send "Send once anyway"; auto-sync never releases.
+- D5 = **whole brain ON: collections, notes, databases, embedded files; OFF: workspace source files, chat threads, skills** (each a Settings toggle).
+- Still open: throwaway test workspace token; explicit go-ahead to start M0 (no feature code until then).

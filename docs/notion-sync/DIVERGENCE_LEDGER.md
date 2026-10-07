@@ -43,4 +43,4 @@ Ranked by how much they hurt the backup's trustworthiness.
 | U4 | **Our trash never auto-purges; Notion's purges after 30 days.** | Keep ours. For the mirror, never use Notion's trash (DESIGN §6.4). |
 | U5 | **Note metadata (topics, mastery, source) are properties of a page that is not a database row** (only in the virtual "All Notes"). Notion can't do this. | This is D1 in DESIGN: choose how notes land in Notion. |
 
-These go to you in one AskUserQuestion together with the DESIGN decisions.
+**Decided 2026-10-07:** U1–U4 keep as-is (user accepted each recommendation); U5 resolved by D1 = tree of databases. Bug fixes approved: B1, B2, B3.

@@ -38,7 +38,7 @@ also carry a hidden "SB ID" property, which makes crash recovery exact (ROBUSTNE
 schema-in-step cost falls on the engine, not on you. Notes with no collection go into the
 root page's own "Notes" database.
 
-**D2 — Deletes.** Recommended: a note you trash here is listed in the next dry run as
+**D2 — Deletes — DECIDED 2026-10-07: recommended option.** Recommended: a note you trash here is listed in the next dry run as
 "Deleted in Second Brain", **unchecked** (Obsidian Publish's safety rule). If you tick it,
 the page is *moved* to `🗄 Deleted in Second Brain` under the root. Never `in_trash`, because
 Notion purges its trash after 30 days. Alternative: auto-propagate on auto-sync.
@@ -48,12 +48,12 @@ Notion purges its trash after 30 days. Alternative: auto-propagate on auto-sync.
 Notion computes differently or refuses the expression. Alternative: formula only (cleaner, less
 safe) or snapshot only (always exact, not live).
 
-**D4 — Privacy ceiling for Notion.** Recommended: Notion is treated like a trusted cloud
+**D4 — Privacy ceiling for Notion — DECIDED 2026-10-07: recommended option.** Recommended: Notion is treated like a trusted cloud
 provider: `open` + `personal` notes may go; `private` notes are blocked and need a
 per-send "Send once anyway" (the existing `released` channel). Auto-sync never releases.
 Alternative: treat Notion as untrusted (`open` only).
 
-**D5 — What "whole brain" includes.** Recommended default ON: collections, notes, databases
+**D5 — What "whole brain" includes — DECIDED 2026-10-07: recommended defaults.** Recommended default ON: collections, notes, databases
 (rows, views), files embedded in notes. Default OFF: workspace source files (large), chat
 threads, skills. Each is a toggle in Settings.
 

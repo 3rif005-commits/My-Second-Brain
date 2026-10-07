@@ -695,7 +695,6 @@ App: `./app.sh status` first (never stop a running stack you didn't start), then
 | 11 | **Local backup archive** `.sbz` + `tools.restore --dry-run` + scheduled retention (can be moved earlier, it doesn't depend on Notion) | IR from 1 | `python -m tools.backup --out /tmp/sb.sbz && python -m tools.restore /tmp/sb.sbz --dry-run` |
 | — | Divergence fixes you approve: **B1** (interactive blocks out of localStorage), **B2** (24-h capture URLs) | — | per fix |
 
-**Decisions waiting on you:** D1 (how notes land: recommended *tree of databases*), D2 (deletes
-listed unchecked → archive page), D3 (formula + snapshot), D4 (Notion = trusted, private blocked),
-D5 (whole-brain includes), which ledger bugs to fix (B1–B3 recommended), and a throwaway test
-workspace token.
+**Decided 2026-10-07:** D1 tree of databases · D2 deletes listed unchecked → archive page · D3 formula +
+snapshot · D4 Notion = trusted, private blocked · D5 whole brain = notes/collections/databases/embedded
+files · fix B1, B2, B3 · U1–U4 keep. **Waiting on:** a throwaway test workspace token and the go-ahead for M0.
