@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Send to Notion mockups</title>
+<style>
+:root{
+  --bg:#ffffff; --fg:#2c2c2b; --muted:#787774; --faint:#bcbab6;
+  --sidebar:#f9fafb; --border:#e5e7eb; --hover:rgba(33,27,23,.051);
+  --menu-bg:#fff; --menu-shadow:0 0 0 1px rgba(15,15,15,.05),0 3px 6px rgba(15,15,15,.1),0 9px 24px rgba(15,15,15,.2);
+  --accent:#2383e2; --accent-weak:rgba(35,131,226,.1);
+  --ok:#448361; --ok-weak:rgba(68,131,97,.12);
+  --warn:#cb912f; --warn-weak:rgba(203,145,47,.14);
+  --bad:#d44c47; --bad-weak:rgba(212,76,71,.12);
+  --nfx:#9065b0; --nfx-weak:rgba(144,101,176,.14);
+  --code:#f7f6f3;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#191919; --fg:#f0efed; --muted:#9b9a97; --faint:#5f5e59;
+    --sidebar:#202020; --border:#2f2f2f; --hover:rgba(255,255,255,.055);
+    --menu-bg:#252525; --menu-shadow:0 0 0 1px rgba(255,255,255,.08),0 3px 6px rgba(0,0,0,.4),0 9px 24px rgba(0,0,0,.5);
+    --accent-weak:rgba(35,131,226,.2); --code:#2a2a2a;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#191919; --fg:#f0efed; --muted:#9b9a97; --faint:#5f5e59;
+  --sidebar:#202020; --border:#2f2f2f; --hover:rgba(255,255,255,.055);
+  --menu-bg:#252525; --menu-shadow:0 0 0 1px rgba(255,255,255,.08),0 3px 6px rgba(0,0,0,.4),0 9px 24px rgba(0,0,0,.5);
+  --accent-weak:rgba(35,131,226,.2); --code:#2a2a2a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+button{font:inherit;color:inherit}
+.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.top h1{font-size:15px;margin:0 12px 0 0}
+.tabs{display:flex;gap:2px;flex-wrap:wrap}
+.tab{border:0;background:none;padding:5px 9px;border-radius:6px;cursor:pointer;color:var(--muted)}
+.tab[aria-selected="true"]{background:var(--hover);color:var(--fg);font-weight:600}
+.tab:focus-visible,.btn:focus-visible,.row:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.spacer{flex:1}
+.wrap{max-width:1180px;margin:0 auto;padding:16px}
+.alts{display:flex;gap:6px;margin:4px 0 12px;flex-wrap:wrap}
+.alt{border:1px solid var(--border);background:none;border-radius:999px;padding:3px 10px;cursor:pointer;font-size:13px}
+.alt[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-weak);color:var(--accent)}
+.rec{font-size:11px;font-weight:600;color:var(--ok);margin-left:4px}
+.note{color:var(--muted);font-size:13px;margin:0 0 12px}
+.frame{border:1px solid var(--border);border-radius:10px;overflow:hidden;display:flex;min-height:520px;position:relative;background:var(--bg)}
+.side{width:240px;flex:none;background:var(--sidebar);border-right:1px solid var(--border);padding:10px 6px;font-size:13.5px}
+.side .item{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:5px;color:var(--fg);cursor:default;position:relative}
+.side .item:hover{background:var(--hover)}
+.side .item.sel{background:var(--accent-weak)}
+.side .ind{padding-left:22px}.side .ind2{padding-left:36px}
+.side .sec{color:var(--muted);font-size:12px;padding:10px 8px 4px}
+.dot{width:6px;height:6px;border-radius:50%;margin-left:auto;flex:none}
+.d-warn{background:var(--warn)}.d-bad{background:var(--bad)}.d-nfx{background:var(--nfx)}
+.d-ok{border:1.5px solid var(--ok);background:none;opacity:0}.item:hover .d-ok{opacity:1}
+.lock{margin-left:auto;font-size:11px;opacity:.7}
+.main{flex:1;min-width:0;padding:14px 28px;position:relative}
+.crumbs{color:var(--muted);font-size:13px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.hdr{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin-top:-22px}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:2px 8px;font-size:12.5px;cursor:pointer;border:0}
+.c-none{background:var(--hover);color:var(--muted)}.c-ok{background:var(--ok-weak);color:var(--ok)}
+.c-warn{background:var(--warn-weak);color:var(--warn)}.c-bad{background:var(--bad-weak);color:var(--bad)}
+.c-nfx{background:var(--nfx-weak);color:var(--nfx)}
+.title{font-size:34px;font-weight:700;margin:38px 0 6px}
+.ph{height:10px;border-radius:4px;background:var(--hover);margin:10px 0}
+.menu{position:absolute;background:var(--menu-bg);box-shadow:var(--menu-shadow);border-radius:10px;padding:6px;width:260px;z-index:3;font-size:14px}
+.mi{display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;height:28px}
+.mi:hover,.mi.hl{background:var(--hover)}.mi .k{margin-left:auto;color:var(--faint);font-size:12px}
+.mdiv{height:1px;background:var(--border);margin:5px 0}
+.panel{position:absolute;top:0;right:0;bottom:0;width:483px;max-width:100%;background:var(--menu-bg);box-shadow:var(--menu-shadow);display:flex;flex-direction:column;z-index:4}
+.panel h2{font-size:15px;margin:0}
+.ph-h{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border)}
+.pb{padding:12px 16px;overflow:auto;flex:1}
+.pf{padding:12px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.lbl{font-size:12px;color:var(--muted);margin:10px 0 4px}
+.field{border:1px solid var(--border);border-radius:6px;padding:6px 8px;display:flex;align-items:center;gap:6px}
+.radio{display:flex;gap:6px;flex-direction:column}
+.radio label{display:flex;gap:8px;align-items:flex-start;padding:4px 0}
+.small{font-size:12px;color:var(--muted)}
+.btn{border:1px solid var(--border);background:var(--bg);border-radius:6px;padding:5px 12px;cursor:pointer}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.dng{color:var(--bad);border-color:var(--bad)}
+.ptabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin:10px 0 6px;flex-wrap:wrap}
+.ptab{border:0;background:none;padding:6px 8px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font-size:13px}
+.ptab[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--fg)}
+.row{display:flex;align-items:center;gap:8px;padding:6px 4px;border-radius:6px}
+.row:hover{background:var(--hover)}
+.row .t{flex:1;min-width:0}.row .t b{font-weight:500}.row .t .small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{font-size:11.5px;border-radius:4px;padding:1px 6px;white-space:nowrap}
+.p-e{background:var(--ok-weak);color:var(--ok)}.p-a{background:var(--warn-weak);color:var(--warn)}
+.p-l{background:var(--bad-weak);color:var(--bad)}.p-n{background:var(--nfx-weak);color:var(--nfx)}
+.loss{margin:2px 0 6px 30px;font-size:12.5px;color:var(--muted);border-left:2px solid var(--border);padding-left:8px}
+.bar{height:6px;border-radius:3px;background:var(--hover);overflow:hidden}.bar i{display:block;height:100%;background:var(--accent);width:62%}
+.modal-bg{position:absolute;inset:0;background:rgba(15,15,15,.35);display:flex;align-items:center;justify-content:center;z-index:4}
+.modal{background:var(--menu-bg);box-shadow:var(--menu-shadow);border-radius:12px;width:560px;max-width:94%;padding:18px}
+.diff{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.diff pre{margin:0;background:var(--code);border-radius:6px;padding:8px;font-size:12px;white-space:pre-wrap;min-height:150px}
+.del{background:var(--bad-weak)}.add{background:var(--ok-weak)}
+.settings{max-width:760px}
+.card{border:1px solid var(--border);border-radius:10px;padding:14px;margin:0 0 12px}
+.card h3{margin:0 0 8px;font-size:14px}
+table.t{width:100%;border-collapse:collapse;font-size:13px}
+table.t td,table.t th{padding:6px 4px;border-bottom:1px solid var(--border);text-align:left}
+table.t th{color:var(--muted);font-weight:500}
+.stbar{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:14px;flex-wrap:wrap}
+.stbar span{padding:6px 10px;font-size:13px;color:var(--muted)}.stbar span.on{color:var(--fg);border-bottom:2px solid var(--fg)}
+.banner{background:var(--bad-weak);color:var(--bad);border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.toast{position:absolute;right:16px;bottom:16px;background:var(--fg);color:var(--bg);border-radius:8px;padding:10px 14px;font-size:13px;z-index:5}
+.actionbar{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);background:var(--menu-bg);box-shadow:var(--menu-shadow);border-radius:10px;padding:6px 8px;display:flex;gap:8px;align-items:center;z-index:3}
+.cmdk{position:absolute;left:50%;top:60px;transform:translateX(-50%);width:560px;max-width:94%;background:var(--menu-bg);box-shadow:var(--menu-shadow);border-radius:12px;z-index:4}
+.cmdk input{width:100%;border:0;border-bottom:1px solid var(--border);background:none;color:var(--fg);padding:14px 16px;font-size:16px;outline:none}
+.hidden{display:none!important}
+@media (max-width:820px){
+  .side{display:none}.main{padding:12px 16px}.panel{width:100%}.diff{grid-template-columns:1fr}
+  .hdr{margin-top:6px;justify-content:flex-start}.title{margin-top:14px;font-size:26px}
+}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>Send to Notion: mockups</h1>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <span class="spacer"></span>
+  <button class="tab" id="theme" aria-label="Toggle light or dark mode">◐ Theme</button>
+</div>
+<div class="wrap">
+  <div class="alts" id="alts" role="group" aria-label="Alternatives"></div>
+  <p class="note" id="note"></p>
+  <div id="stage"></div>
+</div>
+
+<template id="sidebar">
+  <div class="side" aria-label="Sidebar">
+    <div class="sec">Favorites</div>
+    <div class="item">⭐ Lecture 10 — Entropy<span class="dot d-warn" title="Changed since last send"></span></div>
+    <div class="sec">Collections</div>
+    <div class="item">📁 Physics<span class="dot d-bad" title="1 item failed"></span></div>
+    <div class="item ind sel">📄 Lecture 10 — Entropy<span class="dot d-warn" title="Changed since last send"></span></div>
+    <div class="item ind">📄 Lecture 9 — Heat engines<span class="dot d-ok" title="In sync"></span></div>
+    <div class="item ind">📄 Exam notes<span class="lock" title="Private: never sent">🔒</span></div>
+    <div class="item ind">🗃 Formula sheet<span class="dot d-nfx" title="Edited in Notion"></span></div>
+    <div class="item">📁 Algorithms<span class="dot d-ok" title="In sync"></span></div>
+    <div class="item ind">📄 Dijkstra<span class="dot d-ok" title="In sync"></span></div>
+    <div class="item">📄 Inbox note</div>
+  </div>
+</template>
+
+<script>
+const S = {
+  entry: { name:"1 · Entry points", alts:[
+    ["a","Chip + menus",true,"Header chip shows the mirror state at a glance; the ••• menu, sidebar right-click, multi-select bar and ⌘K all open the same Send panel."],
+    ["b","Menus only",false,"Quieter: no chip. The mirror state is invisible until you open a menu."],
+    ["c","Mirror section",false,"A dedicated sidebar section listing mirrored items. Good overview, heavy; the sidebar dots already give the overview."],
+    ["k","⌘K command",false,"Command palette entries (part of every alternative)."]]},
+  send: { name:"2 · Send + dry run", alts:[
+    ["b","Review panel",true,"Right-side panel (483 px, same as view settings). Keeps the page visible; preview can be long; becomes the progress view after Send."],
+    ["a","Modal wizard",false,"Centred 3-step modal. Familiar, but hides the page you are sending and is cramped for a long preview."],
+    ["p","Progress / result",false,"The same panel after you press Send: live per-item state, then a summary. Partial-failure state shown."],
+    ["c","One-click (auto-sync only)",false,"Send immediately with an undo toast. Only used for auto-sync rules, because you asked to be told BEFORE sending."]]},
+  status: { name:"3 · Status", alts:[
+    ["a","Dots",true,"Quiet 6 px dots, only when they carry information. Folders roll up the worst child state. Hover the green ring to see in-sync items."],
+    ["b","Icons",false,"An icon on every item. Louder; a 1,000-note sidebar becomes noisy."],
+    ["c","Header chip only",false,"No sidebar signal. You can't see what failed without opening each page."]]},
+  settings: { name:"4 · Settings", alts:[
+    ["a","Single page",true,"Connection, mirror status, rules, activity, health and danger zone on one scrolling page, like the other settings tabs."],
+    ["e","Connect (empty)",false,"First-run state: two steps, the token never shown again after saving."],
+    ["b","Sub-tabs",false,"Connection / Rules / Activity tabs. Tidier, but status and activity are split from each other."]]},
+  conflict: { name:"5 · Edited in Notion", alts:[
+    ["a","Side-by-side diff",true,"Notion now (left) vs what we'd send (right). Overwrite needs a second click; dismissing = Skip (the safe option)."],
+    ["b","Inline diff",false,"One column with removed/added lines. Used automatically below 768 px."],
+    ["c","Buttons only",false,"Fast but blind: you choose without seeing what changed."]]},
+  edge: { name:"6 · Failures", alts:[
+    ["revoked","Token revoked",true,"Global banner, kill switch auto-on, one recovery action."],
+    ["rate","Rate limited",false,"Automatic; the panel says so in plain words."],
+    ["large","Too large",false,"File over the plan's per-file cap: linked, not copied, chosen before sending."],
+    ["unsupported","Unsupported block",false,"Shown as a pill in the preview; the page still sends with a visible note."],
+    ["gone","Page gone in Notion",false,"Mapped page deleted or unshared in Notion."]]}
+};
+let cur="entry", alt="a";
+const $=s=>document.querySelector(s);
+function sidebar(){return $("#sidebar").innerHTML}
+function page(extra="",chip='<button class="chip c-warn" data-act="open-send">● Changed · Send</button>'){
+  return `<div class="main"><div class="crumbs">My Brain › Physics › Lecture 10 — Entropy</div>
+  <div class="hdr">${chip}<button class="chip c-none" aria-label="More">•••</button></div>
+  <div class="title">🌡️ Lecture 10 — Entropy</div>
+  <div class="ph" style="width:70%"></div><div class="ph" style="width:92%"></div><div class="ph" style="width:85%"></div>
+  <div class="ph" style="width:60%"></div><div class="ph" style="width:88%"></div>${extra}</div>`}
+function frame(inner){return `<div class="frame">${sidebar()}${inner}</div>`}
+
+function previewRows(){
+ return `<div class="ptabs" role="tablist">
+  <button class="ptab" aria-selected="true">New 2</button><button class="ptab">Changed 1</button>
+  <button class="ptab">Unchanged 40</button><button class="ptab">Needs you 2</button><button class="ptab">Not sent 2</button></div>
+  <label class="row" tabindex="0"><input type="checkbox" checked> 📄 <span class="t"><b>Lecture 10 — Entropy</b><span class="small">Physics · changed 2 h ago</span></span><span class="pill p-a">3 approximated</span></label>
+  <div class="loss">• Table "Carnot cycle" has merged cells: Notion can't merge cells, the text goes to the first cell.<br>• Checkpoint "page 14": becomes a 📍 callout with a link to the PDF.<br>• Image width 60 %: Notion keeps the image at full width.</div>
+  <label class="row" tabindex="0"><input type="checkbox" checked> 📄 <span class="t"><b>Lecture 11 — Free energy</b><span class="small">Physics · new</span></span><span class="pill p-e">Exact</span></label>
+  <label class="row" tabindex="0"><input type="checkbox" checked> 🗃 <span class="t"><b>Formula sheet</b><span class="small">database · 24 rows · 3 views</span></span><span class="pill p-l">1 lossy</span></label>
+  <div class="loss">• Feed view "Recent": Notion's API can't create feed views; it'll be a list view.</div>
+  <div class="lbl">Needs you</div>
+  <div class="row"><input type="checkbox" disabled> 🗃 <span class="t"><b>Formula sheet › Row "Gibbs"</b><span class="small">edited in Notion 3 h ago</span></span><span class="pill p-n">Review</span></div>
+  <div class="row"><input type="checkbox"> 📎 <span class="t"><b>Lecture 10.pdf</b><span class="small">18 MB: your Notion plan accepts 5 MB per file. It'll be linked, not copied.</span></span><span class="pill p-a">Link only</span></div>
+  <div class="lbl">Not sent</div>
+  <div class="row"><input type="checkbox"> 🔒 <span class="t"><b>Exam notes</b><span class="small">Private: stays on this device</span></span><button class="btn" style="font-size:12px;padding:2px 8px">Send once anyway</button></div>
+  <div class="row"><input type="checkbox"> 🗑 <span class="t"><b>Old draft</b><span class="small">Deleted in Second Brain: tick to move it to "Deleted in Second Brain" in Notion</span></span></div>`}
+
+function sendPanel(){return `<div class="panel" role="dialog" aria-label="Send to Notion">
+ <div class="ph-h"><span>⇪</span><h2>Send to Notion</h2><span class="spacer"></span><button class="btn" data-act="close" aria-label="Close">Esc</button></div>
+ <div class="pb">
+  <div class="lbl">Destination</div>
+  <div class="field">📄 Second Brain mirror › Physics <span class="spacer"></span><a href="#" style="color:var(--accent)">Change…</a></div>
+  <div class="lbl">What to send</div>
+  <div class="radio"><label><input type="radio" name="sc"> Just this page</label>
+  <label><input type="radio" name="sc" checked> With everything inside <span class="small">(the whole Physics collection)</span></label>
+  <label><input type="radio" name="sc"> With linked notes &amp; databases <span class="small">(+2 mentioned notes)</span></label></div>
+  ${previewRows()}
+ </div>
+ <div class="pf"><span class="small">≈ 214 requests · about 2 min</span><span class="spacer"></span><button class="btn" data-act="close">Cancel</button><button class="btn pri" data-act="progress">Send 3 items</button></div>
+</div>`}
+
+function progressPanel(){return `<div class="panel" role="dialog" aria-label="Sending to Notion">
+ <div class="ph-h"><span>⇪</span><h2>Sending to Notion</h2><span class="spacer"></span><button class="btn" data-act="close">Hide</button></div>
+ <div class="pb"><div class="bar"><i></i></div><p class="small">132 of 214 requests · you can close this; it keeps running in the background.</p>
+  <div class="row">✓ <span class="t"><b>Lecture 11 — Free energy</b></span><span class="pill p-e">Exact</span></div>
+  <div class="row">✓ <span class="t"><b>Lecture 10 — Entropy</b></span><span class="pill p-a">3 approximated</span></div>
+  <div class="row">↻ <span class="t"><b>Formula sheet</b><span class="small">rows 14 of 24 · Notion asked us to slow down; continuing in 12 s</span></span></div>
+  <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">
+  <div class="lbl">When it ends partially</div>
+  <div class="card"><b>2 sent · 1 failed</b><div class="small" style="margin:4px 0 8px">Formula sheet: "The ‘Mastery’ property was changed in Notion."</div>
+  <button class="btn pri">Retry failed</button> <button class="btn">See why</button> <a href="#" style="color:var(--accent);margin-left:8px">Open in Notion ↗</a></div>
+ </div></div>`}
+
+function render(){
+  const sec=S[cur];
+  $("#tabs").innerHTML=Object.entries(S).map(([k,v])=>`<button class="tab" role="tab" aria-selected="${k===cur}" data-tab="${k}">${v.name}</button>`).join("");
+  $("#alts").innerHTML=sec.alts.map(([k,n,r])=>`<button class="alt" aria-pressed="${k===alt}" data-alt="${k}">${n}${r?'<span class="rec">recommended</span>':''}</button>`).join("");
+  $("#note").textContent=(sec.alts.find(a=>a[0]===alt)||sec.alts[0])[3];
+  $("#stage").innerHTML=VIEWS[cur](alt);
+}
+const VIEWS={
+ entry(a){
+  if(a==="a") return frame(page(`<div class="menu" style="right:24px;top:44px">
+    <div class="mi">🔗 Copy link</div><div class="mi">⧉ Duplicate</div><div class="mi">↪ Move to</div><div class="mdiv"></div>
+    <div class="mi hl" data-act="open-send">⇪ Send to Notion…<span class="k">⌘⇧N</span></div>
+    <div class="mi">↗ Open in Notion</div><div class="mi">⏸ Pause mirroring</div><div class="mdiv"></div>
+    <div class="mi">⬇ Export</div><div class="mi">🗑 Delete</div></div>
+    <div class="actionbar"><span class="small">3 selected</span><button class="btn pri" data-act="open-send">⇪ Send to Notion</button><button class="btn">✕</button></div>`));
+  if(a==="b") return frame(page(`<div class="menu" style="right:24px;top:44px"><div class="mi">🔗 Copy link</div><div class="mi">⧉ Duplicate</div><div class="mdiv"></div><div class="mi hl" data-act="open-send">⇪ Send to Notion…<span class="k">⌘⇧N</span></div><div class="mi">⬇ Export</div></div>`,'<span></span>'));
+  if(a==="c") return `<div class="frame"><div class="side"><div class="sec">Mirror · Notion</div>
+    <div class="item">✓ 1,204 in sync</div><div class="item">● 12 changed<span class="dot d-warn"></span></div><div class="item">⚠ 2 failed<span class="dot d-bad"></span></div><div class="item">◆ 1 edited in Notion<span class="dot d-nfx"></span></div>
+    <div class="sec">Collections</div><div class="item">📁 Physics</div><div class="item">📁 Algorithms</div></div>${page()}</div>`;
+  return frame(page(`<div class="cmdk" role="dialog" aria-label="Command palette"><input value="notion" aria-label="Search commands">
+    <div style="padding:6px"><div class="mi hl">⇪ Send to Notion: current page<span class="k">⌘⇧N</span></div><div class="mi">⇪ Send whole brain to Notion…</div><div class="mi">↗ Open current page in Notion</div><div class="mi">◷ Notion activity</div></div></div>`));
+ },
+ send(a){
+  if(a==="b") return frame(page()+sendPanel());
+  if(a==="p") return frame(page()+progressPanel());
+  if(a==="a") return frame(page(`<div class="modal-bg"><div class="modal" role="dialog" aria-label="Send to Notion">
+    <div class="small">Step 2 of 3 · Preview</div><h2 style="font-size:16px;margin:4px 0 8px">Send “Physics” to Notion</h2>
+    <div style="max-height:300px;overflow:auto">${previewRows()}</div>
+    <div class="pf" style="padding:12px 0 0"><button class="btn">Back</button><span class="spacer"></span><button class="btn">Cancel</button><button class="btn pri">Send 3 items</button></div></div></div>`));
+  return frame(page(`<div class="toast">✓ Sent “Lecture 10” to Notion · <u>Undo</u> · <u>Open ↗</u></div>`,'<button class="chip c-ok">✓ In Notion</button>'));
+ },
+ status(a){
+  if(a==="a") return frame(page(`<div class="card" style="margin-top:20px"><b>Legend</b><div class="small" style="margin-top:6px">
+   <span class="dot d-warn" style="display:inline-block"></span> changed since last send ·
+   <span class="dot d-bad" style="display:inline-block"></span> failed ·
+   <span class="dot d-nfx" style="display:inline-block"></span> edited in Notion ·
+   🔒 private · nothing = never sent · ring on hover = in sync</div>
+   <div style="margin-top:10px">Header chip states:
+   <span class="chip c-none">◻ Not in Notion</span> <span class="chip c-ok">✓ In Notion</span> <span class="chip c-warn">● Changed</span> <span class="chip c-bad">⚠ Failed</span> <span class="chip c-nfx">◆ Edited in Notion</span> <span class="chip c-none">🔒 Private</span></div>
+   <div class="menu" style="position:relative;margin-top:12px;width:300px"><div class="small" style="padding:4px 8px">Last sent 2 h ago · 3 approximated</div><div class="mi">↗ Open in Notion</div><div class="mi hl">⇪ Send changes now</div><div class="mi">⏸ Pause mirroring</div></div></div>`));
+  if(a==="b") return `<div class="frame"><div class="side"><div class="sec">Collections</div>
+   ${["✅ 📁 Physics","⚠️ 📄 Lecture 10 — Entropy","✅ 📄 Lecture 9","🔒 📄 Exam notes","🟣 🗃 Formula sheet","✅ 📁 Algorithms","✅ 📄 Dijkstra","⬜ 📄 Inbox note"].map(x=>`<div class="item">${x}</div>`).join("")}</div>${page()}</div>`;
+  return `<div class="frame"><div class="side"><div class="sec">Collections</div><div class="item">📁 Physics</div><div class="item ind sel">📄 Lecture 10 — Entropy</div><div class="item ind">📄 Lecture 9</div><div class="item">📁 Algorithms</div></div>${page()}</div>`;
+ },
+ settings(a){
+  const bar=`<div class="stbar"><span>AI providers</span><span>Routing</span><span>Skills</span><span>Background jobs</span><span>Connected apps</span><span>MCP</span><span class="on">Notion</span></div>`;
+  if(a==="e") return `<div class="frame"><div class="main settings">${bar}<div class="card"><h3>Mirror your brain in Notion</h3>
+   <p class="small">Second Brain stays the source of truth. Notion gets a read-only-style copy you can browse anywhere. Nothing is ever pulled back.</p>
+   <ol style="padding-left:18px"><li style="margin-bottom:10px">In Notion, create an <b>internal connection</b> with <i>Read, Update and Insert content</i> only, and copy its token. <a href="#" style="color:var(--accent)">Open Notion integrations ↗</a></li>
+   <li style="margin-bottom:10px">Paste it here <div class="field" style="margin-top:6px"><input aria-label="Notion token" placeholder="ntn_…" style="border:0;background:none;color:var(--fg);flex:1;outline:none"><button class="btn pri">Check</button></div><span class="small">Stored encrypted on the server. It's never shown again.</span></li>
+   <li>Share ONE page with the connection in Notion (••• → Connections), then pick it as the mirror root:
+    <div class="field" style="margin-top:6px">No pages shared yet <span class="spacer"></span><button class="btn">Refresh</button></div></li></ol></div></div></div>`;
+  const conn=`<div class="card"><h3>Connection</h3><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">🟦 <b>Ayoub's Notion</b><span class="small">root: 📄 Second Brain mirror ↗ · token …a91f · API 2026-03-11 pinned</span><span class="spacer"></span><button class="btn">Change root</button><button class="btn dng">Disconnect</button></div></div>`;
+  const status=`<div class="card"><h3>Mirror status</h3><div style="display:flex;gap:16px;flex-wrap:wrap"><span><b>1,204</b> in sync</span><span style="color:var(--warn)"><b>12</b> changed</span><span style="color:var(--bad)"><b>2</b> failed</span><span style="color:var(--nfx)"><b>1</b> edited in Notion</span><span class="small">🔒 31 private, not sent</span><span class="spacer"></span><button class="btn pri" data-act="open-send-settings">Review &amp; send changes</button></div></div>`;
+  const rules=`<div class="card"><h3>Auto-sync rules</h3><table class="t"><tr><th>Scope</th><th>When</th><th>Includes</th><th></th></tr>
+   <tr><td>🧠 Whole brain</td><td>Daily at 03:00</td><td>notes, databases, embedded files</td><td>⋯</td></tr>
+   <tr><td>📁 Physics</td><td>10 min after I stop editing</td><td>+ source files</td><td>⋯</td></tr></table><button class="btn" style="margin-top:8px">+ Add rule</button>
+   <p class="small">Auto-sync never sends private notes and never overwrites pages edited in Notion; those wait in “Needs you”.</p></div>`;
+  const act=`<div class="card"><h3>Activity</h3><table class="t"><tr><th>When</th><th>Trigger</th><th>Result</th><th></th></tr>
+   <tr><td>Today 14:02</td><td>Manual · Physics</td><td>3 sent · 1 failed</td><td><button class="btn">Retry failed</button></td></tr>
+   <tr><td>Today 03:00</td><td>Daily · whole brain</td><td>12 sent · 0 failed · 4 min</td><td>›</td></tr>
+   <tr><td>Yesterday</td><td>Canary</td><td>✓ contract OK</td><td>›</td></tr></table></div>`;
+  const health=`<div class="card"><h3>Health</h3><div class="small">Last success 14:02 · 3 rate-limit waits in 24 h (all recovered) · canary ✓ 03:05 · token valid</div></div>
+   <div class="card" style="border-color:var(--bad)"><h3 style="color:var(--bad)">Danger zone</h3><button class="btn dng">⏸ Pause all syncing</button> <button class="btn">Forget mapping for…</button> <span class="small">Nothing here ever deletes anything in Notion.</span></div>`;
+  if(a==="a") return `<div class="frame"><div class="main settings" style="overflow:auto;max-height:720px">${bar}${conn}${status}${rules}${act}${health}</div></div>`;
+  return `<div class="frame"><div class="main settings">${bar}<div class="ptabs"><button class="ptab" aria-selected="true">Connection</button><button class="ptab">Rules</button><button class="ptab">Activity</button><button class="ptab">Health</button></div>${conn}${status}</div></div>`;
+ },
+ conflict(a){
+  const head=`<div class="small">Formula sheet › Gibbs · <span class="pill p-n">Edited in Notion 3 h ago by Ayoub</span></div><h2 style="font-size:16px;margin:6px 0">This page changed in Notion since the last send</h2>`;
+  const btns=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn">Skip this time</button><button class="btn pri">Keep both: send as a copy</button><button class="btn dng">Overwrite with Second Brain…</button><span class="spacer"></span><a href="#" class="small" style="align-self:center">Stop mirroring this page</a></div>
+   <p class="small">Closing this = Skip. Overwrite asks once more. “Send as a copy” leaves your Notion edits untouched.</p>`;
+  let body;
+  if(a==="a") body=`<div class="diff"><div><div class="lbl">Notion now</div><pre>G = H − TS
+<span class="del">Used for reactions at constant T and P.</span>
+<span class="add">My margin note: check sign conventions!</span></pre></div><div><div class="lbl">What we'd send</div><pre>G = H − TS
+<span class="add">Used for reactions at constant T and P.</span>
+ΔG &lt; 0 ⇒ spontaneous.</pre></div></div>`;
+  else if(a==="b") body=`<pre style="background:var(--code);padding:8px;border-radius:6px;font-size:12px">  G = H − TS
+<span class="del">− My margin note: check sign conventions!   (only in Notion)</span>
+<span class="add">+ Used for reactions at constant T and P.</span>
+<span class="add">+ ΔG &lt; 0 ⇒ spontaneous.</span></pre>`;
+  else body=`<p class="small">3 lines differ.</p>`;
+  return frame(page(`<div class="modal-bg"><div class="modal" role="dialog" aria-label="Edited in Notion">${head}${body}${btns}</div></div>`,'<button class="chip c-nfx">◆ Edited in Notion</button>'));
+ },
+ edge(a){
+  if(a==="revoked") return frame(`<div class="main"><div class="banner">⚠ Notion disconnected this app (the token was revoked). Syncing is paused. Your notes are safe. <span class="spacer"></span><button class="btn">Reconnect</button></div>${page().replace('<div class="main">','<div>')}</div>`);
+  if(a==="rate") return frame(page()+progressPanel());
+  if(a==="large") return frame(page()+`<div class="panel"><div class="ph-h"><h2>Send to Notion</h2></div><div class="pb"><div class="lbl">Needs you</div>
+   <div class="row">📎 <span class="t"><b>Lecture 10.pdf</b><span class="small">18 MB · your Notion plan accepts 5 MB per file</span></span></div>
+   <div class="radio" style="margin-left:26px"><label><input type="radio" name="lg" checked> Link to it instead (a bookmark with the file name)</label><label><input type="radio" name="lg"> Skip this file</label></div>
+   <p class="small" style="margin-left:26px">On a paid Notion plan the limit is 5 GB and the file would be copied.</p></div></div>`);
+  if(a==="unsupported") return frame(page()+`<div class="panel"><div class="ph-h"><h2>Send to Notion</h2></div><div class="pb">
+   <div class="row">📄 <span class="t"><b>Study planner</b></span><span class="pill p-l">1 can't be shown</span></div>
+   <div class="loss">• Button “Mark reviewed”: Notion's API can't create buttons. The page gets a ⚡ note listing what the button does.<br>• Everything else on the page is sent normally.</div></div></div>`);
+  return frame(page(`<div class="modal-bg"><div class="modal"><h2 style="font-size:16px;margin:0 0 6px">“Dijkstra” is no longer reachable in Notion</h2><p class="small">It was deleted in Notion or the page was unshared from the connection. Nothing was changed here.</p>
+   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri">Create it again in Notion</button><button class="btn">Forget the link</button><button class="btn">Skip</button></div></div></div>`,'<button class="chip c-bad">⚠ Failed</button>'));
+ }
+};
+document.addEventListener("click",e=>{
+  const t=e.target.closest("[data-tab],[data-alt],[data-act],#theme"); if(!t) return;
+  if(t.id==="theme"){const r=document.documentElement;const d=r.getAttribute("data-theme")==="dark"||(!r.getAttribute("data-theme")&&matchMedia("(prefers-color-scheme: dark)").matches);r.setAttribute("data-theme",d?"light":"dark");return}
+  if(t.dataset.tab){cur=t.dataset.tab;alt=S[cur].alts[0][0];render();return}
+  if(t.dataset.alt){alt=t.dataset.alt;render();return}
+  e.preventDefault();
+  const act=t.dataset.act;
+  if(act==="open-send"||act==="open-send-settings"){cur="send";alt="b";render()}
+  if(act==="progress"){cur="send";alt="p";render()}
+  if(act==="close"){cur="entry";alt="a";render()}
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&cur==="send"){cur="entry";alt="a";render()}});
+render();
+</script>
+</body>
+</html>
