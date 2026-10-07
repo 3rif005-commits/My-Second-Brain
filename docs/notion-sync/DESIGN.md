@@ -145,7 +145,7 @@ New migration `030_notion_sync.sql` (ends with a proof `SELECT`, per project rul
 
 ```sql
 notion_connections (id, user_id, workspace_id, workspace_name, bot_user_id, owner_notion_user_id,
-  token_ciphertext bytea, token_key_id text, root_page_id, archive_page_id, notes_db_template jsonb,
+  token_ciphertext text (Fernet, urlsafe base64), token_key_id text, token_hint text, root_page_id, archive_page_id, notes_db_template jsonb,
   api_version text default '2026-03-11', mapper_set_version int,
   status text check (status in ('active','paused','revoked','error')),   -- paused = KILL SWITCH
   privacy_ceiling text default 'personal', created_at, last_ok_at)

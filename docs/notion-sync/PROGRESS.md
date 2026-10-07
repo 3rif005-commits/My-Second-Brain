@@ -29,4 +29,5 @@
 ## M0 build log
 - 2026-10-07 B3 fixed (ba34f9c): unknown blocks kept via `unknownBlock` placeholder; 144/144 editor vitest pass. Live browser check NOT done yet.
 - 2026-10-07 `services/secrets.py` (Fernet, rotation, fail-closed) + settings `secrets_key`, `notion_test_token`; 8/8 tests pass.
-- NEXT: migration `030_notion_sync.sql` (DESIGN §5, proof SELECT at end, notion_connections with NO authenticated policy); user applies it in Supabase SQL editor. Then live tests T1–T10 once NOTION_TEST_TOKEN is in backend/.env. User still needs to add SECRETS_KEY to backend/.env.
+- 2026-10-07 migration `030_notion_sync.sql` written; verified in a throwaway postgres:16 container (stubbed profiles/auth.uid/authenticated): applies, re-applies idempotently, proof SELECT = 6 tables, RLS on, notion_connections 0 policies, others 1. Deviation from DESIGN §5: token_ciphertext is TEXT (Fernet output is ASCII; PostgREST bytea is hex-awkward) + token_hint, include, released columns added. **NOT applied to production yet: the user runs it in the Supabase SQL editor.**
+- NEXT (needs user): apply 030 in Supabase; add SECRETS_KEY and NOTION_TEST_TOKEN to backend/.env; then live tests T1–T10 + cassette recording; then B3 live browser check.
