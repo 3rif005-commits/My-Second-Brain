@@ -25,3 +25,8 @@
 - D4 = **Notion is a trusted cloud destination (ceiling `personal`)**; private notes blocked, per-send "Send once anyway"; auto-sync never releases.
 - D5 = **whole brain ON: collections, notes, databases, embedded files; OFF: workspace source files, chat threads, skills** (each a Settings toggle).
 - Still open: throwaway test workspace token; explicit go-ahead to start M0 (no feature code until then).
+
+## M0 build log
+- 2026-10-07 B3 fixed (ba34f9c): unknown blocks kept via `unknownBlock` placeholder; 144/144 editor vitest pass. Live browser check NOT done yet.
+- 2026-10-07 `services/secrets.py` (Fernet, rotation, fail-closed) + settings `secrets_key`, `notion_test_token`; 8/8 tests pass.
+- NEXT: migration `030_notion_sync.sql` (DESIGN §5, proof SELECT at end, notion_connections with NO authenticated policy); user applies it in Supabase SQL editor. Then live tests T1–T10 once NOTION_TEST_TOKEN is in backend/.env. User still needs to add SECRETS_KEY to backend/.env.
