@@ -7,8 +7,8 @@
 |---|----------|--------|-------|
 | 0 | Repo grounding (docs, memory, data inventory) | done | evidence/INVENTORY.md |
 | 1 | RESEARCH.md | done (live tests T1-T10 pending token) | |
-| 2 | FIDELITY_MATRIX.md | not started | |
-| 3 | DIVERGENCE_LEDGER.md | not started | |
+| 2 | FIDELITY_MATRIX.md | done | |
+| 3 | DIVERGENCE_LEDGER.md | done (B1-B7, U1-U5 for user) | |
 | 4 | DESIGN.md + mockups | not started | |
 | 5 | ROBUSTNESS.md | not started | |
 | 6 | STATUS.md milestone plan | not started | |
