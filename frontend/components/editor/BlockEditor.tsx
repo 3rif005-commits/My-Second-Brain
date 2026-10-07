@@ -16,7 +16,8 @@ import { en as coreEn } from "@blocknote/core/locales";
 import { en as aiEn } from "@blocknote/xl-ai/locales";
 import { withMultiColumn, multiColumnDropCursor, getMultiColumnSlashMenuItems, locales as multiColumnLocales } from "@blocknote/xl-multi-column";
 import { useTheme } from "@/app/providers";
-import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec, InlineMathSpec, insertMathBlock, insertCalloutBlock } from "./customBlocks";
+import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec, UnknownBlockSpec, InlineMathSpec, insertMathBlock, insertCalloutBlock } from "./customBlocks";
+import { wrapUnknown, restoreUnknown } from "./unknownBlocks";
 import {
   extractCalloutChildren, attachCalloutChildren, inlineMathInTableCells,
   mergeRedundantToggleHeadings,
@@ -69,6 +70,7 @@ const multiColSchema = withMultiColumn(
       callout: CalloutBlockSpec(),
       database: DatabaseBlockSpec(),
       button: ButtonBlockSpec(),
+      unknownBlock: UnknownBlockSpec(),
     },
     inlineContentSpecs: {
       ...defaultInlineContentSpecs,
@@ -81,12 +83,11 @@ const multiColSchema = withMultiColumn(
 
 const VALID_BLOCK_TYPES = new Set(Object.keys(multiColSchema.blockSpecs));
 
-// Recursively remove blocks with types unknown to the schema so
-// useCreateBlockNote never receives unrecognized content.
+// useCreateBlockNote can't hold a block of an unregistered type, so each one is
+// swapped for an `unknownBlock` placeholder that keeps the original; `persist`
+// below swaps it back before anything is saved (unknownBlocks.ts).
 function sanitizeBlocks(blocks: AnyBlock[]): AnyBlock[] {
-  return blocks
-    .filter((b) => b != null && VALID_BLOCK_TYPES.has(b?.type))
-    .map((b) => ({ ...b, children: Array.isArray(b.children) ? sanitizeBlocks(b.children) : [] }));
+  return wrapUnknown(blocks, VALID_BLOCK_TYPES);
 }
 
 /** Reorders slash-menu items so every group's items sit in one contiguous
@@ -394,6 +395,13 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       } as Parameters<typeof useCreateBlockNote>[0]
     );
 
+    // Every save goes through here: placeholders become their original blocks
+    // again, so a block this editor can't show is never lost on save.
+    const persist = (blocks: AnyBlock[]) => {
+      const stored = restoreUnknown(blocks);
+      onSave?.(stored, getPlainText(stored));
+    };
+
     // A generated draft → blocks, with the callout bodies BlockNote's own
     // parser would drop (see calloutChildren.ts).
     const parseDraftHtml = async (html: string): Promise<AnyBlock[]> => {
@@ -407,14 +415,16 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     };
 
     useImperativeHandle(ref, () => ({
+      // Callers save what this returns, so it is the stored form.
       getDocument() {
-        return editor.document as AnyBlock[];
+        return restoreUnknown(editor.document as AnyBlock[]);
       },
       replaceDocument(blocks: AnyBlock[]) {
         // An empty note is one empty paragraph: replaceBlocks with nothing
         // would leave BlockNote without a block to put the cursor in.
+        const safe = sanitizeBlocks(blocks);
         editor.replaceBlocks(editor.document,
-          blocks.length ? blocks : [{ type: "paragraph" }] as AnyBlock[]);
+          safe.length ? safe : [{ type: "paragraph" }] as AnyBlock[]);
       },
       async exportMarkdown(title: string) {
         const md = await editor.blocksToMarkdownLossy(editor.document);
@@ -466,7 +476,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         editor.replaceBlocks(editor.document, parsed);
         const now = editor.document as AnyBlock[];
         if (saveTimer.current) clearTimeout(saveTimer.current);
-        onSave?.(now, getPlainText(now));
+        persist(now);
         return now;
       },
       async insertHtmlAtEnd(html: string) {
@@ -478,7 +488,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         const now = editor.document as AnyBlock[];
         const added = last ? now.slice(before) : now;
         if (saveTimer.current) clearTimeout(saveTimer.current);
-        onSave?.(now, getPlainText(now));
+        persist(now);
         return added;
       },
       blockIds() {
@@ -505,8 +515,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 
     const save = useCallback(() => {
       if (!onSave) return;
-      const blocks = editor.document as AnyBlock[];
-      onSave(blocks, getPlainText(blocks));
+      persist(editor.document as AnyBlock[]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [editor, onSave]);
 
     // 2-second debounced auto-save on every content change
@@ -547,7 +557,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         const blocks = attachCalloutChildren(rawBlocks as AnyBlock[], calloutChildren);
         editor.replaceBlocks(editor.document, blocks);
         if (saveTimer.current) clearTimeout(saveTimer.current);
-        onSave(blocks as AnyBlock[], getPlainText(blocks as AnyBlock[]));
+        persist(blocks as AnyBlock[]);
 
         if (interactiveData.length > 0) onInteractiveBlocks?.(interactiveData);
         onBlocksApplied?.(blocks as AnyBlock[]);
