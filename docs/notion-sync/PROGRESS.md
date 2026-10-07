@@ -15,3 +15,10 @@
 
 ## Facts established
 - 2026-10-07: no Notion API integration in repo (grep for api.notion.com / @notionhq / notion-client outside venvs: zero hits; "notion" hits are "Notion-style" comments only).
+
+## Decisions made by the user (2026-10-07)
+- D1 = **Tree of databases** (collection page → inline "Notes" DB of its notes; sub-collections as child pages; root "Notes" DB for un-filed notes).
+- D3 = **Formula + snapshot** property.
+- Divergence fixes approved: **B1** (interactive blocks out of localStorage), **B3** (keep unknown blocks), **B2** (24-h capture URLs). B5 not chosen (Notion token still uses new encrypted storage).
+- U1–U4: user wants to review one by one (presented in chat 2026-10-07; answers pending).
+- Still open: D2 (deletes), D4 (privacy ceiling), D5 (whole-brain includes), test workspace token, overall approval to start M0.

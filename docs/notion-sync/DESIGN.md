@@ -26,7 +26,7 @@ either side can change while the other stays the same.
 
 ## 2. Decisions you need to make (D1–D6; recommendations given)
 
-**D1 — How notes land in Notion (the biggest one).** Notion gives properties only to database
+**D1 — How notes land in Notion — DECIDED 2026-10-07: D (tree of databases).** Notion gives properties only to database
 rows; our notes have properties (topics, mastery, source…) *and* live in a folder tree.
 | Option | Shape in Notion | Hierarchy | Note properties | Cost |
 |---|---|---|---|---|
@@ -43,7 +43,7 @@ root page's own "Notes" database.
 the page is *moved* to `🗄 Deleted in Second Brain` under the root. Never `in_trash`, because
 Notion purges its trash after 30 days. Alternative: auto-propagate on auto-sync.
 
-**D3 — Formulas & rollups.** Recommended: push the live Notion formula/rollup **and** a hidden
+**D3 — Formulas & rollups — DECIDED 2026-10-07: formula + snapshot.** Recommended: push the live Notion formula/rollup **and** a hidden
 "<name> (SB value)" snapshot property, so the backup holds our computed value even when
 Notion computes differently or refuses the expression. Alternative: formula only (cleaner, less
 safe) or snapshot only (always exact, not live).
