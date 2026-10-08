@@ -17,8 +17,10 @@ from services.notion_sync.engine.resolver import MentionResolver, db_page_resolv
 from services.notion_sync.engine.store import Store
 from services.notion_sync.notion.adapter import NotionAdapter, page_url
 from services.notion_sync.notion import dbschema
+from services.notion_sync.include import include_of
 from services.notion_sync.readers.database import (database_of_source, database_to_ir, load_database,
                                                    relation_targets, relation_values, row_to_ir)
+from services.notion_sync.readers import objects as objs
 from services.notion_sync.readers.note import collection_to_ir, note_to_ir
 from services.portable import ir
 from services.portable.canonical import digest
@@ -180,7 +182,7 @@ def database_scope(db, user: str, selected: list[str], include_linked: bool, row
 def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), collection_ids=(), database_ids=(),
                include_linked: bool = False,
                released=frozenset(), archive_ids=frozenset(), resolutions=None, check_edits: bool = True,
-               collections_only=()) -> Plan:
+               collections_only=(), thread_ids=(), skill_names=(), sources: bool | None = None) -> Plan:
     resolutions = {str(k): v for k, v in (resolutions or {}).items() if v in RESOLUTIONS}
     user = conn.user_id
     store = Store(db, user, conn.id)
@@ -298,6 +300,8 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
             if b is not None and b.sources:
                 rp = (db.table("db_row_props").select("*").eq("note_id", nid).execute().data or [None])[0]
                 obj = row_to_ir(obj, b, row, rp, relation_values(db, user, [_pd(p) for p in b.props[b.sources[0]["id"]]], nid))
+        if sources if sources is not None else include_of(conn)["source_files"]:
+            obj = objs.add_sources(db, user, obj, nid)
         h = object_hash(obj, conn, link_tags(obj, resolver))
         rendered = adapter.render(obj, resolver, db_page_resolver(store, m))
         fid = fidelity(rendered.losses)
@@ -337,7 +341,59 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
             items.append(PlanItem(nid, (row.get("title") or "Untitled").strip(), MISSING))   # in the trash, never sent
     for nid in missing:
         items.append(PlanItem(nid, "(note not found)", MISSING))
+    items += _object_items(db, conn, adapter, store, [str(t) for t in thread_ids], [str(s_) for s_ in skill_names], released)
     return Plan(items)
+
+
+def _object_items(db, conn, adapter, store, thread_ids, skill_names, released) -> list[PlanItem]:
+    """Chat threads and skills ("the rest of the brain")."""
+    out: list[PlanItem] = []
+    user = conn.user_id
+    if thread_ids:
+        rows = {str(r["id"]): r for r in (db.table("chat_threads").select("*").eq("user_id", user).in_("id", thread_ids)
+                                          .execute().data or [])}
+        tmaps = store.mappings_for("thread", thread_ids)
+        for tid in thread_ids:
+            row = rows.get(tid)
+            if row is None:
+                out.append(PlanItem(tid, "(chat not found)", MISSING, "thread"))
+                continue
+            title = objs.thread_title(row)
+            m = tmaps.get(tid)
+            cited = [str(c) for c in row.get("context_note_ids") or []]
+            levels = {str(n["id"]): privacy.level_of(n) for n in (
+                db.table("notes").select("id, sensitivity, local_only").eq("user_id", user).in_("id", cited).execute().data or [])} if cited else {}
+            # a chat is as private as the most private note it cites; a note that cannot be found counts as private
+            blocked = any(not privacy.allows(conn.privacy_ceiling, levels.get(c, "private")) for c in cited)
+            if blocked and tid not in released:
+                out.append(PlanItem(tid, title, PRIVATE, "thread", path="Chats"))
+                continue
+            obj = objs.thread_to_ir(row)
+            h = object_hash(obj, conn)
+            r = adapter.render(obj)
+            exists = bool(m and m.get("notion_id") and m.get("state") in ("synced", "failed"))
+            state = UNCHANGED if exists and m.get("local_hash") == h and m.get("state") == "synced" else CHANGED if exists else NEW
+            out.append(PlanItem(tid, title, state, "thread", fidelity(r.losses), [x.to_dict() for x in r.losses],
+                                0 if state == UNCHANGED else 3 + len(r.blocks), page_url(m["notion_id"]) if exists else None,
+                                h, m["id"] if m else None, released=blocked and tid in released, path="Chats"))
+    if skill_names:
+        skills = objs.load_skills(objs.skill_dirs())
+        smaps = store.mappings_for("skill", skill_names)
+        for name in skill_names:
+            sk = skills.get(name)
+            if sk is None:
+                out.append(PlanItem(name, name, MISSING, "skill"))
+                continue
+            obj = objs.skill_to_ir(name, sk)
+            h = object_hash(obj, conn)
+            r = adapter.render(obj)
+            m = smaps.get(name)
+            exists = bool(m and m.get("notion_id") and m.get("state") in ("synced", "failed"))
+            state = UNCHANGED if exists and m.get("local_hash") == h and m.get("state") == "synced" else CHANGED if exists else NEW
+            out.append(PlanItem(name, name, state, "skill", fidelity(r.losses), [x.to_dict() for x in r.losses],
+                                0 if state == UNCHANGED else 3 + len(r.blocks), page_url(m["notion_id"]) if exists else None,
+                                h, m["id"] if m else None, path="Skills"))
+    return out
 
 
 def _row_database(db, user: str, note_id: str):

@@ -41,6 +41,9 @@ class SendBody(BaseModel):
     collection_ids: list[str] = Field(default=[], max_length=50)        # "with everything inside"
     database_ids: list[str] = Field(default=[], max_length=50)          # the table, its schema and its rows
     include_linked: bool = False                                        # also the databases its relations point to
+    thread_ids: list[str] = Field(default=[], max_length=500)           # chat threads (off by default in "everything")
+    skill_names: list[str] = Field(default=[], max_length=100)
+    sources: bool | None = None                                         # add each note's sources; None = the Settings switch
     released: list[str] = []                                           # private notes let through, this send only
     archive_ids: list[str] = []                                        # deleted notes to move to the archive page
     resolutions: dict[str, str] = {}                                    # id -> overwrite | copy | recreate | forget (default: skip)
@@ -90,13 +93,17 @@ def _expand(body: SendBody, conn) -> SendBody:
         return body
     inc = {**scope_mod.DEFAULT_INCLUDE, **(conn.row.get("include") or {})}
     notes, colls, dbs = scope_mod.all_scope(get_supabase(), conn.user_id, inc)
-    return body.model_copy(update={"note_ids": list(dict.fromkeys(body.note_ids + notes)),
+    from services.notion_sync.readers import objects as objs
+    threads, skills = scope_mod.all_extras(get_supabase(), conn.user_id, inc, sorted(objs.load_skills(objs.skill_dirs())))
+    return body.model_copy(update={"thread_ids": list(dict.fromkeys(body.thread_ids + threads)),
+                                   "skill_names": list(dict.fromkeys(body.skill_names + skills)),
+                                   "note_ids": list(dict.fromkeys(body.note_ids + notes)),
                                    "collection_ids": list(dict.fromkeys(body.collection_ids + colls)),
                                    "database_ids": list(dict.fromkeys(body.database_ids + dbs)), "all": False})
 
 
 def _need_scope(body: SendBody) -> None:
-    if not body.note_ids and not body.collection_ids and not body.database_ids and not body.all:
+    if not (body.note_ids or body.collection_ids or body.database_ids or body.thread_ids or body.skill_names or body.all):
         raise HTTPException(422, {"error": "Choose a note or a collection to send.", "error_code": "EMPTY_SCOPE"})
 
 
@@ -207,6 +214,7 @@ def plan(body: SendBody, authorization: str = Header(...)):
     try:
         p = plan_scope(get_supabase(), conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
                        database_ids=body.database_ids, include_linked=body.include_linked,
+                       thread_ids=body.thread_ids, skill_names=body.skill_names, sources=body.sources,
                        released=frozenset(body.released), archive_ids=frozenset(body.archive_ids),
                        resolutions=body.resolutions)
     except NotionError as e:
@@ -233,6 +241,7 @@ def _send_blocking(body: SendBody, user_id: str, loop) -> dict:
         try:
             p = plan_scope(db, conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
                        database_ids=body.database_ids, include_linked=body.include_linked,
+                       thread_ids=body.thread_ids, skill_names=body.skill_names, sources=body.sources,
                            released=released, archive_ids=frozenset(body.archive_ids), resolutions=body.resolutions)
         except NotionError as e:
             raise _notion_error(e, conn)
@@ -269,7 +278,12 @@ def _titles(db, user_id: str, items: list[dict]) -> dict[str, str]:
     notes = [i["local_id"] for i in items if i["local_kind"] == "note"]
     colls = [i["local_id"] for i in items if i["local_kind"] == "collection"]
     dbs = [i["local_id"] for i in items if i["local_kind"] == "database"]
-    out: dict[str, str] = {}
+    threads = [i["local_id"] for i in items if i["local_kind"] == "thread"]
+    out: dict[str, str] = {i["local_id"]: i["local_id"] for i in items if i["local_kind"] == "skill"}
+    if threads:
+        from services.notion_sync.readers.objects import thread_title
+        for r in db.table("chat_threads").select("*").eq("user_id", user_id).in_("id", threads).execute().data or []:
+            out[str(r["id"])] = thread_title(r)
     if dbs:
         for r in db.table("db_databases").select("id, title").eq("user_id", user_id).in_("id", dbs).execute().data or []:
             out[str(r["id"])] = r.get("title") or "Untitled database"
@@ -338,6 +352,8 @@ async def retry_failed(run_id: str, authorization: str = Header(...)):
                            note_ids=[i["local_id"] for i in failed if i["local_kind"] == "note"],
                            collections_only=[i["local_id"] for i in failed if i["local_kind"] == "collection"],
                            database_ids=[i["local_id"] for i in failed if i["local_kind"] == "database"],
+                           thread_ids=[i["local_id"] for i in failed if i["local_kind"] == "thread"],
+                           skill_names=[i["local_id"] for i in failed if i["local_kind"] == "skill"],
                            released=frozenset(store.run(run_id).get("released") or []))
             if not p.sendable:
                 return {"status": "nothing_to_send", "items": [], "requests": 0, "plan": p.to_dict()}

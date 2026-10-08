@@ -18,7 +18,7 @@ KNOWN_UNREAD = {
     "unknownBlock": "never persisted (B3 placeholder)",
 }
 #: IR block types without a writer yet (they degrade to OpaqueWriter)
-KNOWN_UNWRITTEN = {"table_row", "table_cell", "column", "embed", "bookmark"}   # table_row/cell are written by the table writer
+KNOWN_UNWRITTEN = {"table_row", "table_cell", "column", "embed"}   # table_row/cell are written by the table writer
 
 
 def test_every_ir_block_type_has_a_writer_or_is_listed():

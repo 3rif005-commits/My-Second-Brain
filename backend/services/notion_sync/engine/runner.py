@@ -31,6 +31,8 @@ from services.notion_sync.notion.errors import AmbiguousWrite, NotionError, Sync
 from services.notion_sync.planner import (CHANGED, DELETED, NEW, PlanItem, fetch_collections, fetch_notes,
                                           object_hash)
 from services.notion_sync.readers.database import relation_values, row_to_ir
+from services.notion_sync.include import include_of
+from services.notion_sync.readers import objects as objs
 from services.notion_sync.readers.note import collection_to_ir, note_to_ir
 from services.portable import ir
 from services.portable.losses import dedupe
@@ -305,6 +307,8 @@ class Engine(DatabaseMixin):
             b = st.bundle
             rp = (self.db.table("db_row_props").select("*").eq("note_id", row["id"]).execute().data or [None])[0]
             obj = row_to_ir(obj, b, row, rp, self._links(st, str(row["id"])))
+        if include_of(self.conn)["source_files"]:
+            obj = objs.add_sources(self.db, self.conn.user_id, obj, str(row["id"]))
         return obj
 
     def _links(self, st, note_id: str) -> dict[str, list[str]]:
@@ -410,6 +414,78 @@ class Engine(DatabaseMixin):
         elif m:
             self.store.forget_one("note", it.note_id)
         it.state = NEW
+
+    # ---- chat threads and skills (the rest of the brain) ----------------------------------------------
+    SPECIAL = {"thread": ("chats", "💬 Chats"), "skill": ("skills", "🧠 Skills")}
+
+    def ensure_special_page(self, kind: str) -> str:
+        """"💬 Chats" / "🧠 Skills": one page each under the root, created on first use."""
+        key, title = self.SPECIAL[kind]
+        root = self._root()
+        m, ours = self.store.begin_create(CONTAINER, key, "page", parent=root)
+        if m.get("state") == "synced" and m.get("notion_id"):
+            return m["notion_id"]
+        try:
+            pid = self._adopt_or_none(m, ours, self.adapter.find_child_pages(root, title))
+            if not pid:
+                pid = self.adapter.create_page(root, self.adapter.render(ir.Obj(
+                    "page", ir.Ref("special", key), title=[ir.Text(title)])))
+        except AmbiguousWrite:
+            raise _ambiguous()
+        self.store.cas(m["id"], "creating", {"notion_id": pid, "notion_kind": "page", "notion_parent_id": root,
+                                             "state": "synced", "last_pushed_at": now()})
+        return pid
+
+    def _object_ir(self, item: PlanItem) -> ir.Obj:
+        if item.kind == "thread":
+            rows = (self.db.table("chat_threads").select("*").eq("id", item.note_id).eq("user_id", self.conn.user_id)
+                    .execute().data or [])
+            if not rows:
+                raise ItemFailure("failed", "permanent", "no_thread", "This chat no longer exists.")
+            return objs.thread_to_ir(rows[0])
+        sk = objs.load_skills(objs.skill_dirs()).get(item.note_id)
+        if sk is None:
+            raise ItemFailure("failed", "permanent", "no_skill", "This skill no longer exists.")
+        return objs.skill_to_ir(item.note_id, sk)
+
+    def send_object(self, item: PlanItem) -> ItemResult:
+        """A chat thread or a skill: one page under its special page, body replaced in place when it changes."""
+        obj = self._object_ir(item)
+        h = object_hash(obj, self.conn)
+        title = "".join(t.text for t in obj.title)
+        try:
+            parent = self.ensure_special_page(item.kind)
+            m, ours = self.store.begin_create(item.kind, item.note_id, parent=parent)
+            r = self.adapter.render(obj)
+            created = False
+            if not (m.get("state") in ("synced", "failed") and m.get("notion_id")):
+                pid = m.get("notion_id") or self._adopt_or_none(m, ours, self.adapter.find_child_pages(parent, title)) \
+                    or self.adapter.create_page(parent, r)
+                self.store.cas(m["id"], "creating", {"notion_id": pid, "notion_kind": "page", "notion_parent_id": parent,
+                                                     "state": "synced"})
+                m = self.store.mapping(item.kind, item.note_id)
+                created = True
+            else:
+                pid = m["notion_id"]
+                if m.get("local_hash") != h and item.resolution != "overwrite":
+                    self._edit_check(pid)
+                if m.get("local_hash") != h:
+                    self.adapter.update_properties(pid, r, row=False)
+            if created or m.get("local_hash") != h:
+                top = self._replace_body(m, pid, r, everything=item.resolution == "overwrite")
+                losses = [x.to_dict() for x in dedupe(list(r.losses) + self.adapter.take_losses())]
+                self.store.update(m["id"], {"local_hash": h, "block_index": {"v": 1, "top": top}, "last_pushed_at": now(),
+                                            "state": "synced", "mapper_set_version": registry.mapper_set_version(),
+                                            "ir_version": ir.IR_VERSION, "losses": losses, "error_class": None,
+                                            "error_code": None, "error_message": None})
+            else:
+                losses = [x.to_dict() for x in r.losses]
+            return ItemResult(item.note_id, item.title, "done", "create" if created else "update",
+                              "Sent." if created else "Updated.", page_url(pid), losses, item.kind)
+        except AmbiguousWrite as e:
+            raise ItemFailure("failed", "retryable", "ambiguous_write", plain_message(e))
+        except NotionError as e:
+            raise self._notion_failure(e)
 
     def archive_note(self, item: PlanItem) -> ItemResult:
         """A note deleted here: move its page to the archive page (never to Notion's trash)."""
@@ -553,6 +629,8 @@ class Engine(DatabaseMixin):
 
             for it in (i for i in sendable if i.kind == "note" and i.state != DELETED):
                 finish(it, lambda it=it: do_note(it))
+            for it in (i for i in sendable if i.kind in ("thread", "skill")):
+                finish(it, lambda it=it: self.send_object(it))
             for it in (i for i in sendable if i.state == DELETED):
                 finish(it, lambda it=it: self.archive_note(it))
 

@@ -7,8 +7,7 @@ from services import privacy
 from services.notion_sync.connection import Connection
 from services.notion_sync.planner import ancestors, fetch_collections
 
-DEFAULT_INCLUDE = {"collections": True, "notes": True, "databases": True, "embedded_files": True,
-                   "source_files": False, "threads": False, "skills": False}
+from services.notion_sync.include import DEFAULT_INCLUDE, include_of  # noqa: F401
 
 
 def _parse(ts) -> datetime | None:
@@ -25,6 +24,7 @@ def row_note_ids(db, user_id: str) -> set[str]:
 
 
 def all_scope(db, user_id: str, include: dict | None = None) -> tuple[list[str], list[str], list[str]]:
+    """Notes, root collections and databases. Threads and skills: `all_extras`."""
     """-> (note ids, root collection ids, database ids) of the whole brain, per the D5 toggles.
     Collections are sent as roots ("with everything inside"); loose notes are listed."""
     inc = {**DEFAULT_INCLUDE, **(include or {})}
@@ -106,3 +106,14 @@ def mirror_map(db, conn: Connection) -> dict:
             continue
         out_colls[cid] = sub if sub and (own is None or rank[sub] >= rank[own]) else own
     return {"notes": out_notes, "collections": out_colls}
+
+
+def all_extras(db, user_id: str, include: dict | None = None, skill_names: list[str] | None = None) -> tuple[list[str], list[str]]:
+    """-> (thread ids, skill names) for "everything", per the D5 switches (both default OFF)."""
+    inc = {**DEFAULT_INCLUDE, **(include or {})}
+    threads: list[str] = []
+    if inc["threads"]:
+        rows = (db.table("chat_threads").select("id").eq("user_id", user_id).is_("archived_at", "null").execute().data or [])
+        threads = [str(r["id"]) for r in rows]
+    skills = list(skill_names or []) if inc["skills"] else []
+    return threads, skills

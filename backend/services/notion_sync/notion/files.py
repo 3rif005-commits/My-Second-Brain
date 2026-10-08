@@ -108,3 +108,28 @@ def upload_name(name: str, mime: str) -> str:
     if "." not in name:
         name += mimetypes.guess_extension(mime or "") or ""
     return name
+
+
+class CompositeFiles:
+    """`storage:<path>` comes from our own storage (never a public link); everything else is a URL."""
+    def __init__(self, http: FileSource, storage_fetch=None):
+        self.http, self.storage_fetch = http, storage_fetch
+
+    def is_public_link(self, url: str) -> bool:
+        return False if url.startswith("storage:") else self.http.is_public_link(url)
+
+    def fetch(self, url: str, max_bytes: int, name_hint: str = "") -> Fetched:
+        if not url.startswith("storage:"):
+            return self.http.fetch(url, max_bytes, name_hint)
+        if self.storage_fetch is None:
+            raise FileUnavailable("no storage")
+        path = url[len("storage:"):]
+        try:
+            data = self.storage_fetch(path)
+        except Exception as e:
+            raise FileUnavailable(type(e).__name__) from e
+        if len(data) > max_bytes:
+            raise FileTooLarge(len(data))
+        base = path.rsplit("/", 1)[-1]
+        name = name_hint if "." in (name_hint or "") else base      # Notion validates the extension
+        return Fetched(data, mimetypes.guess_type(base)[0] or mimetypes.guess_type(name)[0] or "application/octet-stream", name)

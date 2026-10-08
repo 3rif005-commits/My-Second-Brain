@@ -309,12 +309,53 @@ def run_m6(client, adapter, root, bot) -> dict:
     return rep, w.db
 
 
+def run_m9(client, adapter, root, bot) -> dict:
+    """Chat thread, skill, and a note's sources, all against the real API."""
+    import tempfile
+    from pathlib import Path
+    from services.notion_sync.notion.files import CompositeFiles, HttpFileSource
+    from services.notion_sync.planner import plan_scope
+    from services.notion_sync.readers import objects as objs
+    user = "live-user"
+    tmp = Path(tempfile.mkdtemp())
+    (tmp / "sb-test-skill" / "reference").mkdir(parents=True)
+    (tmp / "sb-test-skill" / "SKILL.md").write_text("---\ndescription: A test skill\n---\n# SB-TEST skill\n\nDo this **well**:\n\n- one\n- two\n")
+    (tmp / "sb-test-skill" / "reference" / "style.md").write_text("Plain words.\n")
+    objs.skill_dirs = lambda: [tmp]
+    adapter.files = CompositeFiles(HttpFileSource(), lambda path: PNG)
+    note = {"id": "00000000-0000-4000-8000-0000000000b1", "user_id": user, "title": "SB-TEST note with sources", "collection_id": None,
+            "sensitivity": "personal", "deleted_at": None, "content": [B("paragraph", [T("a note")])]}
+    thread = {"id": "00000000-0000-4000-8000-0000000000c1", "user_id": user, "title": "SB-TEST chat", "context_note_ids": [],
+              "messages": [{"role": "user", "content": "What is **entropy**?"}, {"role": "assistant", "content": "A measure of disorder:\n\n- first\n- second\n\n```python\nprint(1)\n```"}],
+              "archived_at": None, "pinned": False, "model_mode": "api"}
+    res_rows = [{"id": "r1", "note_id": note["id"], "user_id": user, "kind": "pdf", "title": "Lecture.png", "storage_path": "u/r1/lecture.png", "order_index": 0},
+                {"id": "r2", "note_id": note["id"], "user_id": user, "kind": "youtube", "title": "A talk", "source_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "order_index": 1},
+                {"id": "r3", "note_id": note["id"], "user_id": user, "kind": "website", "title": "An article", "source_url": "https://example.com/", "order_index": 2}]
+    db = FakeDB(collections=[], notes=[note], chat_threads=[thread], note_resources=res_rows, notion_mappings=[], notion_runs=[], notion_run_items=[],
+                notion_connections=[{"id": "live-c", "user_id": user, "status": "active", "bot_user_id": bot.bot_id, "root_page_id": root.id,
+                                     "privacy_ceiling": "personal", "token_ciphertext": "x", "token_hint": "…", "include": {"source_files": True}}])
+    conn = conn_mod.load(db, user)
+    rep: dict = {}
+    p = plan_scope(db, conn, adapter, note_ids=[note["id"]], thread_ids=[thread["id"]], skill_names=["sb-test-skill"])
+    res = Engine(db, conn, adapter).run(p.items)
+    rep["send"] = {"status": res.status, "requests": res.requests, "items": [(i.kind, i.title, i.status, i.message[:60] if i.status != "done" else "ok") for i in res.items]}
+    mp = {(x["local_kind"], x["local_id"]): x for x in db.tables["notion_mappings"]}
+    rep["note_tail"] = [b["type"] for b in adapter._children(mp[("note", note["id"])]["notion_id"])]
+    rep["thread_blocks"] = [b["type"] for b in adapter._children(mp[("thread", thread["id"])]["notion_id"])]
+    rep["skill_blocks"] = [b["type"] for b in adapter._children(mp[("skill", "sb-test-skill")]["notion_id"])]
+    before = client.write_requests
+    p2 = plan_scope(db, conn, adapter, note_ids=[note["id"]], thread_ids=[thread["id"]], skill_names=["sb-test-skill"])
+    rep["resend"] = {"nothing_to_send": p2.to_dict()["nothing_to_send"], "writes": client.write_requests - before}
+    return rep, db
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--m2", action="store_true", help="send the M2 fixture (tables, callouts, columns, files, cover)")
     ap.add_argument("--m3", action="store_true", help="the hierarchy/mentions/move/archive scenario")
     ap.add_argument("--m4", action="store_true", help="edited-in-Notion protection: hold back, copy, overwrite")
     ap.add_argument("--m6", action="store_true", help="databases: schema, relations, rollup, formula, rows")
+    ap.add_argument("--m9", action="store_true", help="chat thread, skill, note sources")
     ap.add_argument("--keep", action="store_true", help="do not trash the test pages afterwards")
     args = ap.parse_args()
     token = settings.notion_test_token
@@ -328,17 +369,17 @@ def main():
     root = pages[0]
     bot = adapter.whoami()
     user = "live-user"
-    if args.m3 or args.m4 or args.m6:
+    if args.m3 or args.m4 or args.m6 or args.m9:
         report = {"root": root.title}
         try:
-            r, db3 = (run_m4 if args.m4 else run_m6 if args.m6 else run_m3)(client, adapter, root, bot)
+            r, db3 = (run_m4 if args.m4 else run_m6 if args.m6 else run_m9 if args.m9 else run_m3)(client, adapter, root, bot)
             report.update(r)
         finally:
             if not args.keep:
                 trashed = []
                 for b in adapter._children(root.id):
                     title = (b.get("child_page") or b.get("child_database") or {}).get("title", "")
-                    if b["type"] == "child_database" or title.startswith(("SB-TEST", "🗄")):
+                    if b["type"] == "child_database" or title.startswith(("SB-TEST", "🗄", "💬", "🧠")):
                         client.delete(f"/blocks/{b['id']}")
                         trashed.append(title)
                 report["cleanup_trashed"] = trashed

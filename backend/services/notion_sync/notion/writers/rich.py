@@ -76,8 +76,7 @@ class TableWriter:
 # ---- media ---------------------------------------------------------------------------
 
 def _kind_for(kind: str, url: str, name: str) -> str:
-    probe = (name or urlparse(url).path).lower()
-    if kind == "file" and probe.endswith(".pdf"):
+    if kind == "file" and (name.lower().endswith(".pdf") or urlparse(url.replace("storage:", "/")).path.lower().endswith(".pdf")):
         return "pdf"
     return kind
 
@@ -229,6 +228,23 @@ class ActionWriter:
             "color": "gray_background", "children": [{"type": "toggle", "toggle": {
                 "rich_text": plain_rich("Button actions (not runnable in Notion)"),
                 "children": code_blocks(text or "(none)", "json", child_losses)}}]}}], losses + child_losses)
+
+
+class BookmarkWriter:
+    handles = "ir:bookmark"
+    version = 1
+
+    def write(self, node, ctx):
+        losses = list(node.losses)
+        url = node.attrs.get("url", "")
+        cap = rich_text(node.inline, losses)
+        if not url.lower().startswith(("http://", "https://")) or len(url) > 2000:
+            losses.append(Loss("approximated", "A web address Notion cannot bookmark.", "The title is kept as text.", "bookmark_dropped"))
+            return WriteResult([{"type": "paragraph", "paragraph": {"rich_text": cap or plain_rich(url[:200])}}], losses)
+        body = {"url": url}
+        if cap:
+            body["caption"] = cap[:MAX_RICH_TEXT_OBJECTS]
+        return WriteResult([{"type": "bookmark", "bookmark": body}], losses)
 
 
 DB_EMBED = "__sb_db_embed"

@@ -49,7 +49,7 @@ def adapter_for(conn: Connection, client: NotionClient | None = None, db=None) -
     from urllib.parse import urlparse
 
     from core.config import settings
-    from services.notion_sync.notion.files import HttpFileSource
+    from services.notion_sync.notion.files import CompositeFiles, HttpFileSource
     own = {urlparse(settings.supabase_url).hostname or ""}
     if client is None:
         gate = None
@@ -57,4 +57,7 @@ def adapter_for(conn: Connection, client: NotionClient | None = None, db=None) -
             from services.notion_sync.engine.worker import kill_switch
             gate = kill_switch(db, conn.id)
         client = NotionClient(conn.token(), gate=gate)
-    return NotionAdapter(client, files=HttpFileSource(own))
+    def from_storage(path: str) -> bytes:
+        from services.workspace import storage
+        return storage.download(path)
+    return NotionAdapter(client, files=CompositeFiles(HttpFileSource(own), from_storage))

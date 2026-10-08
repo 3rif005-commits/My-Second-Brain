@@ -140,7 +140,7 @@ def test_opaque_writer_keeps_text_marker_and_raw_json():
 
 
 def test_missing_writer_degrades_to_opaque():
-    b = ir.Block("bookmark", inline=[ir.Text("hi")])         # no writer yet
+    b = ir.Block("embed", inline=[ir.Text("hi")])         # no writer yet
     r = write_blocks([b])
     assert r.blocks[1]["type"] == "callout" and r.losses[-1].code == "unsupported_block"
 
