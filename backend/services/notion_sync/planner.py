@@ -62,7 +62,7 @@ class PlanItem:
 
     @property
     def sendable(self) -> bool:
-        return self.state in (NEW, CHANGED) or (self.state == DELETED and self.selected)
+        return self.selected and self.state in (NEW, CHANGED, DELETED)
 
 
 @dataclass
@@ -182,7 +182,8 @@ def database_scope(db, user: str, selected: list[str], include_linked: bool, row
 def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), collection_ids=(), database_ids=(),
                include_linked: bool = False,
                released=frozenset(), archive_ids=frozenset(), resolutions=None, check_edits: bool = True,
-               collections_only=(), thread_ids=(), skill_names=(), sources: bool | None = None) -> Plan:
+               collections_only=(), thread_ids=(), skill_names=(), sources: bool | None = None,
+               exclude=frozenset()) -> Plan:
     resolutions = {str(k): v for k, v in (resolutions or {}).items() if v in RESOLUTIONS}
     user = conn.user_id
     store = Store(db, user, conn.id)
@@ -342,6 +343,9 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
     for nid in missing:
         items.append(PlanItem(nid, "(note not found)", MISSING))
     items += _object_items(db, conn, adapter, store, [str(t) for t in thread_ids], [str(s_) for s_ in skill_names], released)
+    for it in items:                                   # items the user unticked in the review panel
+        if it.note_id in exclude:
+            it.selected = False
     return Plan(items)
 
 

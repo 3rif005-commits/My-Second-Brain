@@ -165,3 +165,25 @@ def test_public_link_detection():
     assert not s.is_public_link("https://files.sb.test/a.png")
     assert not s.is_public_link("https://example.com/a.png?X-Amz-Signature=1")
     assert not s.is_public_link("http://example.com/a.png")
+
+
+# ---- ledger B2: an expired capture URL still works, by its storage path ------------------------------------
+
+def test_storage_path_is_read_out_of_a_signed_url():
+    from services.notion_sync.notion.files import storage_path_of
+    assert storage_path_of("https://x.supabase.co/storage/v1/object/sign/workspace-resources/u1/r1/frame%201.png?token=abc") == "u1/r1/frame 1.png"
+    assert storage_path_of("https://x.supabase.co/storage/v1/object/public/workspace-resources/u1/a.png") == "u1/a.png"
+    assert storage_path_of("https://x.supabase.co/storage/v1/object/sign/other-bucket/a.png?token=1") is None
+    assert storage_path_of("https://example.com/a.png") is None
+
+
+def test_an_expired_capture_url_is_fetched_from_storage_by_its_path():
+    from services.notion_sync.notion.files import CompositeFiles, HttpFileSource
+    dead = httpx.MockTransport(lambda r: httpx.Response(400, json={"error": "token expired"}))
+    http = HttpFileSource({"x.supabase.co"}, transport=dead)
+    got = CompositeFiles(http, lambda path: b"PIXELS" if path == "u1/r1/frame.png" else (_ for _ in ()).throw(KeyError(path)))
+    f = got.fetch("https://x.supabase.co/storage/v1/object/sign/workspace-resources/u1/r1/frame.png?token=EXPIRED", 1000, "frame.png")
+    assert f.data == b"PIXELS" and f.name == "frame.png"
+    from services.notion_sync.notion.files import FileUnavailable
+    with pytest.raises(FileUnavailable):                                      # someone else's host is never rewritten
+        got.fetch("https://evil.example/storage/v1/object/sign/workspace-resources/u1/r1/frame.png?token=x", 1000)

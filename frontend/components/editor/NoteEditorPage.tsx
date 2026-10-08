@@ -17,7 +17,8 @@ import { NoteProperties } from "./NoteProperties";
 import { DatabaseRowProperties } from "../database/DatabaseRowProperties";
 import { BacklinksPanel } from "./BacklinksPanel";
 import { InteractiveBlockCard } from "./InteractiveBlockCard";
-import { SendToNotionPanel } from "../notion/SendToNotionPanel";
+import { useNotion } from "@/context/NotionContext";
+import { NotionChip } from "../notion/NotionChip";
 import type { BlockEditorHandle, InteractiveBlock } from "./BlockEditor";
 
 const EMOJIS = [
@@ -89,7 +90,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
   });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [showNotion, setShowNotion] = useState(false);
+  const notion = useNotion();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [sourceCount, setSourceCount] = useState(0);
@@ -338,6 +339,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
                 ? "Applying…"
                 : ""}
             </span>
+            <NotionChip noteId={note.id} />
             {sourceCount > 0 && (
               <button
                 onClick={() => router.push(`/brain/workspace/${note.id}`)}
@@ -388,7 +390,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
                 <button
                   role="menuitem"
                   className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
-                  onClick={() => { setShowMenu(false); setShowNotion(true); }}
+                  onClick={() => { setShowMenu(false); notion.open({ note_ids: [note.id] }); }}
                 >
                   <Send size={13} /> Send to Notion…
                 </button>
@@ -565,8 +567,6 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
           </div>
         </div>
       </div>
-
-      {showNotion && <SendToNotionPanel noteId={note.id} onClose={() => setShowNotion(false)} />}
 
       {/* Delete confirmation modal */}
       {showDeleteModal &&

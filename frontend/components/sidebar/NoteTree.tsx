@@ -23,6 +23,9 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { Collection, Note } from "@/lib/types/database";
 import type { NoteSummary } from "@/lib/hooks/useNotes";
+import { NotionDot } from "@/components/notion/NotionDot";
+import { RowMenu, type RowMenuTarget } from "@/components/notion/RowMenu";
+import { useNotion } from "@/context/NotionContext";
 
 interface NoteTreeProps {
   notes: NoteSummary[];
@@ -52,6 +55,9 @@ function NoteItem({
   const pathname = usePathname();
   const active = pathname === `/brain/${note.id}`;
   const confirming = confirmingId === note.id;
+  const notion = useNotion();
+  const [menu, setMenu] = useState<RowMenuTarget | null>(null);
+  const selected = notion.isSelected("note", note.id);
 
   const {
     attributes,
@@ -72,8 +78,14 @@ function NoteItem({
     <div
       ref={setNodeRef}
       style={isDragOverlay ? undefined : style}
+      onContextMenu={(e) => { e.preventDefault(); setMenu({ kind: "note", id: note.id, title: note.title || "Untitled", x: e.clientX, y: e.clientY }); }}
+      onClickCapture={(e) => {
+        if (notion.connected && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.stopPropagation(); notion.toggleSelect("note", note.id); }
+      }}
       className={`group flex items-center justify-between px-1 py-1 rounded-md text-sm cursor-pointer transition-colors ${
-        active
+        selected
+          ? "bg-indigo-500/25 text-white ring-1 ring-indigo-400/60"
+          : active
           ? "bg-white/10 text-white font-medium"
           : "text-slate-400 hover:text-slate-100 hover:bg-white/5"
       } ${isDragOverlay ? "bg-slate-700/80 shadow-lg" : ""}`}
@@ -95,7 +107,9 @@ function NoteItem({
       >
         <span className="shrink-0 text-sm leading-none">{note.icon || "📄"}</span>
         <span className="truncate">{note.title || "Untitled"}</span>
+        <NotionDot state={notion.stateOf("note", note.id)} />
       </Link>
+      {menu && <RowMenu target={menu} onClose={() => setMenu(null)} />}
 
       {confirming ? (
         <div className="flex items-center gap-1 ml-1 shrink-0">
@@ -162,6 +176,8 @@ export function NoteTree({
 }: NoteTreeProps) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [activeNote, setActiveNote] = useState<NoteSummary | null>(null);
+  const notion = useNotion();
+  const [colMenu, setColMenu] = useState<RowMenuTarget | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -232,9 +248,12 @@ export function NoteTree({
 
       {collections.map((col) => (
         <div key={col.id}>
-          <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-widest mt-3">
+          <div
+            onContextMenu={(e) => { e.preventDefault(); setColMenu({ kind: "collection", id: col.id, title: col.name, x: e.clientX, y: e.clientY }); }}
+            className="group flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-widest mt-3">
             {col.icon && <span>{col.icon}</span>}
-            <span className="truncate">{col.name}</span>
+            <span className="truncate flex-1">{col.name}</span>
+            <NotionDot state={notion.stateOf("collection", col.id)} />
           </div>
           {byCollection(col.id).map((note) => (
             <div key={note.id} className="pl-3">
@@ -252,6 +271,7 @@ export function NoteTree({
           )}
         </div>
       ))}
+      {colMenu && <RowMenu target={colMenu} onClose={() => setColMenu(null)} />}
     </div>
   );
 }

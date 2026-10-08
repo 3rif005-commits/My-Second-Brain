@@ -47,6 +47,8 @@ class SendBody(BaseModel):
     released: list[str] = []                                           # private notes let through, this send only
     archive_ids: list[str] = []                                        # deleted notes to move to the archive page
     resolutions: dict[str, str] = {}                                    # id -> overwrite | copy | recreate | forget (default: skip)
+    only_collection_ids: list[str] = Field(default=[], max_length=200)  # these folders themselves, not what is inside
+    exclude: list[str] = Field(default=[], max_length=2000)             # ids the user unticked in the review
     background: bool = False                                           # return at once with a run id; watch GET /runs/{id}
     all: bool = False                                                   # the whole brain, per the Settings toggles (D5)
 
@@ -103,7 +105,7 @@ def _expand(body: SendBody, conn) -> SendBody:
 
 
 def _need_scope(body: SendBody) -> None:
-    if not (body.note_ids or body.collection_ids or body.database_ids or body.thread_ids or body.skill_names or body.all):
+    if not (body.note_ids or body.collection_ids or body.only_collection_ids or body.database_ids or body.thread_ids or body.skill_names or body.all):
         raise HTTPException(422, {"error": "Choose a note or a collection to send.", "error_code": "EMPTY_SCOPE"})
 
 
@@ -215,6 +217,7 @@ def plan(body: SendBody, authorization: str = Header(...)):
         p = plan_scope(get_supabase(), conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
                        database_ids=body.database_ids, include_linked=body.include_linked,
                        thread_ids=body.thread_ids, skill_names=body.skill_names, sources=body.sources,
+                       collections_only=body.only_collection_ids, exclude=frozenset(body.exclude),
                        released=frozenset(body.released), archive_ids=frozenset(body.archive_ids),
                        resolutions=body.resolutions)
     except NotionError as e:
@@ -242,6 +245,7 @@ def _send_blocking(body: SendBody, user_id: str, loop) -> dict:
             p = plan_scope(db, conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
                        database_ids=body.database_ids, include_linked=body.include_linked,
                        thread_ids=body.thread_ids, skill_names=body.skill_names, sources=body.sources,
+                       collections_only=body.only_collection_ids, exclude=frozenset(body.exclude),
                            released=released, archive_ids=frozenset(body.archive_ids), resolutions=body.resolutions)
         except NotionError as e:
             raise _notion_error(e, conn)

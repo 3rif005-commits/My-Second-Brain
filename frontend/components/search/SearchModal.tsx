@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import { useNotion } from "@/context/NotionContext";
 import { Search, X } from "lucide-react";
 
 interface SearchResult {
@@ -25,6 +26,8 @@ export function SearchModal({ open, onClose }: Props) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const pathname = usePathname() ?? "";
+  const notion = useNotion();
 
   useEffect(() => {
     if (open) {
@@ -61,6 +64,14 @@ export function SearchModal({ open, onClose }: Props) {
     onClose();
   }
 
+  // Commands (⌘P, then type "notion"): the keyboard route into Send to Notion (DESIGN §7.1).
+  const noteId = pathname.match(/^\/brain\/([0-9a-f-]{36})$/)?.[1];
+  const commands = /notion|^>/i.test(query) ? [
+    ...(noteId ? [{ id: "send-page", label: "Send to Notion: current page", run: () => notion.open({ note_ids: [noteId] }) }] : []),
+    { id: "send-all", label: "Send whole brain to Notion", run: () => notion.open({ all: true }, "whole brain") },
+    { id: "activity", label: "Open Notion activity", run: () => router.push("/brain/settings/notion?tab=activity") },
+  ] : [];
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
       onClose();
@@ -68,14 +79,15 @@ export function SearchModal({ open, onClose }: Props) {
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setSelectedIndex((i) => Math.min(i + 1, results.length - 1));
+      setSelectedIndex((i) => Math.min(i + 1, commands.length + results.length - 1));
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIndex((i) => Math.max(i - 1, 0));
     }
-    if (e.key === "Enter" && results[selectedIndex]) {
-      navigate(results[selectedIndex].id);
+    if (e.key === "Enter") {
+      if (selectedIndex < commands.length) { commands[selectedIndex].run(); onClose(); }
+      else if (results[selectedIndex - commands.length]) navigate(results[selectedIndex - commands.length].id);
     }
   }
 
@@ -117,12 +129,19 @@ export function SearchModal({ open, onClose }: Props) {
         {/* Results */}
         {query.trim() ? (
           <div className="max-h-80 overflow-y-auto">
+            {commands.map((c, i) => (
+              <button key={c.id} onClick={() => { c.run(); onClose(); }}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-gray-900 dark:text-gray-100 ${
+                  i === selectedIndex ? "bg-indigo-50 dark:bg-indigo-900/30" : "hover:bg-gray-50 dark:hover:bg-gray-700/50"}`}>
+                <span aria-hidden>⇪</span>{c.label}
+              </button>
+            ))}
             {loading && (
               <div className="px-4 py-8 text-center text-sm text-gray-400">
                 Searching…
               </div>
             )}
-            {!loading && results.length === 0 && (
+            {!loading && results.length === 0 && commands.length === 0 && (
               <div className="px-4 py-8 text-center text-sm text-gray-400">
                 No notes found for &ldquo;{query}&rdquo;
               </div>
@@ -133,7 +152,7 @@ export function SearchModal({ open, onClose }: Props) {
                   key={note.id}
                   onClick={() => navigate(note.id)}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                    i === selectedIndex
+                    i + commands.length === selectedIndex
                       ? "bg-indigo-50 dark:bg-indigo-900/30"
                       : "hover:bg-gray-50 dark:hover:bg-gray-700/50"
                   }`}

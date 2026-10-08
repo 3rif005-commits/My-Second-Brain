@@ -14,7 +14,8 @@
 // which had nowhere to live before this milestone).
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Lock, MoreHorizontal, Trash2 } from "lucide-react";
+import { Copy, Lock, MoreHorizontal, Send, Trash2 } from "lucide-react";
+import { useNotion } from "@/context/NotionContext";
 import { useToast } from "@/app/providers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { MenuList, Popover } from "@/components/ui/primitives";
@@ -30,6 +31,7 @@ export interface DatabasePageMenuProps {
 
 export function DatabasePageMenu({ databaseId, databaseTitle, isLocked, onToggleLocked, onDelete }: DatabasePageMenuProps) {
   const router = useRouter();
+  const notion = useNotion();
   const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -58,6 +60,12 @@ export function DatabasePageMenu({ databaseId, databaseTitle, isLocked, onToggle
       {
         rows: [
           { id: "copy-link", icon: <Copy size={14} />, label: "Copy link", onSelect: copyLink },
+          {
+            id: "send-notion",
+            icon: <Send size={14} />,
+            label: "Send to Notion…",
+            onSelect: () => { setOpen(false); notion.open({ database_ids: [databaseId], include_linked: true }, databaseTitle); },
+          },
           {
             id: "lock",
             icon: <Lock size={14} />,

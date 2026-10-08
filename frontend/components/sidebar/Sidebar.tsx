@@ -27,6 +27,10 @@ import { useNotes } from "@/lib/hooks/useNotes";
 import { useCollections } from "@/lib/hooks/useCollections";
 import { useTrash } from "@/lib/hooks/useTrash";
 import { NoteTree } from "./NoteTree";
+import { NotionDot } from "@/components/notion/NotionDot";
+import { RowMenu, type RowMenuTarget } from "@/components/notion/RowMenu";
+import { useNotion } from "@/context/NotionContext";
+import type { ItemKind } from "@/lib/notion";
 import { NotificationsBell } from "./NotificationsBell";
 import { useJobBadge } from "@/components/activity/useJobBadge";
 import { CsvImport, type CsvImportHandle } from "./CsvImport";
@@ -110,31 +114,68 @@ function Section({
   );
 }
 
-/** A page-level row inside a section (a note, a database). */
+/** A page-level row inside a section (a note, a database). Right-click: Send to Notion…; ⌘/Ctrl-click: select
+ *  several to send together. The dot says what the Notion mirror knows about it. */
 function PageRow({
   emoji,
   title,
   active,
   onClick,
+  kind = "note",
+  id,
 }: {
   emoji: string;
   title: string;
   active?: boolean;
   onClick: () => void;
+  kind?: ItemKind;
+  id?: string;
 }) {
+  const notion = useNotion();
+  const [menu, setMenu] = useState<RowMenuTarget | null>(null);
+  const selected = !!id && notion.isSelected(kind, id);
+  const state = id && (kind === "note" || kind === "collection") ? notion.stateOf(kind, id) : null;
   return (
-    <button
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      className={`w-full flex items-center gap-2 pl-[26px] pr-2 py-[3px] rounded-md text-[13px] transition-colors text-left ${
-        active
-          ? "bg-white/[0.08] text-white font-medium"
-          : "text-slate-400 hover:text-slate-100 hover:bg-white/[0.055]"
-      }`}
-    >
-      <span className="shrink-0 text-[13px] leading-none">{emoji}</span>
-      <span className="truncate">{title}</span>
-    </button>
+    <>
+      <button
+        onClick={(e) => {
+          if (id && notion.connected && (e.metaKey || e.ctrlKey)) { e.preventDefault(); notion.toggleSelect(kind, id); return; }
+          onClick();
+        }}
+        onContextMenu={(e) => {
+          if (!id) return;
+          e.preventDefault();
+          setMenu({ kind, id, title, x: e.clientX, y: e.clientY });
+        }}
+        aria-current={active ? "page" : undefined}
+        aria-pressed={selected || undefined}
+        className={`group w-full flex items-center gap-2 pl-[26px] pr-2 py-[3px] rounded-md text-[13px] transition-colors text-left ${
+          selected
+            ? "bg-indigo-500/25 text-white ring-1 ring-indigo-400/60"
+            : active
+            ? "bg-white/[0.08] text-white font-medium"
+            : "text-slate-400 hover:text-slate-100 hover:bg-white/[0.055]"
+        }`}
+      >
+        <span className="shrink-0 text-[13px] leading-none">{emoji}</span>
+        <span className="truncate flex-1">{title}</span>
+        <NotionDot state={state} />
+      </button>
+      {menu && <RowMenu target={menu} onClose={() => setMenu(null)} />}
+    </>
+  );
+}
+
+/** "3 selected · Send to Notion": appears once you ⌘/Ctrl-click rows (DESIGN §7.1). */
+function NotionSelectionBar() {
+  const notion = useNotion();
+  if (notion.selection.size === 0) return null;
+  return (
+    <div role="region" aria-label="Selection" className="mx-2 mb-2 flex items-center gap-2 rounded-lg border border-indigo-400/40 bg-indigo-500/15 px-3 py-2 text-[12px] text-slate-100 shrink-0">
+      <span className="flex-1">{notion.selection.size} selected</span>
+      <button onClick={notion.sendSelection} className="rounded-md bg-indigo-600 px-2 py-1 font-medium hover:bg-indigo-500">Send to Notion</button>
+      <button onClick={notion.clearSelection} aria-label="Clear selection" className="px-1 text-slate-300 hover:text-white">✕</button>
+    </div>
   );
 }
 
@@ -364,6 +405,7 @@ export function Sidebar({
                 title={note.title || "Untitled"}
                 active={pathname === `/brain/${note.id}`}
                 onClick={() => navigate(`/brain/${note.id}`)}
+                id={note.id}
               />
             ))}
           </Section>
@@ -378,6 +420,7 @@ export function Sidebar({
                 title={note.title || "Untitled"}
                 active={pathname === `/brain/${note.id}`}
                 onClick={() => navigate(`/brain/${note.id}`)}
+                id={note.id}
               />
             ))}
           </Section>
@@ -453,6 +496,8 @@ export function Sidebar({
                 title={db.title || "Untitled Database"}
                 active={pathname === `/brain/db/${db.id}`}
                 onClick={() => navigate(`/brain/db/${db.id}`)}
+                kind="database"
+                id={db.id}
               />
             ))
           )}
@@ -490,6 +535,8 @@ export function Sidebar({
           )}
         </Section>
       </div>
+
+      <NotionSelectionBar />
 
       {/* Trash */}
       {trashedNotes.length > 0 && (

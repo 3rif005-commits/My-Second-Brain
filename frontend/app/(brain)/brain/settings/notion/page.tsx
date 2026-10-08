@@ -3,15 +3,27 @@
 // Settings → Notion (DESIGN §7.4): connect with an internal-connection token,
 // pick the one page everything is sent under, disconnect. Push only: nothing
 // is ever read back into Second Brain.
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CheckCircle2, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/app/providers";
 import { notionApi, type NotionPage, type NotionStatus } from "@/lib/notion";
+import { useNotion } from "@/context/NotionContext";
+import { MirrorSection } from "@/components/notion/settings/MirrorSection";
+import { RulesSection } from "@/components/notion/settings/RulesSection";
+import { ActivitySection } from "@/components/notion/settings/ActivitySection";
+import { HealthSection } from "@/components/notion/settings/HealthSection";
 
 export default function NotionSettingsPage() {
+  return <Suspense fallback={null}><NotionSettings /></Suspense>;
+}
+
+function NotionSettings() {
   const { showToast } = useToast();
+  const notion = useNotion();
+  const params = useSearchParams();
   const [status, setStatus] = useState<NotionStatus | null>(null);
   const [pages, setPages] = useState<NotionPage[] | null>(null);
   const [token, setToken] = useState("");
@@ -31,6 +43,12 @@ export default function NotionSettingsPage() {
       if (s.connected) void refreshPages();
     }).catch((e) => setError(e.message));
   }, [refreshPages]);
+
+  // ?tab=activity (from the panel, ⌘P, the bell) scrolls to that section once it is on the page
+  useEffect(() => {
+    const t = params?.get("tab");
+    if (t && status?.connected) document.getElementById(t)?.scrollIntoView({ block: "start" });
+  }, [params, status?.connected]);
 
   async function connect(e: React.FormEvent) {
     e.preventDefault();
@@ -169,6 +187,19 @@ export default function NotionSettingsPage() {
                 </a>
               )}
             </section>
+            {status.status === "error" && (
+              <p role="alert" className="rounded-md px-3 py-2 text-[13px] bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+                Notion disconnected this app. Paste a fresh token above (disconnect first) to reconnect: your notes and what was sent are kept.
+              </p>
+            )}
+            {status.root && (
+              <>
+                <MirrorSection />
+                <RulesSection />
+                <ActivitySection />
+              </>
+            )}
+            <HealthSection paused={status.status === "paused"} onChanged={() => { notionApi.status(true).then(setStatus).catch(() => {}); notion.refresh(); }} />
           </>
         )}
       </div>

@@ -110,6 +110,19 @@ def upload_name(name: str, mime: str) -> str:
     return name
 
 
+_SIGNED_PATH = re.compile(r"^/storage/v1/object/(?:sign|public|authenticated)/workspace-resources/(?P<path>.+)$")
+
+
+def storage_path_of(url: str) -> str | None:
+    """The storage path inside one of OUR signed URLs. A capture inserted into a note carries a
+    24-hour signed URL (ledger B2); once it expires the URL is useless but the file is still in
+    storage, so the mirror reads it by path instead of by the dead link."""
+    from urllib.parse import unquote
+    u = urlparse(url)
+    m = _SIGNED_PATH.match(u.path or "")
+    return unquote(m["path"]) if m else None
+
+
 class CompositeFiles:
     """`storage:<path>` comes from our own storage (never a public link); everything else is a URL."""
     def __init__(self, http: FileSource, storage_fetch=None):
@@ -120,7 +133,12 @@ class CompositeFiles:
 
     def fetch(self, url: str, max_bytes: int, name_hint: str = "") -> Fetched:
         if not url.startswith("storage:"):
-            return self.http.fetch(url, max_bytes, name_hint)
+            path = storage_path_of(url) if self.storage_fetch is not None else None
+            host = (urlparse(url).hostname or "").lower()
+            if path and host in self.http.own_hosts:
+                url = "storage:" + path                      # skip the (possibly expired) signature
+            else:
+                return self.http.fetch(url, max_bytes, name_hint)
         if self.storage_fetch is None:
             raise FileUnavailable("no storage")
         path = url[len("storage:"):]

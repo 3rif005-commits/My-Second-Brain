@@ -260,3 +260,16 @@ def test_mirror_endpoint(env):
     c.post("/notion/send", json={"note_ids": [n["id"]]}, headers=H)
     n["updated_at"] = "2000-01-01T00:00:00+00:00"
     assert c.get("/notion/mirror", headers=H).json()["notes"][n["id"]] == "synced"
+
+
+def test_unticked_items_are_not_sent_and_a_folder_can_go_without_its_contents(env):
+    w, c = env
+    c.post("/notion/root", json={"page_id": w.notion.root}, headers=H)
+    col = w.add_collection("C")
+    a, b = w.add_note(title="a", collection_id=col["id"]), w.add_note(title="b", collection_id=col["id"])
+    plan = c.post("/notion/plan", json={"collection_ids": [col["id"]], "exclude": [b["id"]]}, headers=H).json()
+    assert {i["title"]: i["selected"] for i in plan["items"]} == {"C": True, "a": True, "b": False}
+    r = c.post("/notion/send", json={"collection_ids": [col["id"]], "exclude": [b["id"]]}, headers=H).json()
+    assert [i["title"] for i in r["items"]] == ["C", "a"] and w.mapping(b) is None
+    only = c.post("/notion/plan", json={"only_collection_ids": [col["id"]]}, headers=H).json()
+    assert [i["title"] for i in only["items"]] == ["C"]
