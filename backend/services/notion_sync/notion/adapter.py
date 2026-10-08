@@ -346,6 +346,37 @@ class NotionAdapter:
             body["description"] = description
         self.c.patch(f"/databases/{database_id}", body)
 
+    # ---- views (M7) --------------------------------------------------------------------------
+    def list_view_ids(self, database_id: str) -> list[str]:
+        out, cursor = [], None
+        while True:
+            params = {"database_id": database_id, **({"start_cursor": cursor} if cursor else {})}
+            res = self.c.get("/views", params=params)
+            out += [v["id"] for v in res.get("results", [])]
+            if not res.get("has_more"):
+                return out
+            cursor = res.get("next_cursor")
+
+    def get_view(self, view_id: str) -> dict:
+        return self.c.get(f"/views/{view_id}")
+
+    def create_view(self, database_id: str, data_source_id: str, payload: dict, *, dashboard_id: str | None = None) -> str:
+        body = {"database_id": database_id, "data_source_id": data_source_id, **payload}
+        if dashboard_id:
+            body["dashboard_view_id"] = dashboard_id
+        return self.c.post("/views", body, create=True)["id"]
+
+    def create_dashboard(self, database_id: str, data_source_id: str, payload: dict) -> str:
+        """A dashboard needs a data source too (verified live), though its widgets carry their own."""
+        return self.c.post("/views", {"database_id": database_id, "data_source_id": data_source_id, **payload}, create=True)["id"]
+
+    def patch_view(self, view_id: str, payload: dict) -> None:
+        body = {k: v for k, v in payload.items() if k != "type"}
+        self.c.patch(f"/views/{view_id}", body)
+
+    def delete_view(self, view_id: str) -> None:
+        self.c.delete(f"/views/{view_id}")
+
     def create_row(self, data_source_id: str, r: Rendered, sb_id: str, title_prop: str = TITLE_PROP) -> str:
         """Create the (empty) row. Returns the page id. Never retried blindly:
         an unknown outcome raises AmbiguousWrite and the engine reconciles."""

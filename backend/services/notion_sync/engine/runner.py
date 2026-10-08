@@ -500,10 +500,12 @@ class Engine(DatabaseMixin):
             if db_states:
                 try:
                     self.finish_schemas([st for _, st in db_states])
+                    self._view_resolver = store_resolver
                     for it, st in db_states:
+                        vlosses = self.sync_views(st)
                         self._finish_db_item(it, st)
                         results[("database", it.note_id)].losses = [x.to_dict() for x in
-                                                                    dedupe(list(st.layout.losses) + list(st.obj.losses))]
+                                                                    dedupe(list(st.layout.losses) + list(st.obj.losses) + vlosses)]
                 except SyncPaused:
                     halted["paused"] = True
                 except (NotionError, AmbiguousWrite) as e:

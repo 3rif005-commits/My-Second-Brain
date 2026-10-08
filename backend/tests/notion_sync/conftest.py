@@ -57,7 +57,7 @@ class World:
         self.notion = FakeNotion()
         self.db = FakeDB(
             collections=[], notes=[], db_databases=[], db_data_sources=[], db_properties=[], db_row_props=[],
-            db_relation_links=[], notion_mappings=[], notion_runs=[], notion_run_items=[],
+            db_relation_links=[], db_views=[], notion_mappings=[], notion_runs=[], notion_run_items=[],
             notion_connections=[{"id": "c1", "user_id": USER, "status": "active", "bot_user_id": BOT,
                                  "root_page_id": self.notion.root, "privacy_ceiling": "personal",
                                  "token_ciphertext": "x", "token_hint": "…abcd", "workspace_name": "Test WS"}])
@@ -115,6 +115,12 @@ class World:
              "result_type": result_type, "position": n, "description": None}
         self.db.tables["db_properties"].append(p)
         return p
+
+    def add_view(self, ds, name, type_="table", config=None, filter=None, sorts=None, position=0):
+        v = {"id": str(uuid.uuid4()), "data_source_id": ds["id"], "user_id": USER, "name": name, "icon": None, "type": type_,
+             "config": config or {}, "filter": filter, "sorts": sorts or [], "is_locked": False, "position": position}
+        self.db.tables["db_views"].append(v)
+        return v
 
     def add_row(self, ds, title, values=None, computed=None, position=0):
         n = self.add_note(title=title)

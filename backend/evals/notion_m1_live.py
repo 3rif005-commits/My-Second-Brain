@@ -211,7 +211,7 @@ def run_m6(client, adapter, root, bot) -> dict:
     w = World.__new__(World)
     user = "user-1"
     w.db = FakeDB(collections=[], notes=[], db_databases=[], db_data_sources=[], db_properties=[], db_row_props=[],
-                  db_relation_links=[], notion_mappings=[], notion_runs=[], notion_run_items=[],
+                  db_relation_links=[], db_views=[], notion_mappings=[], notion_runs=[], notion_run_items=[],
                   notion_connections=[{"id": "live-c", "user_id": user, "status": "active", "bot_user_id": bot.bot_id,
                                        "root_page_id": root.id, "privacy_ceiling": "personal", "token_ciphertext": "x", "token_hint": "…"}])
     wrap = lambda t, v: {"type": t, t: v}
@@ -235,6 +235,23 @@ def run_m6(client, adapter, root, bot) -> dict:
     w.add_prop(pds, "Tasks", "relation", {"relation_id": rid, "side": "reverse", "target_data_source_id": tds["id"]}, key="tks")
     w.add_prop(pds, "Total hours", "rollup", {"relation_key": "tks", "target_data_source_id": tds["id"], "target_key": "hrs", "function": "sum"}, key="tot", result_type="number")
     w.add_prop(tds, "Double", "formula", {"expression": 'prop("Hours") * 2'}, key="dbl", result_type="number")
+    v = lambda *a, **k: w.add_view(tds, *a, **k)
+    v("Everything", "table", {"hidden_properties": ["ok"], "column_widths": {"hrs": 140}, "show_vertical_lines": True,
+                              "group_by": {"property_key": "pri", "hide_empty_groups": True}}, position=0,
+      filter={"type": "group", "op": "and", "children": [
+          {"type": "condition", "property": "hrs", "operator": "greater_than", "value": 1},
+          {"type": "group", "op": "or", "children": [{"type": "condition", "property": "st", "operator": "equals", "value": "s1"},
+                                                     {"type": "condition", "property": "due", "operator": "past_week", "value": {}}]}]},
+      sorts=[{"property": "hrs", "direction": "desc"}])
+    v("By status", "board", {"group_by": {"property_key": "st", "mode": "option"}, "cover_size": "large"}, position=1)
+    v("Plain list", "list", {}, position=2)
+    v("Cards", "gallery", {"cover_size": "large"}, position=3)
+    v("When", "calendar", {"date_property_id": "due", "show_weekends": False}, position=4)
+    v("Plan", "timeline", {"date_property_id": "due", "preference": {"zoom_level": "month"}}, position=5)
+    cht = v("Per priority", "chart", {"chart_type": "column", "x_axis": {"property_id": "pri"}, "y_axis": {"aggregator": "count"}}, position=6)
+    v("Intake", "form", {"questions": [{"property_key": "pri", "required": True}]}, position=7)
+    v("News", "feed", {}, position=8)
+    v("Overview", "dashboard", {"rows": [{"id": "r1", "height": 320, "widgets": [{"id": "w1", "width": 6, "view_id": cht["id"]}]}]}, position=9)
     ann = w.add_row(pds, "SB-TEST Ann", {"age": wrap("number", 30)}, computed={"tot": {"type": "number", "number": 7.0}})
     t1 = w.add_row(tds, "SB-TEST Build", {"hrs": wrap("number", 3), "pri": wrap("select", "o1"), "tags": wrap("multi_select", ["a", "b,c"]),
                                             "st": wrap("status", "Doing"), "due": wrap("date", {"start": "2026-10-09T10:00:00+00:00", "end": None, "time_zone": "Africa/Casablanca"}),
@@ -266,6 +283,13 @@ def run_m6(client, adapter, root, bot) -> dict:
                               "Assignee": len(tp["Assignee"]["relation"]), "Due": tp["Due"]["date"]}
     ap = client.get(f"/pages/{mp[ann['id']]['notion_id']}")["properties"]
     rep["person_row"] = {"Tasks": len(ap["Tasks"]["relation"]), "Total hours": ap["Total hours"]["rollup"]}
+    dbn = mp[tasks["id"]]["notion_id"]
+    views_now = [client.get(f"/views/{vid}") for vid in adapter.list_view_ids(dbn)]
+    rep["views"] = sorted((x["name"], x["type"], bool(x.get("dashboard_view_id"))) for x in views_now)
+    rep["view_filter_sample"] = next((x.get("filter") for x in views_now if x["name"] == "Everything"), None)
+    before2 = client.write_requests
+    plan_scope(w.db, conn, adapter, database_ids=[tasks["id"]])
+    rep["views_resend_writes"] = client.write_requests - before2
     w.db.tables["db_properties"][:] = [p_ for p_ in w.db.tables["db_properties"] if p_["key"] != "nt"]
     next(p_ for p_ in w.db.tables["db_properties"] if p_["key"] == "hrs")["name"] = "Effort (h)"
     w.add_prop(tds, "Extra", "checkbox", key="ex")

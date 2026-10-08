@@ -36,6 +36,7 @@ class FakeNotion:
         self.blocks: dict[str, dict] = {}
         self.dbs: dict[str, dict] = {}
         self.uploads: dict[str, dict] = {}
+        self.views: dict[str, dict] = {}
         self.upload_cap = 5 * 1024 * 1024
         self.sources: dict[str, dict] = {}
         self.calls: list[tuple[str, str]] = []
@@ -170,6 +171,55 @@ class FakeNotion:
             self.blocks[bid]["children_ids"] = self._store_blocks(kids, bid, "block_id")
             ids.append(bid)
         return ids
+
+    def _new_view(self, did, sid, name, type_, **extra) -> dict:
+        vid = self._id()
+        v = {"object": "view", "id": vid, "parent": {"type": "database_id", "database_id": did}, "data_source_id": sid,
+             "name": name, "type": type_, "created_time": self.ts(), **extra}
+        self.views[vid] = v
+        return v
+
+    def _check_view(self, body):
+        cfg = body.get("configuration") or {}
+        t = body.get("type")
+        src = self.sources.get(body.get("data_source_id")) if body.get("data_source_id") else None
+        ids = set(src.get("ids", {}).values()) if src else set()
+
+        def known(pid, where):
+            if pid not in ids:
+                raise _Bad(f"{where} property \"{pid}\" not found.")
+        if cfg and cfg.get("type") != t:
+            raise _Bad("configuration.type must match type")
+        for p in cfg.get("properties", []) or []:
+            known(p["property_id"], "view")
+        for key in ("group_by", "sub_group_by"):
+            if cfg.get(key):
+                known(cfg[key]["property_id"], "Group-by")
+                if "type" not in cfg[key] or "sort" not in cfg[key]:
+                    raise _Bad("group_by needs type and sort")
+        if t == "board" and not cfg.get("group_by"):
+            raise _Bad("board views require group_by")
+        if t in ("calendar", "timeline"):
+            known(cfg.get("date_property_id"), "date")
+        if t == "chart":
+            if cfg.get("chart_type") not in ("column", "bar", "line", "donut", "number"):
+                raise _Bad("chart_type invalid")
+            if cfg.get("x_axis") and "type" not in cfg["x_axis"]:
+                raise _Bad("body.configuration.x_axis.type should be defined")
+            if cfg.get("x_axis"):
+                known(cfg["x_axis"]["property_id"], "x axis")
+
+        def walk(f):
+            if not f:
+                return
+            for k in ("and", "or"):
+                for x in f.get(k, []) or []:
+                    walk(x)
+            if "property" in f:
+                known(f["property"], "filter")
+        walk(body.get("filter"))
+        for s_ in body.get("sorts") or []:
+            known(s_["property"], "sort")
 
     def _prop_id(self, sid: str, name: str) -> str:
         ids = self.sources[sid].setdefault("ids", {})
@@ -500,6 +550,37 @@ class FakeNotion:
             if method == "PATCH":
                 self._patch_source(m[1], body.get("properties", {}))
             return ok(self._source_view(m[1]))
+        if path == "/views" and method == "GET":
+            did = request.url.params.get("database_id")
+            return ok({"object": "list", "results": [{"object": "view", "id": v["id"]} for v in self.views.values()
+                                                       if v["parent"]["database_id"] == did and not v.get("deleted")],
+                       "has_more": False, "next_cursor": None})
+        if path == "/views" and method == "POST":
+            if body["database_id"] not in self.dbs:
+                raise _Missing
+            if not body.get("data_source_id"):
+                raise _Bad("body.data_source_id should be defined")
+            self._check_view(body)
+            extra = {k: body[k] for k in ("configuration", "filter", "sorts", "dashboard_view_id") if k in body}
+            return ok(self._new_view(body["database_id"], body.get("data_source_id"), body["name"], body["type"], **extra))
+        m = re.fullmatch(r"/views/([^/]+)", path)
+        if m:
+            v = self.views.get(m[1])
+            if v is None or v.get("deleted"):
+                raise _Missing
+            if method == "GET":
+                return ok(v)
+            if method == "PATCH":
+                merged = {"type": v["type"], "data_source_id": v["data_source_id"], **{k: v[k] for k in ("configuration", "filter", "sorts") if k in v}, **body}
+                self._check_view(merged)
+                v.update({k: body[k] for k in ("name", "configuration", "filter", "sorts") if k in body})
+                return ok(v)
+            if method == "DELETE":
+                if len([x for x in self.views.values() if x["parent"]["database_id"] == v["parent"]["database_id"]
+                        and not x.get("deleted") and not x.get("dashboard_view_id")]) <= 1:
+                    raise _Bad("A database must keep at least one view.")
+                v["deleted"] = True
+                return ok(v)
         if method == "POST" and path == "/databases":
             did, sid = self._id(), self._id()
             parent = body["parent"]
@@ -511,6 +592,7 @@ class FakeNotion:
             self.sources[sid] = {"id": sid, "db": did, "properties": dict(body["initial_data_source"]["properties"])}
             for n in self.sources[sid]["properties"]:
                 self._prop_id(sid, n)
+            self._new_view(did, sid, "Default view", "table")
             bid = did
             self.blocks[bid] = {"object": "block", "id": bid, "type": "child_database", "created_time": t,
                                 "child_database": {"title": "".join(x["text"]["content"] for x in body["title"])},

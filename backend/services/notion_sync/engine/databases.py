@@ -12,7 +12,7 @@ import logging
 from dataclasses import dataclass, field
 
 from services.notion_sync.engine.store import now
-from services.notion_sync.notion import dbschema
+from services.notion_sync.notion import dbschema, views as viewmap
 from services.notion_sync.notion.errors import AmbiguousWrite
 from services.notion_sync.readers.database import Bundle, database_to_ir, load_database
 from services.portable import ir
@@ -245,3 +245,79 @@ class DatabaseMixin:
             except (NotionError, KeyError):
                 st.layout.losses.append(dbschema.Loss("approximated", f"Which group each option of “{name}” is in.",
                                                       "All options sit in “To-do”.", "status_groups"))
+
+
+    # ---- views (M7) ------------------------------------------------------------------------------
+    def sync_views(self, st: DbState) -> list:
+        """Create/update this database's views. Runs after the schema (it needs property ids).
+        Notion's own "Default view" is removed once ours exist; none of OUR views is ever deleted
+        here (a view deleted in the app is left in Notion)."""
+        from services.notion_sync.notion.errors import NotionError
+        views = sorted(st.obj.props.get("views") or [], key=lambda v: v.get("position") or 0)
+        losses: list = []
+        if not views:
+            return losses
+        ids = {k: st.have[n]["id"] for k, n in st.layout.names.items() if n in st.have and st.have[n].get("id")}
+        types = {d["key"]: d["type"] for d in st.defs}
+        opts = {d["key"]: {o.get("id"): o.get("name") for o in (d.get("config") or {}).get("options") or []} for d in st.defs}
+        resolver = getattr(self, "_view_resolver", None)
+        ctx = viewmap.ViewCtx(ids, types, opts, (lambda nid: (resolver(nid)[1] if resolver and resolver(nid)[0] == "page" else None)))
+        built = {v["id"]: viewmap.build(v, ctx) for v in views}
+        wanted_widgets: dict[str, viewmap.Built] = {}
+        made = 0
+        for v in views:
+            b = built[v["id"]]
+            losses += b.losses
+            if b.payload is None or v.get("type") == "dashboard":
+                continue
+            made += self._sync_one_view(st, "view", v["id"], b.payload)
+        for v in views:
+            b = built[v["id"]]
+            if v.get("type") != "dashboard" or b.payload is None:
+                continue
+            dash = self._sync_one_view(st, "view", v["id"], b.payload, dashboard=True)
+            made += dash
+            dm = self.store.mapping("view", v["id"])
+            for wid in b.widgets:
+                wb = built.get(wid)
+                if wb is None or wb.payload is None:
+                    losses.append(viewmap.Loss("lossy", f"A widget of the dashboard “{v.get('name')}” that is not a view of this table.",
+                                               "It is left out.", "view_widget_missing"))
+                    continue
+                self._sync_one_view(st, "widget", f"{v['id']}:{wid}", wb.payload, dashboard_notion_id=dm["notion_id"])
+        if st.created and made:
+            self._drop_default_view(st)
+        return losses
+
+    def _sync_one_view(self, st: DbState, kind: str, local_id: str, payload: dict, *, dashboard: bool = False,
+                       dashboard_notion_id: str | None = None) -> int:
+        h = digest(payload)
+        m, ours = self.store.begin_create(kind, local_id, parent=st.notion_db)
+        if m.get("state") == "synced" and m.get("notion_id"):
+            if m.get("local_hash") == h:
+                return 0
+            self.adapter.patch_view(m["notion_id"], payload)
+            self.store.update(m["id"], {"local_hash": h, "last_pushed_at": now()})
+            return 0
+        vid = None
+        if not ours:                                         # reconcile: a view we may have created before a crash
+            known = {x.get("notion_id") for x in self.db.table("notion_mappings").select("notion_id")
+                     .eq("connection_id", self.conn.id).in_("local_kind", ["view", "widget"]).execute().data or []}
+            for cand in self.adapter.list_view_ids(st.notion_db):
+                if cand not in known and self.adapter.get_view(cand).get("name") == payload.get("name"):
+                    vid = cand
+                    break
+        if vid is None:
+            vid = (self.adapter.create_dashboard(st.notion_db, st.notion_ds, payload) if dashboard
+                   else self.adapter.create_view(st.notion_db, st.notion_ds, payload, dashboard_id=dashboard_notion_id))
+        self.store.cas(m["id"], "creating", {"notion_id": vid, "notion_kind": "view", "state": "synced",
+                                             "local_hash": h, "last_pushed_at": now()})
+        return 1
+
+    def _drop_default_view(self, st: DbState) -> None:
+        """The empty "Default view" Notion makes with every new database goes once ours exist."""
+        mine = {x.get("notion_id") for x in self.db.table("notion_mappings").select("notion_id")
+                .eq("connection_id", self.conn.id).in_("local_kind", ["view", "widget"]).execute().data or []}
+        for vid in self.adapter.list_view_ids(st.notion_db):
+            if vid not in mine and self.adapter.get_view(vid).get("name") == "Default view":
+                self.adapter.delete_view(vid)

@@ -23,6 +23,7 @@ class Bundle:
     sources: list[dict]                       # real data sources, in order
     props: dict[str, list[dict]]              # data_source_id -> property rows (by position)
     virtual: int = 0                          # "All notes" sources, which are views, not databases
+    views: list[dict] = field(default_factory=list)   # the first data source's views, in tab order
     losses: list[Loss] = field(default_factory=list)
 
 
@@ -39,6 +40,9 @@ def load_database(db, user_id: str, database_id: str) -> Bundle | None:
         props[s["id"]] = (db.table("db_properties").select("*").eq("data_source_id", s["id"])
                           .order("position").execute().data or [])
     b = Bundle(rows[0], real, props, virtual=len(srcs) - len(real))
+    if real:
+        b.views = (db.table("db_views").select("*").eq("data_source_id", real[0]["id"]).eq("user_id", user_id)
+                   .order("position").execute().data or [])
     if len(real) > 1:
         b.losses.append(Loss("lossy", f"{len(real) - 1} more data source(s) in this database.",
                              "Only the first is sent.", "extra_data_sources"))
@@ -72,7 +76,10 @@ def database_to_ir(b: Bundle) -> ir.Obj:
         title=[ir.Text((d.get("title") or "Untitled").strip() or "Untitled")], icon=d.get("icon") or None,
         cover=d.get("cover_url") or None,
         props={"description": _text(d.get("description")), "inline": bool(d.get("is_inline")),
-               "data_source": {"id": str(src["id"]), "name": src.get("name") or "Default", "properties": defs} if src else None},
+               "data_source": {"id": str(src["id"]), "name": src.get("name") or "Default", "properties": defs} if src else None,
+               "views": [{"id": str(v["id"]), "name": v.get("name"), "type": v.get("type"), "config": v.get("config") or {},
+                          "filter": v.get("filter"), "sorts": v.get("sorts") or [], "position": v.get("position") or 0}
+                         for v in b.views]},
         losses=list(b.losses))
 
 
