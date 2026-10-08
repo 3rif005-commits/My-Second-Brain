@@ -24,18 +24,31 @@ from .version import API_BASE, NOTION_VERSION
 
 
 class TokenBucket:
+    SLOWDOWN = 0.8            # after a 429 the rate drops 20% ...
+    SLOWDOWN_FOR = 600.0      # ... for 10 minutes (ROBUSTNESS §9)
+
     def __init__(self, rate: float = RATE_PER_SECOND, burst: int = RATE_BURST,
                  clock: Callable[[], float] = time.monotonic,
                  sleep: Callable[[float], None] = time.sleep):
         self.rate, self.burst = rate, burst
+        self._base_rate = rate
+        self._slow_until = 0.0
         self._clock, self._sleep = clock, sleep
         self._tokens = float(burst)
         self._at = clock()
         self._lock = threading.Lock()
 
+    def penalize(self) -> None:
+        """Called on every 429: be gentler for a while."""
+        with self._lock:
+            self._slow_until = self._clock() + self.SLOWDOWN_FOR
+            self.rate = self._base_rate * self.SLOWDOWN
+
     def take(self) -> None:
         with self._lock:
             now = self._clock()
+            if self.rate != self._base_rate and now >= self._slow_until:
+                self.rate = self._base_rate
             self._tokens = min(self.burst, self._tokens + (now - self._at) * self.rate)
             self._at = now
             if self._tokens < 1:
@@ -51,7 +64,7 @@ class NotionClient:
     def __init__(self, token: str, *, transport: httpx.BaseTransport | None = None,
                  bucket: TokenBucket | None = None,
                  sleep: Callable[[float], None] = time.sleep,
-                 base_url: str = API_BASE):
+                 base_url: str = API_BASE, gate: Callable[[], None] | None = None):
         self._http = httpx.Client(
             base_url=base_url, timeout=REQUEST_TIMEOUT_S, transport=transport,
             headers={"Authorization": f"Bearer {token}", "Notion-Version": NOTION_VERSION})
@@ -59,6 +72,8 @@ class NotionClient:
         self._sleep = sleep
         self.requests = 0
         self.write_requests = 0
+        self.rate_limit_waits = 0
+        self._gate = gate            # called before EVERY request: the kill switch
 
     def close(self) -> None:
         self._http.close()
@@ -75,6 +90,8 @@ class NotionClient:
         retry_unknown = is_read or idempotent or (not create and method in ("PATCH", "DELETE"))
         last: Exception | None = None
         for attempt in range(MAX_ATTEMPTS):
+            if self._gate:
+                self._gate()
             self._bucket.take()
             self.requests += 1
             if not is_read:
@@ -88,6 +105,8 @@ class NotionClient:
                 self._sleep(self._backoff(attempt))
                 continue
             if r.status_code == 429:
+                self.rate_limit_waits += 1
+                self._bucket.penalize()
                 wait = self._retry_after(r)
                 last = NotionError(429, "rate_limited", "", wait)
                 self._sleep(wait if wait is not None else self._backoff(attempt))

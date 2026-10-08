@@ -71,8 +71,8 @@ class World:
     def conn(self):
         return conn_mod.load(self.db, USER)
 
-    def client(self) -> NotionClient:
-        return NotionClient("secret", transport=self.notion.transport,
+    def client(self, gate=None) -> NotionClient:
+        return NotionClient("secret", transport=self.notion.transport, gate=gate,
                             bucket=TokenBucket(rate=1000, burst=1000), sleep=self.sleeps.append)
 
     def engine(self) -> Engine:

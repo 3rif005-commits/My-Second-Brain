@@ -81,8 +81,25 @@ class Store:
     def new_run(self, scope: dict, plan: dict, released: list[str], trigger: str = "manual") -> dict:
         return (self.db.table("notion_runs").insert({
             "user_id": self.user_id, "connection_id": self.cid, "trigger": trigger,
-            "scope": scope, "plan": plan, "released": released, "status": "running",
-            "started_at": now()}).execute().data)[0]
+            "scope": scope, "plan": plan, "released": released, "status": "queued"}).execute().data)[0]
+
+    def begin_run(self, run_id: str) -> None:
+        (self.db.table("notion_runs").update({"status": "running", "started_at": now()})
+         .eq("id", run_id).execute())
+
+    def runs(self, limit: int = 20) -> list[dict]:
+        rows = (self.db.table("notion_runs").select("*").eq("connection_id", self.cid)
+                .order("created_at", desc=True).limit(limit).execute().data or [])
+        return rows
+
+    def run(self, run_id: str) -> dict | None:
+        rows = (self.db.table("notion_runs").select("*").eq("id", run_id).eq("connection_id", self.cid)
+                .execute().data or [])
+        return rows[0] if rows else None
+
+    def run_items(self, run_id: str) -> list[dict]:
+        return (self.db.table("notion_run_items").select("*").eq("run_id", run_id)
+                .order("created_at").execute().data or [])
 
     def finish_run(self, run_id: str, status: str, counts: dict, requests: int) -> None:
         (self.db.table("notion_runs").update({
@@ -93,7 +110,11 @@ class Store:
         return (self.db.table("notion_run_items").insert({
             "user_id": self.user_id, "run_id": run_id, "mapping_id": mapping_id,
             "local_kind": kind, "local_id": note_id, "action": action,
-            "status": "running"}).execute().data)[0]
+            "status": "queued"}).execute().data)[0]
+
+    def start_item(self, item_id: str) -> None:
+        (self.db.table("notion_run_items").update({"status": "running", "attempts": 1, "updated_at": now()})
+         .eq("id", item_id).execute())
 
     def finish_item(self, item_id: str, status: str, *, error_class: str | None = None,
                     error_code: str | None = None, message: str | None = None) -> None:

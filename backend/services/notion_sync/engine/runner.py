@@ -24,11 +24,12 @@ from services.notion_sync.connection import Connection
 from services.notion_sync.engine.resolver import MentionResolver
 from services.notion_sync.engine.store import CONTAINER, Store, now
 from services.notion_sync.notion.adapter import (ARCHIVE_TITLE, NotionAdapter, Rendered, page_url)
-from services.notion_sync.notion.errors import AmbiguousWrite, NotionError, plain_message
+from services.notion_sync.notion.errors import AmbiguousWrite, NotionError, SyncPaused, plain_message
 from services.notion_sync.planner import (CHANGED, DELETED, NEW, PlanItem, fetch_collections, fetch_notes,
                                           object_hash)
 from services.notion_sync.readers.note import collection_to_ir, note_to_ir
 from services.portable import ir
+from services.portable.losses import dedupe
 
 log = logging.getLogger(__name__)
 
@@ -189,27 +190,31 @@ class Engine:
         return page_id
 
     # ---- bodies --------------------------------------------------------------------------
+    def _on_top(self, m: dict):
+        def save(top, pending=None):
+            idx = {"v": 1, "top": top}
+            if pending:
+                idx["pending"] = pending
+            self.store.update(m["id"], {"block_index": idx})          # no `pending` once a request lands
+        return save
+
     def _append(self, m: dict, page_id: str, r: Rendered, top: list[dict]) -> list[dict]:
-        """Append r's body, keeping the mapping's block index exact after every request."""
-        def landed(entries):
-            top.extend(entries)
-            self.store.update(m["id"], {"block_index": {"v": 1, "top": top}})
-        self.adapter.append_body(page_id, r, on_blocks=landed)
-        return top
+        """Write a brand-new body, keeping the mapping's block index exact after every request."""
+        return self.adapter.sync_body(page_id, r, [], self._on_top(m))
 
     def _replace_body(self, m: dict, page_id: str, r: Rendered, everything: bool = False) -> list[dict]:
-        top = list((m.get("block_index") or {}).get("top") or [])      # only blocks WE created
+        """Bring the body up to date: in place where possible, a rebuild otherwise. Only blocks
+        WE created (our index) are touched, unless the user chose Overwrite."""
+        idx = m.get("block_index") or {}
+        top = list(idx.get("top") or [])
+        if idx.get("pending"):                                           # a send died mid-append: reclaim
+            top += self.adapter.reclaim_pending(page_id, idx["pending"], {e["id"] for e in top})
+            self.store.update(m["id"], {"block_index": {"v": 1, "top": top}})
         if everything:                  # the user chose Overwrite: blocks people added go too
             self.adapter.delete_all_top_level(page_id)
             top = []
             self.store.update(m["id"], {"block_index": {"v": 1, "top": []}})
-
-        def gone(bid):
-            top[:] = [e for e in top if e["id"] != bid]
-            self.store.update(m["id"], {"block_index": {"v": 1, "top": top}})
-        if top:
-            self.adapter.delete_blocks([e["id"] for e in top], on_deleted=gone)
-        return self._append(m, page_id, r, top)
+        return self.adapter.sync_body(page_id, r, top, self._on_top(m))
 
     def _edit_check(self, page_id: str) -> None:
         info = self.adapter.get_page(page_id)
@@ -264,6 +269,9 @@ class Engine:
     def _notion_failure(self, e: NotionError) -> ItemFailure:
         # ids and the field path only: never the value Notion echoes back
         log.warning("notion error %s %s: %s", e.status, e.code, re.sub(r"instead was.*", "", e.message or "")[:300])
+        if e.status == 401 or e.code == "unauthorized":
+            # token revoked: the kill switch goes on by itself; mappings are kept for the reconnect
+            self.db.table("notion_connections").update({"status": "error", "updated_at": now()}).eq("id", self.conn.id).execute()
         return ItemFailure("needs_you" if e.error_class == "needs_user" else "failed",
                            e.error_class, e.code, plain_message(e))
 
@@ -275,7 +283,7 @@ class Engine:
         if m.get("notion_id"):
             return
         obj = note_to_ir(self._titled(row))
-        r = self.adapter.materialize(self.adapter.render(obj, resolver))
+        r = self.adapter.materialize_cover(self.adapter.render(obj, resolver))
         skip = self.store.detached_page_ids(item.note_id)
         rows = [r for r in self.adapter.find_rows(ds, item.note_id) if r[0] not in skip]   # reconcile: a crash or a lost mapping
         if rows:
@@ -318,8 +326,7 @@ class Engine:
                 m = self.store.mapping("note", item.note_id)
             page_id = m["notion_id"]
             h = object_hash(obj, self.conn, resolver.tags(obj))
-            r = self.adapter.materialize(self.adapter.render(note_to_ir(self._titled(row)), resolver))   # uploads our own files
-            losses = [loss.to_dict() for loss in r.losses]
+            r = self.adapter.materialize_cover(self.adapter.render(note_to_ir(self._titled(row)), resolver))
             if (action == "update" or m.get("local_hash")) and item.resolution != "overwrite":
                 self._edit_check(page_id)
             if m.get("notion_parent_id") != ds:                    # moved to another collection, or restored
@@ -327,6 +334,7 @@ class Engine:
                 self.store.update(m["id"], {"notion_parent_id": ds})
             self.adapter.update_properties(page_id, r)
             top = self._replace_body(m, page_id, r, everything=item.resolution == "overwrite")
+            losses = [loss.to_dict() for loss in dedupe(list(r.losses) + self.adapter.take_losses())]   # + what files taught us
             fin = self.adapter.get_page(page_id)
             self.store.update(m["id"], {
                 "state": "synced", "local_hash": h, "mapper_set_version": registry.mapper_set_version(),
@@ -370,17 +378,28 @@ class Engine:
             raise self._notion_failure(e)
 
     # ---- a run ---------------------------------------------------------------------------------
-    def run(self, items: list[PlanItem], released: frozenset[str] = frozenset()) -> RunResult:
+    def prepare(self, items: list[PlanItem], released: frozenset[str] = frozenset(),
+                trigger: str = "manual") -> tuple[dict, list[PlanItem], dict]:
+        """Write the run and its queued items (so progress is visible at once)."""
         sendable = [i for i in items if i.sendable]
         run = self.store.new_run({"ids": [i.note_id for i in items]}, {"counts": {"send": len(sendable)}},
-                                 sorted(released))
-        notes = fetch_notes(self.db, self.conn.user_id, [i.note_id for i in sendable if i.kind == "note" and i.state != DELETED])
-        start_requests = self.adapter.c.requests
-        results: dict[tuple[str, str], ItemResult] = {}
-        recs: dict[tuple[str, str], dict] = {}
+                                 sorted(released), trigger)
+        recs = {}
         for it in sendable:
             action = "archive" if it.state == DELETED else ("create" if it.state == NEW else "update")
             recs[(it.kind, it.note_id)] = self.store.new_item(run["id"], it.note_id, action, it.mapping_id, it.kind)
+        return run, sendable, recs
+
+    def run(self, items: list[PlanItem], released: frozenset[str] = frozenset(), trigger: str = "manual") -> RunResult:
+        run, sendable, recs = self.prepare(items, released, trigger)
+        return self.execute(run, sendable, recs, released)
+
+    def execute(self, run: dict, sendable: list[PlanItem], recs: dict, released: frozenset[str] = frozenset()) -> RunResult:
+        self.store.begin_run(run["id"])
+        notes = fetch_notes(self.db, self.conn.user_id, [i.note_id for i in sendable if i.kind == "note" and i.state != DELETED])
+        start_requests = self.adapter.c.requests
+        results: dict[tuple[str, str], ItemResult] = {}
+        halted = {"paused": False}
         store_resolver = MentionResolver(self.db, self.store, self.conn.user_id, self.conn.privacy_ceiling, released,
                                          {i.note_id for i in sendable if i.kind == "note" and i.state == NEW})
         shell_failures: dict[str, ItemFailure] = {}
@@ -388,13 +407,20 @@ class Engine:
         def finish(it: PlanItem, fn):
             key = (it.kind, it.note_id)
             rec = recs[key]
-            if self._paused():
+            if halted["paused"] or self._paused():
+                halted["paused"] = True
                 self.store.finish_item(rec["id"], "skipped", message="Syncing is paused.")
                 results[key] = ItemResult(it.note_id, it.title, "skipped", "", "Syncing is paused.", kind=it.kind)
                 return
+            self.store.start_item(rec["id"])
             try:
                 res = fn()
                 self.store.finish_item(rec["id"], res.status, message=res.message)
+            except SyncPaused:                          # the kill switch fired between two requests
+                halted["paused"] = True
+                self.store.finish_item(rec["id"], "skipped", message="Syncing was paused; this will be retried.")
+                results[key] = ItemResult(it.note_id, it.title, "skipped", "", "Syncing was paused.", kind=it.kind)
+                return
             except ItemFailure as f:
                 if it.kind == "note":
                     self._mark_mapping(it.note_id, f)
@@ -429,6 +455,9 @@ class Engine:
                     break
                 try:
                     self._shell(it, row, store_resolver)
+                except SyncPaused:
+                    halted["paused"] = True
+                    break
                 except ItemFailure as f:
                     shell_failures[it.note_id] = f
                 except AmbiguousWrite:
@@ -452,16 +481,18 @@ class Engine:
         ordered = [results[(i.kind, i.note_id)] for i in sendable if (i.kind, i.note_id) in results]
         done = sum(r.status == "done" for r in ordered)
         bad = sum(r.status in ("failed", "needs_you") for r in ordered)
-        status = "succeeded" if bad == 0 else "partial" if done else "failed"
+        status = ("paused" if halted["paused"] else "succeeded" if bad == 0 else "partial" if done else "failed")
         used = self.adapter.c.requests - start_requests
-        self.store.finish_run(run["id"], status, {"done": done, "problems": bad,
-                                                  "skipped": len(ordered) - done - bad}, used)
+        self.store.finish_run(run["id"], status, {"done": done, "problems": bad, "skipped": len(ordered) - done - bad,
+                                                  "rate_limit_waits": self.adapter.c.rate_limit_waits}, used)
+        if status == "succeeded" and done:
+            self.db.table("notion_connections").update({"last_ok_at": now()}).eq("id", self.conn.id).execute()
         return RunResult(run["id"], status, ordered, used)
 
     def _paused(self) -> bool:
         rows = (self.db.table("notion_connections").select("status").eq("id", self.conn.id)
                 .execute().data or [])
-        return bool(rows) and rows[0].get("status") != "active"
+        return bool(rows) and rows[0].get("status") == "paused"      # the kill switch; "error" = bad token
 
     def _mark_mapping(self, note_id: str, f: ItemFailure) -> None:
         m = self.store.mapping("note", note_id)

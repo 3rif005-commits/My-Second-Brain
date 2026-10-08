@@ -8,11 +8,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from services.portable import ir
+from services.portable.canonical import digest
 from services.portable.losses import Loss, dedupe
 
 import copy
 
-from .chunker import plan_steps
+from .chunker import children_of, plan_steps
 from .client import NotionClient
 from .adapter_emoji import looks_like_emoji
 from .errors import AmbiguousWrite, NotionError
@@ -87,6 +88,8 @@ class NotionAdapter:
         self.c = client
         self.files = files or HttpFileSource()
         self._cap: int | None = None
+        self._cache: dict[str, object] = {}              # files fetched during this send
+        self._run_losses: list[Loss] = []                # losses found while writing (files)
 
     # ---- connect ---------------------------------------------------------------
     def whoami(self) -> BotInfo:
@@ -194,6 +197,29 @@ class NotionAdapter:
             out.cover = self._resolve_cover(out.cover_url, out.losses, cache)
         out.losses = dedupe(out.losses)
         out.pending_files = 0
+        return out
+
+    def take_losses(self) -> list[Loss]:
+        out, self._run_losses = self._run_losses, []
+        return out
+
+    def materialize_cover(self, r: Rendered) -> Rendered:
+        """Resolve only the cover. Bodies are resolved block by block as they are written, so a
+        block that did not change is never fetched or uploaded again."""
+        if not r.cover_url or r.cover:
+            return r
+        out = copy.copy(r)
+        out.losses = list(r.losses)
+        out.cover = self._resolve_cover(r.cover_url, out.losses, self._cache)
+        out.losses = dedupe(out.losses)
+        return out
+
+    def materialize_blocks(self, blocks: list[dict]) -> list[dict]:
+        out = copy.deepcopy(blocks)
+        for b in _walk(out):
+            body = b.get(b.get("type", ""))
+            if isinstance(body, dict) and SB_FILE in body:
+                self._resolve_block(b, body, self._run_losses, self._cache)
         return out
 
     def _cap_bytes(self) -> int:
@@ -354,22 +380,101 @@ class NotionAdapter:
         self.c.post(f"/pages/{page_id}/move", {"parent": parent}, idempotent=True)
 
     # ---- bodies --------------------------------------------------------------------
-    def append_body(self, page_id: str, r: Rendered, on_blocks=None) -> list[dict]:
+    def append_body(self, page_id: str, r: Rendered, on_blocks=None, on_pending=None) -> list[dict]:
         """Append the whole body. `on_blocks(entries)` is called after every
-        request with [{"id", "src"}] of the top-level blocks that landed, so a
-        crash leaves an exact record of what is on the page."""
+        request with the top-level blocks that landed, so a crash leaves an exact
+        record of what is on the page."""
+        return self._append_blocks(page_id, r.blocks, r.block_src, on_blocks, on_pending)
+
+    def _append_blocks(self, page_id: str, blocks: list[dict], block_src: list[str], on_blocks=None,
+                       on_pending=None) -> list[dict]:
         placed: list[dict] = []
         i = 0
-        for step in plan_steps(r.blocks):
-            ids = self._append(page_id, step.blocks, {e["id"] for e in placed})
-            entries = [{"id": bid, "src": r.block_src[i + k]} for k, bid in enumerate(ids)]
+        for step in plan_steps(blocks):
+            if on_pending:       # write-ahead: what is about to land, so a crash can be reconciled
+                on_pending({"count": len(step.blocks), "types": [b.get("type") for b in step.blocks]})
+            ids = self._append(page_id, self.materialize_blocks(step.blocks), {e["id"] for e in placed})
+            entries = [{"id": bid, "src": block_src[i + k], **_fingerprint(blocks[i + k])}
+                       for k, bid in enumerate(ids)]
             i += len(step.blocks)
             placed += entries
             if on_blocks:
                 on_blocks(entries)
             for d in step.deferred:
-                self._append_tree(self._resolve(ids, d.path), d.children)
+                self._append_tree(self._resolve(ids, d.path), self.materialize_blocks(d.children))
         return placed
+
+    # Block types whose text/flags can be changed in place (no children, nothing immutable).
+    _PATCHABLE = {"paragraph", "heading_1", "heading_2", "heading_3", "heading_4", "bulleted_list_item",
+                  "numbered_list_item", "to_do", "quote", "code", "toggle", "divider"}
+
+    def _patch_payload(self, block: dict) -> dict | None:
+        t = block["type"]
+        body = dict(block.get(t) or {})
+        body.pop("children", None)
+        if t == "divider":
+            return None
+        body.pop("is_toggleable", None)          # cannot be changed in place (a change makes a rebuild)
+        if t != "code":
+            body.setdefault("color", "default")          # an omitted colour would leave the old one
+        else:
+            body.setdefault("caption", [])
+        return {t: body}
+
+    def sync_body(self, page_id: str, r: Rendered, old: list[dict], on_top=None) -> list[dict]:
+        """Bring the page's body to `r` touching as little as possible (ADR-06): blocks
+        whose hash is unchanged are left alone, a changed text block is PATCHed in place
+        (its Notion id, and so any comment on it, survives; its children are untouched when
+        they did not change), blocks added at the end are appended, blocks removed from the
+        end are deleted. Anything else (a block inserted in the middle, a type change, nested
+        content that changed) rebuilds the body. Only blocks WE created (the ids in `old`)
+        are ever deleted or patched."""
+        new = r.blocks
+        fps = [_fingerprint(b) for b in new]
+        top = [dict(e) for e in old]
+        n = min(len(top), len(new))
+        patches: list[int] = []
+        keep = 0
+        while keep < n:
+            o, f = top[keep], fps[keep]
+            if o.get("h") == f["h"] and o.get("ch") == f["ch"]:
+                pass
+            elif (o.get("h") is not None and o.get("t") == f["t"] and o.get("ch") == f["ch"]
+                  and o.get("tg") == f["tg"] and f["t"] in self._PATCHABLE
+                  and self._patch_payload(new[keep]) is not None):
+                patches.append(keep)
+            else:
+                break
+            keep += 1
+        if keep < n:                                     # structure changed: rebuild
+            def gone(bid):
+                top[:] = [e for e in top if e["id"] != bid]
+                if on_top:
+                    on_top(top, None)
+            self.delete_blocks([e["id"] for e in top], on_deleted=gone)
+            top.clear()
+            patches, keep = [], 0
+        for i in patches:
+            self.c.patch(f"/blocks/{top[i]['id']}", self._patch_payload(new[i]))
+            top[i].update(fps[i], src=r.block_src[i])
+            if on_top:
+                on_top(top, None)
+        if len(top) > len(new):                          # blocks removed at the end
+            def gone2(bid):
+                top[:] = [e for e in top if e["id"] != bid]
+                if on_top:
+                    on_top(top, None)
+            self.delete_blocks([e["id"] for e in top[len(new):]], on_deleted=gone2)
+        if len(new) > len(top):                          # blocks added at the end (or everything)
+            start = len(top)
+
+            def landed(entries):
+                top.extend(entries)
+                if on_top:
+                    on_top(top, None)
+            self._append_blocks(page_id, new[start:], r.block_src[start:], landed,
+                                (lambda p: on_top(top, p)) if on_top else None)
+        return top
 
     def _append(self, parent_id: str, blocks: list[dict], known: set[str]) -> list[str]:
         """Append one request. An append is atomic (T1) but a timeout or 5xx
@@ -416,6 +521,19 @@ class NotionAdapter:
             node = self._children(node)[j]["id"]
         return node
 
+    def reclaim_pending(self, page_id: str, pending: dict, known: set[str]) -> list[dict]:
+        """A previous send died between an append landing and its bookkeeping. If the
+        last children of the page are exactly the blocks it was about to write (and we
+        have no record of them), they are ours: hand their ids back so they are replaced
+        instead of duplicated."""
+        n, types = int(pending.get("count") or 0), list(pending.get("types") or [])
+        if n <= 0:
+            return []
+        tail = self._children(page_id)[-n:]
+        if len(tail) == n and all(b["id"] not in known and b.get("type") == t for b, t in zip(tail, types)):
+            return [{"id": b["id"], "src": ""} for b in tail]
+        return []
+
     def delete_blocks(self, ids: list[str], on_deleted=None) -> None:
         """Delete only blocks WE created (ids come from our own block index)."""
         for bid in ids:
@@ -445,3 +563,13 @@ def _walk(blocks):
         kids = body.get("children") if isinstance(body, dict) else None
         if kids:
             yield from _walk(kids)
+
+
+def _fingerprint(block: dict) -> dict:
+    """What we remember about a top-level block we wrote: a hash of the block itself, one of
+    what is nested inside it, its type, and whether a heading is a toggle."""
+    t = block.get("type", "")
+    body = block.get(t) if isinstance(block.get(t), dict) else {}
+    kids = body.get("children")
+    own = {**block, t: {k: v for k, v in body.items() if k != "children"}}
+    return {"t": t, "h": digest(own), "ch": digest(kids) if kids else None, "tg": bool(body.get("is_toggleable"))}

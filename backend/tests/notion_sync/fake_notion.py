@@ -22,6 +22,7 @@ import httpx
 from services.notion_sync.notion.languages import NOTION_LANGUAGES
 
 BOT = "bot-0000"
+Crash = None  # set below
 HUMAN = "human-1111"
 
 
@@ -222,6 +223,9 @@ class FakeNotion:
                 return httpx.Response(429, headers={"Retry-After": "1"}, json={"object": "error", "status": 429, "code": "rate_limited", "message": "slow"})
             if mode == "timeout_before":
                 raise httpx.ReadTimeout("timeout", request=request)
+            if mode == "crash_after":          # the whole process dies right after the write applied
+                self._route(method, path, body, request)
+                raise _Crash()
             if mode == "timeout_after":
                 try:
                     self._route(method, path, body, request)
@@ -320,6 +324,20 @@ class FakeNotion:
                 return ok({"object": "list", "results": [self._public(b) for b in page],
                            "has_more": more, "next_cursor": str(start + size) if more else None})
         m = re.fullmatch(r"/blocks/([^/]+)", path)
+        if m and method == "PATCH":
+            b = self.blocks.get(m[1])
+            if b is None or b["in_trash"]:
+                raise _Missing
+            t = b["type"]
+            if t not in body:
+                raise _Bad(f"body.{t} missing")
+            patch = body[t]
+            if "children" in patch or "is_toggleable" in patch:
+                raise _Bad("children / is_toggleable cannot be patched")
+            self._validate_blocks([{"type": t, t: patch}])
+            b[t].update(patch)
+            self._touch_page(m[1])
+            return ok(self._public(m[1]))
         if m and method == "DELETE":
             b = self.blocks.get(m[1])
             if b is None or b["in_trash"]:
@@ -434,9 +452,16 @@ class FakeNotion:
         return out
 
 
+class _Crash(BaseException):
+    """Not an Exception: nothing in the engine may catch it, like a kill -9."""
+
+
 class _Bad(Exception):
     pass
 
 
 class _Missing(Exception):
     pass
+
+
+Crash = _Crash

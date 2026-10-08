@@ -135,7 +135,8 @@ def path_of(colls: dict[str, dict], cid: str | None) -> str:
 
 
 def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), collection_ids=(),
-               released=frozenset(), archive_ids=frozenset(), resolutions=None, check_edits: bool = True) -> Plan:
+               released=frozenset(), archive_ids=frozenset(), resolutions=None, check_edits: bool = True,
+               collections_only=()) -> Plan:
     resolutions = {str(k): v for k, v in (resolutions or {}).items() if v in RESOLUTIONS}
     user = conn.user_id
     store = Store(db, user, conn.id)
@@ -160,6 +161,10 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
     for cid in tree + [c for nid in live_order for c in ancestors(colls, live[nid].get("collection_id") and str(live[nid]["collection_id"]))]:
         if cid not in need:
             need.append(cid)
+    for cid in (str(c) for c in collections_only):        # exactly these, without what is inside
+        for a in ancestors(colls, cid):
+            if a not in need:
+                need.append(a)
     need.sort(key=lambda c: len(ancestors(colls, c)))
 
     cmaps = store.mappings_for("collection", need)

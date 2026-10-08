@@ -59,3 +59,7 @@ def plain_message(err: Exception) -> str:
     if isinstance(err, AmbiguousWrite):
         return "Notion didn't answer in time. We'll check what arrived before trying again."
     return "Something went wrong."
+
+
+class SyncPaused(Exception):
+    """The kill switch is on: stop before the next request, whatever the item."""

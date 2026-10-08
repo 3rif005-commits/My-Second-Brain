@@ -20,7 +20,7 @@ def env(monkeypatch):
     monkeypatch.setattr(settings, "secrets_key", Fernet.generate_key().decode())
     monkeypatch.setattr(api, "get_user_id", lambda a: USER)
     monkeypatch.setattr(api, "get_supabase", lambda: w.db)
-    monkeypatch.setattr(api, "_client", lambda token: w.client())
+    monkeypatch.setattr(api, "_client", lambda token, gate=None: w.client(gate))
     app = FastAPI()
     app.include_router(api.router)
     return w, TestClient(app)
@@ -52,11 +52,11 @@ def test_connect_stores_encrypted_token_and_returns_only_last4(env):
 def test_connect_rejects_bad_token_and_non_bot(env, monkeypatch):
     import httpx
     w, c = env
-    monkeypatch.setattr(api, "_client", lambda t: api.NotionClient(t, transport=httpx.MockTransport(
+    monkeypatch.setattr(api, "_client", lambda t, gate=None: api.NotionClient(t, transport=httpx.MockTransport(
         lambda r: httpx.Response(401, json={"code": "unauthorized", "message": "x"}))))
     r = c.post("/notion/connect", json={"token": "ntn_bad_token_1"}, headers=H)
     assert r.status_code == 400 and r.json()["detail"]["error_code"] == "BAD_TOKEN"
-    monkeypatch.setattr(api, "_client", lambda t: api.NotionClient(t, transport=httpx.MockTransport(
+    monkeypatch.setattr(api, "_client", lambda t, gate=None: api.NotionClient(t, transport=httpx.MockTransport(
         lambda r: httpx.Response(200, json={"id": "u", "type": "person"}))))
     r = c.post("/notion/connect", json={"token": "ntn_person_tok_1"}, headers=H)
     assert r.json()["detail"]["error_code"] == "NOT_A_BOT"

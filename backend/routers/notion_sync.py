@@ -5,6 +5,8 @@ never returned; the API shows only "…last4".
 """
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
@@ -12,11 +14,14 @@ from routers.ingest import get_user_id
 from services import secrets
 from services.database import get_supabase
 from services.notion_sync import connection as conn_mod
+from services.notion_sync.engine import worker
 from services.notion_sync.engine.runner import Engine, connection_lock
+from services.notion_sync.engine.worker import kill_switch
 from services.notion_sync.engine.store import Store, now
 from services.notion_sync.notion.adapter import NotionAdapter, page_url
 from services.notion_sync.notion.client import NotionClient
 from services.notion_sync.notion.errors import NotConnected, NotionError, plain_message
+from services.notion_sync.notion.version import NOTION_VERSION
 from services.notion_sync.planner import plan_scope
 
 router = APIRouter(prefix="/notion", tags=["notion"])
@@ -36,10 +41,11 @@ class SendBody(BaseModel):
     released: list[str] = []                                           # private notes let through, this send only
     archive_ids: list[str] = []                                        # deleted notes to move to the archive page
     resolutions: dict[str, str] = {}                                    # id -> overwrite | copy | recreate | forget (default: skip)
+    background: bool = False                                           # return at once with a run id; watch GET /runs/{id}
 
 
-def _client(token: str) -> NotionClient:      # patched in tests
-    return NotionClient(token)
+def _client(token: str, gate=None) -> NotionClient:      # patched in tests
+    return NotionClient(token, gate=gate)
 
 
 def _need_conn(user_id: str):
@@ -51,7 +57,8 @@ def _need_conn(user_id: str):
 
 def _adapter(conn) -> NotionAdapter:
     try:
-        return conn_mod.adapter_for(conn, _client(conn.token()))
+        gate = kill_switch(get_supabase(), conn.id)            # the kill switch, before every request
+        return conn_mod.adapter_for(conn, _client(conn.token(), gate))
     except NotConnected as e:
         raise HTTPException(409, {"error": str(e), "error_code": "PAUSED" if conn.status == "paused" else "NOT_CONNECTED"})
     except (secrets.SecretsUnavailable, secrets.SecretUnreadable):
@@ -59,7 +66,9 @@ def _adapter(conn) -> NotionAdapter:
                                   "error_code": "SECRET_UNREADABLE"})
 
 
-def _notion_error(e: NotionError) -> HTTPException:
+def _notion_error(e: NotionError, conn=None) -> HTTPException:
+    if conn is not None and (e.status == 401 or e.code == "unauthorized"):
+        get_supabase().table("notion_connections").update({"status": "error", "updated_at": now()}).eq("id", conn.id).execute()
     return HTTPException(502 if e.error_class == "retryable" else 400,
                          {"error": plain_message(e), "error_code": e.code.upper()})
 
@@ -179,34 +188,184 @@ def plan(body: SendBody, authorization: str = Header(...)):
         raise HTTPException(409, {"error": "Pick the Notion page to send to first.", "error_code": "NO_ROOT"})
     _need_scope(body)
     adapter = _adapter(conn)
-    p = plan_scope(get_supabase(), conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
-                   released=frozenset(body.released), archive_ids=frozenset(body.archive_ids),
-                   resolutions=body.resolutions)
+    try:
+        p = plan_scope(get_supabase(), conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
+                       released=frozenset(body.released), archive_ids=frozenset(body.archive_ids),
+                       resolutions=body.resolutions)
+    except NotionError as e:
+        raise _notion_error(e, conn)
     return p.to_dict()
 
 
-@router.post("/send")
-def send(body: SendBody, authorization: str = Header(...)):
-    user_id = get_user_id(authorization)
+def _send_blocking(body: SendBody, user_id: str, loop) -> dict:
     conn = _need_conn(user_id)
     if not conn.root_page_id:
         raise HTTPException(409, {"error": "Pick the Notion page to send to first.", "error_code": "NO_ROOT"})
     lock = connection_lock(conn.id)
     if not lock.acquire(blocking=False):
         raise HTTPException(409, {"error": "A send is already running.", "error_code": "BUSY"})
+    handed_off = False
     try:
+        db = get_supabase()
         adapter = _adapter(conn)
         released = frozenset(body.released)
+        worker.recover_interrupted(db, Store(db, user_id, conn.id))
         # Re-plan on the server: never trust a plan the browser sends back.
         _need_scope(body)
-        p = plan_scope(get_supabase(), conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
-                       released=released, archive_ids=frozenset(body.archive_ids), resolutions=body.resolutions)
+        try:
+            p = plan_scope(db, conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
+                           released=released, archive_ids=frozenset(body.archive_ids), resolutions=body.resolutions)
+        except NotionError as e:
+            raise _notion_error(e, conn)
         if not p.sendable:
             return {"status": "nothing_to_send", "items": [], "requests": 0, "plan": p.to_dict()}
-        res = Engine(get_supabase(), conn, adapter).run(p.items, released)
-        return {**res.to_dict(), "plan": p.to_dict()}
+        engine = Engine(db, conn, adapter)
+        if not body.background:
+            res = engine.run(p.items, released)
+            return {**res.to_dict(), "plan": p.to_dict()}
+        run, sendable, recs = engine.prepare(p.items, released)
+        lock.release()                      # the worker takes it again for the whole run
+        handed_off = True
+
+        def finished(res):
+            bad = sum(i.status in ("failed", "needs_you") for i in res.items)
+            if bad and loop is not None:
+                asyncio.run_coroutine_threadsafe(
+                    worker.bell(user_id, run["id"], sum(i.status == "done" for i in res.items), bad), loop)
+        worker.start_background(engine, run, sendable, recs, released, on_finish=finished)
+        return {"status": "queued", "run_id": run["id"], "items": [], "requests": 0, "plan": p.to_dict()}
     finally:
-        lock.release()
+        if not handed_off:
+            lock.release()
+
+
+@router.post("/send")
+async def send(body: SendBody, authorization: str = Header(...)):
+    user_id = get_user_id(authorization)
+    loop = asyncio.get_running_loop()
+    return await asyncio.to_thread(_send_blocking, body, user_id, loop)
+
+
+def _titles(db, user_id: str, items: list[dict]) -> dict[str, str]:
+    notes = [i["local_id"] for i in items if i["local_kind"] == "note"]
+    colls = [i["local_id"] for i in items if i["local_kind"] == "collection"]
+    out: dict[str, str] = {}
+    if notes:
+        for r in db.table("notes").select("id, title").eq("user_id", user_id).in_("id", notes).execute().data or []:
+            out[str(r["id"])] = (r.get("title") or "Untitled").strip() or "Untitled"
+    if colls:
+        for r in db.table("collections").select("id, name").eq("user_id", user_id).in_("id", colls).execute().data or []:
+            out[str(r["id"])] = r.get("name") or "Untitled folder"
+    return out
+
+
+def _run_view(run: dict) -> dict:
+    return {k: run.get(k) for k in ("id", "trigger", "status", "counts", "requests_used", "created_at",
+                                    "started_at", "finished_at")}
+
+
+@router.get("/runs")
+def runs(limit: int = 20, authorization: str = Header(...)):
+    """Activity: the history is the run rows."""
+    user_id = get_user_id(authorization)
+    conn = _need_conn(user_id)
+    store = Store(get_supabase(), user_id, conn.id)
+    worker.recover_interrupted(get_supabase(), store)
+    return {"runs": [_run_view(r) for r in store.runs(min(max(limit, 1), 100))]}
+
+
+@router.get("/runs/{run_id}")
+def run_detail(run_id: str, authorization: str = Header(...)):
+    user_id = get_user_id(authorization)
+    conn = _need_conn(user_id)
+    store = Store(get_supabase(), user_id, conn.id)
+    r = store.run(run_id)
+    if r is None:
+        raise HTTPException(404, {"error": "No such run.", "error_code": "NOT_FOUND"})
+    items = store.run_items(run_id)
+    titles = _titles(get_supabase(), user_id, items)
+    return {**_run_view(r), "items": [{
+        "id": i["id"], "kind": i["local_kind"], "local_id": i["local_id"], "title": titles.get(i["local_id"], ""),
+        "action": i["action"], "status": i["status"], "error_class": i.get("error_class"),
+        "message": i.get("message")} for i in items]}
+
+
+@router.post("/runs/{run_id}/retry")
+async def retry_failed(run_id: str, authorization: str = Header(...)):
+    """A new run with only the items that failed (not the ones waiting for your choice)."""
+    user_id = get_user_id(authorization)
+    loop = asyncio.get_running_loop()
+
+    def go():
+        conn = _need_conn(user_id)
+        store = Store(get_supabase(), user_id, conn.id)
+        if store.run(run_id) is None:
+            raise HTTPException(404, {"error": "No such run.", "error_code": "NOT_FOUND"})
+        failed = [i for i in store.run_items(run_id) if i["status"] == "failed"]
+        if not failed:
+            return {"status": "nothing_to_send", "items": [], "requests": 0}
+        lock = connection_lock(conn.id)
+        if not lock.acquire(blocking=False):
+            raise HTTPException(409, {"error": "A send is already running.", "error_code": "BUSY"})
+        handed = False
+        try:
+            db = get_supabase()
+            adapter = _adapter(conn)
+            p = plan_scope(db, conn, adapter,
+                           note_ids=[i["local_id"] for i in failed if i["local_kind"] == "note"],
+                           collections_only=[i["local_id"] for i in failed if i["local_kind"] == "collection"],
+                           released=frozenset(store.run(run_id).get("released") or []))
+            if not p.sendable:
+                return {"status": "nothing_to_send", "items": [], "requests": 0, "plan": p.to_dict()}
+            engine = Engine(db, conn, adapter)
+            run, sendable, recs = engine.prepare(p.items, frozenset(store.run(run_id).get("released") or []), "retry")
+            lock.release()
+            handed = True
+
+            def finished(res):
+                bad = sum(i.status in ("failed", "needs_you") for i in res.items)
+                if bad:
+                    asyncio.run_coroutine_threadsafe(
+                        worker.bell(user_id, run["id"], sum(i.status == "done" for i in res.items), bad), loop)
+            worker.start_background(engine, run, sendable, recs, frozenset(), on_finish=finished)
+            return {"status": "queued", "run_id": run["id"], "items": [], "requests": 0}
+        finally:
+            if not handed:
+                lock.release()
+    return await asyncio.to_thread(go)
+
+
+@router.post("/pause")
+def pause_all(authorization: str = Header(...)):
+    """The kill switch: nothing is sent until you resume. Takes effect before the next request."""
+    return _set_status(get_user_id(authorization), "paused")
+
+
+@router.post("/resume")
+def resume_all(authorization: str = Header(...)):
+    return _set_status(get_user_id(authorization), "active")
+
+
+def _set_status(user_id: str, status: str) -> dict:
+    conn = _need_conn(user_id)
+    get_supabase().table("notion_connections").update({"status": status, "updated_at": now()}).eq("id", conn.id).execute()
+    return _public(conn_mod.load(get_supabase(), user_id))
+
+
+@router.get("/health")
+def health(authorization: str = Header(...)):
+    user_id = get_user_id(authorization)
+    conn = _need_conn(user_id)
+    db = get_supabase()
+    rows = db.table("notion_mappings").select("state").eq("connection_id", conn.id).execute().data or []
+    states = {}
+    for r in rows:
+        states[r["state"]] = states.get(r["state"], 0) + 1
+    recent = Store(db, user_id, conn.id).runs(20)
+    return {"status": conn.status, "last_ok_at": conn.row.get("last_ok_at"), "api_version": NOTION_VERSION,
+            "mappings": states, "failing": states.get("failed", 0),
+            "rate_limit_waits_recent": sum((r.get("counts") or {}).get("rate_limit_waits", 0) for r in recent),
+            "token_problem": conn.status == "error"}
 
 
 class PauseBody(BaseModel):

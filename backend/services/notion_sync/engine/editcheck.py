@@ -35,7 +35,10 @@ def check(adapter: NotionAdapter, conn: Connection, mapping: dict, ours_markdown
     if info.unreachable:
         return {"reason": "unreachable"}
     try:
-        index = {e["id"] for e in (mapping.get("block_index") or {}).get("top") or []}
+        bi = mapping.get("block_index") or {}
+        index = {e["id"] for e in bi.get("top") or []}
+        if bi.get("pending"):       # a send of ours died mid-append: those blocks are ours, not a person's
+            index |= {e["id"] for e in adapter.reclaim_pending(page_id, bi["pending"], set(index))}
         foreign = [b for b in adapter.top_level_ids(page_id, content_only=True) if b not in index]
     except NotionError:
         foreign = []
