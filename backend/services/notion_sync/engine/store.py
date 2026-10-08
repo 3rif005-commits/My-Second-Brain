@@ -42,7 +42,7 @@ class Store:
             row = (self.db.table("notion_mappings").insert({
                 "user_id": self.user_id, "connection_id": self.cid, "local_kind": kind,
                 "local_id": local_id, "local_sub": sub, "state": "creating",
-                "create_token": str(uuid.uuid4()), "create_started_at": now(),
+                "create_token": str(uuid.uuid4()), "create_started_at": now(), "updated_at": now(),
                 "notion_parent_id": parent}).execute().data or [None])[0]
         except Exception:
             row = None

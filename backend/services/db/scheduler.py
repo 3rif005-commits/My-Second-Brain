@@ -45,6 +45,7 @@ _JOB_ID = "db_scheduler_tick"
 _JOBS_JOB_ID = "background_jobs_tick"
 _TRIGGERS_JOB_ID = "background_job_triggers_tick"
 _SCHEDULES_JOB_ID = "background_job_schedules_tick"
+_NOTION_JOB_ID = "notion_auto_sync_tick"
 
 _scheduler: AsyncIOScheduler | None = None
 
@@ -196,6 +197,16 @@ async def _tick_job_schedules() -> None:
         logger.exception("scheduler tick: job schedules pass failed")
 
 
+async def _tick_notion() -> None:
+    """Auto-sync to Notion (DESIGN §6.4): send what changed for every connection that has rules.
+    A thread, not the event loop: it makes network calls and takes a while. One at a time."""
+    from services.notion_sync import auto
+    try:
+        await asyncio.to_thread(auto.run_due)
+    except Exception:
+        logger.exception("scheduler tick: notion auto-sync pass failed")
+
+
 def start_scheduler() -> None:
     """Idempotent: a second call while already running is a no-op (matches
     `get_pool()`'s own "creating it on first call" posture)."""
@@ -210,6 +221,8 @@ def start_scheduler() -> None:
                       id=_TRIGGERS_JOB_ID, max_instances=1, coalesce=True)
     scheduler.add_job(_tick_job_schedules, IntervalTrigger(seconds=_TICK_INTERVAL_SECONDS),
                       id=_SCHEDULES_JOB_ID, max_instances=1, coalesce=True)
+    scheduler.add_job(_tick_notion, IntervalTrigger(seconds=_TICK_INTERVAL_SECONDS),
+                      id=_NOTION_JOB_ID, max_instances=1, coalesce=True)
     scheduler.start()
     _scheduler = scheduler
 

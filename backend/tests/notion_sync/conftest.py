@@ -57,7 +57,7 @@ class World:
         self.notion = FakeNotion()
         self.db = FakeDB(
             collections=[], notes=[], db_databases=[], db_data_sources=[], db_properties=[], db_row_props=[],
-            db_relation_links=[], db_views=[], notion_mappings=[], notion_runs=[], notion_run_items=[],
+            db_relation_links=[], db_views=[], notion_rules=[], notion_mappings=[], notion_runs=[], notion_run_items=[],
             notion_connections=[{"id": "c1", "user_id": USER, "status": "active", "bot_user_id": BOT,
                                  "root_page_id": self.notion.root, "privacy_ceiling": "personal",
                                  "token_ciphertext": "x", "token_hint": "…abcd", "workspace_name": "Test WS"}])

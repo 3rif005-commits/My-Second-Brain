@@ -22,6 +22,7 @@ from services.notion_sync.notion.adapter import NotionAdapter, page_url
 from services.notion_sync.notion.client import NotionClient
 from services.notion_sync.notion.errors import NotConnected, NotionError, plain_message
 from services.notion_sync.notion.version import NOTION_VERSION
+from services.notion_sync import scope as scope_mod
 from services.notion_sync.planner import plan_scope
 
 router = APIRouter(prefix="/notion", tags=["notion"])
@@ -44,6 +45,7 @@ class SendBody(BaseModel):
     archive_ids: list[str] = []                                        # deleted notes to move to the archive page
     resolutions: dict[str, str] = {}                                    # id -> overwrite | copy | recreate | forget (default: skip)
     background: bool = False                                           # return at once with a run id; watch GET /runs/{id}
+    all: bool = False                                                   # the whole brain, per the Settings toggles (D5)
 
 
 def _client(token: str, gate=None) -> NotionClient:      # patched in tests
@@ -82,8 +84,19 @@ def _public(conn, root_title: str | None = None) -> dict:
                      if conn.root_page_id else None)}
 
 
+def _expand(body: SendBody, conn) -> SendBody:
+    """`all` -> the ids of the whole brain (the same on every call, so plan and send agree)."""
+    if not body.all:
+        return body
+    inc = {**scope_mod.DEFAULT_INCLUDE, **(conn.row.get("include") or {})}
+    notes, colls, dbs = scope_mod.all_scope(get_supabase(), conn.user_id, inc)
+    return body.model_copy(update={"note_ids": list(dict.fromkeys(body.note_ids + notes)),
+                                   "collection_ids": list(dict.fromkeys(body.collection_ids + colls)),
+                                   "database_ids": list(dict.fromkeys(body.database_ids + dbs)), "all": False})
+
+
 def _need_scope(body: SendBody) -> None:
-    if not body.note_ids and not body.collection_ids and not body.database_ids:
+    if not body.note_ids and not body.collection_ids and not body.database_ids and not body.all:
         raise HTTPException(422, {"error": "Choose a note or a collection to send.", "error_code": "EMPTY_SCOPE"})
 
 
@@ -189,6 +202,7 @@ def plan(body: SendBody, authorization: str = Header(...)):
     if not conn.root_page_id:
         raise HTTPException(409, {"error": "Pick the Notion page to send to first.", "error_code": "NO_ROOT"})
     _need_scope(body)
+    body = _expand(body, conn)
     adapter = _adapter(conn)
     try:
         p = plan_scope(get_supabase(), conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
@@ -215,6 +229,7 @@ def _send_blocking(body: SendBody, user_id: str, loop) -> dict:
         worker.recover_interrupted(db, Store(db, user_id, conn.id))
         # Re-plan on the server: never trust a plan the browser sends back.
         _need_scope(body)
+        body = _expand(body, conn)
         try:
             p = plan_scope(db, conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
                        database_ids=body.database_ids, include_linked=body.include_linked,
@@ -406,3 +421,74 @@ def note_status(note_id: str, authorization: str = Header(...)):
     return {"connected": True, "state": m["state"], "paused": bool(m.get("paused")), "notion_url": page_url(m["notion_id"]),
             "last_pushed_at": m.get("last_pushed_at"), "losses": m.get("losses") or [],
             "error": m.get("error_message")}
+
+
+# ---- mirror status, auto-sync rules, what "everything" includes ---------------------------------------
+
+@router.get("/mirror")
+def mirror(authorization: str = Header(...)):
+    """The state of every note and folder, for the sidebar dots and the header chip. No Notion calls."""
+    user_id = get_user_id(authorization)
+    conn = conn_mod.load(get_supabase(), user_id)
+    if conn is None:
+        return {"connected": False, "notes": {}, "collections": {}}
+    return {"connected": True, "paused": conn.status == "paused", **scope_mod.mirror_map(get_supabase(), conn)}
+
+
+class RuleBody(BaseModel):
+    scope_kind: str = Field(pattern="^(note|collection|database|all)$")
+    scope_id: str | None = None
+    mode: str = Field(default="on_change", pattern="^(manual|on_change|daily)$")
+    include: dict = {}
+
+
+@router.get("/rules")
+def list_rules(authorization: str = Header(...)):
+    conn = _need_conn(get_user_id(authorization))
+    return {"rules": [{k: r.get(k) for k in ("id", "scope_kind", "scope_id", "mode", "include", "created_at")}
+                      for r in get_supabase().table("notion_rules").select("*").eq("connection_id", conn.id).execute().data or []]}
+
+
+@router.post("/rules")
+def add_rule(body: RuleBody, authorization: str = Header(...)):
+    user_id = get_user_id(authorization)
+    conn = _need_conn(user_id)
+    if (body.scope_kind == "all") != (body.scope_id is None):
+        raise HTTPException(422, {"error": "A rule for everything has no id; any other rule needs one.", "error_code": "BAD_SCOPE"})
+    db = get_supabase()
+    existing = [r for r in db.table("notion_rules").select("*").eq("connection_id", conn.id).execute().data or []
+                if r["scope_kind"] == body.scope_kind and r.get("scope_id") == body.scope_id]
+    row = {"user_id": user_id, "connection_id": conn.id, "scope_kind": body.scope_kind, "scope_id": body.scope_id,
+           "mode": body.mode, "include": body.include}
+    if existing:
+        db.table("notion_rules").update({"mode": body.mode, "include": body.include}).eq("id", existing[0]["id"]).execute()
+        return {"id": existing[0]["id"], **{k: row[k] for k in ("scope_kind", "scope_id", "mode", "include")}}
+    created = db.table("notion_rules").insert(row).execute().data[0]
+    return {"id": created["id"], **{k: row[k] for k in ("scope_kind", "scope_id", "mode", "include")}}
+
+
+@router.delete("/rules/{rule_id}")
+def delete_rule(rule_id: str, authorization: str = Header(...)):
+    conn = _need_conn(get_user_id(authorization))
+    get_supabase().table("notion_rules").delete().eq("id", rule_id).eq("connection_id", conn.id).execute()
+    return {"deleted": rule_id}
+
+
+class IncludeBody(BaseModel):
+    include: dict
+
+
+@router.get("/include")
+def get_include(authorization: str = Header(...)):
+    conn = _need_conn(get_user_id(authorization))
+    return {"include": {**scope_mod.DEFAULT_INCLUDE, **(conn.row.get("include") or {})}}
+
+
+@router.put("/include")
+def put_include(body: IncludeBody, authorization: str = Header(...)):
+    """D5: what "everything" contains. Only the known switches are accepted."""
+    conn = _need_conn(get_user_id(authorization))
+    clean = {k: bool(v) for k, v in body.include.items() if k in scope_mod.DEFAULT_INCLUDE}
+    merged = {**scope_mod.DEFAULT_INCLUDE, **(conn.row.get("include") or {}), **clean}
+    get_supabase().table("notion_connections").update({"include": merged, "updated_at": now()}).eq("id", conn.id).execute()
+    return {"include": merged}
