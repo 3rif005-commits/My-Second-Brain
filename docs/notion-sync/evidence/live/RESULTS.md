@@ -19,3 +19,12 @@ Script: `backend/evals/notion_live_probe.py`. Raw calls (no token): `2026-10-08T
 Not yet tested: T11 (moving a database to another parent, for collection moves). Also documented, not in our test list: a data-source schema must stay under 50 KB.
 
 Cleanup: both probe pages moved to the TEST workspace's trash (SB-TEST-root kept, now empty).
+
+
+## M1 live findings (2026-10-08, `backend/evals/notion_m1_live.py`)
+
+| # | Question | Answer (VERIFIED live) | Consequence |
+|---|---|---|---|
+| L1 | Is `list_start_index` accepted on `numbered_list_item`? | **No, on create or on update.** 400 "list_start_index should be not present" (also `list_format`). Tried against API 2026-03-11 on the test workspace; the docs list it as creatable. | A numbered list that starts at N is sent as starting at 1: an *approximated* loss (`list_start`). FIDELITY_MATRIX row changed from E to A. |
+| L2 | Does a full M1 fixture send (headings 1-6, toggle heading, nested lists, to-do, toggle, quote, code, divider, inline styles, link, inline math, long emoji text, unknown block) go through in one run? | **Yes**: page create + container + 4 requests; read-back block types match the plan. `is_toggleable: false` on plain headings is accepted. `parent: {type: data_source_id}` creates a row. A second send makes 0 write calls. | none |
+| L3 | Cost of a *changed* note | 29 requests for a 25-block note (delete every block we created, re-append). | ADR-06 block diff is still needed (planned later); fine for M1. |

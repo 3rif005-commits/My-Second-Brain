@@ -1,0 +1,38 @@
+[
+ {
+  "type": "opaque",
+  "attrs": {
+   "source_type": "flashcard",
+   "raw": {
+    "id": "f1",
+    "type": "flashcard",
+    "props": {
+     "back": "back side"
+    },
+    "content": [
+     {
+      "type": "text",
+      "text": "front",
+      "styles": {}
+     }
+    ],
+    "children": []
+   }
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "front"
+   }
+  ],
+  "src_id": "f1",
+  "losses": [
+   {
+    "level": "lossy",
+    "what": "A “flashcard” block, which this app cannot yet show in Notion.",
+    "fallback": "It appears as a note in the page, with its original data in a toggle.",
+    "code": "unsupported_block"
+   }
+  ]
+ }
+]

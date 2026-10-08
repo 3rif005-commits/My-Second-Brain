@@ -1,0 +1,24 @@
+[
+ {
+  "type": "toggle",
+  "inline": [
+   {
+    "type": "text",
+    "text": "summary"
+   }
+  ],
+  "children": [
+   {
+    "type": "paragraph",
+    "inline": [
+     {
+      "type": "text",
+      "text": "body"
+     }
+    ],
+    "src_id": "p"
+   }
+  ],
+  "src_id": "t1"
+ }
+]

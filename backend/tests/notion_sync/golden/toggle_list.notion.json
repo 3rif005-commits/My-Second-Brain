@@ -1,0 +1,30 @@
+[
+ {
+  "type": "toggle",
+  "toggle": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "summary"
+     }
+    }
+   ],
+   "children": [
+    {
+     "type": "paragraph",
+     "paragraph": {
+      "rich_text": [
+       {
+        "type": "text",
+        "text": {
+         "content": "body"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  }
+ }
+]

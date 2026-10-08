@@ -38,7 +38,7 @@
 | heading level 4 | heading_4 (since 2026-03-30) | E | |
 | heading level 5–6 (if the schema allows; ASSUMPTION) | heading_4 | A | Visual level collapsed to 4; original level kept in the round-trip IR. |
 | heading `isToggleable` + children | heading_N `is_toggleable: true` + children | E | |
-| bulletListItem / numberedListItem / checkListItem | bulleted_list_item / numbered_list_item / to_do (`checked`) | E | `numberedListItem.start` → `list_start_index`. |
+| bulletListItem / numberedListItem / checkListItem | bulleted_list_item / numbered_list_item / to_do (`checked`) | E / A | `numberedListItem.start` → **not settable**: Notion rejects `list_start_index` (verified live, RESULTS L1). A list starting at N shows from 1 → **A**. |
 | toggleListItem | toggle | E | |
 | quote | quote | E | |
 | codeBlock (`language`) | code (`language`) | E / A | Languages map through a table. A language Notion doesn't know → `plain text` + caption `lang: <ours>` (A). Code > 2,000 chars → several rich-text objects (≤100 → 200,000 chars). [T9] |

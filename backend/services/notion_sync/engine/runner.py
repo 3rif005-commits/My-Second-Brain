@@ -8,6 +8,7 @@ create with an unknown outcome is never repeated blindly, and a mapping left in
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from dataclasses import dataclass, field
 
@@ -176,6 +177,9 @@ class Engine:
         except AmbiguousWrite as e:
             raise ItemFailure("failed", "retryable", "ambiguous_write", plain_message(e))
         except NotionError as e:
+            # ids and the field path only: never the value Notion echoes back
+            log.warning("notion error %s %s: %s", e.status, e.code,
+                        re.sub(r"instead was.*", "", e.message or "")[:300])
             raise ItemFailure("needs_you" if e.error_class == "needs_user" else "failed",
                               e.error_class, e.code, plain_message(e))
 

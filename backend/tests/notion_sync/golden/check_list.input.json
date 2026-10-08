@@ -1,0 +1,30 @@
+[
+ {
+  "id": "c1",
+  "type": "checkListItem",
+  "props": {
+   "checked": true
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "done",
+    "styles": {}
+   }
+  ],
+  "children": []
+ },
+ {
+  "id": "c2",
+  "type": "checkListItem",
+  "props": {},
+  "content": [
+   {
+    "type": "text",
+    "text": "todo",
+    "styles": {}
+   }
+  ],
+  "children": []
+ }
+]

@@ -35,3 +35,12 @@
 - 2026-10-08 SB-TEST-root shared (title was empty; set via API to `SB-TEST-root` 🧪). Live probe T1–T10 run: 81 requests, all answered; results in evidence/live/RESULTS.md, raw calls saved (no token) for cassettes.
 - 2026-10-08 T2 human half ✓ (last_edited_by = user ≠ bot); T8 ✓ (JS runs in Notion). Probe pages trashed in the test workspace.
 - **M0 CLOSED 2026-10-08.** NEXT: M1 (connect + send one plain note with dry-run preview), plus approved fixes B1, B2.
+
+## M1 build log (started 2026-10-08)
+- Piece 1 IR `services/portable/` (ir, canonical, losses), ir_version 1. Piece 2 readers (blocknote: paragraph, heading 1-6, bullet/numbered/check, toggle, quote, codeBlock, divider; inline marks/colours/links/inlineMath/mention-as-text; UnknownReader -> opaque) + `services/notion_sync/registry.py`.
+- Piece 3 adapter `services/notion_sync/notion/` (pinned version, httpx client, token bucket 2.5/s burst 3, Retry-After + backoff, creates/appends never blindly retried, chunker 100/2 levels/450 KB/1000 elements, UTF-16 splitting, language map, writers + OpaqueWriter).
+- Piece 4 tests `backend/tests/notion_sync/` (readers, writers + golden, chunker seeded-random, client, contract replay of the saved cassettes, guards/lint, engine against an in-memory Notion `fake_notion.py` with fault injection).
+- Piece 5 engine core: `planner.py`, `engine/store.py`, `engine/runner.py` (mapping row in `creating` BEFORE the create, reconcile by SB ID / Notes-database listing, ambiguous-append reconciliation, edit check, privacy gate twice, runs/run_items), `connection.py`.
+- Live core check on the test workspace: `venv/bin/python -m evals.notion_m1_live` (see RESULTS L1-L3). **Finding L1: `list_start_index` is rejected by Notion; design row changed E -> A.**
+- CHECKPOINT reached after piece 5: API (6), UI (7) NOT started; waiting for review of the frozen core.
+- Known gaps, by design for M1: changed notes are replaced (delete our blocks + re-append, no block diff); a process kill between an append landing and its bookkeeping can leave orphan blocks (write-ahead cursor is M5); the `SB ID` property is visible, not hidden (views API, M6/M7); estimate of requests is rough; no per-request kill switch (per item only); Notion-side edit detection is the cheap `last_edited_by != bot` check only (M4).

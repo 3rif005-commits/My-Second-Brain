@@ -17,7 +17,7 @@ NOTION_LANGUAGES = frozenset([
     "webassembly", "xml", "yaml", "java/c/c++/c#",
 ])
 
-#: our language id (BlockNote / Shiki names) -> Notion, same language
+#: our language id (the editor's Shiki names) -> Notion, same language
 ALIASES = {
     "text": "plain text", "txt": "plain text", "plaintext": "plain text", "": "plain text",
     "js": "javascript", "mjs": "javascript", "cjs": "javascript",

@@ -1,7 +1,7 @@
 """The IR: exactly DESIGN §4, `ir_version = 1`.
 
-Plain dataclasses with a stable `to_dict`. Nothing here names a BlockNote prop
-or a Notion shape.
+Plain dataclasses with a stable `to_dict`. Nothing here names a source-editor prop
+or a destination shape.
 """
 from __future__ import annotations
 

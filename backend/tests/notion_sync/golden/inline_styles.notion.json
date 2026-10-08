@@ -1,0 +1,90 @@
+[
+ {
+  "type": "paragraph",
+  "paragraph": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "b"
+     },
+     "annotations": {
+      "bold": true
+     }
+    },
+    {
+     "type": "text",
+     "text": {
+      "content": "i"
+     },
+     "annotations": {
+      "italic": true
+     }
+    },
+    {
+     "type": "text",
+     "text": {
+      "content": "u"
+     },
+     "annotations": {
+      "underline": true
+     }
+    },
+    {
+     "type": "text",
+     "text": {
+      "content": "s"
+     },
+     "annotations": {
+      "strikethrough": true
+     }
+    },
+    {
+     "type": "text",
+     "text": {
+      "content": "c"
+     },
+     "annotations": {
+      "code": true
+     }
+    },
+    {
+     "type": "text",
+     "text": {
+      "content": "red"
+     },
+     "annotations": {
+      "color": "red"
+     }
+    },
+    {
+     "type": "text",
+     "text": {
+      "content": "hl"
+     },
+     "annotations": {
+      "color": "blue_background"
+     }
+    },
+    {
+     "type": "text",
+     "text": {
+      "content": "link",
+      "link": {
+       "url": "https://example.com"
+      }
+     },
+     "annotations": {
+      "bold": true
+     }
+    },
+    {
+     "type": "equation",
+     "equation": {
+      "expression": "x^2"
+     }
+    }
+   ]
+  }
+ }
+]

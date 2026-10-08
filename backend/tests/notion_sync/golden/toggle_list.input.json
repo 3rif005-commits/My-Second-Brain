@@ -1,0 +1,29 @@
+[
+ {
+  "id": "t1",
+  "type": "toggleListItem",
+  "props": {},
+  "content": [
+   {
+    "type": "text",
+    "text": "summary",
+    "styles": {}
+   }
+  ],
+  "children": [
+   {
+    "id": "p",
+    "type": "paragraph",
+    "props": {},
+    "content": [
+     {
+      "type": "text",
+      "text": "body",
+      "styles": {}
+     }
+    ],
+    "children": []
+   }
+  ]
+ }
+]

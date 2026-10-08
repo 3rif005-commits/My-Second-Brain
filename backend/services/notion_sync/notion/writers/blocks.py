@@ -1,5 +1,5 @@
 """Writers for the M1 block types. One class per IR type, same interface as
-readers (ROBUSTNESS §1.1): `handles`, `version`, `write(node, ctx)`."""
+the reader interface (ROBUSTNESS §1.1): `handles`, `version`, `write(node, ctx)`."""
 from __future__ import annotations
 
 import json
@@ -102,9 +102,15 @@ class ListItemWriter:
 
     def write(self, node, ctx):
         if node.attrs.get("style") == "numbered":
+            r = _text_block(node, ctx, "numbered_list_item")
             start = node.attrs.get("start")
-            extra = {"list_start_index": start} if isinstance(start, int) else None
-            return _text_block(node, ctx, "numbered_list_item", extra)
+            if isinstance(start, int) and start != 1:
+                # VERIFIED live 2026-10-08 (M1): Notion rejects list_start_index on
+                # create and on update ("should be not present"), so a list cannot
+                # start anywhere but 1.
+                r.losses.append(Loss("approximated", f"A numbered list that starts at {start}.",
+                                     "Notion numbers it from 1.", "list_start"))
+            return r
         return _text_block(node, ctx, "bulleted_list_item")
 
 

@@ -1,0 +1,30 @@
+[
+ {
+  "type": "to_do",
+  "to_do": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "done"
+     }
+    }
+   ],
+   "checked": true
+  }
+ },
+ {
+  "type": "to_do",
+  "to_do": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "todo"
+     }
+    }
+   ],
+   "checked": false
+  }
+ }
+]

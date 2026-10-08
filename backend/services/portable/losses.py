@@ -27,7 +27,7 @@ class Loss:
 
 def fidelity(losses: list[Loss]) -> str:
     """One word for a set of losses: exact | approximated | lossy.
-    `impossible` counts as lossy: something is not in Notion at all."""
+    `impossible` counts as lossy: something is not in the destination at all."""
     if not losses:
         return "exact"
     worst = max(_RANK[loss.level] for loss in losses)

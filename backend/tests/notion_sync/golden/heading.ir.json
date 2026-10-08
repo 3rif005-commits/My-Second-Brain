@@ -1,0 +1,67 @@
+[
+ {
+  "type": "heading",
+  "attrs": {
+   "level": 1
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "One"
+   }
+  ],
+  "src_id": "h1"
+ },
+ {
+  "type": "heading",
+  "attrs": {
+   "level": 4
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "Four"
+   }
+  ],
+  "src_id": "h4"
+ },
+ {
+  "type": "heading",
+  "attrs": {
+   "level": 6
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "Six"
+   }
+  ],
+  "src_id": "h6"
+ },
+ {
+  "type": "heading",
+  "attrs": {
+   "level": 2,
+   "toggleable": true
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "Toggle"
+   }
+  ],
+  "children": [
+   {
+    "type": "paragraph",
+    "inline": [
+     {
+      "type": "text",
+      "text": "inside"
+     }
+    ],
+    "src_id": "c"
+   }
+  ],
+  "src_id": "ht"
+ }
+]

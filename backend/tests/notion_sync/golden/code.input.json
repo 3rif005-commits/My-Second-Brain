@@ -1,0 +1,32 @@
+[
+ {
+  "id": "c1",
+  "type": "codeBlock",
+  "props": {
+   "language": "python"
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "print('hi')\nx = 1",
+    "styles": {}
+   }
+  ],
+  "children": []
+ },
+ {
+  "id": "c2",
+  "type": "codeBlock",
+  "props": {
+   "language": "jsx"
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "<A/>",
+    "styles": {}
+   }
+  ],
+  "children": []
+ }
+]

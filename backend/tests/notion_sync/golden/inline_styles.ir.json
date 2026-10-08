@@ -1,0 +1,69 @@
+[
+ {
+  "type": "paragraph",
+  "inline": [
+   {
+    "type": "text",
+    "text": "b",
+    "marks": {
+     "bold": true
+    }
+   },
+   {
+    "type": "text",
+    "text": "i",
+    "marks": {
+     "italic": true
+    }
+   },
+   {
+    "type": "text",
+    "text": "u",
+    "marks": {
+     "underline": true
+    }
+   },
+   {
+    "type": "text",
+    "text": "s",
+    "marks": {
+     "strike": true
+    }
+   },
+   {
+    "type": "text",
+    "text": "c",
+    "marks": {
+     "code": true
+    }
+   },
+   {
+    "type": "text",
+    "text": "red",
+    "marks": {
+     "color": "red"
+    }
+   },
+   {
+    "type": "text",
+    "text": "hl",
+    "marks": {
+     "bg": "blue"
+    }
+   },
+   {
+    "type": "text",
+    "text": "link",
+    "marks": {
+     "bold": true
+    },
+    "link": "https://example.com"
+   },
+   {
+    "type": "equation",
+    "latex": "x^2"
+   }
+  ],
+  "src_id": "b1"
+ }
+]

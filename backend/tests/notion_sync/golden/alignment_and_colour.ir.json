@@ -1,0 +1,17 @@
+[
+ {
+  "type": "paragraph",
+  "attrs": {
+   "color": "red",
+   "bg": "green",
+   "align": "center"
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "centered"
+   }
+  ],
+  "src_id": "b1"
+ }
+]

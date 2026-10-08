@@ -1,0 +1,28 @@
+[
+ {
+  "type": "todo",
+  "attrs": {
+   "checked": true
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "done"
+   }
+  ],
+  "src_id": "c1"
+ },
+ {
+  "type": "todo",
+  "attrs": {
+   "checked": false
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "todo"
+   }
+  ],
+  "src_id": "c2"
+ }
+]

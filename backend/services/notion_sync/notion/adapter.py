@@ -14,7 +14,7 @@ from services.portable.losses import Loss, dedupe
 
 from .chunker import plan_steps
 from .client import NotionClient
-from .errors import NotionError
+from .errors import AmbiguousWrite, NotionError
 from .richtext import plain_rich, rich_text, split_units
 from .writers import write_block
 
@@ -219,7 +219,7 @@ class NotionAdapter:
         placed: list[dict] = []
         i = 0
         for step in plan_steps(r.blocks):
-            ids = self._append(page_id, step.blocks)
+            ids = self._append(page_id, step.blocks, {e["id"] for e in placed})
             entries = [{"id": bid, "src": r.block_src[i + k]} for k, bid in enumerate(ids)]
             i += len(step.blocks)
             placed += entries
@@ -229,7 +229,20 @@ class NotionAdapter:
                 self._append_tree(self._resolve(ids, d.path), d.children)
         return placed
 
-    def _append(self, parent_id: str, blocks: list[dict]) -> list[str]:
+    def _append(self, parent_id: str, blocks: list[dict], known: set[str]) -> list[str]:
+        """Append one request. An append is atomic (T1) but a timeout or 5xx
+        leaves its outcome unknown, and repeating it could duplicate the
+        blocks: so first look at what is on the parent (`known` = ids we have
+        already placed there) and only re-send when it provably did not land."""
+        try:
+            return self._append_once(parent_id, blocks)
+        except AmbiguousWrite:
+            landed = self._landed(parent_id, blocks, known)
+            if landed is not None:
+                return landed
+            return self._append_once(parent_id, blocks)       # confirmed absent: safe
+
+    def _append_once(self, parent_id: str, blocks: list[dict]) -> list[str]:
         res = self.c.patch(f"/blocks/{parent_id}/children", {"children": blocks}, create=True)
         ids = [b["id"] for b in res.get("results", [])]
         if len(ids) != len(blocks):
@@ -237,9 +250,21 @@ class NotionAdapter:
                               f"appended {len(blocks)} blocks, got {len(ids)} back")
         return ids
 
+    def _landed(self, parent_id: str, blocks: list[dict], known: set[str]) -> list[str] | None:
+        """The ids of `blocks` if they are the last children of the parent."""
+        kids = self._children(parent_id)
+        tail = kids[-len(blocks):] if blocks else []
+        if len(tail) == len(blocks) and all(
+                b["id"] not in known and b.get("type") == w.get("type")
+                for b, w in zip(tail, blocks)):
+            return [b["id"] for b in tail]
+        return None
+
     def _append_tree(self, parent_id: str, blocks: list[dict]) -> None:
+        known: set[str] = set()
         for step in plan_steps(blocks):
-            ids = self._append(parent_id, step.blocks)
+            ids = self._append(parent_id, step.blocks, known)
+            known.update(ids)
             for d in step.deferred:
                 self._append_tree(self._resolve(ids, d.path), d.children)
 

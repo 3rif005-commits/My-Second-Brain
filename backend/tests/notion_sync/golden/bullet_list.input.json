@@ -1,0 +1,42 @@
+[
+ {
+  "id": "l1",
+  "type": "bulletListItem",
+  "props": {},
+  "content": [
+   {
+    "type": "text",
+    "text": "a",
+    "styles": {}
+   }
+  ],
+  "children": [
+   {
+    "id": "n",
+    "type": "bulletListItem",
+    "props": {},
+    "content": [
+     {
+      "type": "text",
+      "text": "nested",
+      "styles": {}
+     }
+    ],
+    "children": []
+   }
+  ]
+ },
+ {
+  "id": "l2",
+  "type": "bulletListItem",
+  "props": {},
+  "content": [
+   {
+    "type": "text",
+    "text": "b",
+    "styles": {}
+   }
+  ],
+  "children": []
+ }
+]
