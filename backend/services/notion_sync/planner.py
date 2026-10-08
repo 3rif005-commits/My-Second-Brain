@@ -13,7 +13,7 @@ from services import privacy
 from services.notion_sync import registry
 from services.notion_sync.connection import Connection
 from services.notion_sync.engine import editcheck
-from services.notion_sync.engine.resolver import MentionResolver, link_tags
+from services.notion_sync.engine.resolver import MentionResolver, db_page_resolver, link_tags
 from services.notion_sync.engine.store import Store
 from services.notion_sync.notion.adapter import NotionAdapter, page_url
 from services.notion_sync.notion import dbschema
@@ -299,7 +299,7 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
                 rp = (db.table("db_row_props").select("*").eq("note_id", nid).execute().data or [None])[0]
                 obj = row_to_ir(obj, b, row, rp, relation_values(db, user, [_pd(p) for p in b.props[b.sources[0]["id"]]], nid))
         h = object_hash(obj, conn, link_tags(obj, resolver))
-        rendered = adapter.render(obj, resolver)
+        rendered = adapter.render(obj, resolver, db_page_resolver(store, m))
         fid = fidelity(rendered.losses)
         losses = [x.to_dict() for x in rendered.losses]
         restore = bool(m and m.get("state") == "archived")

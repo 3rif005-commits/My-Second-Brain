@@ -22,7 +22,7 @@ from services import privacy
 from services.notion_sync import registry
 from services.notion_sync.connection import Connection
 from services.notion_sync.engine.databases import DatabaseMixin
-from services.notion_sync.engine.resolver import MentionResolver, link_tags
+from services.notion_sync.engine.resolver import MentionResolver, db_page_resolver, link_tags
 from services.notion_sync.engine.store import CONTAINER, Store, now
 from services.notion_sync.notion import dbschema
 from services.notion_sync.notion.adapter import (ARCHIVE_TITLE, NotionAdapter, Rendered, page_url)
@@ -361,7 +361,7 @@ class Engine(DatabaseMixin):
                 m = self.store.mapping("note", item.note_id)
             page_id = m["notion_id"]
             h = object_hash(h_obj, self.conn, link_tags(h_obj, resolver))
-            r = self.adapter.materialize_cover(self.adapter.render(obj, resolver))
+            r = self.adapter.materialize_cover(self.adapter.render(obj, resolver, db_page_resolver(self.store, self.store.mapping("note", item.note_id))))
             if st is not None:
                 self._row_props(st, obj, r, resolver)
             if (action == "update" or m.get("local_hash")) and item.resolution != "overwrite":

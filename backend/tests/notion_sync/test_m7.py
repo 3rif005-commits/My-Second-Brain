@@ -168,3 +168,57 @@ def test_view_created_but_answer_lost_is_adopted(world):
     assert res.items[0].status == "failed"
     world.send(databases=[db])
     assert sorted(v["name"] for v in notion_views(world, db)) == ["One", "Three", "Two"]
+
+
+# ---- inline databases sit in position (T3) --------------------------------------------------------
+
+def P(text, i):
+    return {"id": i, "type": "paragraph", "props": {}, "content": [{"type": "text", "text": text, "styles": {}}], "children": []}
+
+
+def host_with_db(world):
+    host = world.add_note(title="Host")
+    db, ds = world.add_db("Inline", inline=True, host=host)
+    world.add_row(ds, "row")
+    host["content"] = [P("before", "a"), {"id": "d", "type": "database", "props": {"databaseId": db["id"], "viewId": ""},
+                                           "content": [], "children": []}, P("after", "b")]
+    return host, db
+
+
+def page_kinds(world, host):
+    out = []
+    for b in world.notion.top_blocks(world.mapping(host)["notion_id"]):
+        out.append("DB" if b["type"] == "child_database" else b["paragraph"]["rich_text"][0]["text"]["content"])
+    return out
+
+
+def test_an_inline_database_sits_between_the_blocks_it_was_between(world):
+    host, db = host_with_db(world)
+    res, _ = world.send(host, databases=[db])
+    assert all(i.status == "done" for i in res.items), [i.message for i in res.items]
+    assert page_kinds(world, host) == ["before", "DB", "after"]
+    writes = world.notion.writes()
+    assert world.send(host, databases=[db])[0].items == [] and world.notion.writes() == writes
+
+
+def test_the_host_is_rearranged_when_its_database_arrives_later(world):
+    host, db = host_with_db(world)
+    res, plan = world.send(host)                                      # the database is not in Notion yet
+    assert page_kinds(world, host) == ["before", "after"]
+    assert "db_embed_pending" in {loss["code"] for loss in plan.items[-1].losses}
+    world.send(databases=[db])                                        # …now it is, at the end of the page
+    assert page_kinds(world, host)[-1] == "DB"
+    assert world.plan(host).items[0].state == CHANGED                 # the host's hash noticed
+    world.send(host)
+    assert page_kinds(world, host) == ["before", "DB", "after"]
+    assert world.plan(host).to_dict()["nothing_to_send"]
+
+
+def test_editing_text_around_the_database_keeps_it_in_place(world):
+    host, db = host_with_db(world)
+    world.send(host, databases=[db])
+    host["content"][0] = P("before, edited", "a")
+    host["content"].append(P("last", "c"))
+    world.send(host)
+    assert page_kinds(world, host) == ["before, edited", "DB", "after", "last"]
+    assert len([d for d in world.notion.dbs.values() if d["title"][0]["text"]["content"] == "Inline"]) == 1

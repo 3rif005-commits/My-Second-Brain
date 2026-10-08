@@ -25,7 +25,8 @@ from .writers import write_block
 
 from .properties import (SB_ID_PROP, SCHEMA, TITLE_PROP, row_properties, sb_id_value,
                          title_value)
-from .richtext import RESOLVER
+from .richtext import DB_RESOLVER, RESOLVER
+from .writers.rich import DB_EMBED
 
 NOTES_DB_TITLE = "Notes"
 ARCHIVE_TITLE = "🗄 Deleted in Second Brain"
@@ -142,13 +143,15 @@ class NotionAdapter:
             raise
 
     # ---- render (pure) -----------------------------------------------------------
-    def render(self, obj: ir.Obj, resolver=None) -> Rendered:
-        """Pure. `resolver(note_id)` says how a link to another note is written."""
-        token = RESOLVER.set(resolver)
+    def render(self, obj: ir.Obj, resolver=None, db_page=None) -> Rendered:
+        """Pure. `resolver(note_id)` says how a link to another note is written; `db_page(database_id)`
+        says whether an embedded database already exists in Notion (and its id)."""
+        token, token2 = RESOLVER.set(resolver), DB_RESOLVER.set(db_page)
         try:
             return self._render(obj)
         finally:
             RESOLVER.reset(token)
+            DB_RESOLVER.reset(token2)
 
     def _render(self, obj: ir.Obj) -> Rendered:
         losses: list[Loss] = list(obj.losses)
@@ -167,6 +170,7 @@ class NotionAdapter:
             blocks += r.blocks
             src += [node.src_id] * len(r.blocks)
             losses += r.losses
+        _drop_nested_anchors(blocks, losses)
         pending = sum(1 for b in _walk(blocks) if SB_FILE in (b.get(b.get("type", ""), {}) or {}))
         pending += 1 if obj.cover else 0
         props = row_properties(obj, losses) if obj.kind == "page" else {}
@@ -452,13 +456,15 @@ class NotionAdapter:
         return self._append_blocks(page_id, r.blocks, r.block_src, on_blocks, on_pending)
 
     def _append_blocks(self, page_id: str, blocks: list[dict], block_src: list[str], on_blocks=None,
-                       on_pending=None) -> list[dict]:
+                       on_pending=None, after: str | None = None) -> list[dict]:
+        """`after`: None = the end of the page; "start" = the top; an id = right behind that block."""
         placed: list[dict] = []
         i = 0
         for step in plan_steps(blocks):
             if on_pending:       # write-ahead: what is about to land, so a crash can be reconciled
                 on_pending({"count": len(step.blocks), "types": [b.get("type") for b in step.blocks]})
-            ids = self._append(page_id, self.materialize_blocks(step.blocks), {e["id"] for e in placed})
+            anchor = (placed[-1]["id"] if placed else (None if after is None else after if after != "start" else "start"))
+            ids = self._append(page_id, self.materialize_blocks(step.blocks), {e["id"] for e in placed}, anchor)
             entries = [{"id": bid, "src": block_src[i + k], **_fingerprint(blocks[i + k])}
                        for k, bid in enumerate(ids)]
             i += len(step.blocks)
@@ -468,6 +474,57 @@ class NotionAdapter:
             for d in step.deferred:
                 self._append_tree(self._resolve(ids, d.path), self.materialize_blocks(d.children))
         return placed
+
+    def _sync_with_anchors(self, page_id: str, r: Rendered, old: list[dict], on_top=None) -> list[dict]:
+        """A page with an embedded database: the database block is an anchor we do not own. Our
+        own blocks are replaced around it: what comes before it is inserted at the start (or after
+        the previous anchor), what comes after it right behind it (T3: the position is exact)."""
+        top = [dict(e) for e in old if e.get("t") == "child_database"]          # anchors stay
+        mine = [e for e in old if e.get("t") != "child_database"]
+
+        def gone(bid):
+            if on_top:
+                on_top(top + [e for e in mine if e["id"] != bid], None)
+            mine[:] = [e for e in mine if e["id"] != bid]
+        self.delete_blocks([e["id"] for e in mine], on_deleted=gone)
+        # segments of blocks between anchors
+        segs: list[tuple[list[dict], list[str], str | None]] = []   # (blocks, src, id of the anchor BEFORE them)
+        cur_b: list[dict] = []
+        cur_s: list[str] = []
+        prev_anchor: str | None = None
+        order: list[dict] = []                                       # final order of our index entries
+        for b, src in zip(r.blocks, r.block_src):
+            if b.get("type") == DB_EMBED:
+                segs.append((cur_b, cur_s, prev_anchor))
+                prev_anchor = b[DB_EMBED]["database_id"]
+                cur_b, cur_s = [], []
+            else:
+                cur_b.append(b)
+                cur_s.append(src)
+        segs.append((cur_b, cur_s, prev_anchor))
+        placed_order: list[dict] = []
+        known_anchor = {e["id"] for e in top}
+        for blocks, srcs, anchor in segs:
+            if anchor is not None:
+                if anchor not in known_anchor:
+                    top.append({"id": anchor, "src": "", "t": "child_database", "h": "anchor", "ch": None, "tg": False})
+                    known_anchor.add(anchor)
+                placed_order.append(next(e for e in top if e["id"] == anchor))
+            if not blocks:
+                continue
+            entries: list[dict] = []
+
+            def landed(es):
+                entries.extend(es)
+                if on_top:
+                    on_top(placed_order + entries, None)
+            self._append_blocks(page_id, blocks, srcs, landed,
+                                (lambda p: on_top(placed_order + entries, {**p, "after": anchor})) if on_top else None,
+                                after=anchor if anchor else "start")
+            placed_order += entries
+        if on_top:
+            on_top(placed_order, None)
+        return placed_order
 
     # Block types whose text/flags can be changed in place (no children, nothing immutable).
     _PATCHABLE = {"paragraph", "heading_1", "heading_2", "heading_3", "heading_4", "bulleted_list_item",
@@ -495,6 +552,8 @@ class NotionAdapter:
         content that changed) rebuilds the body. Only blocks WE created (the ids in `old`)
         are ever deleted or patched."""
         new = r.blocks
+        if any(b.get("type") == DB_EMBED for b in new):
+            return self._sync_with_anchors(page_id, r, old, on_top)
         fps = [_fingerprint(b) for b in new]
         top = [dict(e) for e in old]
         n = min(len(top), len(new))
@@ -541,31 +600,47 @@ class NotionAdapter:
                                 (lambda p: on_top(top, p)) if on_top else None)
         return top
 
-    def _append(self, parent_id: str, blocks: list[dict], known: set[str]) -> list[str]:
+    def _append(self, parent_id: str, blocks: list[dict], known: set[str], after: str | None = None) -> list[str]:
         """Append one request. An append is atomic (T1) but a timeout or 5xx
         leaves its outcome unknown, and repeating it could duplicate the
         blocks: so first look at what is on the parent (`known` = ids we have
         already placed there) and only re-send when it provably did not land."""
         try:
-            return self._append_once(parent_id, blocks)
+            return self._append_once(parent_id, blocks, after)
         except AmbiguousWrite:
-            landed = self._landed(parent_id, blocks, known)
+            landed = self._landed(parent_id, blocks, known, after)
             if landed is not None:
                 return landed
-            return self._append_once(parent_id, blocks)       # confirmed absent: safe
+            return self._append_once(parent_id, blocks, after)   # confirmed absent: safe
 
-    def _append_once(self, parent_id: str, blocks: list[dict]) -> list[str]:
-        res = self.c.patch(f"/blocks/{parent_id}/children", {"children": blocks}, create=True)
-        ids = [b["id"] for b in res.get("results", [])]
+    def _append_once(self, parent_id: str, blocks: list[dict], after: str | None = None) -> list[str]:
+        body: dict = {"children": blocks}
+        if after == "start":
+            body["position"] = {"type": "start"}
+        elif after:
+            body["position"] = {"type": "after_block", "after_block": {"id": after}}
+        res = self.c.patch(f"/blocks/{parent_id}/children", body, create=True)
+        results = res.get("results", [])
+        if after:          # VERIFIED live: a positioned insert returns the new blocks FOLLOWED BY every later sibling
+            results = results[:len(blocks)]
+        ids = [b["id"] for b in results]
         if len(ids) != len(blocks):
             raise NotionError(502, "unexpected_response",
                               f"appended {len(blocks)} blocks, got {len(ids)} back")
         return ids
 
-    def _landed(self, parent_id: str, blocks: list[dict], known: set[str]) -> list[str] | None:
-        """The ids of `blocks` if they are the last children of the parent."""
+    def _landed(self, parent_id: str, blocks: list[dict], known: set[str], after: str | None = None) -> list[str] | None:
+        """The ids of `blocks` if they sit where they were being inserted (the end, the start, or
+        right behind `after`)."""
         kids = self._children(parent_id)
-        tail = kids[-len(blocks):] if blocks else []
+        if after == "start":
+            tail = kids[:len(blocks)]
+        elif after:
+            ids = [k["id"] for k in kids]
+            at = ids.index(after) + 1 if after in ids else len(kids)
+            tail = kids[at:at + len(blocks)]
+        else:
+            tail = kids[-len(blocks):] if blocks else []
         if len(tail) == len(blocks) and all(
                 b["id"] not in known and b.get("type") == w.get("type")
                 for b, w in zip(tail, blocks)):
@@ -594,7 +669,16 @@ class NotionAdapter:
         n, types = int(pending.get("count") or 0), list(pending.get("types") or [])
         if n <= 0:
             return []
-        tail = self._children(page_id)[-n:]
+        kids = self._children(page_id)
+        after = pending.get("after")
+        if after == "start" or (after is None and "after" in pending):
+            tail = kids[:n]
+        elif after:
+            ids = [k["id"] for k in kids]
+            at = ids.index(after) + 1 if after in ids else len(kids)
+            tail = kids[at:at + n]
+        else:
+            tail = kids[-n:]
         if len(tail) == n and all(b["id"] not in known and b.get("type") == t for b, t in zip(tail, types)):
             return [{"id": b["id"], "src": ""} for b in tail]
         return []
@@ -638,3 +722,19 @@ def _fingerprint(block: dict) -> dict:
     kids = body.get("children")
     own = {**block, t: {k: v for k, v in body.items() if k != "children"}}
     return {"t": t, "h": digest(own), "ch": digest(kids) if kids else None, "tg": bool(body.get("is_toggleable"))}
+
+
+def _drop_nested_anchors(blocks: list[dict], losses: list[Loss]) -> None:
+    """An embedded database can only be anchored between top-level blocks."""
+    def clean(lst: list[dict], top: bool) -> None:
+        for b in list(lst):
+            if b.get("type") == DB_EMBED and not top:
+                lst.remove(b)
+                losses.append(Loss("approximated", "An embedded database inside another block.",
+                                   "It is placed on the page instead.", "db_embed_nested"))
+                continue
+            body = b.get(b.get("type", ""))
+            kids = body.get("children") if isinstance(body, dict) else None
+            if kids:
+                clean(kids, False)
+    clean(blocks, True)

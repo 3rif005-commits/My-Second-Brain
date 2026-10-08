@@ -231,12 +231,22 @@ class ActionWriter:
                 "children": code_blocks(text or "(none)", "json", child_losses)}}]}}], losses + child_losses)
 
 
+DB_EMBED = "__sb_db_embed"
+
+
 class DbEmbedWriter:
-    """An inline database block. The database itself is sent as a database under the page (M6/M7);
-    here the block has nothing to write, only a loss to declare."""
+    """An inline database block. The database is a Notion database inside the host page; the
+    block here is only an ANCHOR saying where it sits, so the blocks before it go before it and
+    the rest after (T3). Without a database in Notion yet there is nothing to anchor."""
     handles = "ir:db_embed"
     version = 1
 
     def write(self, node, ctx):
-        return WriteResult([], list(node.losses) + [Loss(
-            "approximated", "An embedded database.", "It is sent as its own table inside the page.", "db_embed_position")])
+        from ..richtext import DB_RESOLVER
+        res = DB_RESOLVER.get()
+        notion_id = res(node.attrs.get("database_id", "")) if res else None
+        losses = list(node.losses)
+        if not notion_id:
+            return WriteResult([], losses + [Loss("approximated", "An embedded database that is not in Notion yet.",
+                                                  "It appears when the database is sent.", "db_embed_pending")])
+        return WriteResult([{"type": DB_EMBED, DB_EMBED: {"database_id": notion_id}}], losses)

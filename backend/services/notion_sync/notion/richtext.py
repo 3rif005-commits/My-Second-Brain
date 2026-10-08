@@ -17,6 +17,8 @@ LINK_SCHEMES = ("http://", "https://", "mailto:", "tel:")
 #: Resolves links to other notes while a page is being written. `resolve(note_id)`
 #: returns ("page", notion_page_id) | ("private", None) | ("unmirrored", None).
 RESOLVER: contextvars.ContextVar = contextvars.ContextVar("notion_mention_resolver", default=None)
+#: Resolves an embedded database: `db_page(local_database_id)` -> Notion database id | None.
+DB_RESOLVER: contextvars.ContextVar = contextvars.ContextVar("notion_db_resolver", default=None)
 _NOTE_LINK = re.compile(r"(?:^|/)brain/([0-9a-fA-F]{8}-[0-9a-fA-F-]{27})(?:[/?#].*)?$")
 
 

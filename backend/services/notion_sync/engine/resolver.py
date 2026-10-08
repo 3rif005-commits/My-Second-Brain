@@ -83,4 +83,23 @@ def link_tags(obj: ir.Obj, resolver: "MentionResolver") -> list[tuple[str, str]]
     for v in ((obj.props.get("db") or {}).get("values") or {}).values():
         if v.get("type") == "relation":
             tags += [(f"rel:{t}", resolver(t)[0]) for t in v.get("value") or []]
+    db_page = db_page_resolver(resolver.store, resolver.store.mapping("note", obj.ref.id)) if obj.ref.kind == "note" else (lambda _: None)
+    tags += [(f"db:{d}", "anchored" if db_page(d) else "pending") for d in embedded_databases(obj)]
     return sorted(tags)
+
+
+def embedded_databases(obj: ir.Obj) -> list[str]:
+    return sorted({b.attrs.get("database_id") for b in ir.walk(obj.body) if b.type == "db_embed" and b.attrs.get("database_id")})
+
+
+def db_page_resolver(store: Store, host_mapping: dict | None):
+    """`db_page(local database id)` -> its Notion database id, but only when that database
+    lives inside THIS note's page (that is the only place it can be anchored)."""
+    host = (host_mapping or {}).get("notion_id")
+
+    def resolve(db_id: str):
+        m = store.mapping("database", db_id)
+        if m and m.get("state") == "synced" and m.get("notion_id") and host and m.get("notion_parent_id") == host:
+            return m["notion_id"]
+        return None
+    return resolve

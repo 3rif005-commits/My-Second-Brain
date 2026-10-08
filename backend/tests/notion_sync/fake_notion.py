@@ -453,11 +453,24 @@ class FakeNotion:
             if method == "PATCH":
                 self._validate_blocks(body["children"])
                 new = self._store_blocks(body["children"], m[1], "page_id" if m[1] in self.pages else "block_id")
-                kids.extend(new)
+                pos = body.get("position")
+                if pos and pos["type"] == "start":
+                    kids[0:0] = new
+                elif pos and pos["type"] == "after_block":
+                    ref = pos["after_block"]["id"]
+                    if ref not in kids:
+                        raise _Bad("after_block is not a child of this parent")
+                    at = kids.index(ref) + 1
+                    kids[at:at] = new
+                else:
+                    kids.extend(new)
                 if m[1] in self.blocks:
                     self.blocks[m[1]]["has_children"] = True
                 self._touch_page(m[1])
-                return ok({"object": "list", "results": [self._public(b) for b in new], "has_more": False, "next_cursor": None})
+                shown = new
+                if pos:                    # like the real API: the new blocks, then every later sibling
+                    shown = kids[kids.index(new[0]):]
+                return ok({"object": "list", "results": [self._public(b) for b in shown], "has_more": False, "next_cursor": None})
             if method == "GET":
                 live = [b for b in kids if not self.blocks[b]["in_trash"]]
                 start = int(request.url.params.get("start_cursor") or 0)

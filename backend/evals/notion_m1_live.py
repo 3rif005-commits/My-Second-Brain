@@ -283,6 +283,17 @@ def run_m6(client, adapter, root, bot) -> dict:
                               "Assignee": len(tp["Assignee"]["relation"]), "Due": tp["Due"]["date"]}
     ap = client.get(f"/pages/{mp[ann['id']]['notion_id']}")["properties"]
     rep["person_row"] = {"Tasks": len(ap["Tasks"]["relation"]), "Total hours": ap["Total hours"]["rollup"]}
+    # an inline database sits between the blocks it sat between
+    host = w.add_note(title="SB-TEST Host page")
+    inl, ids_ = w.add_db("SB-TEST Inline", inline=True, host=host)
+    w.add_row(ids_, "SB-TEST inline row")
+    para_ = lambda t, i: {"id": i, "type": "paragraph", "props": {}, "content": [{"type": "text", "text": t, "styles": {}}], "children": []}
+    host_row = next(n for n in w.db.tables["notes"] if n["id"] == host["id"])
+    host_row["content"] = [para_("before the table", "a"), {"id": "d", "type": "database", "props": {"databaseId": inl["id"]}, "content": [], "children": []},
+                           para_("after the table", "b")]
+    go("2b_host_with_inline_db", note_ids=[host["id"]], database_ids=[inl["id"]])
+    mp = {x["local_id"]: x for x in w.db.tables["notion_mappings"]}
+    rep["inline_order"] = [("DB" if b["type"] == "child_database" else b["paragraph"]["rich_text"][0]["plain_text"]) for b in adapter._children(mp[host["id"]]["notion_id"])]
     dbn = mp[tasks["id"]]["notion_id"]
     views_now = [client.get(f"/views/{vid}") for vid in adapter.list_view_ids(dbn)]
     rep["views"] = sorted((x["name"], x["type"], bool(x.get("dashboard_view_id"))) for x in views_now)
