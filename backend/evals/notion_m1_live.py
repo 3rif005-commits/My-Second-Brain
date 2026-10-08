@@ -204,11 +204,82 @@ def run_m4(client, adapter, root, bot) -> dict:
     return rep, db
 
 
+def run_m6(client, adapter, root, bot) -> dict:
+    """Two linked databases: every scalar type, a two-way relation, a rollup, a formula (+ snapshots), rows."""
+    from services.notion_sync.planner import plan_scope
+    from tests.notion_sync.conftest import World
+    w = World.__new__(World)
+    user = "user-1"
+    w.db = FakeDB(collections=[], notes=[], db_databases=[], db_data_sources=[], db_properties=[], db_row_props=[],
+                  db_relation_links=[], notion_mappings=[], notion_runs=[], notion_run_items=[],
+                  notion_connections=[{"id": "live-c", "user_id": user, "status": "active", "bot_user_id": bot.bot_id,
+                                       "root_page_id": root.id, "privacy_ceiling": "personal", "token_ciphertext": "x", "token_hint": "…"}])
+    wrap = lambda t, v: {"type": t, t: v}
+    people, pds = w.add_db("SB-TEST People", icon="🧑")
+    tasks, tds = w.add_db("SB-TEST Tasks", icon="✅")
+    w.add_prop(pds, "Age", "number", key="age")
+    w.add_prop(tds, "Hours", "number", {"format": "number_with_commas"}, key="hrs")
+    w.add_prop(tds, "Priority", "select", {"options": [{"id": "o1", "name": "High", "color": "red"}, {"id": "o2", "name": "Low", "color": "blue"}]}, key="pri")
+    w.add_prop(tds, "Tags", "multi_select", {"options": []}, key="tags")
+    w.add_prop(tds, "State", "status", {"options": [{"id": "s1", "name": "Todo", "color": "gray", "group": "To-do"},
+                                                    {"id": "s2", "name": "Doing", "color": "blue", "group": "In progress"},
+                                                    {"id": "s3", "name": "Done", "color": "green", "group": "Complete"}]}, key="st")
+    w.add_prop(tds, "Due", "date", key="due")
+    w.add_prop(tds, "Done?", "checkbox", key="ok")
+    w.add_prop(tds, "Site", "url", key="site")
+    w.add_prop(tds, "Notes", "rich_text", key="nt")
+    w.add_prop(tds, "Created", "created_time", key="ct")
+    w.add_prop(tds, "Owner", "people", key="own")
+    rid = "11111111-1111-4111-8111-111111111111"
+    w.add_prop(tds, "Assignee", "relation", {"relation_id": rid, "side": "forward", "target_data_source_id": pds["id"]}, key="asg")
+    w.add_prop(pds, "Tasks", "relation", {"relation_id": rid, "side": "reverse", "target_data_source_id": tds["id"]}, key="tks")
+    w.add_prop(pds, "Total hours", "rollup", {"relation_key": "tks", "target_data_source_id": tds["id"], "target_key": "hrs", "function": "sum"}, key="tot", result_type="number")
+    w.add_prop(tds, "Double", "formula", {"expression": 'prop("Hours") * 2'}, key="dbl", result_type="number")
+    ann = w.add_row(pds, "SB-TEST Ann", {"age": wrap("number", 30)}, computed={"tot": {"type": "number", "number": 7.0}})
+    t1 = w.add_row(tds, "SB-TEST Build", {"hrs": wrap("number", 3), "pri": wrap("select", "o1"), "tags": wrap("multi_select", ["a", "b,c"]),
+                                            "st": wrap("status", "Doing"), "due": wrap("date", {"start": "2026-10-09T10:00:00+00:00", "end": None, "time_zone": "Africa/Casablanca"}),
+                                            "ok": wrap("checkbox", True), "site": wrap("url", "https://x.org"), "nt": wrap("rich_text", "hello")},
+                   computed={"dbl": {"type": "number", "number": 6.0}}, position=1)
+    t2 = w.add_row(tds, "SB-TEST Test", {"hrs": wrap("number", 4)}, computed={"dbl": {"type": "number", "number": 8.0}}, position=2)
+    w.link(rid, t1, ann)
+    w.link(rid, t2, ann)
+    conn = conn_mod.load(w.db, user)
+    rep: dict = {}
+
+    def go(tag, **scope):
+        p = plan_scope(w.db, conn, adapter, **scope)
+        res = Engine(w.db, conn, adapter).run(p.items)
+        rep[tag] = {"status": res.status, "requests": res.requests,
+                    "items": [(i.kind, i.title, i.status, i.message[:80] if i.status != "done" else "ok") for i in res.items]}
+        return p, res
+    p, res = go("1_send_tasks_with_linked", database_ids=[tasks["id"]], include_linked=True)
+    rep["1_losses"] = sorted({l["code"] for i in p.items for l in i.losses})
+    before = client.write_requests
+    p2 = plan_scope(w.db, conn, adapter, database_ids=[tasks["id"]], include_linked=True)
+    rep["2_resend"] = {"nothing_to_send": p2.to_dict()["nothing_to_send"], "writes": client.write_requests - before}
+    mp = {x["local_id"]: x for x in w.db.tables["notion_mappings"]}
+    tp = client.get(f"/pages/{mp[t1['id']]['notion_id']}")["properties"]
+    rep["task_row"] = {k: v.get("type") for k, v in tp.items()}
+    rep["task_row_values"] = {"Priority": (tp["Priority"]["select"] or {}).get("name"), "State": (tp["State"]["status"] or {}).get("name"),
+                              "Tags": [t["name"] for t in tp["Tags"]["multi_select"]], "Hours": tp["Hours"]["number"],
+                              "Double": tp["Double"]["formula"], "Double (SB value)": tp["Double (SB value)"]["number"],
+                              "Assignee": len(tp["Assignee"]["relation"]), "Due": tp["Due"]["date"]}
+    ap = client.get(f"/pages/{mp[ann['id']]['notion_id']}")["properties"]
+    rep["person_row"] = {"Tasks": len(ap["Tasks"]["relation"]), "Total hours": ap["Total hours"]["rollup"]}
+    w.db.tables["db_properties"][:] = [p_ for p_ in w.db.tables["db_properties"] if p_["key"] != "nt"]
+    next(p_ for p_ in w.db.tables["db_properties"] if p_["key"] == "hrs")["name"] = "Effort (h)"
+    w.add_prop(tds, "Extra", "checkbox", key="ex")
+    go("3_schema_edit", database_ids=[tasks["id"]])
+    rep["3_names_after"] = sorted(client.get(f"/data_sources/{mp[tds['id']]['notion_id']}")["properties"])
+    return rep, w.db
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--m2", action="store_true", help="send the M2 fixture (tables, callouts, columns, files, cover)")
     ap.add_argument("--m3", action="store_true", help="the hierarchy/mentions/move/archive scenario")
     ap.add_argument("--m4", action="store_true", help="edited-in-Notion protection: hold back, copy, overwrite")
+    ap.add_argument("--m6", action="store_true", help="databases: schema, relations, rollup, formula, rows")
     ap.add_argument("--keep", action="store_true", help="do not trash the test pages afterwards")
     args = ap.parse_args()
     token = settings.notion_test_token
@@ -222,10 +293,10 @@ def main():
     root = pages[0]
     bot = adapter.whoami()
     user = "live-user"
-    if args.m3 or args.m4:
+    if args.m3 or args.m4 or args.m6:
         report = {"root": root.title}
         try:
-            r, db3 = (run_m4 if args.m4 else run_m3)(client, adapter, root, bot)
+            r, db3 = (run_m4 if args.m4 else run_m6 if args.m6 else run_m3)(client, adapter, root, bot)
             report.update(r)
         finally:
             if not args.keep:

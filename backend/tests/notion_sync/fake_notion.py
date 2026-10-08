@@ -171,6 +171,95 @@ class FakeNotion:
             ids.append(bid)
         return ids
 
+    def _prop_id(self, sid: str, name: str) -> str:
+        ids = self.sources[sid].setdefault("ids", {})
+        if name not in ids:
+            ids[name] = f"p{len(ids)}{uuid.uuid4().hex[:3]}"
+        return ids[name]
+
+    def _source_view(self, sid: str) -> dict:
+        src = self.sources[sid]
+        props = {}
+        for name, schema in src["properties"].items():
+            t = next(iter(schema))
+            props[name] = {"id": self._prop_id(sid, name), "name": name, "type": t, **schema}
+            if t == "status":
+                props[name]["status"] = self._status_view(sid, name)
+        return {"object": "data_source", "id": sid, "properties": props}
+
+    def _status_view(self, sid: str, name: str) -> dict:
+        st = self.sources[sid]["properties"][name]["status"]
+        opts = [{"id": f"o-{o['name']}", "name": o["name"], "color": o.get("color", "default")} for o in st.get("options", [])]
+        groups = st.get("groups") or [{"name": g, "option_ids": ([o["id"] for o in opts] if g == "To-do" else [])}
+                                      for g in ("To-do", "In progress", "Complete")]
+        return {"options": opts, "groups": groups}
+
+    def _patch_source(self, sid: str, props: dict):
+        src = self.sources[sid]
+        for key, spec in props.items():
+            by_id = {v: k for k, v in src.get("ids", {}).items()}
+            name = by_id.get(key, key)
+            if spec is None:
+                src["properties"].pop(name, None)
+                continue
+            if set(spec) == {"name"}:                                   # rename by property id
+                if name not in src["properties"]:
+                    raise _Bad(f"property {key} does not exist")
+                src["properties"][spec["name"]] = src["properties"].pop(name)
+                src["ids"][spec["name"]] = src["ids"].pop(name)
+                continue
+            t = next(iter(spec))
+            if t == "relation":
+                rel = spec["relation"]
+                tgt = self.sources.get(rel["data_source_id"])
+                if tgt is None:
+                    raise _Bad("relation target data source not found")
+                src["properties"][name] = {"relation": rel}
+                if rel.get("type") == "dual_property":
+                    back = rel["dual_property"]["synced_property_name"]
+                    tgt["properties"][back] = {"relation": {"data_source_id": sid, "type": "dual_property",
+                                                            "dual_property": {"synced_property_name": name}}}
+                continue
+            if t == "rollup":
+                r = spec["rollup"]
+                rel = src["properties"].get(r["relation_property_name"], {}).get("relation")
+                if not rel:
+                    raise _Bad("rollup relation property does not exist")
+                if r["rollup_property_name"] not in self.sources[rel["data_source_id"]]["properties"]:
+                    raise _Bad("rollup property does not exist in the related data source")
+            if t == "formula":
+                for ref in re.findall(r'prop\("((?:[^"\\]|\\.)*)"\)', spec["formula"]["expression"]):
+                    if ref not in src["properties"] and ref != name:
+                        raise _Bad(f"Type error with formula: unknown property {ref}")
+            if t == "status" and name in src["properties"] and "options" not in spec["status"]:
+                src["properties"][name]["status"] = {**src["properties"][name]["status"], **spec["status"]}
+                continue
+            src["properties"][name] = spec
+
+    def _validate_row(self, ds_id: str, props: dict):
+        src = self.sources[ds_id]
+        for name, val in props.items():
+            schema = src["properties"].get(name)
+            if schema is None:
+                raise _Bad(f"{name} is not a property that exists.")
+            t = next(iter(schema))
+            if t in ("created_time", "last_edited_time", "formula", "rollup", "unique_id"):
+                raise _Bad(f"{name} is read-only")
+            if next(iter(val)) != t:
+                raise _Bad(f"property {name} should be {t}")
+            if t == "relation":
+                for r in val["relation"]:
+                    if r["id"] not in self.pages:
+                        raise _Bad("relation target page does not exist")
+            if t == "title":
+                self._validate_rich(val["title"], f"properties.{name}")
+            if t == "rich_text":
+                self._validate_rich(val["rich_text"], f"properties.{name}")
+            if t in ("select", "status") and val[t] and "," in val[t]["name"]:
+                raise _Bad("select option names cannot contain commas")
+            if t == "multi_select" and any("," in o["name"] for o in val["multi_select"]):
+                raise _Bad("select option names cannot contain commas")
+
     def _title_of(self, pid: str) -> str:
         p = self.pages[pid]["properties"]
         t = p.get("title") or next((v for v in p.values() if v.get("type") == "title"), {})
@@ -260,6 +349,8 @@ class FakeNotion:
             if method == "GET":
                 return ok(self._public_page(p))
             if method == "PATCH":
+                if "properties" in body and p["parent"].get("type") == "data_source_id":
+                    self._validate_row(p["parent"]["data_source_id"], body["properties"])
                 if "properties" in body:
                     for k, v in body["properties"].items():
                         if "title" in v:
@@ -280,6 +371,8 @@ class FakeNotion:
                 raise _Missing
             if parent["type"] == "page_id" and parent["page_id"] not in self.pages:
                 raise _Missing
+            if parent["type"] == "data_source_id":
+                self._validate_row(parent["data_source_id"], body.get("properties", {}))
             for v in body.get("properties", {}).values():
                 self._validate_rich(v.get("title", v.get("rich_text", [])), "properties")
             if body.get("children"):
@@ -405,8 +498,8 @@ class FakeNotion:
             if src is None:
                 raise _Missing
             if method == "PATCH":
-                src["properties"].update(body.get("properties", {}))
-            return ok({"object": "data_source", "id": m[1], "properties": {k: {"name": k, **v} for k, v in src["properties"].items()}})
+                self._patch_source(m[1], body.get("properties", {}))
+            return ok(self._source_view(m[1]))
         if method == "POST" and path == "/databases":
             did, sid = self._id(), self._id()
             parent = body["parent"]
@@ -416,6 +509,8 @@ class FakeNotion:
             self.dbs[did] = {"object": "database", "id": did, "created_time": t, "is_inline": body.get("is_inline"),
                              "title": body["title"], "parent": parent, "data_sources": [{"id": sid, "name": "Notes"}], "in_trash": False}
             self.sources[sid] = {"id": sid, "db": did, "properties": dict(body["initial_data_source"]["properties"])}
+            for n in self.sources[sid]["properties"]:
+                self._prop_id(sid, n)
             bid = did
             self.blocks[bid] = {"object": "block", "id": bid, "type": "child_database", "created_time": t,
                                 "child_database": {"title": "".join(x["text"]["content"] for x in body["title"])},
@@ -428,6 +523,16 @@ class FakeNotion:
             if m[1] not in self.dbs:
                 raise _Missing
             return ok(self.dbs[m[1]])
+        if m and method == "PATCH":
+            d = self.dbs.get(m[1])
+            if d is None:
+                raise _Missing
+            for k in ("title", "icon", "description", "cover"):
+                if k in body:
+                    d[k] = body[k]
+            if "title" in body and m[1] in self.blocks:
+                self.blocks[m[1]]["child_database"]["title"] = "".join(t["text"]["content"] for t in body["title"])
+            return ok(d)
         m = re.fullmatch(r"/data_sources/([^/]+)/query", path)
         if m and method == "POST":
             if m[1] not in self.sources:

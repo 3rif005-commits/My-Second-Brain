@@ -13,9 +13,12 @@ from services import privacy
 from services.notion_sync import registry
 from services.notion_sync.connection import Connection
 from services.notion_sync.engine import editcheck
-from services.notion_sync.engine.resolver import MentionResolver
+from services.notion_sync.engine.resolver import MentionResolver, link_tags
 from services.notion_sync.engine.store import Store
 from services.notion_sync.notion.adapter import NotionAdapter, page_url
+from services.notion_sync.notion import dbschema
+from services.notion_sync.readers.database import (database_of_source, database_to_ir, load_database,
+                                                   relation_targets, relation_values, row_to_ir)
 from services.notion_sync.readers.note import collection_to_ir, note_to_ir
 from services.portable import ir
 from services.portable.canonical import digest
@@ -134,7 +137,48 @@ def path_of(colls: dict[str, dict], cid: str | None) -> str:
     return " › ".join(colls[c].get("name") or "Untitled folder" for c in ancestors(colls, cid))
 
 
-def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), collection_ids=(),
+def database_scope(db, user: str, selected: list[str], include_linked: bool, row_dbs: list[str]) -> tuple[list[str], list[str], list[str]]:
+    """-> (selected databases incl. linked ones, schema-only databases it needs, row note ids).
+    Relations pull their target databases into the SCHEMA set (a relation needs its target to
+    exist); `include_linked` also sends their rows."""
+    def targets(dbid: str) -> list[str]:
+        b = load_database(db, user, dbid)
+        if b is None or not b.sources:
+            return []
+        out = []
+        for ds in relation_targets([{"type": p["type"], "config": p.get("config") or {}} for p in b.props[b.sources[0]["id"]]]):
+            t = database_of_source(db, ds)
+            if t:
+                out.append(t)
+        return out
+
+    chosen = list(dict.fromkeys(selected))
+    schema_only: list[str] = []
+    queue = list(chosen) + list(row_dbs)
+    seen = set(queue)
+    while queue:
+        cur = queue.pop(0)
+        for t in targets(cur):
+            if t not in seen:
+                seen.add(t)
+                queue.append(t)
+                if include_linked and cur in chosen:
+                    chosen.append(t)
+                else:
+                    schema_only.append(t)
+    schema_only = [d for d in dict.fromkeys(row_dbs + schema_only) if d not in chosen]
+    rows: list[str] = []
+    for dbid in chosen:
+        b = load_database(db, user, dbid)
+        if b and b.sources:
+            rp = (db.table("db_row_props").select("note_id, position").eq("data_source_id", b.sources[0]["id"])
+                  .eq("user_id", user).execute().data or [])
+            rows += [str(r["note_id"]) for r in sorted(rp, key=lambda r: r.get("position") or 0)]
+    return chosen, schema_only, rows
+
+
+def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), collection_ids=(), database_ids=(),
+               include_linked: bool = False,
                released=frozenset(), archive_ids=frozenset(), resolutions=None, check_edits: bool = True,
                collections_only=()) -> Plan:
     resolutions = {str(k): v for k, v in (resolutions or {}).items() if v in RESOLUTIONS}
@@ -143,6 +187,16 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
     colls = fetch_collections(db, user)
     tree = subtree(colls, [str(c) for c in collection_ids])
     explicit = list(dict.fromkeys(str(i) for i in note_ids))
+    # --- databases: the ones asked for, what their relations need, and their rows
+    explicit_rows: dict[str, str] = {}
+    if explicit:
+        for r in db.table("db_row_props").select("note_id, data_source_id").eq("user_id", user).in_("note_id", explicit).execute().data or []:
+            dbid = database_of_source(db, str(r["data_source_id"]))
+            if dbid:
+                explicit_rows[str(r["note_id"])] = dbid
+    chosen_dbs, schema_dbs, db_rows = database_scope(db, user, [str(d) for d in database_ids], include_linked,
+                                                    sorted(set(explicit_rows.values())))
+    explicit = list(dict.fromkeys(explicit + db_rows))
 
     live: dict[str, dict] = {}
     trashed: dict[str, dict] = {}
@@ -173,6 +227,33 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
     resolver = MentionResolver(db, store, user, conn.privacy_ceiling, released, will_exist)
 
     items: list[PlanItem] = []
+    bundles: dict[str, object] = {}
+
+    def bundle(dbid):
+        if dbid not in bundles:
+            bundles[dbid] = load_database(db, user, dbid)
+        return bundles[dbid]
+
+    dmaps = store.mappings_for("database", chosen_dbs + schema_dbs)
+    for dbid in chosen_dbs + schema_dbs:
+        b = bundle(dbid)
+        if b is None or not b.sources:
+            items.append(PlanItem(dbid, "(database not found)", MISSING, "database"))
+            continue
+        obj = database_to_ir(b)
+        h = object_hash(obj, conn)
+        m = dmaps.get(dbid)
+        lay = dbschema.layout(obj.props["data_source"]["properties"])
+        r = adapter.render(obj)
+        exists = bool(m and m.get("notion_id") and m.get("state") in ("synced", "failed"))
+        state = UNCHANGED if exists and m.get("local_hash") == h and m.get("state") == "synced" else CHANGED if exists else NEW
+        losses = list(r.losses) + lay.losses
+        items.append(PlanItem(dbid, "".join(t.text for t in obj.title), state, "database", fidelity(losses),
+                              [x.to_dict() for x in losses],
+                              0 if state == UNCHANGED else 4 + len(lay.relations) + len(lay.rollups) + len(lay.formulas),
+                              page_url(m["notion_id"]) if exists else None, h, m["id"] if m else None,
+                              path="Databases" + ("" if dbid in chosen_dbs else " (needed by a relation)")))
+
     for cid in need:
         row = colls[cid]
         obj = collection_to_ir(row)
@@ -211,7 +292,13 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
             items.append(PlanItem(nid, title, PAUSED, notion_url=url, mapping_id=m["id"], path=path))
             continue
         obj = note_to_ir(row)
-        h = object_hash(obj, conn, resolver.tags(obj))
+        rowdb = _row_database(db, user, nid)
+        if rowdb:
+            b = bundle(rowdb[0])
+            if b is not None and b.sources:
+                rp = (db.table("db_row_props").select("*").eq("note_id", nid).execute().data or [None])[0]
+                obj = row_to_ir(obj, b, row, rp, relation_values(db, user, [_pd(p) for p in b.props[b.sources[0]["id"]]], nid))
+        h = object_hash(obj, conn, link_tags(obj, resolver))
         rendered = adapter.render(obj, resolver)
         fid = fidelity(rendered.losses)
         losses = [x.to_dict() for x in rendered.losses]
@@ -251,6 +338,20 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
     for nid in missing:
         items.append(PlanItem(nid, "(note not found)", MISSING))
     return Plan(items)
+
+
+def _row_database(db, user: str, note_id: str):
+    """-> (database id, data source id) if this note is a row of a real database."""
+    r = (db.table("db_row_props").select("data_source_id").eq("note_id", note_id).eq("user_id", user).execute().data or [])
+    if not r:
+        return None
+    dbid = database_of_source(db, str(r[0]["data_source_id"]))
+    return (dbid, str(r[0]["data_source_id"])) if dbid else None
+
+
+def _pd(p: dict) -> dict:
+    from services.notion_sync.readers.database import prop_def
+    return prop_def(p)
 
 
 def _target_ds(store: Store, conn: Connection, cid: str | None) -> str | None:

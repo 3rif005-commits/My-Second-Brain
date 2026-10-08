@@ -56,7 +56,8 @@ class World:
     def __init__(self):
         self.notion = FakeNotion()
         self.db = FakeDB(
-            collections=[], notes=[], notion_mappings=[], notion_runs=[], notion_run_items=[],
+            collections=[], notes=[], db_databases=[], db_data_sources=[], db_properties=[], db_row_props=[],
+            db_relation_links=[], notion_mappings=[], notion_runs=[], notion_run_items=[],
             notion_connections=[{"id": "c1", "user_id": USER, "status": "active", "bot_user_id": BOT,
                                  "root_page_id": self.notion.root, "privacy_ceiling": "personal",
                                  "token_ciphertext": "x", "token_hint": "…abcd", "workspace_name": "Test WS"}])
@@ -78,20 +79,52 @@ class World:
     def engine(self) -> Engine:
         return Engine(self.db, self.conn(), NotionAdapter(self.client(), files=self.files))
 
-    def plan(self, *notes, released=frozenset(), collections=(), archive=()):
+    def plan(self, *notes, released=frozenset(), collections=(), archive=(), databases=(), linked=False):
         from services.notion_sync.planner import plan_scope
         eng = self.engine()
         return plan_scope(self.db, eng.conn, eng.adapter, note_ids=[n["id"] for n in notes],
                           collection_ids=[c["id"] for c in collections], released=released,
-                          archive_ids=frozenset(archive))
+                          archive_ids=frozenset(archive), database_ids=[d["id"] for d in databases],
+                          include_linked=linked)
 
-    def send(self, *notes, released=frozenset(), collections=(), archive=()):
+    def send(self, *notes, released=frozenset(), collections=(), archive=(), databases=(), linked=False):
         eng = self.engine()
         from services.notion_sync.planner import plan_scope
         plan = plan_scope(self.db, eng.conn, eng.adapter, note_ids=[n["id"] for n in notes],
                           collection_ids=[c["id"] for c in collections], released=released,
-                          archive_ids=frozenset(archive))
+                          archive_ids=frozenset(archive), database_ids=[d["id"] for d in databases],
+                          include_linked=linked)
         return eng.run(plan.items, frozenset(released)), plan
+
+    # ---- databases ---------------------------------------------------------------------------
+    def add_db(self, title="Tasks", *, inline=False, host=None, icon=None, description=None):
+        d = {"id": str(uuid.uuid4()), "user_id": USER, "title": title, "description": description or [], "icon": icon,
+             "cover_url": None, "is_inline": inline, "parent_note_id": host["id"] if host else None,
+             "is_locked": False, "position": 0, "deleted_at": None}
+        ds = {"id": str(uuid.uuid4()), "database_id": d["id"], "user_id": USER, "name": "Default",
+              "system_kind": None, "position": 0}
+        self.db.tables["db_databases"].append(d)
+        self.db.tables["db_data_sources"].append(ds)
+        self.add_prop(ds, "Title", "title")
+        return d, ds
+
+    def add_prop(self, ds, name, type_, config=None, key=None, result_type=None):
+        n = len([p for p in self.db.tables["db_properties"] if p["data_source_id"] == ds["id"]])
+        p = {"id": str(uuid.uuid4()), "data_source_id": ds["id"], "user_id": USER, "key": key or f"k{n}{name[:3]}".replace(" ", ""),
+             "name": name, "type": type_, "config": config or {}, "storage": "jsonb", "column_name": None,
+             "result_type": result_type, "position": n, "description": None}
+        self.db.tables["db_properties"].append(p)
+        return p
+
+    def add_row(self, ds, title, values=None, computed=None, position=0):
+        n = self.add_note(title=title)
+        self.db.tables["db_row_props"].append({"note_id": n["id"], "data_source_id": ds["id"], "user_id": USER,
+                                                "properties": values or {}, "computed": computed or {}, "position": position})
+        return n
+
+    def link(self, relation_id, from_note, to_note, position=0):
+        self.db.tables["db_relation_links"].append({"id": str(uuid.uuid4()), "user_id": USER, "relation_id": relation_id,
+                                                    "from_row_id": from_note["id"], "to_row_id": to_note["id"], "position": position})
 
     def add_collection(self, name="Physics", parent=None, **kw) -> dict:
         c = {"id": str(uuid.uuid4()), "user_id": USER, "name": name, "icon": "📁", "color": "#6366f1",

@@ -38,6 +38,8 @@ class RootBody(BaseModel):
 class SendBody(BaseModel):
     note_ids: list[str] = Field(default=[], max_length=500)
     collection_ids: list[str] = Field(default=[], max_length=50)        # "with everything inside"
+    database_ids: list[str] = Field(default=[], max_length=50)          # the table, its schema and its rows
+    include_linked: bool = False                                        # also the databases its relations point to
     released: list[str] = []                                           # private notes let through, this send only
     archive_ids: list[str] = []                                        # deleted notes to move to the archive page
     resolutions: dict[str, str] = {}                                    # id -> overwrite | copy | recreate | forget (default: skip)
@@ -81,7 +83,7 @@ def _public(conn, root_title: str | None = None) -> dict:
 
 
 def _need_scope(body: SendBody) -> None:
-    if not body.note_ids and not body.collection_ids:
+    if not body.note_ids and not body.collection_ids and not body.database_ids:
         raise HTTPException(422, {"error": "Choose a note or a collection to send.", "error_code": "EMPTY_SCOPE"})
 
 
@@ -190,6 +192,7 @@ def plan(body: SendBody, authorization: str = Header(...)):
     adapter = _adapter(conn)
     try:
         p = plan_scope(get_supabase(), conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
+                       database_ids=body.database_ids, include_linked=body.include_linked,
                        released=frozenset(body.released), archive_ids=frozenset(body.archive_ids),
                        resolutions=body.resolutions)
     except NotionError as e:
@@ -214,6 +217,7 @@ def _send_blocking(body: SendBody, user_id: str, loop) -> dict:
         _need_scope(body)
         try:
             p = plan_scope(db, conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
+                       database_ids=body.database_ids, include_linked=body.include_linked,
                            released=released, archive_ids=frozenset(body.archive_ids), resolutions=body.resolutions)
         except NotionError as e:
             raise _notion_error(e, conn)
@@ -249,7 +253,11 @@ async def send(body: SendBody, authorization: str = Header(...)):
 def _titles(db, user_id: str, items: list[dict]) -> dict[str, str]:
     notes = [i["local_id"] for i in items if i["local_kind"] == "note"]
     colls = [i["local_id"] for i in items if i["local_kind"] == "collection"]
+    dbs = [i["local_id"] for i in items if i["local_kind"] == "database"]
     out: dict[str, str] = {}
+    if dbs:
+        for r in db.table("db_databases").select("id, title").eq("user_id", user_id).in_("id", dbs).execute().data or []:
+            out[str(r["id"])] = r.get("title") or "Untitled database"
     if notes:
         for r in db.table("notes").select("id, title").eq("user_id", user_id).in_("id", notes).execute().data or []:
             out[str(r["id"])] = (r.get("title") or "Untitled").strip() or "Untitled"
@@ -314,6 +322,7 @@ async def retry_failed(run_id: str, authorization: str = Header(...)):
             p = plan_scope(db, conn, adapter,
                            note_ids=[i["local_id"] for i in failed if i["local_kind"] == "note"],
                            collections_only=[i["local_id"] for i in failed if i["local_kind"] == "collection"],
+                           database_ids=[i["local_id"] for i in failed if i["local_kind"] == "database"],
                            released=frozenset(store.run(run_id).get("released") or []))
             if not p.sendable:
                 return {"status": "nothing_to_send", "items": [], "requests": 0, "plan": p.to_dict()}

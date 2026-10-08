@@ -301,22 +301,56 @@ class NotionAdapter:
         return len(missing)
 
     def find_notes_databases(self, root_page_id: str) -> list[DbInfo]:
-        """Reconcile: databases titled "Notes" directly under a page, oldest first."""
+        return self.find_databases(root_page_id, NOTES_DB_TITLE)
+
+    def find_databases(self, page_id: str, title: str) -> list[DbInfo]:
+        """Reconcile: databases with this title directly under a page, oldest first."""
         found: list[DbInfo] = []
-        for b in self._children(root_page_id):
-            if b.get("type") == "child_database" and \
-                    (b.get("child_database") or {}).get("title") == NOTES_DB_TITLE:
+        for b in self._children(page_id):
+            if b.get("type") == "child_database" and (b.get("child_database") or {}).get("title") == title:
                 db = self.c.get(f"/databases/{b['id']}")
                 found.append(DbInfo(db["id"], (db.get("data_sources") or [{}])[0].get("id", ""),
                                     db.get("created_time") or b.get("created_time")))
         return sorted(found, key=lambda d: d.created_time or "")
 
     # ---- rows ---------------------------------------------------------------------
-    def create_row(self, data_source_id: str, r: Rendered, sb_id: str) -> str:
+    # ---- user databases (M6) ------------------------------------------------------------
+    def create_database(self, parent_page_id: str, r: Rendered, props: dict, *, inline: bool,
+                        description: list[dict] | None = None) -> DbInfo:
+        """A database with its first data source and the scalar properties. Relations,
+        rollups and formulas are added afterwards (they need the other data sources)."""
+        body: dict = {"parent": {"type": "page_id", "page_id": parent_page_id}, "title": r.title,
+                      "is_inline": inline, "initial_data_source": {"properties": props}}
+        if r.icon:
+            body["icon"] = r.icon
+        if r.cover:
+            body["cover"] = r.cover
+        if description:
+            body["description"] = description
+        db = self.c.post("/databases", body, create=True)
+        return DbInfo(db["id"], (db.get("data_sources") or [{}])[0].get("id", ""), db.get("created_time"))
+
+    def data_source_props(self, ds_id: str) -> dict[str, dict]:
+        """name -> {"id", "type"} of the properties a data source has right now."""
+        have = self.c.get(f"/data_sources/{ds_id}").get("properties") or {}
+        return {n: {"id": p.get("id"), "type": p.get("type")} for n, p in have.items()}
+
+    def patch_data_source(self, ds_id: str, props: dict) -> dict:
+        return self.c.patch(f"/data_sources/{ds_id}", {"properties": props})
+
+    def patch_database(self, database_id: str, r: Rendered, description: list[dict] | None = None) -> None:
+        body: dict = {"title": r.title}
+        if r.icon:
+            body["icon"] = r.icon
+        if description is not None:
+            body["description"] = description
+        self.c.patch(f"/databases/{database_id}", body)
+
+    def create_row(self, data_source_id: str, r: Rendered, sb_id: str, title_prop: str = TITLE_PROP) -> str:
         """Create the (empty) row. Returns the page id. Never retried blindly:
         an unknown outcome raises AmbiguousWrite and the engine reconciles."""
         body: dict = {"parent": {"type": "data_source_id", "data_source_id": data_source_id},
-                      "properties": {TITLE_PROP: {"title": r.title}, SB_ID_PROP: sb_id_value(sb_id), **r.props}}
+                      "properties": {title_prop: {"title": r.title}, SB_ID_PROP: sb_id_value(sb_id), **r.props}}
         if r.icon:
             body["icon"] = r.icon
         if r.cover:
@@ -332,8 +366,8 @@ class NotionAdapter:
                 if not (p.get("in_trash") or p.get("archived"))]
         return sorted(rows, key=lambda x: x[1])
 
-    def update_properties(self, page_id: str, r: Rendered, *, row: bool = True) -> None:
-        body: dict = {"properties": {(TITLE_PROP if row else "title"): {"title": r.title}, **r.props}}
+    def update_properties(self, page_id: str, r: Rendered, *, row: bool = True, title_prop: str = TITLE_PROP) -> None:
+        body: dict = {"properties": {(title_prop if row else "title"): {"title": r.title}, **r.props}}
         if r.icon:
             body["icon"] = r.icon
         if r.cover:

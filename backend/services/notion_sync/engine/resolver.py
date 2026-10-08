@@ -74,3 +74,13 @@ class MentionResolver:
 
     def tags(self, obj: ir.Obj) -> list[tuple[str, str]]:
         return [(t, self(t)[0]) for t in link_targets(obj)]
+
+
+def link_tags(obj: ir.Obj, resolver: "MentionResolver") -> list[tuple[str, str]]:
+    """What a note's hash must notice: how each linked note would be written, and which related
+    rows of a database are in Notion yet (a relation value arrives when its target does)."""
+    tags = list(resolver.tags(obj))
+    for v in ((obj.props.get("db") or {}).get("values") or {}).values():
+        if v.get("type") == "relation":
+            tags += [(f"rel:{t}", resolver(t)[0]) for t in v.get("value") or []]
+    return sorted(tags)

@@ -1,0 +1,10 @@
+[
+ {
+  "type": "db_embed",
+  "attrs": {
+   "database_id": "db-1",
+   "view_id": "v-1"
+  },
+  "src_id": "d1"
+ }
+]

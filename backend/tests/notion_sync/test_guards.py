@@ -15,10 +15,10 @@ M1_READ = {"paragraph", "heading", "quote", "codeBlock", "bulletListItem", "numb
            "columnList", "column", "callout", "math", "checkpoint", "button", "pageBreak"}
 #: block types that exist in the editor but still travel as `opaque` (milestone that adds them)
 KNOWN_UNREAD = {
-    "database": "M7", "unknownBlock": "never persisted (B3 placeholder)",
+    "unknownBlock": "never persisted (B3 placeholder)",
 }
 #: IR block types without a writer yet (they degrade to OpaqueWriter)
-KNOWN_UNWRITTEN = {"table_row", "table_cell", "column", "embed", "bookmark", "db_embed"}   # table_row/cell are written by the table writer
+KNOWN_UNWRITTEN = {"table_row", "table_cell", "column", "embed", "bookmark"}   # table_row/cell are written by the table writer
 
 
 def test_every_ir_block_type_has_a_writer_or_is_listed():
@@ -73,8 +73,8 @@ def test_unknown_reader_and_opaque_writer_exist():
 
 NOTION_SHAPES = re.compile(
     r"api\.notion\.com|Notion-Version|\"(?:bulleted_list_item|numbered_list_item|to_do|heading_[1-4]|"
-    r"child_database|child_page|rich_text|data_source_id|page_id|file_upload|is_toggleable|"
-    r"list_start_index|column_list|synced_block)\"|'(?:bulleted_list_item|rich_text|data_source_id)'")
+    r"child_database|child_page|rich_text|page_id|file_upload|is_toggleable|"
+    r"list_start_index|column_list|synced_block)\"|'(?:bulleted_list_item|rich_text)'")
 
 
 def _py_files(*dirs, skip=()):

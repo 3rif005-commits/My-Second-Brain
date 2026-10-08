@@ -229,3 +229,14 @@ class ActionWriter:
             "color": "gray_background", "children": [{"type": "toggle", "toggle": {
                 "rich_text": plain_rich("Button actions (not runnable in Notion)"),
                 "children": code_blocks(text or "(none)", "json", child_losses)}}]}}], losses + child_losses)
+
+
+class DbEmbedWriter:
+    """An inline database block. The database itself is sent as a database under the page (M6/M7);
+    here the block has nothing to write, only a loss to declare."""
+    handles = "ir:db_embed"
+    version = 1
+
+    def write(self, node, ctx):
+        return WriteResult([], list(node.losses) + [Loss(
+            "approximated", "An embedded database.", "It is sent as its own table inside the page.", "db_embed_position")])

@@ -42,3 +42,15 @@ class ButtonReader:
         return [ir.Block("action", attrs={"label": str(p.get("label") or "Button"),
                                           "icon": str(p.get("icon") or ""), "actions": parsed},
                          src_id=str(src.get("id", "")))]
+
+
+@register_reader
+class DatabaseEmbedReader:
+    handles = "blocknote:database"
+    version = 1
+
+    def read(self, src, ctx):
+        p = src.get("props") or {}
+        return [ir.Block("db_embed", attrs={"database_id": str(p.get("databaseId") or ""),
+                                            "view_id": str(p.get("viewId") or "")},
+                         src_id=str(src.get("id", "")))]

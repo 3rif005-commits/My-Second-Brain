@@ -21,12 +21,16 @@ from datetime import datetime, timedelta, timezone
 from services import privacy
 from services.notion_sync import registry
 from services.notion_sync.connection import Connection
-from services.notion_sync.engine.resolver import MentionResolver
+from services.notion_sync.engine.databases import DatabaseMixin
+from services.notion_sync.engine.resolver import MentionResolver, link_tags
 from services.notion_sync.engine.store import CONTAINER, Store, now
+from services.notion_sync.notion import dbschema
 from services.notion_sync.notion.adapter import (ARCHIVE_TITLE, NotionAdapter, Rendered, page_url)
+from services.notion_sync.notion.properties import TITLE_PROP
 from services.notion_sync.notion.errors import AmbiguousWrite, NotionError, SyncPaused, plain_message
 from services.notion_sync.planner import (CHANGED, DELETED, NEW, PlanItem, fetch_collections, fetch_notes,
                                           object_hash)
+from services.notion_sync.readers.database import relation_values, row_to_ir
 from services.notion_sync.readers.note import collection_to_ir, note_to_ir
 from services.portable import ir
 from services.portable.losses import dedupe
@@ -85,7 +89,7 @@ def _parse(ts: str | None) -> datetime | None:
         return None
 
 
-class Engine:
+class Engine(DatabaseMixin):
     def __init__(self, db, conn: Connection, adapter: NotionAdapter):
         self.db, self.conn, self.adapter = db, conn, adapter
         self.store = Store(db, conn.user_id, conn.id)
@@ -275,15 +279,46 @@ class Engine:
         return ItemFailure("needs_you" if e.error_class == "needs_user" else "failed",
                            e.error_class, e.code, plain_message(e))
 
+    def _destination(self, row: dict):
+        """Where a note's page lives: a database's data source if it is a row, else the Notes
+        database of its collection. -> (data source id, title property name, DbState | None)."""
+        ctx = self.row_context(str(row["id"]))
+        if ctx is not None:
+            st = self.build_database(ctx[0])
+            if not st.finished:
+                self.finish_schemas([st])
+            return st.notion_ds, st.layout.names[st.layout.title_key], st
+        cid = str(row["collection_id"]) if row.get("collection_id") else None
+        return self.ensure_container(cid), TITLE_PROP, None
+
+    def _row_props(self, st, obj: ir.Obj, r: Rendered, resolver) -> None:
+        """Fill a database row's property values (an empty one is an explicit clear)."""
+        losses: list = []
+        r.props = dbschema.row_values(st.layout, st.defs, obj.props["db"]["values"],
+                                      lambda nid: (resolver(nid)[1] if resolver(nid)[0] == "page" and resolver(nid)[1] != "pending" else None),
+                                      losses)
+        r.losses = dedupe(list(r.losses) + losses)
+
+    def _obj_for(self, row: dict, st, titled: bool = True) -> ir.Obj:
+        obj = note_to_ir(self._titled(row) if titled else row)
+        if st is not None:
+            b = st.bundle
+            rp = (self.db.table("db_row_props").select("*").eq("note_id", row["id"]).execute().data or [None])[0]
+            obj = row_to_ir(obj, b, row, rp, self._links(st, str(row["id"])))
+        return obj
+
+    def _links(self, st, note_id: str) -> dict[str, list[str]]:
+        return relation_values(self.db, self.conn.user_id, st.defs, note_id)
+
     def _shell(self, item: PlanItem, row: dict, resolver) -> None:
         """Create the empty page for a new note (title + SB ID), so links can point at it."""
-        cid = str(row["collection_id"]) if row.get("collection_id") else None
-        ds = self.ensure_container(cid)
+        ds, title_prop, st = self._destination(row)
         m, _ = self.store.begin_create("note", item.note_id, parent=ds)
         if m.get("notion_id"):
             return
         obj = note_to_ir(self._titled(row))
         r = self.adapter.materialize_cover(self.adapter.render(obj, resolver))
+        r.props = {}                                              # the shell has a title and an SB ID only
         skip = self.store.detached_page_ids(item.note_id)
         rows = [r for r in self.adapter.find_rows(ds, item.note_id) if r[0] not in skip]   # reconcile: a crash or a lost mapping
         if rows:
@@ -292,7 +327,7 @@ class Engine:
                 log.warning("notion: %d rows for note %s; adopting the oldest", len(rows), item.note_id)
         else:
             try:
-                page_id = self.adapter.create_row(ds, r, item.note_id)
+                page_id = self.adapter.create_row(ds, r, item.note_id, title_prop)
             except AmbiguousWrite:
                 raise _ambiguous()
         if not self.store.cas(m["id"], "creating", {"notion_id": page_id, "notion_kind": "page",
@@ -315,24 +350,26 @@ class Engine:
     def send_note(self, item: PlanItem, row: dict, resolver: MentionResolver) -> ItemResult:
         if item.resolution == "forget":
             return self._forget(item, "note")
-        obj = note_to_ir(row)                      # hashed as the real note, even for a titled copy
-        cid = str(row["collection_id"]) if row.get("collection_id") else None
         action = "create" if item.state == NEW else "update"
         try:
-            ds = self.ensure_container(cid)
+            ds, title_prop, st = self._destination(row)
+            obj = self._obj_for(row, st)
+            h_obj = self._obj_for(row, st, titled=False)         # hashed as the real note, even for a titled copy
             m = self.store.mapping("note", item.note_id)
             if m is None or not m.get("notion_id"):
                 self._shell(item, row, resolver)
                 m = self.store.mapping("note", item.note_id)
             page_id = m["notion_id"]
-            h = object_hash(obj, self.conn, resolver.tags(obj))
-            r = self.adapter.materialize_cover(self.adapter.render(note_to_ir(self._titled(row)), resolver))
+            h = object_hash(h_obj, self.conn, link_tags(h_obj, resolver))
+            r = self.adapter.materialize_cover(self.adapter.render(obj, resolver))
+            if st is not None:
+                self._row_props(st, obj, r, resolver)
             if (action == "update" or m.get("local_hash")) and item.resolution != "overwrite":
                 self._edit_check(page_id)
             if m.get("notion_parent_id") != ds:                    # moved to another collection, or restored
                 self.adapter.move_page(page_id, under_source=ds)
                 self.store.update(m["id"], {"notion_parent_id": ds})
-            self.adapter.update_properties(page_id, r)
+            self.adapter.update_properties(page_id, r, title_prop=title_prop)
             top = self._replace_body(m, page_id, r, everything=item.resolution == "overwrite")
             losses = [loss.to_dict() for loss in dedupe(list(r.losses) + self.adapter.take_losses())]   # + what files taught us
             fin = self.adapter.get_page(page_id)
@@ -349,6 +386,19 @@ class Engine:
             raise ItemFailure("failed", "retryable", "ambiguous_write", plain_message(e))
         except NotionError as e:
             raise self._notion_failure(e)
+
+    def _finish_db_item(self, it: PlanItem, st) -> None:
+        """Title/icon/description changes, then remember what we sent (so the next plan is a no-op)."""
+        m = self.store.mapping("database", it.note_id)
+        if it.state == CHANGED:
+            r = self.adapter.materialize_cover(self.adapter.render(st.obj))
+            from services.notion_sync.notion.richtext import plain_rich
+            desc = plain_rich(st.obj.props.get("description") or "")
+            self.adapter.patch_database(st.notion_db, r, desc)
+        self.store.update(m["id"], {"state": "synced", "local_hash": object_hash(st.obj, self.conn),
+                                    "mapper_set_version": registry.mapper_set_version(),
+                                    "ir_version": ir.IR_VERSION, "last_pushed_at": now(),
+                                    "losses": [x.to_dict() for x in st.layout.losses]})
 
     def _start_over(self, it: PlanItem) -> None:
         """'Send as a copy' / 'Create it again': the old mapping is retired, the note becomes a new page."""
@@ -437,6 +487,32 @@ class Engine:
         # Privacy gate #2, at the adapter boundary: nothing above the ceiling reaches Notion
         # even if the plan was wrong (DESIGN §6.5).
         with privacy.scope(self.conn.privacy_ceiling, self.conn.user_id, released):
+            # databases first: their tables must exist before any row or relation value is written
+            db_states: list[tuple[PlanItem, object]] = []
+
+            def build_db(it):
+                st = self.build_database(it.note_id)
+                db_states.append((it, st))
+                return ItemResult(it.note_id, it.title, "done", "create" if st.created else "update",
+                                  "Table ready.", page_url(st.notion_db), [], "database")
+            for it in (i for i in sendable if i.kind == "database"):
+                finish(it, lambda it=it: build_db(it))
+            if db_states:
+                try:
+                    self.finish_schemas([st for _, st in db_states])
+                    for it, st in db_states:
+                        self._finish_db_item(it, st)
+                        results[("database", it.note_id)].losses = [x.to_dict() for x in
+                                                                    dedupe(list(st.layout.losses) + list(st.obj.losses))]
+                except SyncPaused:
+                    halted["paused"] = True
+                except (NotionError, AmbiguousWrite) as e:
+                    f = self._notion_failure(e) if isinstance(e, NotionError) else _ambiguous()
+                    for it, _ in db_states:
+                        self.store.finish_item(recs[("database", it.note_id)]["id"], f.status, error_class=f.error_class,
+                                               error_code=f.code, message=f.message)
+                        results[("database", it.note_id)] = ItemResult(it.note_id, it.title, f.status, "", f.message, kind="database")
+
             for it in (i for i in sendable if i.kind == "collection"):
                 finish(it, lambda it=it: self.send_collection(it))
 
