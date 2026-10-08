@@ -1,0 +1,111 @@
+{
+  "result": {
+    "root": "3f37b5cb-32d0-80ea-898a-f7f9071b7325",
+    "root_title": "SB-TEST-root",
+    "bot_id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1",
+    "workspace": "My second brain backup",
+    "version": "2026-03-11"
+  },
+  "calls": [
+    {
+      "method": "POST",
+      "path": "/search",
+      "request": {
+        "filter": {
+          "property": "object",
+          "value": "page"
+        },
+        "page_size": 50
+      },
+      "status": 200,
+      "response": {
+        "object": "list",
+        "results": [
+          {
+            "object": "page",
+            "id": "3f37b5cb-32d0-80ea-898a-f7f9071b7325",
+            "created_time": "2026-10-08T10:20:00.000Z",
+            "last_edited_time": "2026-10-08T10:23:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "203cf4d7-be03-47c0-915b-3c8efdfc012b"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "cover": null,
+            "icon": {
+              "type": "emoji",
+              "emoji": "🧪"
+            },
+            "parent": {
+              "type": "workspace",
+              "workspace": true
+            },
+            "in_trash": false,
+            "is_archived": false,
+            "is_locked": false,
+            "properties": {
+              "title": {
+                "id": "title",
+                "type": "title",
+                "title": [
+                  {
+                    "type": "text",
+                    "text": {
+                      "content": "SB-TEST-root",
+                      "link": null
+                    },
+                    "annotations": {
+                      "bold": false,
+                      "italic": false,
+                      "strikethrough": false,
+                      "underline": false,
+                      "code": false,
+                      "color": "default"
+                    },
+                    "plain_text": "SB-TEST-root",
+                    "href": null
+                  }
+                ]
+              }
+            },
+            "url": "https://app.notion.com/p/SB-TEST-root-3f37b5cb32d080ea898af7f9071b7325",
+            "public_url": null
+          }
+        ],
+        "next_cursor": null,
+        "has_more": false,
+        "type": "page_or_data_source",
+        "page_or_data_source": {},
+        "request_id": "2553dd19-3446-4224-8a04-4387e0462880"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/users/me",
+      "request": null,
+      "status": 200,
+      "response": {
+        "object": "user",
+        "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1",
+        "name": "Second Brain mirror",
+        "avatar_url": null,
+        "type": "bot",
+        "bot": {
+          "owner": {
+            "type": "workspace",
+            "workspace": true
+          },
+          "workspace_name": "My second brain backup",
+          "workspace_id": "a5b7b5cb-32d0-81a5-990d-00034b062237",
+          "workspace_limits": {
+            "max_file_upload_size_in_bytes": 5242880
+          }
+        },
+        "request_id": "3a0221c2-8944-47b9-a922-4460ebdbdba5"
+      }
+    }
+  ]
+}

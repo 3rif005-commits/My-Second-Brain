@@ -1,0 +1,30 @@
+{
+  "run_page": "3f37b5cb-32d0-8155-8a35-d75a9d95ba72",
+  "requests": 16,
+  "results": {
+    "T6": {
+      "linked_status": 200,
+      "linked_error": null,
+      "other_page_children": [
+        "child_database"
+      ],
+      "board_view_status": 200,
+      "board_error": null
+    },
+    "T7": {
+      "4.9MiB": {
+        "create_status": 200,
+        "create_error": null,
+        "send_status": 200,
+        "send_error": null,
+        "attach_status": 200
+      },
+      "5.1MiB": {
+        "create_status": 200,
+        "create_error": null,
+        "send_status": 400,
+        "send_error": "File size of 5.1 MiB exceeds the limit of 5 MiB."
+      }
+    }
+  }
+}

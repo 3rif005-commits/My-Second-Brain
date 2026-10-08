@@ -1,0 +1,455 @@
+{
+  "result": {
+    "order": [
+      "A",
+      "B",
+      "child_database",
+      "C"
+    ],
+    "db_created": true,
+    "db_keys": [
+      "cover",
+      "created_time",
+      "data_sources",
+      "database_type",
+      "description",
+      "icon",
+      "id",
+      "in_trash",
+      "is_inline",
+      "is_locked",
+      "last_edited_time",
+      "object",
+      "parent",
+      "public_url",
+      "request_id",
+      "title",
+      "url"
+    ],
+    "verdict": "append-order trick works"
+  },
+  "calls": [
+    {
+      "method": "POST",
+      "path": "/pages",
+      "request": {
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81f1-b486-f0e6ffabad60"
+        },
+        "properties": {
+          "title": {
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T3 inline db position"
+                }
+              }
+            ]
+          }
+        },
+        "children": [
+          {
+            "type": "paragraph",
+            "paragraph": {
+              "rich_text": [
+                {
+                  "type": "text",
+                  "text": {
+                    "content": "A"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "paragraph",
+            "paragraph": {
+              "rich_text": [
+                {
+                  "type": "text",
+                  "text": {
+                    "content": "B"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "status": 200,
+      "response": {
+        "object": "page",
+        "id": "3f37b5cb-32d0-8138-a161-dbf09942ea27",
+        "created_time": "2026-10-08T10:30:00.000Z",
+        "last_edited_time": "2026-10-08T10:30:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "cover": null,
+        "icon": null,
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81f1-b486-f0e6ffabad60"
+        },
+        "in_trash": false,
+        "is_archived": false,
+        "is_locked": false,
+        "properties": {
+          "title": {
+            "id": "title",
+            "type": "title",
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T3 inline db position",
+                  "link": null
+                },
+                "annotations": {
+                  "bold": false,
+                  "italic": false,
+                  "strikethrough": false,
+                  "underline": false,
+                  "code": false,
+                  "color": "default"
+                },
+                "plain_text": "T3 inline db position",
+                "href": null
+              }
+            ]
+          }
+        },
+        "url": "https://app.notion.com/p/T3-inline-db-position-3f37b5cb32d08138a161dbf09942ea27",
+        "public_url": null,
+        "request_id": "92034ddd-1ad8-43ef-b412-a582d7d90b23"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/databases",
+      "request": {
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-8138-a161-dbf09942ea27"
+        },
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "T3 inline DB"
+            }
+          }
+        ],
+        "is_inline": true,
+        "initial_data_source": {
+          "properties": {
+            "Name": {
+              "title": {}
+            }
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "database",
+        "id": "b405c898-e855-4385-9465-90aeb5a6c2db",
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "T3 inline DB",
+              "link": null
+            },
+            "annotations": {
+              "bold": false,
+              "italic": false,
+              "strikethrough": false,
+              "underline": false,
+              "code": false,
+              "color": "default"
+            },
+            "plain_text": "T3 inline DB",
+            "href": null
+          }
+        ],
+        "description": [],
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-8138-a161-dbf09942ea27"
+        },
+        "is_inline": true,
+        "database_type": null,
+        "in_trash": false,
+        "is_locked": false,
+        "created_time": "2026-10-08T10:30:33.260+00:00",
+        "last_edited_time": "2026-10-08T10:30:33.260+00:00",
+        "data_sources": [
+          {
+            "id": "bdf7b873-21b3-4fae-8b34-8c6df9ef4232",
+            "name": "T3 inline DB"
+          }
+        ],
+        "icon": null,
+        "cover": null,
+        "url": "https://app.notion.com/p/b405c898e8554385946590aeb5a6c2db",
+        "public_url": null,
+        "request_id": "6a1202ce-8963-44f2-b64e-f0e41fc6187c"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/blocks/3f37b5cb-32d0-8138-a161-dbf09942ea27/children",
+      "request": {
+        "children": [
+          {
+            "type": "paragraph",
+            "paragraph": {
+              "rich_text": [
+                {
+                  "type": "text",
+                  "text": {
+                    "content": "C"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "status": 200,
+      "response": {
+        "object": "list",
+        "results": [
+          {
+            "object": "block",
+            "id": "3f37b5cb-32d0-81bf-b610-d6a42a1f3b93",
+            "parent": {
+              "type": "page_id",
+              "page_id": "3f37b5cb-32d0-8138-a161-dbf09942ea27"
+            },
+            "created_time": "2026-10-08T10:30:00.000Z",
+            "last_edited_time": "2026-10-08T10:30:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "has_children": false,
+            "in_trash": false,
+            "type": "paragraph",
+            "paragraph": {
+              "rich_text": [
+                {
+                  "type": "text",
+                  "text": {
+                    "content": "C",
+                    "link": null
+                  },
+                  "annotations": {
+                    "bold": false,
+                    "italic": false,
+                    "strikethrough": false,
+                    "underline": false,
+                    "code": false,
+                    "color": "default"
+                  },
+                  "plain_text": "C",
+                  "href": null
+                }
+              ],
+              "icon": null,
+              "color": "default"
+            }
+          }
+        ],
+        "next_cursor": null,
+        "has_more": false,
+        "type": "block",
+        "block": {},
+        "request_id": "dcd668a9-96e6-4ae0-9162-ebefb51608e3"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/3f37b5cb-32d0-8138-a161-dbf09942ea27/children?page_size=100",
+      "request": null,
+      "status": 200,
+      "response": {
+        "object": "list",
+        "results": [
+          {
+            "object": "block",
+            "id": "3f37b5cb-32d0-817a-97ef-cd502ee02398",
+            "parent": {
+              "type": "page_id",
+              "page_id": "3f37b5cb-32d0-8138-a161-dbf09942ea27"
+            },
+            "created_time": "2026-10-08T10:30:00.000Z",
+            "last_edited_time": "2026-10-08T10:30:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "has_children": false,
+            "in_trash": false,
+            "type": "paragraph",
+            "paragraph": {
+              "rich_text": [
+                {
+                  "type": "text",
+                  "text": {
+                    "content": "A",
+                    "link": null
+                  },
+                  "annotations": {
+                    "bold": false,
+                    "italic": false,
+                    "strikethrough": false,
+                    "underline": false,
+                    "code": false,
+                    "color": "default"
+                  },
+                  "plain_text": "A",
+                  "href": null
+                }
+              ],
+              "icon": null,
+              "color": "default"
+            }
+          },
+          {
+            "object": "block",
+            "id": "3f37b5cb-32d0-81e0-b660-c2a4a462000d",
+            "parent": {
+              "type": "page_id",
+              "page_id": "3f37b5cb-32d0-8138-a161-dbf09942ea27"
+            },
+            "created_time": "2026-10-08T10:30:00.000Z",
+            "last_edited_time": "2026-10-08T10:30:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "has_children": false,
+            "in_trash": false,
+            "type": "paragraph",
+            "paragraph": {
+              "rich_text": [
+                {
+                  "type": "text",
+                  "text": {
+                    "content": "B",
+                    "link": null
+                  },
+                  "annotations": {
+                    "bold": false,
+                    "italic": false,
+                    "strikethrough": false,
+                    "underline": false,
+                    "code": false,
+                    "color": "default"
+                  },
+                  "plain_text": "B",
+                  "href": null
+                }
+              ],
+              "icon": null,
+              "color": "default"
+            }
+          },
+          {
+            "object": "block",
+            "id": "b405c898-e855-4385-9465-90aeb5a6c2db",
+            "parent": {
+              "type": "page_id",
+              "page_id": "3f37b5cb-32d0-8138-a161-dbf09942ea27"
+            },
+            "created_time": "2026-10-08T10:30:00.000Z",
+            "last_edited_time": "2026-10-08T10:30:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "has_children": false,
+            "in_trash": false,
+            "type": "child_database",
+            "child_database": {
+              "title": "T3 inline DB"
+            }
+          },
+          {
+            "object": "block",
+            "id": "3f37b5cb-32d0-81bf-b610-d6a42a1f3b93",
+            "parent": {
+              "type": "page_id",
+              "page_id": "3f37b5cb-32d0-8138-a161-dbf09942ea27"
+            },
+            "created_time": "2026-10-08T10:30:00.000Z",
+            "last_edited_time": "2026-10-08T10:30:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "has_children": false,
+            "in_trash": false,
+            "type": "paragraph",
+            "paragraph": {
+              "rich_text": [
+                {
+                  "type": "text",
+                  "text": {
+                    "content": "C",
+                    "link": null
+                  },
+                  "annotations": {
+                    "bold": false,
+                    "italic": false,
+                    "strikethrough": false,
+                    "underline": false,
+                    "code": false,
+                    "color": "default"
+                  },
+                  "plain_text": "C",
+                  "href": null
+                }
+              ],
+              "icon": null,
+              "color": "default"
+            }
+          }
+        ],
+        "next_cursor": null,
+        "has_more": false,
+        "type": "block",
+        "block": {},
+        "request_id": "62047373-2264-437c-b902-bffee4ea50de"
+      }
+    }
+  ]
+}

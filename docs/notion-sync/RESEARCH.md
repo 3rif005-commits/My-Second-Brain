@@ -144,7 +144,10 @@ VERIFIED — [authorization](https://developers.notion.com/docs/authorization), 
 - Whalesync's change detection method is undocumented.
 - Raycast / Super / Zapier / Make Notion actions were not surveyed: they are single-action "create page" tools with no identity tracking, so they teach nothing beyond §2. Mentioned for completeness. ASSUMPTION.
 
-## 7. Live tests that settle the ASSUMPTIONs (need a THROWAWAY workspace token from you)
+## 7. Live tests that settle the ASSUMPTIONs
+
+> **Run 2026-10-08: see `evidence/live/RESULTS.md`.** All ten answered. T2's human half and T8's "does JS run" need a person to look. New findings: the File Upload API has an extension allow-list (`.bin` rejected); text length is counted in UTF-16 units; a 1,001-char block equation was accepted; schema size cap is 50 KB.
+
 | # | Question | How |
 |---|---|---|
 | T1 | Is append-children atomic, or can it half-apply on error? | Append 3 blocks where the 3rd is invalid; read back. |

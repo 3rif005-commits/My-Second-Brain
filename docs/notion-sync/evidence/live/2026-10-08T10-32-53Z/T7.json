@@ -1,0 +1,243 @@
+{
+  "result": {
+    "4.9MiB": {
+      "create_status": 200,
+      "create_error": null,
+      "send_status": 200,
+      "send_error": null,
+      "attach_status": 200
+    },
+    "5.1MiB": {
+      "create_status": 200,
+      "create_error": null,
+      "send_status": 400,
+      "send_error": "File size of 5.1 MiB exceeds the limit of 5 MiB."
+    }
+  },
+  "calls": [
+    {
+      "method": "POST",
+      "path": "/pages",
+      "request": {
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-8155-8a35-d75a9d95ba72"
+        },
+        "properties": {
+          "title": {
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T7 file cap"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "page",
+        "id": "3f37b5cb-32d0-8178-9aac-e34001f766af",
+        "created_time": "2026-10-08T10:33:00.000Z",
+        "last_edited_time": "2026-10-08T10:33:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "cover": null,
+        "icon": null,
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-8155-8a35-d75a9d95ba72"
+        },
+        "in_trash": false,
+        "is_archived": false,
+        "is_locked": false,
+        "properties": {
+          "title": {
+            "id": "title",
+            "type": "title",
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T7 file cap",
+                  "link": null
+                },
+                "annotations": {
+                  "bold": false,
+                  "italic": false,
+                  "strikethrough": false,
+                  "underline": false,
+                  "code": false,
+                  "color": "default"
+                },
+                "plain_text": "T7 file cap",
+                "href": null
+              }
+            ]
+          }
+        },
+        "url": "https://app.notion.com/p/T7-file-cap-3f37b5cb32d081789aace34001f766af",
+        "public_url": null,
+        "request_id": "2505959c-281d-46cb-b11a-7de0703494ef"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/file_uploads",
+      "request": {
+        "mode": "single_part",
+        "filename": "cap-4.9MiB.txt",
+        "content_type": "text/plain"
+      },
+      "status": 200,
+      "response": {
+        "object": "file_upload",
+        "id": "3f37b5cb-32d0-8114-8804-00b28e797d04",
+        "created_time": "2026-10-08T10:33:00.000Z",
+        "created_by": {
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1",
+          "type": "bot"
+        },
+        "last_edited_time": "2026-10-08T10:33:00.000Z",
+        "expiry_time": "2026-10-08T11:33:00.000Z",
+        "upload_url": "https://api.notion.com/v1/file_uploads/3f37b5cb-32d0-8114-8804-00b28e797d04/send",
+        "in_trash": false,
+        "status": "pending",
+        "filename": "cap-4.9MiB.txt",
+        "content_type": "text/plain",
+        "content_length": null,
+        "request_id": "0bdbf77d-0fd0-4e78-ad9d-95759810fcdc"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/file_uploads/{id}/send",
+      "request": "<5138022 bytes text/plain>",
+      "status": 200,
+      "response": {
+        "object": "file_upload",
+        "id": "3f37b5cb-32d0-8114-8804-00b28e797d04",
+        "created_time": "2026-10-08T10:33:00.000Z",
+        "created_by": {
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1",
+          "type": "bot"
+        },
+        "last_edited_time": "2026-10-08T10:33:00.000Z",
+        "expiry_time": "2026-10-08T11:33:00.000Z",
+        "in_trash": false,
+        "status": "uploaded",
+        "filename": "cap-4.9MiB.txt",
+        "content_type": "text/plain",
+        "content_length": 5138022,
+        "request_id": "810f531c-294b-4498-a489-21d711e0c4a0"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/blocks/3f37b5cb-32d0-8178-9aac-e34001f766af/children",
+      "request": {
+        "children": [
+          {
+            "type": "file",
+            "file": {
+              "type": "file_upload",
+              "file_upload": {
+                "id": "3f37b5cb-32d0-8114-8804-00b28e797d04"
+              }
+            }
+          }
+        ]
+      },
+      "status": 200,
+      "response": {
+        "object": "list",
+        "results": [
+          {
+            "object": "block",
+            "id": "3f37b5cb-32d0-8106-85bb-c1706672cf36",
+            "parent": {
+              "type": "page_id",
+              "page_id": "3f37b5cb-32d0-8178-9aac-e34001f766af"
+            },
+            "created_time": "2026-10-08T10:33:00.000Z",
+            "last_edited_time": "2026-10-08T10:33:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "has_children": false,
+            "in_trash": false,
+            "type": "file",
+            "file": {
+              "caption": [],
+              "type": "file",
+              "file": {
+                "url": "https://prod-files-secure.s3.us-west-2.amazonaws.com/a5b7b5cb-32d0-81a5-990d-00034b062237/078318cb-c727-4fd9-b862-acd9bff5b71c/cap-4.9MiB.txt?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=ASIAZI2LB466UN5SBHIS%2F20261008%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20261008T103311Z&X-Amz-Expires=3600&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEFgaCXVzLXdlc3QtMiJGMEQCID%2FCRCbue2tG99pcV7UsMNWJQ5OP1gqp1UwDjr6ElizQAiBjt6ImCQBd9bfJhr5m3ZykdsVoWaK%2B8WnYVfVbVjgQgir%2FAwghEAAaDDYzNzQyMzE4MzgwNSIMiWhJq8lU%2BOXIB7VGKtwDCJy0XHxtCVuQ90JSIZlm7rEwS%2FGXqVIFmZJ%2BLuQc%2Fz6AxO0DUohR7wFhxYgNH1ZDQlLy7mHpuZWStKj6dW8xMdGq%2FkG3jMeW2hAegy%2BichiUSddxeY6N7uAXYrMX6z027Rwt2cSQNNP8Ljahq2N6WT8eyADz0V6yLooMxseWqnKgEb6aCUoabPMWBOsU6a3%2Fi9pOPBzBBok0wX2HutTRq8kMxkc2HI0UtjijcQxl1IKmfMh104BXoFS4zWRisJ6bvIk3Z3tdmP20OIny4%2FvZHzW87yyO10CRDmCpAIvgoEG7LJM8WgGR9c%2BI4iDOSEnZ7c5TrkATD3AKiDZ%2BgnBTQOFXIgq%2B7fMfTPgqHHRUeMimuLdt0FpMl7HOVjkdZ3PLhOCJKEcKzUSZrjUXSpUiLO5k08A8mklafu%2BAa8pipvTY6E3Z%2FjeFXbw%2FHY9t3S3EYZPi%2BA3Z1XCki17%2FMLWokk3nXwflgkUhww2vT9x5YG0S1nOvPW2bsncsjaX77Q3qenhITPoRUuOHYs%2BwWsW5hDD6B%2B6NtQkxWecT721oPrss7XXIuBDaIXHgJX76%2B390GVHUDAB9oCi2yICjf8Ke9wf6Aq3JXRvrKNeRtX4%2BOeQgdoRI4AR9Gim5RQcwspmd1gY6pgGe2De0SJCTqoy1%2BNdPdZ%2FJcxeVCteLQWxRBHXVXB82fea%2F9LsSVFRVynxilSl42Lfi7SPwqJivDQ%2BCTdpYxF83MxTAozwnU88R1e5RPZM8bxpQRdYNq0eCaAZWQTWIT1cG9qZ6oF0YWgER%2FvBKt4vGzElGrP8hUfG0SmOv67eifEw2Xo%2F3mv%2BnQD6tttFPXJLhV%2BKljFk9PfFurnkCmlDfM2HCY2JT&X-Amz-Signature=59bbf0ee0f2302e0bdc95889bdd67ceca129279a443afb6bbcb9eea4d1fa2389&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject",
+                "expiry_time": "2026-10-08T11:33:11.240Z"
+              },
+              "name": "cap-4.9MiB.txt"
+            }
+          }
+        ],
+        "next_cursor": null,
+        "has_more": false,
+        "type": "block",
+        "block": {},
+        "request_id": "860b8fbb-c1cc-4841-a2be-b37254effc21"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/file_uploads",
+      "request": {
+        "mode": "single_part",
+        "filename": "cap-5.1MiB.txt",
+        "content_type": "text/plain"
+      },
+      "status": 200,
+      "response": {
+        "object": "file_upload",
+        "id": "3f37b5cb-32d0-8144-89d6-00b2e6933af2",
+        "created_time": "2026-10-08T10:33:00.000Z",
+        "created_by": {
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1",
+          "type": "bot"
+        },
+        "last_edited_time": "2026-10-08T10:33:00.000Z",
+        "expiry_time": "2026-10-08T11:33:00.000Z",
+        "upload_url": "https://api.notion.com/v1/file_uploads/3f37b5cb-32d0-8144-89d6-00b2e6933af2/send",
+        "in_trash": false,
+        "status": "pending",
+        "filename": "cap-5.1MiB.txt",
+        "content_type": "text/plain",
+        "content_length": null,
+        "request_id": "5175f134-5b2b-4c55-b9a9-1ffcefecab7c"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/file_uploads/{id}/send",
+      "request": "<5347736 bytes text/plain>",
+      "status": 400,
+      "response": {
+        "object": "error",
+        "status": 400,
+        "code": "validation_error",
+        "message": "File size of 5.1 MiB exceeds the limit of 5 MiB.",
+        "request_id": "195b3794-4735-464c-b796-99dd0ab73156"
+      }
+    }
+  ]
+}
