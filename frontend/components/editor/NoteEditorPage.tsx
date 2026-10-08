@@ -4,7 +4,7 @@ import React, { Component, useState, useCallback, useEffect, useRef } from "reac
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Link, Check, Layers } from "lucide-react";
+import { ChevronRight, Link, Check, Layers, Send } from "lucide-react";
 import type { Note } from "@/lib/types/database";
 import { Button } from "@/components/ui/button";
 import { wsApi } from "@/lib/workspace";
@@ -17,6 +17,7 @@ import { NoteProperties } from "./NoteProperties";
 import { DatabaseRowProperties } from "../database/DatabaseRowProperties";
 import { BacklinksPanel } from "./BacklinksPanel";
 import { InteractiveBlockCard } from "./InteractiveBlockCard";
+import { SendToNotionPanel } from "../notion/SendToNotionPanel";
 import type { BlockEditorHandle, InteractiveBlock } from "./BlockEditor";
 
 const EMOJIS = [
@@ -88,6 +89,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
   });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showNotion, setShowNotion] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [sourceCount, setSourceCount] = useState(0);
@@ -383,6 +385,14 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
                   Export as PDF
                 </button>
 
+                <button
+                  role="menuitem"
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+                  onClick={() => { setShowMenu(false); setShowNotion(true); }}
+                >
+                  <Send size={13} /> Send to Notion…
+                </button>
+
                 {/* Divider */}
                 <div className="my-1 border-t border-gray-100 dark:border-gray-700" />
 
@@ -555,6 +565,8 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
           </div>
         </div>
       </div>
+
+      {showNotion && <SendToNotionPanel noteId={note.id} onClose={() => setShowNotion(false)} />}
 
       {/* Delete confirmation modal */}
       {showDeleteModal &&
