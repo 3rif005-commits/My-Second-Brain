@@ -34,6 +34,8 @@ class FakeNotion:
         self.pages: dict[str, dict] = {}
         self.blocks: dict[str, dict] = {}
         self.dbs: dict[str, dict] = {}
+        self.uploads: dict[str, dict] = {}
+        self.upload_cap = 5 * 1024 * 1024
         self.sources: dict[str, dict] = {}
         self.calls: list[tuple[str, str]] = []
         self.faults: list[dict] = []
@@ -105,15 +107,33 @@ class FakeNotion:
             self._validate_rich(body.get("caption", []), f"{path}[{i}].{t}.caption")
             if t == "code" and body.get("language") not in NOTION_LANGUAGES:
                 raise _Bad(f"{path}[{i}].code.language should be one of the enum, instead was {body.get('language')}")
-            if t == "column_list" and len(body.get("children", [])) < 2:
-                raise _Bad("column_list needs ≥ 2 columns")
+            if t == "column_list":
+                cols = body.get("children", [])
+                if len(cols) < 2:
+                    raise _Bad("column_list needs ≥ 2 columns")
+                if any(not c["column"].get("children") for c in cols):
+                    raise _Bad("each column needs ≥ 1 child")
+            if t == "table":
+                w = body.get("table_width")
+                rows = body.get("children", [])
+                if not rows or any(len(r["table_row"]["cells"]) != w for r in rows):
+                    raise _Bad("table rows must all have table_width cells")
+            if t in ("image", "video", "audio", "file", "pdf", "embed"):
+                if body.get("type") == "file_upload":
+                    up = self.uploads.get(body["file_upload"]["id"])
+                    if not up or up["status"] != "uploaded":
+                        raise _Bad("file_upload not uploaded")
+                elif body.get("type") != "external":
+                    raise _Bad(f"{t} needs type external or file_upload")
+            if t == "callout" and body.get("icon") and body["icon"].get("type") == "emoji" and body["icon"]["emoji"].isascii():
+                raise _Bad("callout icon emoji invalid")
             if t.startswith("heading_") and body.get("children") and not body.get("is_toggleable"):
                 raise _Bad(f"{path}[{i}] heading with children must be toggleable")
             if t in ("divider",) and body.get("children"):
                 raise _Bad(f"{path}[{i}] divider cannot have children")
             kids = body.get("children")
             if kids:
-                if depth >= 2:
+                if depth >= 3:
                     raise _Bad(f"{path}[{i}] exceeds two levels of nesting")
                 self._validate_blocks(kids, depth + 1, f"{path}[{i}].{t}.children")
 
@@ -175,7 +195,8 @@ class FakeNotion:
         path = request.url.path.removeprefix("/v1")
         method = request.method
         self.calls.append((method, path))
-        body = json.loads(request.content) if request.content else {}
+        ctype = request.headers.get("content-type", "")
+        body = json.loads(request.content) if request.content and "json" in ctype else {}
         fault = next((f for f in self.faults if f["left"] > 0 and f["match"].split(" ", 1)[0] == method
                       and re.fullmatch(f["match"].split(" ", 1)[1], path)), None)
         if fault:
@@ -228,6 +249,8 @@ class FakeNotion:
                         p["properties"][k] = {"type": "title" if "title" in v else "rich_text", **v}
                 if body.get("icon"):
                     p["icon"] = body["icon"]
+                if body.get("cover"):
+                    p["cover"] = body["cover"]
                 p["last_edited_time"] = self.ts()
                 p["last_edited_by"] = {"object": "user", "id": BOT}
                 return ok(self._public_page(p))
@@ -241,6 +264,10 @@ class FakeNotion:
                 self._validate_rich(v.get("title", v.get("rich_text", [])), "properties")
             if body.get("children"):
                 self._validate_blocks(body["children"])
+            if body.get("cover"):
+                cv = body["cover"]
+                if cv.get("type") == "file_upload" and self.uploads.get(cv["file_upload"]["id"], {}).get("status") != "uploaded":
+                    raise _Bad("cover upload missing")
             icon = body.get("icon")
             if icon and not (icon["type"] == "emoji" and icon["emoji"] and not icon["emoji"].isascii()):
                 raise _Bad("body.icon.emoji invalid")
@@ -249,6 +276,7 @@ class FakeNotion:
             if parent["type"] == "page_id":
                 props = {"title": {"id": "title", "type": "title", **next(iter(props.values()))}} if props else props
             pid = self._new_page(parent, "", props, icon)
+            self.pages[pid]["cover"] = body.get("cover")
             if body.get("children"):
                 self.pages[pid]["children"] = self._store_blocks(body["children"], pid, "page_id")
             return ok(self._public_page(self.pages[pid]))
@@ -285,6 +313,25 @@ class FakeNotion:
                 kids.remove(m[1])
             self._touch_page(parent)
             return ok(self._public(m[1]))
+        if method == "POST" and path == "/file_uploads":
+            name = body["filename"]
+            ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+            if ext in ("", "bin", "exe"):
+                raise _Bad("Provided `filename` has an extension that is not supported for the File Upload API.")
+            uid = self._id()
+            self.uploads[uid] = {"id": uid, "status": "pending", "filename": name, "content_type": body.get("content_type")}
+            return ok({"object": "file_upload", **self.uploads[uid]})
+        m = re.fullmatch(r"/file_uploads/([^/]+)/send", path)
+        if m and method == "POST":
+            up = self.uploads.get(m[1])
+            if up is None:
+                raise _Missing
+            size = len(request.content)
+            if size > self.upload_cap + 2000:
+                raise _Bad(f"File size exceeds the limit of {self.upload_cap // 1048576} MiB.")
+            up["status"] = "uploaded"
+            up["size"] = size
+            return ok({"object": "file_upload", **up})
         if method == "POST" and path == "/databases":
             did, sid = self._id(), self._id()
             parent = body["parent"]

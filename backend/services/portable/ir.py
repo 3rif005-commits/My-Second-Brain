@@ -14,7 +14,7 @@ IR_VERSION = 1
 
 BLOCK_TYPES = (
     "paragraph", "heading", "list_item", "todo", "toggle", "quote", "code",
-    "equation", "divider", "table", "media", "callout", "columns", "column",
+    "equation", "divider", "table", "table_row", "table_cell", "media", "callout", "columns", "column",
     "embed", "bookmark", "db_embed", "anchor", "action", "opaque",
 )
 MARKS = ("bold", "italic", "underline", "strike", "code")
@@ -105,6 +105,7 @@ class Obj:
     order: float = 0.0
     title: list[Inline] = field(default_factory=list)
     icon: str | None = None
+    cover: str | None = None       # a URL; bytes are fetched only when a destination needs them
     props: dict[str, Any] = field(default_factory=dict)
     body: list[Block] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)
@@ -119,6 +120,7 @@ class Obj:
             "order": self.order,
             "title": [i.to_dict() for i in self.title],
             "icon": self.icon,
+            "cover": self.cover,
             "props": self.props,
             "body": [b.to_dict() for b in self.body],
             "meta": self.meta,

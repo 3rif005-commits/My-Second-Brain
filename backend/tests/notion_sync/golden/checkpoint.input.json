@@ -1,0 +1,24 @@
+[
+ {
+  "id": "k1",
+  "type": "checkpoint",
+  "props": {
+   "anchorType": "time",
+   "value": "754",
+   "label": "Key idea"
+  },
+  "content": [],
+  "children": []
+ },
+ {
+  "id": "k2",
+  "type": "checkpoint",
+  "props": {
+   "anchorType": "page",
+   "value": "14",
+   "label": "Figure"
+  },
+  "content": [],
+  "children": []
+ }
+]

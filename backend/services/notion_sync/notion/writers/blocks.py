@@ -144,6 +144,9 @@ class DividerWriter:
 
     def write(self, node, ctx):
         losses = list(node.losses)
+        if node.attrs.get("was") == "page_break":
+            losses.append(Loss("approximated", "A page break.", "Notion has no page breaks; a divider is used.",
+                               "page_break"))
         blocks = [{"type": "divider", "divider": {}}]
         if node.children:
             kids = ctx.write_children(node.children)

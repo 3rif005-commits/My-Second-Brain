@@ -54,8 +54,7 @@ class NotionClient:
                  base_url: str = API_BASE):
         self._http = httpx.Client(
             base_url=base_url, timeout=REQUEST_TIMEOUT_S, transport=transport,
-            headers={"Authorization": f"Bearer {token}", "Notion-Version": NOTION_VERSION,
-                     "Content-Type": "application/json"})
+            headers={"Authorization": f"Bearer {token}", "Notion-Version": NOTION_VERSION})
         self._bucket = bucket or TokenBucket(sleep=sleep)
         self._sleep = sleep
         self.requests = 0
@@ -67,7 +66,7 @@ class NotionClient:
     # -- one call ------------------------------------------------------------
     def request(self, method: str, path: str, *, json: dict | None = None,
                 params: dict | None = None, read: bool | None = None,
-                create: bool = False) -> dict:
+                create: bool = False, files: dict | None = None) -> dict:
         """`read=True` marks a POST that only reads (search, query).
         `create=True` marks any write that is unsafe to repeat after an
         unknown outcome (POST create, PATCH append)."""
@@ -81,7 +80,7 @@ class NotionClient:
             if not is_read:
                 self.write_requests += 1
             try:
-                r = self._http.request(method, path, json=json, params=params)
+                r = self._http.request(method, path, json=json, params=params, files=files)
             except (httpx.TimeoutException, httpx.TransportError) as e:
                 last = e
                 if not retry_unknown:

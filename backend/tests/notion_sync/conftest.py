@@ -15,6 +15,32 @@ from tests.notion_sync.fake_notion import BOT, FakeNotion
 USER = "user-1"
 
 
+class FakeFiles:
+    """A FileSource: `blobs` maps url -> (bytes, mime) or an exception to raise."""
+    def __init__(self, own=("files.sb.test",)):
+        self.blobs: dict = {}
+        self.own = set(own)
+        self.fetched: list[str] = []
+
+    def is_public_link(self, url):
+        from urllib.parse import urlparse
+        u = urlparse(url)
+        return u.scheme == "https" and u.hostname not in self.own and "token=" not in (u.query or "")
+
+    def fetch(self, url, max_bytes, name_hint=""):
+        from services.notion_sync.notion.files import Fetched, FileTooLarge, FileUnavailable
+        self.fetched.append(url)
+        b = self.blobs.get(url)
+        if b is None:
+            raise FileUnavailable("404")
+        if isinstance(b, Exception):
+            raise b
+        data, mime = b
+        if len(data) > max_bytes:
+            raise FileTooLarge(len(data))
+        return Fetched(data, mime, name_hint or url.rsplit("/", 1)[-1].split("?")[0])
+
+
 def T(text, **styles):
     return {"type": "text", "text": text, "styles": styles}
 
@@ -35,6 +61,7 @@ class World:
                                  "root_page_id": self.notion.root, "privacy_ceiling": "personal",
                                  "token_ciphertext": "x", "token_hint": "…abcd", "workspace_name": "Test WS"}])
         self.sleeps: list[float] = []
+        self.files = FakeFiles()
 
     def add_note(self, **kw) -> dict:
         n = note(**kw)
@@ -49,7 +76,7 @@ class World:
                             bucket=TokenBucket(rate=1000, burst=1000), sleep=self.sleeps.append)
 
     def engine(self) -> Engine:
-        return Engine(self.db, self.conn(), NotionAdapter(self.client()))
+        return Engine(self.db, self.conn(), NotionAdapter(self.client(), files=self.files))
 
     def plan(self, *notes, released=frozenset()):
         from services.notion_sync.planner import plan_notes

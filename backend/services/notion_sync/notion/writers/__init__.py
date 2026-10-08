@@ -7,6 +7,8 @@ from services.portable import ir
 from services.portable.losses import Loss
 
 from ._base import WriteCtx, WriteResult
+from .rich import (ActionWriter, AnchorWriter, CalloutWriter, ColumnsWriter, EquationWriter,
+                   MediaWriter, TableWriter)
 from .blocks import (CodeWriter, DividerWriter, HeadingWriter, ListItemWriter,
                      OpaqueWriter, ParagraphWriter, QuoteWriter, TodoWriter, ToggleWriter)
 
@@ -14,7 +16,8 @@ log = logging.getLogger(__name__)
 
 WRITERS = {w.handles: w for w in (
     ParagraphWriter(), HeadingWriter(), ListItemWriter(), TodoWriter(), ToggleWriter(),
-    QuoteWriter(), CodeWriter(), DividerWriter(), OpaqueWriter())}
+    QuoteWriter(), CodeWriter(), DividerWriter(), OpaqueWriter(), TableWriter(), MediaWriter(),
+    CalloutWriter(), ColumnsWriter(), EquationWriter(), AnchorWriter(), ActionWriter())}
 
 
 def write_block(node: ir.Block) -> WriteResult:

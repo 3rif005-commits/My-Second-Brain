@@ -5,17 +5,21 @@ shape (payloads, property names, parents, block ids) stays in this package.
 """
 from __future__ import annotations
 
-import re
-import unicodedata
 from dataclasses import dataclass, field
 
 from services.portable import ir
 from services.portable.losses import Loss, dedupe
 
+import copy
+
 from .chunker import plan_steps
 from .client import NotionClient
+from .adapter_emoji import looks_like_emoji
 from .errors import AmbiguousWrite, NotionError
+from .files import (DEFAULT_CAP, FileSource, FileTooLarge, FileUnavailable, HttpFileSource,
+                    upload_name)
 from .richtext import plain_rich, rich_text, split_units
+from .writers.rich import SB_FILE
 from .writers import write_block
 
 TITLE_PROP = "Name"
@@ -61,6 +65,9 @@ class Rendered:
     blocks: list[dict]
     block_src: list[str]               # IR src_id of each top-level block
     losses: list[Loss] = field(default_factory=list)
+    cover_url: str | None = None       # resolved into `cover` by materialize()
+    cover: dict | None = None
+    pending_files: int = 0
 
 
 def page_url(page_id: str) -> str:
@@ -71,23 +78,11 @@ def _plain(rt: list[dict]) -> str:
     return "".join(t.get("plain_text", "") for t in rt or [])
 
 
-_EMOJI_RE = re.compile(r"[\U0001F000-\U0001FAFF←-⯿☀-➿©®‼⁉"
-                       r"™ℹ〰〽㊗㊙\U0001F1E6-\U0001F1FF]")
-
-
-def looks_like_emoji(s: str) -> bool:
-    """Notion validates icons strictly (T9: "abc" -> 400). Accept only short
-    strings that are made of emoji, joiners and variation selectors."""
-    if not s or len(s) > 16:
-        return False
-    core = [c for c in s if c not in "‍️" and not unicodedata.category(c).startswith("Mn")
-            and not (0x1F3FB <= ord(c) <= 0x1F3FF)]
-    return bool(core) and all(_EMOJI_RE.match(c) for c in core)
-
-
 class NotionAdapter:
-    def __init__(self, client: NotionClient):
+    def __init__(self, client: NotionClient, files: FileSource | None = None):
         self.c = client
+        self.files = files or HttpFileSource()
+        self._cap: int | None = None
 
     # ---- connect ---------------------------------------------------------------
     def whoami(self) -> BotInfo:
@@ -157,12 +152,94 @@ class NotionAdapter:
             blocks += r.blocks
             src += [node.src_id] * len(r.blocks)
             losses += r.losses
-        return Rendered(title, icon, blocks, src, dedupe(losses))
+        pending = sum(1 for b in _walk(blocks) if SB_FILE in (b.get(b.get("type", ""), {}) or {}))
+        pending += 1 if obj.cover else 0
+        return Rendered(title, icon, blocks, src, dedupe(losses), cover_url=obj.cover, pending_files=pending)
 
     def estimate_requests(self, r: Rendered, *, create: bool, old_blocks: int = 0) -> int:
         n = len(plan_steps(r.blocks))
         n += sum(len(s.deferred) for s in plan_steps(r.blocks))
+        n += 2 * r.pending_files
         return n + (1 if create else 1 + old_blocks)
+
+    # ---- files (the only part of a send that reads other things) ------------------
+    def materialize(self, r: Rendered) -> Rendered:
+        """Resolve file placeholders: link public files, upload our own. Returns a
+        new Rendered (the pure one is untouched, so a retry starts clean)."""
+        if not r.pending_files:
+            return r
+        out = copy.copy(r)
+        out.blocks = copy.deepcopy(r.blocks)
+        out.losses = list(r.losses)
+        cache: dict[str, object] = {}
+        for b in _walk(out.blocks):
+            body = b.get(b.get("type", ""))
+            if isinstance(body, dict) and SB_FILE in body:
+                self._resolve_block(b, body, out.losses, cache)
+        if out.cover_url:
+            out.cover = self._resolve_cover(out.cover_url, out.losses, cache)
+        out.losses = dedupe(out.losses)
+        out.pending_files = 0
+        return out
+
+    def _cap_bytes(self) -> int:
+        if self._cap is None:
+            try:
+                self._cap = self.whoami().max_upload_bytes or DEFAULT_CAP
+            except NotionError:
+                self._cap = DEFAULT_CAP
+        return self._cap
+
+    def _file_ref(self, url: str, name: str, losses: list[Loss], cache: dict) -> dict | None:
+        """-> {"type": "external", ...} | {"type": "file_upload", ...} | None (a note is shown)."""
+        if self.files.is_public_link(url):
+            return {"type": "external", "external": {"url": url}}
+        cap = self._cap_bytes()
+        key = f"{url}"
+        try:
+            f = cache.get(key) or self.files.fetch(url, cap, name)
+            cache[key] = f
+        except FileTooLarge as e:
+            size = f" ({e.size / 1048576:.1f} MB)" if e.size else ""
+            losses.append(Loss("lossy", f"A file{size} larger than your Notion plan accepts ({cap // 1048576} MB).",
+                               "A note marks where it was.", "media_too_large"))
+            return None
+        except FileUnavailable:
+            losses.append(Loss("lossy", "A file that could not be fetched (its link may have expired).",
+                               "A note marks where it was.", "media_unavailable"))
+            return None
+        try:
+            up = self.c.post("/file_uploads", {"mode": "single_part", "filename": upload_name(f.name, f.mime),
+                                               "content_type": f.mime}, create=True)
+            self.c.request("POST", f"/file_uploads/{up['id']}/send",
+                           files={"file": (upload_name(f.name, f.mime), f.data, f.mime)}, create=True)
+        except NotionError as e:
+            if e.code == "validation_error":
+                losses.append(Loss("lossy", "A file type Notion does not accept for upload.",
+                                   "A note marks where it was.", "media_type_unsupported"))
+                return None
+            raise
+        return {"type": "file_upload", "file_upload": {"id": up["id"]}}
+
+    def _marker(self, text: str) -> dict:
+        return {"type": "callout", "callout": {"rich_text": plain_rich(text), "color": "gray_background",
+                                                "icon": {"type": "emoji", "emoji": "⚠️"}}}
+
+    def _resolve_block(self, block: dict, body: dict, losses: list[Loss], cache: dict) -> None:
+        ph = body.pop(SB_FILE)
+        ref = self._file_ref(ph["url"], ph.get("name", ""), losses, cache)
+        if ref is None:
+            label = ph.get("name") or ph["url"].rsplit("/", 1)[-1].split("?")[0] or ph["kind"]
+            block.clear()
+            block.update(self._marker(f"Not fully represented: the {ph['kind']} “{label}” could not be copied to Notion."))
+            return
+        body.update(ref)
+
+    def _resolve_cover(self, url: str, losses: list[Loss], cache: dict) -> dict | None:
+        ref = self._file_ref(url, "cover", losses, cache)
+        if ref is None:
+            losses.append(Loss("approximated", "The note's cover image.", "The page has no cover.", "cover_dropped"))
+        return ref
 
     # ---- the Notes database ------------------------------------------------------
     def create_notes_database(self, root_page_id: str) -> DbInfo:
@@ -194,6 +271,8 @@ class NotionAdapter:
                                      SB_ID_PROP: {"rich_text": plain_rich(sb_id)}}}
         if r.icon:
             body["icon"] = r.icon
+        if r.cover:
+            body["cover"] = r.cover
         return self.c.post("/pages", body, create=True)["id"]
 
     def find_rows(self, data_source_id: str, sb_id: str) -> list[tuple[str, str]]:
@@ -209,6 +288,8 @@ class NotionAdapter:
         body: dict = {"properties": {TITLE_PROP: {"title": r.title}}}
         if r.icon:
             body["icon"] = r.icon
+        if r.cover:
+            body["cover"] = r.cover
         self.c.patch(f"/pages/{page_id}", body)
 
     # ---- bodies --------------------------------------------------------------------
@@ -294,3 +375,12 @@ class NotionAdapter:
             if not res.get("has_more"):
                 return out
             cursor = res.get("next_cursor")
+
+
+def _walk(blocks):
+    for b in blocks:
+        yield b
+        body = b.get(b.get("type", ""))
+        kids = body.get("children") if isinstance(body, dict) else None
+        if kids:
+            yield from _walk(kids)

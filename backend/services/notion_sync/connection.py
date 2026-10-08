@@ -46,4 +46,9 @@ def adapter_for(conn: Connection, client: NotionClient | None = None) -> NotionA
         raise NotConnected("Syncing is paused.")
     if conn.status in ("revoked", "error"):
         raise NotConnected("Notion is disconnected. Reconnect to resume.")
-    return NotionAdapter(client or NotionClient(conn.token()))
+    from urllib.parse import urlparse
+
+    from core.config import settings
+    from services.notion_sync.notion.files import HttpFileSource
+    own = {urlparse(settings.supabase_url).hostname or ""}
+    return NotionAdapter(client or NotionClient(conn.token()), files=HttpFileSource(own))

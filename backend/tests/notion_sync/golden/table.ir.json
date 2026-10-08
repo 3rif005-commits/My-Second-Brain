@@ -1,0 +1,78 @@
+[
+ {
+  "type": "table",
+  "attrs": {
+   "header_rows": 1
+  },
+  "children": [
+   {
+    "type": "table_row",
+    "children": [
+     {
+      "type": "table_cell",
+      "inline": [
+       {
+        "type": "text",
+        "text": "H1",
+        "marks": {
+         "bold": true
+        }
+       }
+      ]
+     },
+     {
+      "type": "table_cell",
+      "inline": [
+       {
+        "type": "text",
+        "text": "H2"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "type": "table_row",
+    "children": [
+     {
+      "type": "table_cell",
+      "inline": [
+       {
+        "type": "text",
+        "text": "a"
+       }
+      ]
+     },
+     {
+      "type": "table_cell",
+      "attrs": {
+       "colspan": 2,
+       "bg": "red"
+      },
+      "inline": [
+       {
+        "type": "text",
+        "text": "merged"
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "type": "table_row",
+    "children": [
+     {
+      "type": "table_cell",
+      "inline": [
+       {
+        "type": "text",
+        "text": "only one"
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "src_id": "b1"
+ }
+]

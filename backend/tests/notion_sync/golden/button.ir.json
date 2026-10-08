@@ -1,0 +1,16 @@
+[
+ {
+  "type": "action",
+  "attrs": {
+   "label": "Make flashcards",
+   "icon": "⚡",
+   "actions": [
+    {
+     "type": "run_skill",
+     "skill": "flashcards"
+    }
+   ]
+  },
+  "src_id": "b1"
+ }
+]

@@ -5,8 +5,9 @@ Every number is used in exactly one place so a drift is a one-line fix."""
 MAX_TEXT_UNITS = 2000
 MAX_RICH_TEXT_OBJECTS = 100
 MAX_CHILDREN = 100
-#: the API accepts two levels of nesting per request
-MAX_DEPTH = 2
+#: top-level block + 2 nested levels per request (VERIFIED live: a 4th level is
+#: rejected, column_list > column > block is accepted). Counted including the top block.
+MAX_DEPTH = 3
 #: documented 1,000 block elements and 500 KB per request; keep a margin
 MAX_ELEMENTS = 1000
 MAX_PAYLOAD_BYTES = 450_000

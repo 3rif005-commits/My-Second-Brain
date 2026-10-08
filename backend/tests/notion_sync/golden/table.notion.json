@@ -1,0 +1,77 @@
+[
+ {
+  "type": "table",
+  "table": {
+   "table_width": 2,
+   "has_column_header": true,
+   "has_row_header": false,
+   "children": [
+    {
+     "type": "table_row",
+     "table_row": {
+      "cells": [
+       [
+        {
+         "type": "text",
+         "text": {
+          "content": "H1"
+         },
+         "annotations": {
+          "bold": true
+         }
+        }
+       ],
+       [
+        {
+         "type": "text",
+         "text": {
+          "content": "H2"
+         }
+        }
+       ]
+      ]
+     }
+    },
+    {
+     "type": "table_row",
+     "table_row": {
+      "cells": [
+       [
+        {
+         "type": "text",
+         "text": {
+          "content": "a"
+         }
+        }
+       ],
+       [
+        {
+         "type": "text",
+         "text": {
+          "content": "merged"
+         }
+        }
+       ]
+      ]
+     }
+    },
+    {
+     "type": "table_row",
+     "table_row": {
+      "cells": [
+       [
+        {
+         "type": "text",
+         "text": {
+          "content": "only one"
+         }
+        }
+       ],
+       []
+      ]
+     }
+    }
+   ]
+  }
+ }
+]

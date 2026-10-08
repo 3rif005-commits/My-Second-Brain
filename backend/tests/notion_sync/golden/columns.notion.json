@@ -1,0 +1,64 @@
+[
+ {
+  "type": "column_list",
+  "column_list": {
+   "children": [
+    {
+     "type": "column",
+     "column": {
+      "width_ratio": 0.25,
+      "children": [
+       {
+        "type": "paragraph",
+        "paragraph": {
+         "rich_text": [
+          {
+           "type": "text",
+           "text": {
+            "content": "left"
+           }
+          }
+         ]
+        }
+       }
+      ]
+     }
+    },
+    {
+     "type": "column",
+     "column": {
+      "width_ratio": 0.75,
+      "children": [
+       {
+        "type": "paragraph",
+        "paragraph": {
+         "rich_text": [
+          {
+           "type": "text",
+           "text": {
+            "content": "right"
+           }
+          }
+         ]
+        }
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "type": "paragraph",
+  "paragraph": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "alone"
+     }
+    }
+   ]
+  }
+ }
+]

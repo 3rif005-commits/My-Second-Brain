@@ -67,8 +67,50 @@ def fixture_content():
     ]
 
 
+# 1x1 transparent PNG
+PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000001e221bc330000000049454e44ae426082")
+
+
+class StaticFiles:
+    """Pretends "our storage": every files.sb.test URL is a tiny PNG, so the real
+    File Upload API is exercised without touching anything of yours."""
+    def is_public_link(self, url):
+        return "files.sb.test" not in url and url.startswith("https://") and "token=" not in url
+
+    def fetch(self, url, max_bytes, name_hint=""):
+        from services.notion_sync.notion.files import Fetched
+        return Fetched(PNG, "image/png", name_hint or "pic.png")
+
+
+def m2_content():
+    own = "https://files.sb.test/p/pic.png?token=1"
+    para = lambda t: B("paragraph", [T(t)])
+    return [
+        B("heading", [T("M2 fixture: every other block type")], {"level": 1}),
+        B("table", {"type": "tableContent", "headerRows": 1, "rows": [
+            {"cells": [[T("Name", bold=True)], [T("Value")]]},
+            {"cells": [[T("alpha")], {"type": "tableCell", "props": {"colspan": 2, "backgroundColor": "red"}, "content": [T("merged cell")]}]},
+            {"cells": [[T("beta")], [T("2")]]}]}),
+        B("callout", None, {"calloutType": "WARNING"}, [para("a warning, with a child")]),
+        B("callout", None, {"calloutType": "TIP", "calloutIcon": "🚀"}, [para("a tip with its own icon")]),
+        B("columnList", None, None, [B("column", None, {"width": 1}, [para("left column")]),
+                                      B("column", None, {"width": 2}, [para("right column, twice as wide")])]),
+        B("math", None, {"latex": "\\int_0^1 x^2\\,dx = \\tfrac13"}),
+        B("checkpoint", None, {"anchorType": "time", "value": "754", "label": "Key idea"}),
+        B("button", None, {"label": "Make flashcards", "actionsJson": "[{\"skill\": \"flashcards\"}]"}),
+        B("pageBreak"),
+        B("image", None, {"url": "https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png",
+                          "caption": "a public image (linked)"}),
+        B("image", None, {"url": own, "name": "pic.png", "caption": "our own file (uploaded)"}),
+        B("video", None, {"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}),
+        B("file", None, {"url": "https://files.sb.test/p/notes.zip?token=1", "name": "notes.zip"}),
+        para("last line"),
+    ]
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--m2", action="store_true", help="send the M2 fixture (tables, callouts, columns, files, cover)")
     ap.add_argument("--keep", action="store_true", help="do not trash the test pages afterwards")
     args = ap.parse_args()
     token = settings.notion_test_token
@@ -84,6 +126,10 @@ def main():
     user = "live-user"
     note = {"id": "00000000-0000-4000-8000-00000000m1ff", "user_id": user, "title": "SB-TEST M1 note",
             "icon": "🧪", "content": fixture_content(), "sensitivity": "personal", "deleted_at": None}
+    if args.m2:
+        note.update(title="SB-TEST M2 note", content=m2_content(),
+                    cover_image_url="https://files.sb.test/p/cover.png?token=1")
+        adapter.files = StaticFiles()
     db = FakeDB(notes=[note], notion_mappings=[], notion_runs=[], notion_run_items=[],
                 notion_connections=[{"id": "live-c", "user_id": user, "status": "active", "bot_user_id": bot.bot_id,
                                      "root_page_id": root.id, "privacy_ceiling": "personal",

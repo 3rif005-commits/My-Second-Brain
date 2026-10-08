@@ -1,0 +1,49 @@
+[
+ {
+  "id": "b1",
+  "type": "callout",
+  "props": {
+   "calloutType": "WARNING"
+  },
+  "content": [],
+  "children": [
+   {
+    "id": "p",
+    "type": "paragraph",
+    "props": {},
+    "content": [
+     {
+      "type": "text",
+      "text": "careful",
+      "styles": {}
+     }
+    ],
+    "children": []
+   }
+  ]
+ },
+ {
+  "id": "c2",
+  "type": "callout",
+  "props": {
+   "calloutType": "TIP",
+   "calloutIcon": "🚀"
+  },
+  "content": [],
+  "children": [
+   {
+    "id": "q",
+    "type": "paragraph",
+    "props": {},
+    "content": [
+     {
+      "type": "text",
+      "text": "rocket tip",
+      "styles": {}
+     }
+    ],
+    "children": []
+   }
+  ]
+ }
+]

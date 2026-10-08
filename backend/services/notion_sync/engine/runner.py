@@ -123,9 +123,10 @@ class Engine:
         obj: ir.Obj = note_to_ir(row)
         r = self.adapter.render(obj)
         h = note_hash(obj, self.conn)
-        losses = [loss.to_dict() for loss in r.losses]
         action = "create"
         try:
+            r = self.adapter.materialize(r)            # uploads our own files, links public ones
+            losses = [loss.to_dict() for loss in r.losses]
             m = self.store.mapping("note", item.note_id)
             if m is None or not m.get("notion_id"):
                 ds = self.ensure_container()

@@ -12,4 +12,5 @@ def note_to_ir(row: dict) -> ir.Obj:
     return ir.Obj(
         kind="page", ref=ir.Ref("note", str(row["id"])),
         title=[ir.Text(title)], icon=row.get("icon") or None,
+        cover=row.get("cover_image_url") or None,
         body=read_blocks(row.get("content") or []))

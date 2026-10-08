@@ -41,7 +41,7 @@ def test_every_step_respects_limits_and_nothing_is_lost(seed):
     steps = plan_steps(blocks)
     for s in steps:
         assert 1 <= len(s.blocks) <= MAX_CHILDREN
-        assert all(depth_of(b) <= 2 for b in s.blocks)
+        assert all(depth_of(b) <= 3 for b in s.blocks)
         assert all(count_children_max(b) <= MAX_CHILDREN for b in s.blocks)
         assert len(json.dumps(s.blocks).encode()) <= MAX_PAYLOAD_BYTES
     assert flatten(steps) == blocks

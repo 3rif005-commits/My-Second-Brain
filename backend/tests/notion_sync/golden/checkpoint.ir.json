@@ -1,0 +1,20 @@
+[
+ {
+  "type": "anchor",
+  "attrs": {
+   "anchor_type": "time",
+   "value": "754",
+   "label": "Key idea"
+  },
+  "src_id": "k1"
+ },
+ {
+  "type": "anchor",
+  "attrs": {
+   "anchor_type": "page",
+   "value": "14",
+   "label": "Figure"
+  },
+  "src_id": "k2"
+ }
+]

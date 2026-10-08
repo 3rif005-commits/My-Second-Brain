@@ -298,7 +298,7 @@ def test_paused_connection_sends_nothing(world):
 def test_losses_are_in_the_plan(world):
     n = world.add_note(content=[
         {"id": "h", "type": "heading", "props": {"level": 5}, "content": [T("small")], "children": []},
-        {"id": "t", "type": "table", "props": {}, "content": {"rows": []}, "children": []}])
+        {"id": "t", "type": "flashcard", "props": {}, "content": [], "children": []}])
     plan = world.plan(n)
     codes = {loss["code"] for loss in plan.items[0].losses}
     assert {"heading_level", "unsupported_block"} <= codes
