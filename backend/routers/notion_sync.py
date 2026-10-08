@@ -392,6 +392,18 @@ def _set_status(user_id: str, status: str) -> dict:
     return _public(conn_mod.load(get_supabase(), user_id))
 
 
+def _canary() -> dict | None:
+    """The last daily-canary result (written by `python -m evals.notion_canary`), if there is one."""
+    import json
+    from pathlib import Path
+    try:
+        d = json.loads((Path.home() / ".secondbrain" / "notion_canary.json").read_text())
+        return {"ok": d.get("ok"), "when": d.get("when"), "api_version": d.get("api_version"),
+                "failed": [c["name"] for c in d.get("checks", []) if not c.get("ok")]}
+    except Exception:
+        return None
+
+
 @router.get("/health")
 def health(authorization: str = Header(...)):
     user_id = get_user_id(authorization)
@@ -405,7 +417,7 @@ def health(authorization: str = Header(...)):
     return {"status": conn.status, "last_ok_at": conn.row.get("last_ok_at"), "api_version": NOTION_VERSION,
             "mappings": states, "failing": states.get("failed", 0),
             "rate_limit_waits_recent": sum((r.get("counts") or {}).get("rate_limit_waits", 0) for r in recent),
-            "token_problem": conn.status == "error"}
+            "token_problem": conn.status == "error", "canary": _canary()}
 
 
 class PauseBody(BaseModel):
