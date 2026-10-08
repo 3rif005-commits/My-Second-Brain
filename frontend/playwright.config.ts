@@ -44,6 +44,17 @@ export default defineConfig({
       retries: 0,
     },
 
+    // Send to Notion M1: connects to the TEST workspace (token from backend/.env),
+    // sends a fixture note, re-sends, then deletes the note, disconnects and trashes
+    // the Notes database it created. Refuses to run if Notion is already connected.
+    {
+      name: "notion-sync-live",
+      testMatch: "**/notion-sync-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      retries: 0,
+    },
+
     {
       name: "routing-live",
       testMatch: "**/routing-live.spec.ts",
