@@ -173,21 +173,37 @@ CREATE INDEX IF NOT EXISTS notion_rules_conn_idx ON notion_rules(connection_id);
 CREATE INDEX IF NOT EXISTS notion_rules_user_idx ON notion_rules(user_id);
 
 -- ---- owner-only RLS on everything except notion_connections ------------------
-DO $$
-DECLARE t text;
-BEGIN
-  FOREACH t IN ARRAY ARRAY['notion_mappings','notion_runs','notion_run_items','notion_file_uploads','notion_rules']
-  LOOP
-    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
-    BEGIN
-      EXECUTE format(
-        'CREATE POLICY %I ON %I FOR ALL TO authenticated '
-        'USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()))',
-        t || '_owner_all', t);
-    EXCEPTION WHEN duplicate_object THEN NULL;
-    END;
-  END LOOP;
-END $$;
+-- Written out per table (not in a loop) so the SQL editor's RLS check can see it.
+ALTER TABLE notion_mappings ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY notion_mappings_owner_all ON notion_mappings FOR ALL TO authenticated
+    USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE notion_runs ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY notion_runs_owner_all ON notion_runs FOR ALL TO authenticated
+    USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE notion_run_items ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY notion_run_items_owner_all ON notion_run_items FOR ALL TO authenticated
+    USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE notion_file_uploads ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY notion_file_uploads_owner_all ON notion_file_uploads FOR ALL TO authenticated
+    USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE notion_rules ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  CREATE POLICY notion_rules_owner_all ON notion_rules FOR ALL TO authenticated
+    USING (user_id = (SELECT auth.uid())) WITH CHECK (user_id = (SELECT auth.uid()));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 
 COMMIT;
 
