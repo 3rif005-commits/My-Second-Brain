@@ -77,12 +77,12 @@ def read_inline(content, losses: list[Loss]) -> list[ir.Inline]:
             if latex:
                 out.append(ir.Equation(latex))
         elif t == "mention":
-            name = str((item.get("props") or {}).get("noteName", "")) or "note"
-            out.append(ir.Text("@" + name))
-            losses.append(Loss("approximated",
-                               f"A link to the note “{name}”.",
-                               "It appears as plain text “@" + name + "”.",
-                               "mention_as_text"))
+            props = item.get("props") or {}
+            nid, name = str(props.get("noteId") or ""), str(props.get("noteName") or "") or "note"
+            if nid:
+                out.append(ir.Mention(ir.Ref("note", nid), name))
+            else:
+                out.append(ir.Text("@" + name))
         else:
             text = plain_of([item])
             if text:

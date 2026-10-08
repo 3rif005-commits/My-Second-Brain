@@ -22,9 +22,12 @@ from .richtext import plain_rich, rich_text, split_units
 from .writers.rich import SB_FILE
 from .writers import write_block
 
-TITLE_PROP = "Name"
-SB_ID_PROP = "SB ID"
+from .properties import (SB_ID_PROP, SCHEMA, TITLE_PROP, row_properties, sb_id_value,
+                         title_value)
+from .richtext import RESOLVER
+
 NOTES_DB_TITLE = "Notes"
+ARCHIVE_TITLE = "🗄 Deleted in Second Brain"
 
 
 # ---- results the engine sees ------------------------------------------------
@@ -68,6 +71,7 @@ class Rendered:
     cover_url: str | None = None       # resolved into `cover` by materialize()
     cover: dict | None = None
     pending_files: int = 0
+    props: dict = field(default_factory=dict)      # a note's database properties
 
 
 def page_url(page_id: str) -> str:
@@ -135,7 +139,15 @@ class NotionAdapter:
             raise
 
     # ---- render (pure) -----------------------------------------------------------
-    def render(self, obj: ir.Obj) -> Rendered:
+    def render(self, obj: ir.Obj, resolver=None) -> Rendered:
+        """Pure. `resolver(note_id)` says how a link to another note is written."""
+        token = RESOLVER.set(resolver)
+        try:
+            return self._render(obj)
+        finally:
+            RESOLVER.reset(token)
+
+    def _render(self, obj: ir.Obj) -> Rendered:
         losses: list[Loss] = list(obj.losses)
         title = rich_text(obj.title, losses) or plain_rich("Untitled")
         icon = None
@@ -154,7 +166,9 @@ class NotionAdapter:
             losses += r.losses
         pending = sum(1 for b in _walk(blocks) if SB_FILE in (b.get(b.get("type", ""), {}) or {}))
         pending += 1 if obj.cover else 0
-        return Rendered(title, icon, blocks, src, dedupe(losses), cover_url=obj.cover, pending_files=pending)
+        props = row_properties(obj, losses) if obj.kind == "page" else {}
+        return Rendered(title, icon, blocks, src, dedupe(losses), cover_url=obj.cover, pending_files=pending,
+                        props=props)
 
     def estimate_requests(self, r: Rendered, *, create: bool, old_blocks: int = 0) -> int:
         n = len(plan_steps(r.blocks))
@@ -242,17 +256,26 @@ class NotionAdapter:
         return ref
 
     # ---- the Notes database ------------------------------------------------------
-    def create_notes_database(self, root_page_id: str) -> DbInfo:
+    def create_notes_database(self, parent_page_id: str) -> DbInfo:
         db = self.c.post("/databases", {
-            "parent": {"type": "page_id", "page_id": root_page_id},
+            "parent": {"type": "page_id", "page_id": parent_page_id},
             "title": plain_rich(NOTES_DB_TITLE), "is_inline": True,
-            "initial_data_source": {"properties": {
-                TITLE_PROP: {"title": {}}, SB_ID_PROP: {"rich_text": {}}}}}, create=True)
+            "initial_data_source": {"properties": SCHEMA}}, create=True)
         return DbInfo(db["id"], (db.get("data_sources") or [{}])[0].get("id", ""),
                       db.get("created_time"))
 
+    def ensure_schema(self, data_source_id: str) -> int:
+        """Keep the Notes schema in step: add any property it lacks (an older
+        database made before a property existed). One read; a write only when
+        something is missing. -> number of properties added."""
+        have = self.c.get(f"/data_sources/{data_source_id}").get("properties") or {}
+        missing = {k: v for k, v in SCHEMA.items() if k not in have}
+        if missing:
+            self.c.patch(f"/data_sources/{data_source_id}", {"properties": missing})
+        return len(missing)
+
     def find_notes_databases(self, root_page_id: str) -> list[DbInfo]:
-        """Reconcile: databases titled "Notes" directly under the root, oldest first."""
+        """Reconcile: databases titled "Notes" directly under a page, oldest first."""
         found: list[DbInfo] = []
         for b in self._children(root_page_id):
             if b.get("type") == "child_database" and \
@@ -267,8 +290,7 @@ class NotionAdapter:
         """Create the (empty) row. Returns the page id. Never retried blindly:
         an unknown outcome raises AmbiguousWrite and the engine reconciles."""
         body: dict = {"parent": {"type": "data_source_id", "data_source_id": data_source_id},
-                      "properties": {TITLE_PROP: {"title": r.title},
-                                     SB_ID_PROP: {"rich_text": plain_rich(sb_id)}}}
+                      "properties": {TITLE_PROP: {"title": r.title}, SB_ID_PROP: sb_id_value(sb_id), **r.props}}
         if r.icon:
             body["icon"] = r.icon
         if r.cover:
@@ -284,13 +306,35 @@ class NotionAdapter:
                 if not (p.get("in_trash") or p.get("archived"))]
         return sorted(rows, key=lambda x: x[1])
 
-    def update_properties(self, page_id: str, r: Rendered) -> None:
-        body: dict = {"properties": {TITLE_PROP: {"title": r.title}}}
+    def update_properties(self, page_id: str, r: Rendered, *, row: bool = True) -> None:
+        body: dict = {"properties": {(TITLE_PROP if row else "title"): {"title": r.title}, **r.props}}
         if r.icon:
             body["icon"] = r.icon
         if r.cover:
             body["cover"] = r.cover
         self.c.patch(f"/pages/{page_id}", body)
+
+    # ---- plain pages: collections and the archive -------------------------------------
+    def create_page(self, parent_page_id: str, r: Rendered) -> str:
+        body: dict = {"parent": {"type": "page_id", "page_id": parent_page_id},
+                      "properties": {"title": {"title": r.title}}}
+        if r.icon:
+            body["icon"] = r.icon
+        if r.cover:
+            body["cover"] = r.cover
+        return self.c.post("/pages", body, create=True)["id"]
+
+    def find_child_pages(self, parent_page_id: str, title: str) -> list[tuple[str, str]]:
+        """Reconcile: child pages of `parent` with this title, oldest first."""
+        out = [(b["id"], b.get("created_time", "")) for b in self._children(parent_page_id)
+               if b.get("type") == "child_page" and (b.get("child_page") or {}).get("title") == title]
+        return sorted(out, key=lambda x: x[1])
+
+    def move_page(self, page_id: str, *, under_page: str | None = None, under_source: str | None = None) -> None:
+        """Move a page (a row, a collection page) to a new parent. Repeating it is harmless."""
+        parent = ({"type": "page_id", "page_id": under_page} if under_page
+                  else {"type": "data_source_id", "data_source_id": under_source})
+        self.c.post(f"/pages/{page_id}/move", {"parent": parent}, idempotent=True)
 
     # ---- bodies --------------------------------------------------------------------
     def append_body(self, page_id: str, r: Rendered, on_blocks=None) -> list[dict]:

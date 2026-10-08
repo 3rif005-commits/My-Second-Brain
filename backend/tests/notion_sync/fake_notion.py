@@ -44,8 +44,10 @@ class FakeNotion:
 
     # ---- helpers ------------------------------------------------------------------
     def ts(self) -> str:
+        """Real time (so reconcile windows behave), strictly increasing."""
+        from datetime import datetime, timedelta, timezone
         self._n = getattr(self, "_n", 0) + 1
-        return f"2026-10-08T10:{self._n // 60:02d}:{self._n % 60:02d}.000Z"
+        return (datetime.now(timezone.utc) + timedelta(microseconds=self._n)).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
     def _id(self) -> str:
         return str(uuid.uuid4())
@@ -168,6 +170,18 @@ class FakeNotion:
             ids.append(bid)
         return ids
 
+    def _title_of(self, pid: str) -> str:
+        p = self.pages[pid]["properties"]
+        t = p.get("title") or next((v for v in p.values() if v.get("type") == "title"), {})
+        return "".join(x["text"]["content"] for x in t.get("title", []))
+
+    def _register_child_page(self, pid: str, parent_id: str):
+        self.blocks[pid] = {"object": "block", "id": pid, "type": "child_page", "in_trash": False,
+                            "created_time": self.pages[pid]["created_time"], "has_children": False,
+                            "child_page": {"title": self._title_of(pid)}, "children_ids": [],
+                            "parent": {"type": "page_id", "id": parent_id}}
+        self.pages[parent_id]["children"].append(pid)
+
     def _public(self, bid: str) -> dict:
         b = dict(self.blocks[bid])
         b.pop("children_ids", None)
@@ -253,6 +267,8 @@ class FakeNotion:
                     p["cover"] = body["cover"]
                 p["last_edited_time"] = self.ts()
                 p["last_edited_by"] = {"object": "user", "id": BOT}
+                if m[1] in self.blocks and self.blocks[m[1]]["type"] == "child_page":
+                    self.blocks[m[1]]["child_page"]["title"] = self._title_of(m[1])
                 return ok(self._public_page(p))
         if method == "POST" and path == "/pages":
             parent = body["parent"]
@@ -277,6 +293,8 @@ class FakeNotion:
                 props = {"title": {"id": "title", "type": "title", **next(iter(props.values()))}} if props else props
             pid = self._new_page(parent, "", props, icon)
             self.pages[pid]["cover"] = body.get("cover")
+            if parent["type"] == "page_id":
+                self._register_child_page(pid, parent["page_id"])
             if body.get("children"):
                 self.pages[pid]["children"] = self._store_blocks(body["children"], pid, "page_id")
             return ok(self._public_page(self.pages[pid]))
@@ -332,6 +350,33 @@ class FakeNotion:
             up["status"] = "uploaded"
             up["size"] = size
             return ok({"object": "file_upload", **up})
+        m = re.fullmatch(r"/pages/([^/]+)/move", path)
+        if m and method == "POST":
+            p = self.pages.get(m[1])
+            if p is None or p["in_trash"]:
+                raise _Missing
+            new = body["parent"]
+            if new["type"] == "data_source_id" and new["data_source_id"] not in self.sources:
+                raise _Missing
+            if new["type"] == "page_id" and new["page_id"] not in self.pages:
+                raise _Missing
+            old = p["parent"]
+            if old.get("type") == "page_id" and m[1] in self.pages[old["page_id"]]["children"]:
+                self.pages[old["page_id"]]["children"].remove(m[1])
+                self.blocks.pop(m[1], None)
+            p["parent"] = new if new["type"] == "page_id" else {**new, "database_id": self.sources[new["data_source_id"]]["db"]}
+            if new["type"] == "page_id":
+                self._register_child_page(m[1], new["page_id"])
+            p["last_edited_time"] = self.ts()
+            return ok(self._public_page(p))
+        m = re.fullmatch(r"/data_sources/([^/]+)", path)
+        if m and method in ("GET", "PATCH"):
+            src = self.sources.get(m[1])
+            if src is None:
+                raise _Missing
+            if method == "PATCH":
+                src["properties"].update(body.get("properties", {}))
+            return ok({"object": "data_source", "id": m[1], "properties": {k: {"name": k, **v} for k, v in src["properties"].items()}})
         if method == "POST" and path == "/databases":
             did, sid = self._id(), self._id()
             parent = body["parent"]
@@ -340,7 +385,7 @@ class FakeNotion:
             t = self.ts()
             self.dbs[did] = {"object": "database", "id": did, "created_time": t, "is_inline": body.get("is_inline"),
                              "title": body["title"], "parent": parent, "data_sources": [{"id": sid, "name": "Notes"}], "in_trash": False}
-            self.sources[sid] = {"id": sid, "db": did, "properties": body["initial_data_source"]["properties"]}
+            self.sources[sid] = {"id": sid, "db": did, "properties": dict(body["initial_data_source"]["properties"])}
             bid = did
             self.blocks[bid] = {"object": "block", "id": bid, "type": "child_database", "created_time": t,
                                 "child_database": {"title": "".join(x["text"]["content"] for x in body["title"])},

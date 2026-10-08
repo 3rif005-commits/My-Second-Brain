@@ -17,7 +17,7 @@ from services.notion_sync.engine.store import Store, now
 from services.notion_sync.notion.adapter import NotionAdapter, page_url
 from services.notion_sync.notion.client import NotionClient
 from services.notion_sync.notion.errors import NotConnected, NotionError, plain_message
-from services.notion_sync.planner import plan_notes
+from services.notion_sync.planner import plan_scope
 
 router = APIRouter(prefix="/notion", tags=["notion"])
 
@@ -31,8 +31,10 @@ class RootBody(BaseModel):
 
 
 class SendBody(BaseModel):
-    note_ids: list[str] = Field(min_length=1, max_length=200)
-    released: list[str] = []
+    note_ids: list[str] = Field(default=[], max_length=500)
+    collection_ids: list[str] = Field(default=[], max_length=50)        # "with everything inside"
+    released: list[str] = []                                           # private notes let through, this send only
+    archive_ids: list[str] = []                                        # deleted notes to move to the archive page
 
 
 def _client(token: str) -> NotionClient:      # patched in tests
@@ -66,6 +68,11 @@ def _public(conn, root_title: str | None = None) -> dict:
             "token_hint": conn.token_hint, "privacy_ceiling": conn.privacy_ceiling,
             "root": ({"id": conn.root_page_id, "title": root_title, "url": page_url(conn.root_page_id)}
                      if conn.root_page_id else None)}
+
+
+def _need_scope(body: SendBody) -> None:
+    if not body.note_ids and not body.collection_ids:
+        raise HTTPException(422, {"error": "Choose a note or a collection to send.", "error_code": "EMPTY_SCOPE"})
 
 
 @router.get("/status")
@@ -169,8 +176,10 @@ def plan(body: SendBody, authorization: str = Header(...)):
     conn = _need_conn(user_id)
     if not conn.root_page_id:
         raise HTTPException(409, {"error": "Pick the Notion page to send to first.", "error_code": "NO_ROOT"})
+    _need_scope(body)
     adapter = _adapter(conn)
-    p = plan_notes(get_supabase(), conn, adapter, body.note_ids, frozenset(body.released))
+    p = plan_scope(get_supabase(), conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
+                   released=frozenset(body.released), archive_ids=frozenset(body.archive_ids))
     return p.to_dict()
 
 
@@ -187,7 +196,9 @@ def send(body: SendBody, authorization: str = Header(...)):
         adapter = _adapter(conn)
         released = frozenset(body.released)
         # Re-plan on the server: never trust a plan the browser sends back.
-        p = plan_notes(get_supabase(), conn, adapter, body.note_ids, released)
+        _need_scope(body)
+        p = plan_scope(get_supabase(), conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
+                       released=released, archive_ids=frozenset(body.archive_ids))
         if not p.sendable:
             return {"status": "nothing_to_send", "items": [], "requests": 0, "plan": p.to_dict()}
         res = Engine(get_supabase(), conn, adapter).run(p.items, released)

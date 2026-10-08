@@ -108,9 +108,59 @@ def m2_content():
     ]
 
 
+def run_m3(client, adapter, root, bot) -> dict:
+    """Tree of databases, properties, mentions, move, rename, delete -> archive."""
+    from services.notion_sync.planner import plan_scope
+    user = "live-user"
+    mk = lambda i: f"00000000-0000-4000-8000-0000000000{i:02d}"
+    colls = [{"id": mk(1), "user_id": user, "name": "SB-TEST Physics", "icon": "⚛️", "color": "#6366f1", "description": "All about forces", "parent_id": None, "position": 0},
+             {"id": mk(2), "user_id": user, "name": "SB-TEST Optics", "icon": "🔭", "color": "#ff0000", "description": None, "parent_id": mk(1), "position": 0},
+             {"id": mk(3), "user_id": user, "name": "SB-TEST Chemistry", "icon": "🧪", "color": "#6366f1", "description": None, "parent_id": None, "position": 1}]
+    men = lambda nid, name: {"type": "mention", "props": {"noteId": nid, "noteName": name}}
+    notes = [
+        {"id": mk(11), "user_id": user, "title": "SB-TEST Lenses", "icon": "🔍", "collection_id": mk(2), "topics": ["optics", "a,b"], "mastery_status": "learning",
+         "is_favorited": True, "sensitivity": "personal", "deleted_at": None, "created_at": "2026-10-01T10:00:00+00:00", "updated_at": "2026-10-02T10:00:00+00:00",
+         "content": [B("paragraph", [T("see "), men(mk(12), "Mirrors"), T(" and the "), {"type": "link", "href": f"/brain/{mk(12)}", "content": [T("link form")]}])]},
+        {"id": mk(12), "user_id": user, "title": "SB-TEST Mirrors", "icon": "🪞", "collection_id": mk(1), "sensitivity": "open", "deleted_at": None,
+         "content": [B("paragraph", [T("back to "), men(mk(11), "Lenses"), T("; secret: "), men(mk(13), "Secret")])]},
+        {"id": mk(13), "user_id": user, "title": "SB-TEST Secret", "collection_id": None, "sensitivity": "private", "deleted_at": None, "content": [B("paragraph", [T("hidden")])]},
+        {"id": mk(14), "user_id": user, "title": "SB-TEST To be deleted", "collection_id": None, "sensitivity": "personal", "deleted_at": None, "content": [B("paragraph", [T("bye")])]},
+    ]
+    db = FakeDB(collections=colls, notes=notes, notion_mappings=[], notion_runs=[], notion_run_items=[],
+                notion_connections=[{"id": "live-c", "user_id": user, "status": "active", "bot_user_id": bot.bot_id,
+                                     "root_page_id": root.id, "privacy_ceiling": "personal", "token_ciphertext": "x", "token_hint": "…live"}])
+    colls, notes = db.tables["collections"], db.tables["notes"]      # FakeDB copies what it is given
+    conn = conn_mod.load(db, user)
+    rep: dict = {}
+    t = lambda tag, res: rep.__setitem__(tag, {"status": res.status, "requests": res.requests,
+                                               "items": [(i.kind, i.title, i.status, i.action) for i in res.items]})
+    def go(tag, **scope):
+        p = plan_scope(db, conn, adapter, **scope)
+        eng = Engine(db, conn, adapter)
+        res = eng.run(p.items, frozenset(scope.get("released", ())))
+        t(tag, res)
+        return p
+    p1 = go("1_send_tree", collection_ids=[mk(1)], note_ids=[mk(11), mk(12), mk(13), mk(14)])
+    rep["1_plan_states"] = [(i.title, i.state) for i in p1.items]
+    before = client.write_requests
+    p2 = plan_scope(db, conn, adapter, collection_ids=[mk(1)], note_ids=[mk(11), mk(12)])
+    rep["2_resend"] = {"nothing_to_send": p2.to_dict()["nothing_to_send"], "writes": client.write_requests - before}
+    colls[0]["name"] = "SB-TEST Physics (renamed)"
+    notes[0]["collection_id"] = mk(3)                                  # Lenses moves to Chemistry
+    go("3_rename_and_move", collection_ids=[mk(1)], note_ids=[mk(11), mk(12)])
+    notes[3]["deleted_at"] = "2026-10-08T12:00:00+00:00"
+    go("4_send_deleted_unticked", note_ids=[mk(14)])
+    go("4b_send_deleted_ticked", note_ids=[mk(14)], archive_ids=frozenset({mk(14)}))
+    page = lambda n: next(x["notion_id"] for x in db.tables["notion_mappings"] if x["local_id"] == n and x["local_kind"] == "note")
+    rep["mention_in_Mirrors"] = [t_["type"] for b in adapter._children(page(mk(12))) if b["type"] == "paragraph" for t_ in b["paragraph"]["rich_text"]]
+    rep["props_of_Lenses"] = sorted(client.get(f"/pages/{page(mk(11))}")["properties"])
+    return rep, db
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--m2", action="store_true", help="send the M2 fixture (tables, callouts, columns, files, cover)")
+    ap.add_argument("--m3", action="store_true", help="the hierarchy/mentions/move/archive scenario")
     ap.add_argument("--keep", action="store_true", help="do not trash the test pages afterwards")
     args = ap.parse_args()
     token = settings.notion_test_token
@@ -124,6 +174,23 @@ def main():
     root = pages[0]
     bot = adapter.whoami()
     user = "live-user"
+    if args.m3:
+        report = {"root": root.title}
+        try:
+            r, db3 = run_m3(client, adapter, root, bot)
+            report.update(r)
+        finally:
+            if not args.keep:
+                trashed = []
+                for b in adapter._children(root.id):
+                    title = (b.get("child_page") or b.get("child_database") or {}).get("title", "")
+                    if b["type"] == "child_database" or title.startswith(("SB-TEST", "🗄")):
+                        client.delete(f"/blocks/{b['id']}")
+                        trashed.append(title)
+                report["cleanup_trashed"] = trashed
+            report["total_requests"] = client.requests
+        print(json.dumps(report, indent=1, ensure_ascii=False))
+        return
     note = {"id": "00000000-0000-4000-8000-00000000m1ff", "user_id": user, "title": "SB-TEST M1 note",
             "icon": "🧪", "content": fixture_content(), "sensitivity": "personal", "deleted_at": None}
     if args.m2:

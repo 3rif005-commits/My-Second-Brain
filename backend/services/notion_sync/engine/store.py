@@ -79,10 +79,10 @@ class Store:
             "status": status, "counts": counts, "requests_used": requests,
             "finished_at": now()}).eq("id", run_id).execute())
 
-    def new_item(self, run_id: str, note_id: str, action: str, mapping_id: str | None) -> dict:
+    def new_item(self, run_id: str, note_id: str, action: str, mapping_id: str | None, kind: str = "note") -> dict:
         return (self.db.table("notion_run_items").insert({
             "user_id": self.user_id, "run_id": run_id, "mapping_id": mapping_id,
-            "local_kind": "note", "local_id": note_id, "action": action,
+            "local_kind": kind, "local_id": note_id, "action": action,
             "status": "running"}).execute().data)[0]
 
     def finish_item(self, item_id: str, status: str, *, error_class: str | None = None,

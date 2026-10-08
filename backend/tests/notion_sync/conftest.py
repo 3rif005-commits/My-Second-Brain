@@ -56,7 +56,7 @@ class World:
     def __init__(self):
         self.notion = FakeNotion()
         self.db = FakeDB(
-            notes=[], notion_mappings=[], notion_runs=[], notion_run_items=[],
+            collections=[], notes=[], notion_mappings=[], notion_runs=[], notion_run_items=[],
             notion_connections=[{"id": "c1", "user_id": USER, "status": "active", "bot_user_id": BOT,
                                  "root_page_id": self.notion.root, "privacy_ceiling": "personal",
                                  "token_ciphertext": "x", "token_hint": "…abcd", "workspace_name": "Test WS"}])
@@ -78,16 +78,26 @@ class World:
     def engine(self) -> Engine:
         return Engine(self.db, self.conn(), NotionAdapter(self.client(), files=self.files))
 
-    def plan(self, *notes, released=frozenset()):
-        from services.notion_sync.planner import plan_notes
+    def plan(self, *notes, released=frozenset(), collections=(), archive=()):
+        from services.notion_sync.planner import plan_scope
         eng = self.engine()
-        return plan_notes(self.db, eng.conn, eng.adapter, [n["id"] for n in notes], released)
+        return plan_scope(self.db, eng.conn, eng.adapter, note_ids=[n["id"] for n in notes],
+                          collection_ids=[c["id"] for c in collections], released=released,
+                          archive_ids=frozenset(archive))
 
-    def send(self, *notes, released=frozenset()):
+    def send(self, *notes, released=frozenset(), collections=(), archive=()):
         eng = self.engine()
-        from services.notion_sync.planner import plan_notes
-        plan = plan_notes(self.db, eng.conn, eng.adapter, [n["id"] for n in notes], released)
+        from services.notion_sync.planner import plan_scope
+        plan = plan_scope(self.db, eng.conn, eng.adapter, note_ids=[n["id"] for n in notes],
+                          collection_ids=[c["id"] for c in collections], released=released,
+                          archive_ids=frozenset(archive))
         return eng.run(plan.items, frozenset(released)), plan
+
+    def add_collection(self, name="Physics", parent=None, **kw) -> dict:
+        c = {"id": str(uuid.uuid4()), "user_id": USER, "name": name, "icon": "📁", "color": "#6366f1",
+             "description": None, "parent_id": parent["id"] if parent else None, "position": 0, **kw}
+        self.db.tables["collections"].append(c)
+        return c
 
     def mapping(self, note_):
         rows = [r for r in self.db.tables["notion_mappings"] if r["local_id"] == note_["id"]]

@@ -66,13 +66,13 @@ class NotionClient:
     # -- one call ------------------------------------------------------------
     def request(self, method: str, path: str, *, json: dict | None = None,
                 params: dict | None = None, read: bool | None = None,
-                create: bool = False, files: dict | None = None) -> dict:
+                create: bool = False, files: dict | None = None, idempotent: bool = False) -> dict:
         """`read=True` marks a POST that only reads (search, query).
         `create=True` marks any write that is unsafe to repeat after an
         unknown outcome (POST create, PATCH append)."""
         method = method.upper()
         is_read = (method == "GET") if read is None else read
-        retry_unknown = is_read or (not create and method in ("PATCH", "DELETE"))
+        retry_unknown = is_read or idempotent or (not create and method in ("PATCH", "DELETE"))
         last: Exception | None = None
         for attempt in range(MAX_ATTEMPTS):
             self._bucket.take()

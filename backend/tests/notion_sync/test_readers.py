@@ -112,12 +112,18 @@ def test_reader_exception_becomes_opaque_mapper_error(monkeypatch):
 
 
 def test_mention_and_inline_math():
-    src = blk("paragraph", [T("see "), {"type": "mention", "props": {"noteId": "n", "noteName": "Other"}},
+    src = blk("paragraph", [T("see "), {"type": "mention", "props": {"noteId": "n-1", "noteName": "Other"}},
                              {"type": "inlineMath", "props": {"latex": "x^2"}}])
     b = read1(src)
-    assert [type(i).__name__ for i in b.inline] == ["Text", "Equation"] or b.inline[0].text == "see @Other"
-    assert any(loss.code == "mention_as_text" for loss in b.losses)
+    men = [i for i in b.inline if isinstance(i, ir.Mention)]
+    assert len(men) == 1 and men[0].target == ir.Ref("note", "n-1") and men[0].label == "Other"
     assert any(isinstance(i, ir.Equation) and i.latex == "x^2" for i in b.inline)
+    assert b.losses == []                          # whether it can be a real link is the destination's call
+
+
+def test_mention_without_a_note_id_is_text():
+    b = read1(blk("paragraph", [{"type": "mention", "props": {"noteName": "Ghost"}}]))
+    assert b.inline[0].text == "@Ghost"
 
 
 def test_hash_is_stable_for_same_note():

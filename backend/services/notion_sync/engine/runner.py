@@ -1,9 +1,14 @@
 """Execute a confirmed plan: create protocol, update protocol, runs/items.
 
-Synchronous in M1 (a background worker is M5). The create protocol is
-ROBUSTNESS §4: the mapping row exists in `creating` BEFORE the create call, a
-create with an unknown outcome is never repeated blindly, and a mapping left in
-`creating` is reconciled (query by SB ID) before anything is created again.
+Synchronous (a background worker is M5). The create protocol is ROBUSTNESS §4:
+the mapping row exists in `creating` BEFORE the create call, a create with an
+unknown outcome is never repeated blindly, and a mapping left in `creating` is
+reconciled (query by SB ID / list the parent's children) before anything is
+created again.
+
+Order inside a run (DESIGN §6.1): collections (parents first) → one empty page
+("shell") per new note → note bodies → archives. Shells exist before any body
+is written, so notes that mention each other become real links in one run.
 """
 from __future__ import annotations
 
@@ -11,15 +16,18 @@ import logging
 import re
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 
 from services import privacy
 from services.notion_sync import registry
 from services.notion_sync.connection import Connection
+from services.notion_sync.engine.resolver import MentionResolver
 from services.notion_sync.engine.store import CONTAINER, Store, now
-from services.notion_sync.notion.adapter import NotionAdapter, Rendered, page_url
+from services.notion_sync.notion.adapter import (ARCHIVE_TITLE, NotionAdapter, Rendered, page_url)
 from services.notion_sync.notion.errors import AmbiguousWrite, NotionError, plain_message
-from services.notion_sync.planner import NEW, CHANGED, PlanItem, note_hash, fetch_notes
-from services.notion_sync.readers.note import note_to_ir
+from services.notion_sync.planner import (CHANGED, DELETED, NEW, PlanItem, fetch_collections, fetch_notes,
+                                          object_hash)
+from services.notion_sync.readers.note import collection_to_ir, note_to_ir
 from services.portable import ir
 
 log = logging.getLogger(__name__)
@@ -38,6 +46,10 @@ class ItemFailure(Exception):
         self.status, self.error_class, self.code, self.message = status, error_class, code, message
 
 
+def _ambiguous() -> ItemFailure:
+    return ItemFailure("failed", "retryable", "ambiguous_create", plain_message(AmbiguousWrite("create", "")))
+
+
 @dataclass
 class ItemResult:
     note_id: str
@@ -47,6 +59,7 @@ class ItemResult:
     message: str = ""
     notion_url: str | None = None
     losses: list[dict] = field(default_factory=list)
+    kind: str = "note"
 
     def to_dict(self) -> dict:
         return self.__dict__.copy()
@@ -64,172 +77,345 @@ class RunResult:
                 "items": [i.to_dict() for i in self.items]}
 
 
+def _parse(ts: str | None) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
 class Engine:
     def __init__(self, db, conn: Connection, adapter: NotionAdapter):
         self.db, self.conn, self.adapter = db, conn, adapter
         self.store = Store(db, conn.user_id, conn.id)
+        self._colls: dict[str, dict] | None = None
+        self._schema_ok: set[str] = set()
 
-    # ---- the container: root "Notes" database (D1, M1) ----------------------------
-    def ensure_container(self) -> str:
-        """-> data source id of the root Notes database, creating it once."""
-        root = self.conn.root_page_id
-        if not root:
+    @property
+    def colls(self) -> dict[str, dict]:
+        if self._colls is None:
+            self._colls = fetch_collections(self.db, self.conn.user_id)
+        return self._colls
+
+    # ---- the tree: collection pages, Notes databases, the archive ---------------------
+    def _root(self) -> str:
+        if not self.conn.root_page_id:
             raise ItemFailure("needs_you", "needs_user", "no_root", "Pick a Notion page to send to first.")
-        m, ours = self.store.begin_create(CONTAINER, root, "notes_db", parent=root)
+        return self.conn.root_page_id
+
+    def _adopt_or_none(self, m: dict, ours: bool, found: list[tuple[str, str]]) -> str | None:
+        """Reconcile a page we may have created before a crash: only candidates
+        created since this mapping started (minus clock slack) count."""
+        if ours:
+            return None
+        since = _parse(m.get("create_started_at"))
+        ok = [pid for pid, created in found
+              if since is None or (_parse(created) or since) >= since - timedelta(minutes=2)]
+        if len(ok) > 1:
+            log.warning("notion: %d candidate pages for one mapping; adopting the oldest", len(ok))
+        return ok[0] if ok else None
+
+    def ensure_collection_page(self, cid: str) -> str:
+        """The Notion page of a collection, created (with its description) on first use."""
+        row = self.colls.get(cid)
+        if row is None:
+            raise ItemFailure("failed", "permanent", "no_collection", "This folder no longer exists.")
+        parent_page = self.ensure_collection_page(str(row["parent_id"])) if row.get("parent_id") else self._root()
+        m, ours = self.store.begin_create("collection", cid, parent=parent_page)
+        if m.get("state") in ("synced", "failed") and m.get("notion_id"):
+            return m["notion_id"]
+        obj = collection_to_ir(row)
+        try:
+            r = self.adapter.render(obj)
+            page_id = m.get("notion_id") or self._adopt_or_none(
+                m, ours, self.adapter.find_child_pages(parent_page, "".join(t.text for t in obj.title)))
+            if not page_id:
+                page_id = self.adapter.create_page(parent_page, r)
+            self.store.cas(m["id"], "creating", {"notion_id": page_id, "notion_kind": "page",
+                                                 "notion_parent_id": parent_page, "state": "synced"})
+            top = self._append(m, page_id, r, [])
+            self.store.update(m["id"], {"local_hash": object_hash(obj, self.conn), "last_pushed_at": now(),
+                                        "mapper_set_version": registry.mapper_set_version(),
+                                        "ir_version": ir.IR_VERSION, "block_index": {"v": 1, "top": top},
+                                        "losses": [x.to_dict() for x in r.losses]})
+            return page_id
+        except AmbiguousWrite:
+            raise _ambiguous()
+
+    def ensure_container(self, cid: str | None) -> str:
+        """-> data source id of the Notes database of collection `cid` (None = the root)."""
+        parent_page = self.ensure_collection_page(cid) if cid else self._root()
+        m, ours = self.store.begin_create(CONTAINER, cid or parent_page, "notes_db", parent=parent_page)
+        if m.get("state") == "synced" and m.get("notion_id"):
+            ds = m["notion_id"]
+        else:
+            found = self.adapter.find_notes_databases(parent_page)       # reconcile before creating
+            if found:
+                db = found[0]
+                if len(found) > 1:
+                    log.warning("notion: %d 'Notes' databases under one page; adopting the oldest", len(found))
+            else:
+                try:
+                    db = self.adapter.create_notes_database(parent_page)
+                except AmbiguousWrite:
+                    raise _ambiguous()
+            self.store.cas(m["id"], "creating", {
+                "notion_id": db.data_source_id, "notion_kind": "data_source", "notion_parent_id": db.database_id,
+                "state": "synced", "last_pushed_at": now()})
+            ds = db.data_source_id
+            self._schema_ok.add(ds)
+        if ds not in self._schema_ok:
+            self.adapter.ensure_schema(ds)                               # keep the schema in step
+            self._schema_ok.add(ds)
+        return ds
+
+    def ensure_archive(self) -> str:
+        """The "🗄 Deleted in Second Brain" page: deletes move here, never to Notion's trash."""
+        root = self._root()
+        m, ours = self.store.begin_create("archive", root, "", parent=root)
         if m.get("state") == "synced" and m.get("notion_id"):
             return m["notion_id"]
-        # Still `creating` (first time, or left behind by a crash or a lost mapping):
-        # look for a Notes database that already exists before creating one.
-        found = self.adapter.find_notes_databases(root)
-        if found:
-            db = found[0]                                    # oldest; extras are left alone
-            if len(found) > 1:
-                log.warning("notion: %d 'Notes' databases under the root; adopting the oldest", len(found))
-        else:
-            try:
-                db = self.adapter.create_notes_database(root)
-            except AmbiguousWrite:
-                raise ItemFailure("failed", "retryable", "ambiguous_create",
-                                  plain_message(AmbiguousWrite("create", "")))
-        self.store.cas(m["id"], "creating", {
-            "notion_id": db.data_source_id, "notion_kind": "data_source",
-            "notion_parent_id": db.database_id, "state": "synced", "last_pushed_at": now()})
-        return db.data_source_id
+        try:
+            page_id = self._adopt_or_none(m, ours, self.adapter.find_child_pages(root, ARCHIVE_TITLE))
+            if not page_id:
+                page_id = self.adapter.create_page(root, self.adapter.render(ir.Obj(
+                    "page", ir.Ref("archive", "root"), title=[ir.Text(ARCHIVE_TITLE)], icon=None)))
+        except AmbiguousWrite:
+            raise _ambiguous()
+        self.store.cas(m["id"], "creating", {"notion_id": page_id, "notion_kind": "page",
+                                             "notion_parent_id": root, "state": "synced", "last_pushed_at": now()})
+        self.db.table("notion_connections").update({"archive_page_id": page_id}).eq("id", self.conn.id).execute()
+        return page_id
 
-    # ---- one note ----------------------------------------------------------------------
-    def _page_from_mapping(self, m: dict, ds_id: str, note_id: str, r: Rendered) -> str:
-        """The Notion page for a mapping in `creating`: adopt a row that already
-        exists (crash after the create), else create it."""
+    # ---- bodies --------------------------------------------------------------------------
+    def _append(self, m: dict, page_id: str, r: Rendered, top: list[dict]) -> list[dict]:
+        """Append r's body, keeping the mapping's block index exact after every request."""
+        def landed(entries):
+            top.extend(entries)
+            self.store.update(m["id"], {"block_index": {"v": 1, "top": top}})
+        self.adapter.append_body(page_id, r, on_blocks=landed)
+        return top
+
+    def _replace_body(self, m: dict, page_id: str, r: Rendered) -> list[dict]:
+        top = list((m.get("block_index") or {}).get("top") or [])      # only blocks WE created
+
+        def gone(bid):
+            top[:] = [e for e in top if e["id"] != bid]
+            self.store.update(m["id"], {"block_index": {"v": 1, "top": top}})
+        if top:
+            self.adapter.delete_blocks([e["id"] for e in top], on_deleted=gone)
+        return self._append(m, page_id, r, top)
+
+    def _edit_check(self, page_id: str) -> None:
+        info = self.adapter.get_page(page_id)
+        if info.unreachable:
+            raise ItemFailure("needs_you", "needs_user", "object_not_found",
+                              "This page is no longer reachable in Notion (deleted or unshared).")
+        if self.conn.bot_user_id and info.last_edited_by and info.last_edited_by != self.conn.bot_user_id:
+            raise ItemFailure("needs_you", "needs_user", "edited_in_notion",
+                              "This page was changed in Notion since the last send. Nothing was "
+                              "overwritten. (Choosing what to keep arrives in a later update.)")
+
+    # ---- a collection ----------------------------------------------------------------------
+    def send_collection(self, item: PlanItem) -> ItemResult:
+        cid = item.note_id
+        row = self.colls.get(cid)
+        if row is None:
+            raise ItemFailure("failed", "permanent", "no_collection", "This folder no longer exists.")
+        action = "create" if item.state == NEW else "update"
+        try:
+            page_id = self.ensure_collection_page(cid)           # creates it (with its description) if new
+            m = self.store.mapping("collection", cid)
+            obj = collection_to_ir(row)
+            h = object_hash(obj, self.conn)
+            if m.get("local_hash") != h:                          # an update: rename, icon, description, move
+                action = "update"
+                r = self.adapter.render(obj)
+                self._edit_check(page_id)
+                self.adapter.update_properties(page_id, r, row=False)
+                parent_page = self.ensure_collection_page(str(row["parent_id"])) if row.get("parent_id") else self._root()
+                if m.get("notion_parent_id") != parent_page:
+                    self.adapter.move_page(page_id, under_page=parent_page)
+                    self.store.update(m["id"], {"notion_parent_id": parent_page})
+                top = self._replace_body(m, page_id, r)
+                self.store.update(m["id"], {"local_hash": h, "block_index": {"v": 1, "top": top},
+                                            "last_pushed_at": now(), "state": "synced", "error_class": None,
+                                            "error_code": None, "error_message": None})
+            return ItemResult(cid, item.title, "done", action, "Sent." if action == "create" else "Updated.",
+                              page_url(page_id), [x.to_dict() for x in collection_to_ir(row).losses], "collection")
+        except AmbiguousWrite as e:
+            raise ItemFailure("failed", "retryable", "ambiguous_write", plain_message(e))
+        except NotionError as e:
+            raise self._notion_failure(e)
+
+    # ---- a note ------------------------------------------------------------------------------
+    def _notion_failure(self, e: NotionError) -> ItemFailure:
+        # ids and the field path only: never the value Notion echoes back
+        log.warning("notion error %s %s: %s", e.status, e.code, re.sub(r"instead was.*", "", e.message or "")[:300])
+        return ItemFailure("needs_you" if e.error_class == "needs_user" else "failed",
+                           e.error_class, e.code, plain_message(e))
+
+    def _shell(self, item: PlanItem, row: dict, resolver) -> None:
+        """Create the empty page for a new note (title + SB ID), so links can point at it."""
+        cid = str(row["collection_id"]) if row.get("collection_id") else None
+        ds = self.ensure_container(cid)
+        m, _ = self.store.begin_create("note", item.note_id, parent=ds)
         if m.get("notion_id"):
-            return m["notion_id"]
-        rows = self.adapter.find_rows(ds_id, note_id)
+            return
+        obj = note_to_ir(row)
+        r = self.adapter.materialize(self.adapter.render(obj, resolver))
+        rows = self.adapter.find_rows(ds, item.note_id)               # reconcile: a crash or a lost mapping
         if rows:
             page_id = rows[0][0]
             if len(rows) > 1:
-                log.warning("notion: %d rows for note %s; adopting the oldest", len(rows), note_id)
+                log.warning("notion: %d rows for note %s; adopting the oldest", len(rows), item.note_id)
         else:
             try:
-                page_id = self.adapter.create_row(ds_id, r, note_id)
+                page_id = self.adapter.create_row(ds, r, item.note_id)
             except AmbiguousWrite:
-                raise ItemFailure("failed", "retryable", "ambiguous_create",
-                                  plain_message(AmbiguousWrite("create", "")))
-        if not self.store.cas(m["id"], "creating", {
-                "notion_id": page_id, "notion_kind": "page", "notion_parent_id": ds_id,
-                "state": "synced", "local_hash": None}):
+                raise _ambiguous()
+        if not self.store.cas(m["id"], "creating", {"notion_id": page_id, "notion_kind": "page",
+                                                    "notion_parent_id": ds, "state": "synced", "local_hash": None}):
             self.store.update(m["id"], {"notion_id": page_id})
-        return page_id
+        resolver.forget(item.note_id)
 
-    def send_note(self, item: PlanItem, row: dict) -> ItemResult:
-        obj: ir.Obj = note_to_ir(row)
-        r = self.adapter.render(obj)
-        h = note_hash(obj, self.conn)
-        action = "create"
+    def send_note(self, item: PlanItem, row: dict, resolver: MentionResolver) -> ItemResult:
+        obj = note_to_ir(row)
+        cid = str(row["collection_id"]) if row.get("collection_id") else None
+        action = "create" if item.state == NEW else "update"
         try:
-            r = self.adapter.materialize(r)            # uploads our own files, links public ones
-            losses = [loss.to_dict() for loss in r.losses]
+            ds = self.ensure_container(cid)
             m = self.store.mapping("note", item.note_id)
             if m is None or not m.get("notion_id"):
-                ds = self.ensure_container()
-                m, _ = self.store.begin_create("note", item.note_id, parent=ds)
-                page_id = self._page_from_mapping(m, ds, item.note_id, r)
-                top: list[dict] = list((m.get("block_index") or {}).get("top") or [])
-            else:
-                action = "update"
-                page_id = m["notion_id"]
-                info = self.adapter.get_page(page_id)
-                if info.unreachable:
-                    raise ItemFailure("needs_you", "needs_user", "object_not_found",
-                                      "This page is no longer reachable in Notion (deleted or unshared).")
-                if self.conn.bot_user_id and info.last_edited_by and \
-                        info.last_edited_by != self.conn.bot_user_id:
-                    raise ItemFailure(
-                        "needs_you", "needs_user", "edited_in_notion",
-                        "This page was changed in Notion since the last send. Nothing was "
-                        "overwritten. (Choosing what to keep arrives in a later update.)")
-                self.adapter.update_properties(page_id, r)
-                top = list((m.get("block_index") or {}).get("top") or [])
-
-            def save_top():
-                self.store.update(m["id"], {"block_index": {"v": 1, "top": top}})
-
-            # remove only blocks we created earlier (ids from our own index)
-            if top:
-                def gone(bid):
-                    top[:] = [e for e in top if e["id"] != bid]
-                    save_top()
-                self.adapter.delete_blocks([e["id"] for e in top], on_deleted=gone)
-
-            def landed(entries):
-                top.extend(entries)
-                save_top()
-            self.adapter.append_body(page_id, r, on_blocks=landed)
-
+                self._shell(item, row, resolver)
+                m = self.store.mapping("note", item.note_id)
+            page_id = m["notion_id"]
+            h = object_hash(obj, self.conn, resolver.tags(obj))
+            r = self.adapter.materialize(self.adapter.render(obj, resolver))   # uploads our own files
+            losses = [loss.to_dict() for loss in r.losses]
+            if action == "update" or m.get("local_hash"):
+                self._edit_check(page_id)
+            if m.get("notion_parent_id") != ds:                    # moved to another collection, or restored
+                self.adapter.move_page(page_id, under_source=ds)
+                self.store.update(m["id"], {"notion_parent_id": ds})
+            self.adapter.update_properties(page_id, r)
+            top = self._replace_body(m, page_id, r)
             fin = self.adapter.get_page(page_id)
             self.store.update(m["id"], {
                 "state": "synced", "local_hash": h, "mapper_set_version": registry.mapper_set_version(),
                 "ir_version": ir.IR_VERSION, "notion_last_edited_time": fin.last_edited_time,
-                "notion_last_edited_by": fin.last_edited_by, "last_pushed_at": now(),
+                "notion_last_edited_by": fin.last_edited_by, "last_pushed_at": now(), "block_index": {"v": 1, "top": top},
                 "losses": losses, "error_class": None, "error_code": None, "error_message": None})
             return ItemResult(item.note_id, item.title, "done", action,
-                              "Sent." if action == "create" else "Updated.",
-                              page_url(page_id), losses)
+                              "Sent." if action == "create" else "Updated.", page_url(page_id), losses)
         except ItemFailure:
             raise
         except AmbiguousWrite as e:
             raise ItemFailure("failed", "retryable", "ambiguous_write", plain_message(e))
         except NotionError as e:
-            # ids and the field path only: never the value Notion echoes back
-            log.warning("notion error %s %s: %s", e.status, e.code,
-                        re.sub(r"instead was.*", "", e.message or "")[:300])
-            raise ItemFailure("needs_you" if e.error_class == "needs_user" else "failed",
-                              e.error_class, e.code, plain_message(e))
+            raise self._notion_failure(e)
 
-    # ---- a run --------------------------------------------------------------------------
+    def archive_note(self, item: PlanItem) -> ItemResult:
+        """A note deleted here: move its page to the archive page (never to Notion's trash)."""
+        try:
+            m = self.store.mapping("note", item.note_id)
+            if not m or not m.get("notion_id"):
+                return ItemResult(item.note_id, item.title, "skipped", "", "Nothing to archive.")
+            archive = self.ensure_archive()
+            self.adapter.move_page(m["notion_id"], under_page=archive)
+            self.store.update(m["id"], {"state": "archived", "notion_parent_id": archive, "last_pushed_at": now()})
+            return ItemResult(item.note_id, item.title, "done", "archive",
+                              "Moved to “Deleted in Second Brain”.", page_url(m["notion_id"]))
+        except AmbiguousWrite as e:
+            raise ItemFailure("failed", "retryable", "ambiguous_write", plain_message(e))
+        except NotionError as e:
+            raise self._notion_failure(e)
+
+    # ---- a run ---------------------------------------------------------------------------------
     def run(self, items: list[PlanItem], released: frozenset[str] = frozenset()) -> RunResult:
-        sendable = [i for i in items if i.state in (NEW, CHANGED)]
-        run = self.store.new_run({"note_ids": [i.note_id for i in items]},
-                                 {"counts": {"send": len(sendable)}}, sorted(released))
-        notes = fetch_notes(self.db, self.conn.user_id, [i.note_id for i in sendable])
-        results: list[ItemResult] = []
+        sendable = [i for i in items if i.sendable]
+        run = self.store.new_run({"ids": [i.note_id for i in items]}, {"counts": {"send": len(sendable)}},
+                                 sorted(released))
+        notes = fetch_notes(self.db, self.conn.user_id, [i.note_id for i in sendable if i.kind == "note" and i.state != DELETED])
         start_requests = self.adapter.c.requests
-        # Privacy gate #2, at the adapter boundary: nothing above the ceiling
-        # reaches Notion even if the plan was wrong (DESIGN §6.5).
-        with privacy.scope(self.conn.privacy_ceiling, self.conn.user_id, released):
-            for it in sendable:
-                row = notes.get(it.note_id)
-                rec = self.store.new_item(run["id"], it.note_id,
-                                          "create" if it.state == NEW else "update", it.mapping_id)
-                if row is None or not privacy.filter_rows([row]):
-                    self.store.finish_item(rec["id"], "skipped", message="Not sent (private or deleted).")
-                    results.append(ItemResult(it.note_id, it.title, "skipped", "",
-                                              "Not sent: private or deleted."))
-                    continue
-                if self._paused():
-                    self.store.finish_item(rec["id"], "skipped", message="Syncing is paused.")
-                    results.append(ItemResult(it.note_id, it.title, "skipped", "", "Syncing is paused."))
-                    continue
-                try:
-                    res = self.send_note(it, row)
-                    self.store.finish_item(rec["id"], "done", message=res.message)
-                except ItemFailure as f:
+        results: dict[tuple[str, str], ItemResult] = {}
+        recs: dict[tuple[str, str], dict] = {}
+        for it in sendable:
+            action = "archive" if it.state == DELETED else ("create" if it.state == NEW else "update")
+            recs[(it.kind, it.note_id)] = self.store.new_item(run["id"], it.note_id, action, it.mapping_id, it.kind)
+        store_resolver = MentionResolver(self.db, self.store, self.conn.user_id, self.conn.privacy_ceiling, released,
+                                         {i.note_id for i in sendable if i.kind == "note" and i.state == NEW})
+        shell_failures: dict[str, ItemFailure] = {}
+
+        def finish(it: PlanItem, fn):
+            key = (it.kind, it.note_id)
+            rec = recs[key]
+            if self._paused():
+                self.store.finish_item(rec["id"], "skipped", message="Syncing is paused.")
+                results[key] = ItemResult(it.note_id, it.title, "skipped", "", "Syncing is paused.", kind=it.kind)
+                return
+            try:
+                res = fn()
+                self.store.finish_item(rec["id"], res.status, message=res.message)
+            except ItemFailure as f:
+                if it.kind == "note":
                     self._mark_mapping(it.note_id, f)
-                    self.store.finish_item(rec["id"], f.status, error_class=f.error_class,
-                                           error_code=f.code, message=f.message)
-                    res = ItemResult(it.note_id, it.title, f.status, "", f.message)
-                except Exception:                   # a bug must not take down the run
-                    log.exception("notion send failed for note %s", it.note_id)
-                    msg = "Something went wrong sending this note. Nothing was lost."
-                    self.store.finish_item(rec["id"], "failed", error_class="permanent",
-                                           error_code="internal", message=msg)
-                    res = ItemResult(it.note_id, it.title, "failed", "", msg)
-                results.append(res)
-        done = sum(r.status == "done" for r in results)
-        bad = sum(r.status in ("failed", "needs_you") for r in results)
+                self.store.finish_item(rec["id"], f.status, error_class=f.error_class, error_code=f.code,
+                                       message=f.message)
+                res = ItemResult(it.note_id, it.title, f.status, "", f.message, kind=it.kind)
+            except Exception:                           # a bug must not take down the run
+                log.exception("notion send failed for %s %s", it.kind, it.note_id)
+                msg = "Something went wrong sending this item. Nothing was lost."
+                self.store.finish_item(rec["id"], "failed", error_class="permanent", error_code="internal", message=msg)
+                res = ItemResult(it.note_id, it.title, "failed", "", msg, kind=it.kind)
+            results[key] = res
+
+        # Privacy gate #2, at the adapter boundary: nothing above the ceiling reaches Notion
+        # even if the plan was wrong (DESIGN §6.5).
+        with privacy.scope(self.conn.privacy_ceiling, self.conn.user_id, released):
+            for it in (i for i in sendable if i.kind == "collection"):
+                finish(it, lambda it=it: self.send_collection(it))
+
+            def allowed(it):
+                row = notes.get(it.note_id)
+                return row if row is not None and privacy.filter_rows([row]) else None
+
+            for it in (i for i in sendable if i.kind == "note" and i.state == NEW):      # phase: shells
+                row = allowed(it)
+                if row is None:
+                    continue
+                if self._paused():              # the kill switch is checked before any request
+                    break
+                try:
+                    self._shell(it, row, store_resolver)
+                except ItemFailure as f:
+                    shell_failures[it.note_id] = f
+                except AmbiguousWrite:
+                    shell_failures[it.note_id] = _ambiguous()
+                except NotionError as e:
+                    shell_failures[it.note_id] = self._notion_failure(e)
+
+            def do_note(it):
+                row = allowed(it)
+                if row is None:
+                    return ItemResult(it.note_id, it.title, "skipped", "", "Not sent: private or deleted.")
+                if it.note_id in shell_failures:
+                    raise shell_failures[it.note_id]
+                return self.send_note(it, row, store_resolver)
+
+            for it in (i for i in sendable if i.kind == "note" and i.state != DELETED):
+                finish(it, lambda it=it: do_note(it))
+            for it in (i for i in sendable if i.state == DELETED):
+                finish(it, lambda it=it: self.archive_note(it))
+
+        ordered = [results[(i.kind, i.note_id)] for i in sendable if (i.kind, i.note_id) in results]
+        done = sum(r.status == "done" for r in ordered)
+        bad = sum(r.status in ("failed", "needs_you") for r in ordered)
         status = "succeeded" if bad == 0 else "partial" if done else "failed"
         used = self.adapter.c.requests - start_requests
         self.store.finish_run(run["id"], status, {"done": done, "problems": bad,
-                                                  "skipped": len(results) - done - bad}, used)
-        return RunResult(run["id"], status, results, used)
+                                                  "skipped": len(ordered) - done - bad}, used)
+        return RunResult(run["id"], status, ordered, used)
 
     def _paused(self) -> bool:
         rows = (self.db.table("notion_connections").select("status").eq("id", self.conn.id)
