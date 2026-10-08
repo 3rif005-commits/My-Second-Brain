@@ -12,6 +12,7 @@ const ALLOWED_PREFIXES = [
   "jobs",            // background jobs: queue, list, cancel, apply (5.3)
   "routing",         // Settings → Routing: policy, test bench, decisions
   "notion",          // Settings → Notion + "Send to Notion…" (push-only mirror)
+  "backup",          // Settings → Notion → Local backup
 ];
 
 async function proxy(req: Request, path: string[]) {

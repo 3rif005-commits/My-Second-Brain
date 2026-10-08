@@ -46,6 +46,7 @@ _JOBS_JOB_ID = "background_jobs_tick"
 _TRIGGERS_JOB_ID = "background_job_triggers_tick"
 _SCHEDULES_JOB_ID = "background_job_schedules_tick"
 _NOTION_JOB_ID = "notion_auto_sync_tick"
+_BACKUP_JOB_ID = "local_backup_tick"
 
 _scheduler: AsyncIOScheduler | None = None
 
@@ -207,6 +208,15 @@ async def _tick_notion() -> None:
         logger.exception("scheduler tick: notion auto-sync pass failed")
 
 
+async def _tick_backup() -> None:
+    """The daily local backup (only when BACKUP_ENABLED): off the event loop, it reads everything."""
+    from services.backup import runner
+    try:
+        await asyncio.to_thread(runner.tick)
+    except Exception:
+        logger.exception("scheduler tick: backup pass failed")
+
+
 def start_scheduler() -> None:
     """Idempotent: a second call while already running is a no-op (matches
     `get_pool()`'s own "creating it on first call" posture)."""
@@ -223,6 +233,7 @@ def start_scheduler() -> None:
                       id=_SCHEDULES_JOB_ID, max_instances=1, coalesce=True)
     scheduler.add_job(_tick_notion, IntervalTrigger(seconds=_TICK_INTERVAL_SECONDS),
                       id=_NOTION_JOB_ID, max_instances=1, coalesce=True)
+    scheduler.add_job(_tick_backup, IntervalTrigger(minutes=30), id=_BACKUP_JOB_ID, max_instances=1, coalesce=True)
     scheduler.start()
     _scheduler = scheduler
 
