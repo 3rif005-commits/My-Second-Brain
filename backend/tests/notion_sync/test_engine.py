@@ -48,34 +48,30 @@ def test_idempotent_across_a_fresh_process(world):
 def test_changed_note_replaces_only_our_blocks(world):
     n = world.add_note()
     world.send(n)
-    pid = page_of(world, n)
-    # a human adds a block in Notion... but not as the last editor: add via API-level hack
-    foreign = world.notion._store_blocks([{"type": "paragraph", "paragraph": {"rich_text": []}}], pid, "page_id")
-    world.notion.pages[pid]["children"].extend(foreign)
     n["content"] = [{"id": "p1", "type": "paragraph", "props": {}, "content": [T("changed")], "children": []}]
     plan = world.plan(n)
     assert plan.items[0].state == CHANGED
     res, _ = world.send(n)
     assert res.items[0].status == "done" and res.items[0].action == "update"
+    pid = page_of(world, n)
     texts = [b["paragraph"]["rich_text"] for b in world.notion.top_blocks(pid) if b["type"] == "paragraph"]
-    assert any(t and t[0]["text"]["content"] == "changed" for t in texts)
-    assert not any(t and t[0]["text"]["content"] == "hello" for t in texts)
-    assert foreign[0] in world.notion.pages[pid]["children"]       # never deleted a foreign block
+    assert [t[0]["text"]["content"] for t in texts if t] == ["changed"]
     assert len(world.notion.page_ids_in(world.mapping(n)["notion_parent_id"])) == 1
 
 
 def test_never_deletes_foreign_blocks(world):
+    """A block a person added in Notion is never removed by a normal send: the note is
+    held back as 'edited in Notion' instead (M4 gives the three choices)."""
     n = world.add_note()
     world.send(n)
     pid = page_of(world, n)
     foreign = world.notion._store_blocks([{"type": "paragraph", "paragraph": {"rich_text": []}}], pid, "page_id")[0]
     world.notion.pages[pid]["children"].append(foreign)
     n["title"] = "renamed"
-    world.send(n)
-    ours = {e["id"] for e in world.mapping(n)["block_index"]["top"]}
-    deleted = [p for m, p in world.notion.calls if m == "DELETE"]
-    assert all(p.split("/")[-1] != foreign for p in deleted)
-    assert foreign not in ours
+    res, plan = world.send(n)
+    assert plan.items[0].state == "needs_you" and res.items == []
+    assert not [c for c in world.notion.calls if c[0] == "DELETE"]
+    assert foreign in world.notion.pages[pid]["children"]
 
 
 def test_edited_in_notion_blocks_overwrite(world):
@@ -84,11 +80,18 @@ def test_edited_in_notion_blocks_overwrite(world):
     world.notion.human_edit(page_of(world, n))
     n["content"] = [{"id": "p", "type": "paragraph", "props": {}, "content": [T("mine")], "children": []}]
     writes = world.notion.writes()
-    res, _ = world.send(n)
-    assert res.items[0].status == "needs_you"
-    assert "changed in Notion" in res.items[0].message
-    assert world.notion.writes() == writes                       # nothing was touched
-    assert res.status == "failed"
+    res, plan = world.send(n)
+    assert plan.items[0].state == "needs_you" and plan.items[0].needs["reason"] == "edited_in_notion"
+    assert res.items == [] and world.notion.writes() == writes                 # nothing was touched
+
+
+def test_engine_refuses_even_if_a_forged_plan_says_go(world):
+    n = world.add_note()
+    world.send(n)
+    world.notion.human_edit(page_of(world, n))
+    from services.notion_sync.planner import PlanItem
+    res = world.engine().run([PlanItem(n["id"], "x", CHANGED)])
+    assert res.items[0].status == "needs_you" and "changed in Notion" in res.items[0].message
 
 
 def test_private_note_is_blocked_and_never_reaches_notion(world):

@@ -157,10 +157,58 @@ def run_m3(client, adapter, root, bot) -> dict:
     return rep, db
 
 
+def run_m4(client, adapter, root, bot) -> dict:
+    """A person types in Notion: the next send is held back, and each choice does what it says.
+    (The test token cannot act as a human, so a block our bot did not create stands in for the edit:
+    the deep check treats both the same way.)"""
+    from services.notion_sync.planner import plan_scope
+    user = "live-user"
+    nid = "00000000-0000-4000-8000-000000000041"
+    note = {"id": nid, "user_id": user, "title": "SB-TEST M4 note", "collection_id": None, "sensitivity": "personal",
+            "deleted_at": None, "content": [B("paragraph", [T("original text")])]}
+    db = FakeDB(collections=[], notes=[note], notion_mappings=[], notion_runs=[], notion_run_items=[],
+                notion_connections=[{"id": "live-c", "user_id": user, "status": "active", "bot_user_id": bot.bot_id,
+                                     "root_page_id": root.id, "privacy_ceiling": "personal", "token_ciphertext": "x", "token_hint": "…"}])
+    note = db.tables["notes"][0]
+    conn = conn_mod.load(db, user)
+    rep: dict = {}
+
+    def go(tag, resolutions=None):
+        p = plan_scope(db, conn, adapter, note_ids=[nid], resolutions=resolutions)
+        res = Engine(db, conn, adapter).run(p.items)
+        it = p.items[0]
+        rep[tag] = {"state": it.state, "needs": (it.needs or {}).get("reason"), "result": [(i.status, i.action) for i in res.items],
+                    "diff_ops": sorted({d["op"] for d in (it.needs or {}).get("diff", [])})}
+        return p
+
+    go("1_first_send")
+    mp = lambda: next(x for x in db.tables["notion_mappings"] if x["local_kind"] == "note" and not x["local_sub"])
+    page = mp()["notion_id"]
+    client.patch(f"/blocks/{page}/children", {"children": [{"type": "paragraph", "paragraph": {"rich_text": [
+        {"type": "text", "text": {"content": "typed by a person in Notion"}}]}}]}, create=True)
+    note["content"] = [B("paragraph", [T("my newer text")])]
+    before = client.write_requests
+    go("2_held_back")
+    rep["2_writes_while_held"] = client.write_requests - before
+    go("3_keep_both", {nid: "copy"})
+    rep["3_copy_is_new_page"] = mp()["notion_id"] != page
+    rep["3_original_text"] = [t["plain_text"] for b in adapter._children(page) if b["type"] == "paragraph" for t in b["paragraph"]["rich_text"]]
+    go("4_after_copy")
+    copy_page = mp()["notion_id"]
+    client.patch(f"/blocks/{copy_page}/children", {"children": [{"type": "paragraph", "paragraph": {"rich_text": [
+        {"type": "text", "text": {"content": "another human edit"}}]}}]}, create=True)
+    note["content"] = [B("paragraph", [T("third version")])]
+    go("5_overwrite", {nid: "overwrite"})
+    rep["5_text_after_overwrite"] = [t["plain_text"] for b in adapter._children(copy_page) if b["type"] == "paragraph" for t in b["paragraph"]["rich_text"]]
+    rep["6_resend"] = {"state": plan_scope(db, conn, adapter, note_ids=[nid]).items[0].state}
+    return rep, db
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--m2", action="store_true", help="send the M2 fixture (tables, callouts, columns, files, cover)")
     ap.add_argument("--m3", action="store_true", help="the hierarchy/mentions/move/archive scenario")
+    ap.add_argument("--m4", action="store_true", help="edited-in-Notion protection: hold back, copy, overwrite")
     ap.add_argument("--keep", action="store_true", help="do not trash the test pages afterwards")
     args = ap.parse_args()
     token = settings.notion_test_token
@@ -174,10 +222,10 @@ def main():
     root = pages[0]
     bot = adapter.whoami()
     user = "live-user"
-    if args.m3:
+    if args.m3 or args.m4:
         report = {"root": root.title}
         try:
-            r, db3 = run_m3(client, adapter, root, bot)
+            r, db3 = (run_m4 if args.m4 else run_m3)(client, adapter, root, bot)
             report.update(r)
         finally:
             if not args.keep:

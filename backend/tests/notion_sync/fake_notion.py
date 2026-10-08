@@ -350,6 +350,18 @@ class FakeNotion:
             up["status"] = "uploaded"
             up["size"] = size
             return ok({"object": "file_upload", **up})
+        m = re.fullmatch(r"/pages/([^/]+)/markdown", path)
+        if m and method == "GET":
+            p = self.pages.get(m[1])
+            if p is None or p["in_trash"]:
+                raise _Missing
+            lines = []
+            for b in self.tree(p["children"]):
+                body = b.get(b["type"], {})
+                text = "".join(t.get("text", {}).get("content", "") for t in body.get("rich_text", []))
+                lines.append(("## " if b["type"].startswith("heading") else "") + text)
+            return ok({"object": "page_markdown", "id": m[1], "markdown": "\n".join(lines), "truncated": False,
+                       "unknown_block_ids": []})
         m = re.fullmatch(r"/pages/([^/]+)/move", path)
         if m and method == "POST":
             p = self.pages.get(m[1])

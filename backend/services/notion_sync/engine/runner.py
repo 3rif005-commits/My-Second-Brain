@@ -90,6 +90,7 @@ class Engine:
         self.store = Store(db, conn.user_id, conn.id)
         self._colls: dict[str, dict] | None = None
         self._schema_ok: set[str] = set()
+        self._suffix: dict[str, str] = {}       # note id -> title suffix, for 'Keep both' copies
 
     @property
     def colls(self) -> dict[str, dict]:
@@ -196,8 +197,12 @@ class Engine:
         self.adapter.append_body(page_id, r, on_blocks=landed)
         return top
 
-    def _replace_body(self, m: dict, page_id: str, r: Rendered) -> list[dict]:
+    def _replace_body(self, m: dict, page_id: str, r: Rendered, everything: bool = False) -> list[dict]:
         top = list((m.get("block_index") or {}).get("top") or [])      # only blocks WE created
+        if everything:                  # the user chose Overwrite: blocks people added go too
+            self.adapter.delete_all_top_level(page_id)
+            top = []
+            self.store.update(m["id"], {"block_index": {"v": 1, "top": []}})
 
         def gone(bid):
             top[:] = [e for e in top if e["id"] != bid]
@@ -224,6 +229,12 @@ class Engine:
             raise ItemFailure("failed", "permanent", "no_collection", "This folder no longer exists.")
         action = "create" if item.state == NEW else "update"
         try:
+            if item.resolution == "forget":
+                return self._forget(item, "collection")
+            if item.resolution == "recreate":                    # the page is gone in Notion: start over
+                self.store.forget_one("collection", cid)
+                self.store.forget_one(CONTAINER, cid, "notes_db")
+                action = "create"
             page_id = self.ensure_collection_page(cid)           # creates it (with its description) if new
             m = self.store.mapping("collection", cid)
             obj = collection_to_ir(row)
@@ -231,13 +242,14 @@ class Engine:
             if m.get("local_hash") != h:                          # an update: rename, icon, description, move
                 action = "update"
                 r = self.adapter.render(obj)
-                self._edit_check(page_id)
+                if item.resolution != "overwrite":
+                    self._edit_check(page_id)
                 self.adapter.update_properties(page_id, r, row=False)
                 parent_page = self.ensure_collection_page(str(row["parent_id"])) if row.get("parent_id") else self._root()
                 if m.get("notion_parent_id") != parent_page:
                     self.adapter.move_page(page_id, under_page=parent_page)
                     self.store.update(m["id"], {"notion_parent_id": parent_page})
-                top = self._replace_body(m, page_id, r)
+                top = self._replace_body(m, page_id, r, everything=item.resolution == "overwrite")
                 self.store.update(m["id"], {"local_hash": h, "block_index": {"v": 1, "top": top},
                                             "last_pushed_at": now(), "state": "synced", "error_class": None,
                                             "error_code": None, "error_message": None})
@@ -262,9 +274,10 @@ class Engine:
         m, _ = self.store.begin_create("note", item.note_id, parent=ds)
         if m.get("notion_id"):
             return
-        obj = note_to_ir(row)
+        obj = note_to_ir(self._titled(row))
         r = self.adapter.materialize(self.adapter.render(obj, resolver))
-        rows = self.adapter.find_rows(ds, item.note_id)               # reconcile: a crash or a lost mapping
+        skip = self.store.detached_page_ids(item.note_id)
+        rows = [r for r in self.adapter.find_rows(ds, item.note_id) if r[0] not in skip]   # reconcile: a crash or a lost mapping
         if rows:
             page_id = rows[0][0]
             if len(rows) > 1:
@@ -279,8 +292,22 @@ class Engine:
             self.store.update(m["id"], {"notion_id": page_id})
         resolver.forget(item.note_id)
 
+    def _titled(self, row: dict) -> dict:
+        suffix = self._suffix.get(str(row["id"]))
+        return {**row, "title": f"{(row.get('title') or 'Untitled').strip()}{suffix}"} if suffix else row
+
+    def _forget(self, item: PlanItem, kind: str) -> ItemResult:
+        """Stop tracking: the mapping goes, nothing in Notion is touched."""
+        self.store.forget_one(kind, item.note_id)
+        if kind == "collection":
+            self.store.forget_one(CONTAINER, item.note_id, "notes_db")
+        return ItemResult(item.note_id, item.title, "done", "forget",
+                          "No longer tracked. The page in Notion was left alone.", None, kind=kind)
+
     def send_note(self, item: PlanItem, row: dict, resolver: MentionResolver) -> ItemResult:
-        obj = note_to_ir(row)
+        if item.resolution == "forget":
+            return self._forget(item, "note")
+        obj = note_to_ir(row)                      # hashed as the real note, even for a titled copy
         cid = str(row["collection_id"]) if row.get("collection_id") else None
         action = "create" if item.state == NEW else "update"
         try:
@@ -291,15 +318,15 @@ class Engine:
                 m = self.store.mapping("note", item.note_id)
             page_id = m["notion_id"]
             h = object_hash(obj, self.conn, resolver.tags(obj))
-            r = self.adapter.materialize(self.adapter.render(obj, resolver))   # uploads our own files
+            r = self.adapter.materialize(self.adapter.render(note_to_ir(self._titled(row)), resolver))   # uploads our own files
             losses = [loss.to_dict() for loss in r.losses]
-            if action == "update" or m.get("local_hash"):
+            if (action == "update" or m.get("local_hash")) and item.resolution != "overwrite":
                 self._edit_check(page_id)
             if m.get("notion_parent_id") != ds:                    # moved to another collection, or restored
                 self.adapter.move_page(page_id, under_source=ds)
                 self.store.update(m["id"], {"notion_parent_id": ds})
             self.adapter.update_properties(page_id, r)
-            top = self._replace_body(m, page_id, r)
+            top = self._replace_body(m, page_id, r, everything=item.resolution == "overwrite")
             fin = self.adapter.get_page(page_id)
             self.store.update(m["id"], {
                 "state": "synced", "local_hash": h, "mapper_set_version": registry.mapper_set_version(),
@@ -314,6 +341,17 @@ class Engine:
             raise ItemFailure("failed", "retryable", "ambiguous_write", plain_message(e))
         except NotionError as e:
             raise self._notion_failure(e)
+
+    def _start_over(self, it: PlanItem) -> None:
+        """'Send as a copy' / 'Create it again': the old mapping is retired, the note becomes a new page."""
+        m = self.store.mapping("note", it.note_id)
+        if m and it.resolution == "copy" and m.get("notion_id"):
+            # the edited original is detached for good: never touched again
+            self.store.update(m["id"], {"local_sub": f"detached:{m['notion_id']}", "state": "detached"})
+            self._suffix[it.note_id] = f" (from Second Brain, {datetime.now(timezone.utc):%b} {datetime.now(timezone.utc).day})"
+        elif m:
+            self.store.forget_one("note", it.note_id)
+        it.state = NEW
 
     def archive_note(self, item: PlanItem) -> ItemResult:
         """A note deleted here: move its page to the archive page (never to Notion's trash)."""
@@ -375,6 +413,9 @@ class Engine:
         with privacy.scope(self.conn.privacy_ceiling, self.conn.user_id, released):
             for it in (i for i in sendable if i.kind == "collection"):
                 finish(it, lambda it=it: self.send_collection(it))
+
+            for it in (i for i in sendable if i.kind == "note" and i.resolution in ("recreate", "copy")):
+                self._start_over(it)
 
             def allowed(it):
                 row = notes.get(it.note_id)

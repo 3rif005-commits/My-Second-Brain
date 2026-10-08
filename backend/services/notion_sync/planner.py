@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from services import privacy
 from services.notion_sync import registry
 from services.notion_sync.connection import Connection
+from services.notion_sync.engine import editcheck
 from services.notion_sync.engine.resolver import MentionResolver
 from services.notion_sync.engine.store import Store
 from services.notion_sync.notion.adapter import NotionAdapter, page_url
@@ -19,11 +20,14 @@ from services.notion_sync.readers.note import collection_to_ir, note_to_ir
 from services.portable import ir
 from services.portable.canonical import digest
 from services.portable.losses import fidelity
+from services.portable.markdown import to_markdown
 
 # plan item states
 NEW, CHANGED, UNCHANGED = "new", "changed", "unchanged"
 PRIVATE, PAUSED, MISSING, DELETED = "private", "paused", "missing", "deleted"
-STATES = (NEW, CHANGED, UNCHANGED, PRIVATE, PAUSED, MISSING, DELETED)
+NEEDS_YOU = "needs_you"
+STATES = (NEW, CHANGED, UNCHANGED, PRIVATE, PAUSED, MISSING, DELETED, NEEDS_YOU)
+RESOLUTIONS = ("overwrite", "copy", "recreate", "forget")   # "skip" is the default: nothing happens
 
 
 @dataclass
@@ -43,11 +47,13 @@ class PlanItem:
     restore: bool = False           # a note that was archived and is back
     moved: bool = False             # sent to a different collection than before
     path: str = ""                  # "Physics › Optics"
+    needs: dict | None = None       # why it needs you: edited in Notion / unreachable, with the diff
+    resolution: str | None = None   # what you chose for it (RESOLUTIONS)
 
     def to_dict(self) -> dict:
         return {k: getattr(self, k) for k in (
             "note_id", "title", "state", "kind", "fidelity", "losses", "est_requests", "notion_url",
-            "mapping_id", "released", "selected", "restore", "moved", "path")}
+            "mapping_id", "released", "selected", "restore", "moved", "path", "needs", "resolution")}
 
     @property
     def sendable(self) -> bool:
@@ -129,7 +135,8 @@ def path_of(colls: dict[str, dict], cid: str | None) -> str:
 
 
 def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), collection_ids=(),
-               released=frozenset(), archive_ids=frozenset()) -> Plan:
+               released=frozenset(), archive_ids=frozenset(), resolutions=None, check_edits: bool = True) -> Plan:
+    resolutions = {str(k): v for k, v in (resolutions or {}).items() if v in RESOLUTIONS}
     user = conn.user_id
     store = Store(db, user, conn.id)
     colls = fetch_collections(db, user)
@@ -170,10 +177,19 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
         exists = bool(m and m.get("notion_id") and m.get("state") in ("synced", "failed"))
         state = UNCHANGED if exists and m.get("local_hash") == h and m.get("state") == "synced" \
             else CHANGED if exists else NEW
+        needs, res_choice = None, None
+        if state == CHANGED and check_edits:
+            needs = editcheck.check(adapter, conn, m, to_markdown(obj.body))
+            res_choice = resolutions.get(cid)
+            if needs and res_choice not in ("overwrite", "recreate", "forget"):
+                state = NEEDS_YOU
+            elif needs:
+                needs = None
         items.append(PlanItem(cid, row.get("name") or "Untitled folder", state, "collection",
                               fidelity(r.losses), [x.to_dict() for x in r.losses],
                               0 if state == UNCHANGED else 2 + len(r.blocks), page_url(m["notion_id"]) if exists else None,
-                              h, m["id"] if m else None, path=path_of(colls, str(row.get("parent_id")) if row.get("parent_id") else None)))
+                              h, m["id"] if m else None, path=path_of(colls, str(row.get("parent_id")) if row.get("parent_id") else None),
+                              needs=needs, resolution=res_choice))
 
     for nid in live_order:
         row = live[nid]
@@ -203,11 +219,21 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
             state, est = CHANGED, adapter.estimate_requests(rendered, create=False, old_blocks=old) + 2
         else:
             state, est = NEW, adapter.estimate_requests(rendered, create=True) + 3
+        needs, res_choice = None, None
+        if state == CHANGED and check_edits and not restore and m.get("state") != "failed":
+            needs = editcheck.check(adapter, conn, m, to_markdown(obj.body))
+            res_choice = resolutions.get(nid)
+            if needs and res_choice in RESOLUTIONS:
+                needs = None
+            elif needs:
+                state = NEEDS_YOU
+        elif state == CHANGED:
+            res_choice = resolutions.get(nid)
         released_now = nid in released and not privacy.allows(conn.privacy_ceiling, level)
         items.append(PlanItem(nid, title, state, "note", fid, losses, est, url, h, m["id"] if m else None,
                               released=released_now, restore=restore,
                               moved=bool(exists and m.get("notion_parent_id") != _target_ds(store, conn, cid)),
-                              path=path))
+                              path=path, needs=needs, resolution=res_choice))
 
     for nid, row in trashed.items():
         m = nmaps.get(nid)

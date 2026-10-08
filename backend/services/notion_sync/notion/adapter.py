@@ -314,6 +314,23 @@ class NotionAdapter:
             body["cover"] = r.cover
         self.c.patch(f"/pages/{page_id}", body)
 
+    def page_markdown(self, page_id: str) -> str:
+        """What the page looks like in Notion right now, as markdown (one read)."""
+        return self.c.get(f"/pages/{page_id}/markdown").get("markdown", "")
+
+    def top_level_ids(self, page_id: str, *, content_only: bool = False) -> list[str]:
+        """Ids of a page's top-level blocks. `content_only` leaves out the sub-pages and
+        databases that sit on a collection's page: those are structure we manage."""
+        return [b["id"] for b in self._children(page_id)
+                if not (content_only and b.get("type") in ("child_page", "child_database"))]
+
+    def delete_all_top_level(self, page_id: str) -> int:
+        """Overwrite only: removes EVERY top-level block, including ones a person added in
+        Notion. Reached only after the user chose Overwrite (and confirmed it)."""
+        ids = self.top_level_ids(page_id)
+        self.delete_blocks(ids)
+        return len(ids)
+
     # ---- plain pages: collections and the archive -------------------------------------
     def create_page(self, parent_page_id: str, r: Rendered) -> str:
         body: dict = {"parent": {"type": "page_id", "page_id": parent_page_id},

@@ -100,7 +100,7 @@ class World:
         return c
 
     def mapping(self, note_):
-        rows = [r for r in self.db.tables["notion_mappings"] if r["local_id"] == note_["id"]]
+        rows = [r for r in self.db.tables["notion_mappings"] if r["local_id"] == note_["id"] and not r.get("local_sub")]
         return rows[0] if rows else None
 
 

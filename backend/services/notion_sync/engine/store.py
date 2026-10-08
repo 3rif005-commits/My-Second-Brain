@@ -61,6 +61,16 @@ class Store:
         (self.db.table("notion_mappings").update({**fields, "updated_at": now()})
          .eq("id", mapping_id).execute())
 
+    def detached_page_ids(self, note_id: str) -> set[str]:
+        """Pages of this note we deliberately stopped touching (a 'Keep both' original)."""
+        rows = (self.db.table("notion_mappings").select("notion_id, local_sub").eq("connection_id", self.cid)
+                .eq("local_kind", "note").eq("local_id", note_id).eq("state", "detached").execute().data or [])
+        return {r["notion_id"] for r in rows if r.get("notion_id")}
+
+    def forget_one(self, kind: str, local_id: str, sub: str = "") -> None:
+        (self.db.table("notion_mappings").delete().eq("connection_id", self.cid).eq("local_kind", kind)
+         .eq("local_id", local_id).eq("local_sub", sub).execute())
+
     def forget_all(self, kind: str | None = None) -> int:
         q = self.db.table("notion_mappings").delete().eq("connection_id", self.cid)
         if kind:

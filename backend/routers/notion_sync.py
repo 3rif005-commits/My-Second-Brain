@@ -35,6 +35,7 @@ class SendBody(BaseModel):
     collection_ids: list[str] = Field(default=[], max_length=50)        # "with everything inside"
     released: list[str] = []                                           # private notes let through, this send only
     archive_ids: list[str] = []                                        # deleted notes to move to the archive page
+    resolutions: dict[str, str] = {}                                    # id -> overwrite | copy | recreate | forget (default: skip)
 
 
 def _client(token: str) -> NotionClient:      # patched in tests
@@ -179,7 +180,8 @@ def plan(body: SendBody, authorization: str = Header(...)):
     _need_scope(body)
     adapter = _adapter(conn)
     p = plan_scope(get_supabase(), conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
-                   released=frozenset(body.released), archive_ids=frozenset(body.archive_ids))
+                   released=frozenset(body.released), archive_ids=frozenset(body.archive_ids),
+                   resolutions=body.resolutions)
     return p.to_dict()
 
 
@@ -198,13 +200,30 @@ def send(body: SendBody, authorization: str = Header(...)):
         # Re-plan on the server: never trust a plan the browser sends back.
         _need_scope(body)
         p = plan_scope(get_supabase(), conn, adapter, note_ids=body.note_ids, collection_ids=body.collection_ids,
-                       released=released, archive_ids=frozenset(body.archive_ids))
+                       released=released, archive_ids=frozenset(body.archive_ids), resolutions=body.resolutions)
         if not p.sendable:
             return {"status": "nothing_to_send", "items": [], "requests": 0, "plan": p.to_dict()}
         res = Engine(get_supabase(), conn, adapter).run(p.items, released)
         return {**res.to_dict(), "plan": p.to_dict()}
     finally:
         lock.release()
+
+
+class PauseBody(BaseModel):
+    paused: bool
+
+
+@router.post("/notes/{note_id}/pause")
+def pause_note(note_id: str, body: PauseBody, authorization: str = Header(...)):
+    """Stop mirroring one note (or resume): a page you curate by hand in Notion."""
+    user_id = get_user_id(authorization)
+    conn = _need_conn(user_id)
+    store = Store(get_supabase(), user_id, conn.id)
+    m = store.mapping("note", note_id)
+    if not m or not m.get("notion_id"):
+        raise HTTPException(409, {"error": "This note has not been sent to Notion.", "error_code": "NEVER_SENT"})
+    store.update(m["id"], {"paused": body.paused})
+    return {"note_id": note_id, "paused": body.paused}
 
 
 @router.get("/notes/{note_id}")
@@ -216,6 +235,6 @@ def note_status(note_id: str, authorization: str = Header(...)):
     m = Store(get_supabase(), user_id, conn.id).mapping("note", note_id)
     if not m or not m.get("notion_id"):
         return {"connected": True, "state": "never_sent"}
-    return {"connected": True, "state": m["state"], "notion_url": page_url(m["notion_id"]),
+    return {"connected": True, "state": m["state"], "paused": bool(m.get("paused")), "notion_url": page_url(m["notion_id"]),
             "last_pushed_at": m.get("last_pushed_at"), "losses": m.get("losses") or [],
             "error": m.get("error_message")}

@@ -187,3 +187,30 @@ def test_another_users_note_cannot_be_sent(env):
     w.db.tables["notes"].append(n)
     p = c.post("/notion/plan", json={"note_ids": [n["id"]]}, headers=H).json()
     assert p["items"][0]["state"] == "missing"
+
+
+def test_collection_scope_resolutions_and_pause(env):
+    w, c = ready(env)
+    col = w.add_collection("Physics")
+    n = w.add_note(collection_id=col["id"], content=[{"id": "p", "type": "paragraph", "props": {}, "content": [{"type": "text", "text": "a", "styles": {}}], "children": []}])
+    r = c.post("/notion/send", json={"collection_ids": [col["id"]]}, headers=H).json()
+    assert r["status"] == "succeeded" and [i["kind"] for i in r["items"]] == ["collection", "note"]
+    pid = w.mapping(n)["notion_id"]
+    w.notion.human_edit(pid)
+    n["title"] = "renamed"
+    p = c.post("/notion/plan", json={"note_ids": [n["id"]]}, headers=H).json()
+    note = next(i for i in p["items"] if i["kind"] == "note")
+    assert note["state"] == "needs_you" and note["needs"]["reason"] == "edited_in_notion"
+    assert c.post("/notion/send", json={"note_ids": [n["id"]]}, headers=H).json()["status"] == "nothing_to_send"
+    r = c.post("/notion/send", json={"note_ids": [n["id"]], "resolutions": {n["id"]: "overwrite", "bogus": "x"}}, headers=H).json()
+    assert r["status"] == "succeeded" and r["items"][0]["status"] == "done"
+    assert c.post(f"/notion/notes/{n['id']}/pause", json={"paused": True}, headers=H).json()["paused"] is True
+    assert c.get(f"/notion/notes/{n['id']}", headers=H).json()["paused"] is True
+    items = c.post("/notion/plan", json={"note_ids": [n["id"]]}, headers=H).json()["items"]
+    assert next(i for i in items if i["kind"] == "note")["state"] == "paused"
+    assert c.post("/notion/notes/never/pause", json={"paused": True}, headers=H).status_code == 409
+
+
+def test_empty_scope_is_refused(env):
+    w, c = ready(env)
+    assert c.post("/notion/plan", json={}, headers=H).status_code == 422
