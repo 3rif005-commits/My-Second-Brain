@@ -698,3 +698,7 @@ App: `./app.sh status` first (never stop a running stack you didn't start), then
 **Decided 2026-10-07:** D1 tree of databases · D2 deletes listed unchecked → archive page · D3 formula +
 snapshot · D4 Notion = trusted, private blocked · D5 whole brain = notes/collections/databases/embedded
 files · fix B1, B2, B3 · U1–U4 keep. **Waiting on:** a throwaway test workspace token and the go-ahead for M0.
+
+
+## Send to Notion: handoff (2026-10-10)
+M0–M11 are built and committed on `wip/cloud-handoff` (backend 319 tests, vitest 1253, tsc clean); B1/B2 fixed in code. Not verified: the extended Playwright spec, B1/B2 in a real browser, a visual pass of the UI. See `docs/notion-sync/PROGRESS.md` ("Handoff state") and `CLOUD_HANDOFF_PROMPT.md`.

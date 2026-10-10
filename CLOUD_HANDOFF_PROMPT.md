@@ -1,0 +1,46 @@
+You are continuing the "Send to Notion" feature (plus two small app fixes) of my app, Second Brain, on branch `wip/cloud-handoff`. You are in a cloud sandbox with NO access to my real Supabase data, my secrets, llama.cpp, the running app or my browser. Work only on what runs offline. Work inline: no subagents. Small commits, `git push` after each, report faithfully (say what you ran and what you did not).
+
+## 1. Orient (read, do not guess)
+`git log --oneline -25`, `STATUS.md` (the Send to Notion section), `docs/notion-sync/PROGRESS.md` (read the whole "M1 … M11" log at the end), `docs/notion-sync/DESIGN.md`, `ROBUSTNESS.md` (§10 ADRs: don't undo one without asking), `docs/notion-sync/evidence/live/RESULTS.md` (L1–L13: verified live Notion behaviour), `docs/notion-sync/NOTION_CHANGES.md`.
+
+## 2. Goal and what is DONE (all committed, all offline tests green)
+A push-only mirror of the brain into the user's Notion workspace, in 11 milestones, all built:
+- M0–M2 IR, readers, Notion adapter, every block type, files, covers. M3 folders → pages + a "Notes" database each, note properties as columns, mentions as real links, moves, deletes → "🗄 Deleted in Second Brain". M4 edited-in-Notion protection (needs-you, diff, Overwrite / Keep both / Create again / Forget, per-note pause). M5 background runs, kill switch before every request, retry, recovery, write-ahead append reconcile, block-level diff. M6 databases (schema, relations, rollups, formulas + "(SB value)" snapshots, rows). M7 views (all creatable types, dashboards), inline databases in position. M8 mirror map, whole-brain scope, auto-sync rules + scheduler tick. M9 chat threads, skills, note sources (opt-in). M10 canary + NOTION_CHANGES.md. M11 local `.sbz` backup, verify, non-destructive restore, retention, daily pass (off by default: `BACKUP_ENABLED`).
+- UI for all of it: `frontend/components/notion/*`, `frontend/context/NotionContext.tsx`, Settings → Notion page, sidebar dots / right-click menu / ⌘-click multi-select, note chip, database menu entry, ⌘P commands.
+- B2 (24-hour capture links) and B1 (interactive blocks out of localStorage) fixed in code (see §3 for what is unverified).
+Code: `backend/services/notion_sync/` (+ `services/portable/`, `services/backup/`, `routers/notion_sync.py`, `routers/backup.py`, `routers/storage_urls.py`), tests in `backend/tests/notion_sync/`, `tests/test_backup.py`, `tests/test_storage_urls.py`.
+
+## 3. Exact state: what is NOT finished or NOT verified
+1. **The extended live browser spec was never run to completion.** `frontend/e2e/notion-sync-live.spec.ts` has 4 tests: (a) connect + one note [PASSED earlier in a previous version], (b) folder with notes: right-click → review → send → mirror state → Activity → Health → kill switch, (c) B1 localStorage→note migration. (b) and (c) are written but unrun. They need my app + my Notion test token: do NOT try in the cloud.
+2. **B1 is verified only by unit tests.** Not verified in a real browser: that `InteractiveBlock` renders inside the editor (`components/editor/InteractiveBlock.tsx`, registered as `interactive` in `BlockEditor.tsx`), that the migration effect in `NoteEditorPage.tsx` (poll for the editor ref, `insertBlocksAtEnd`, delete the localStorage key only after a successful PATCH) behaves, and that the old "Knowledge Check" slash item inserts a block. Review that code carefully by reading it.
+3. **B2 is verified by unit tests only**: new captures use a 10-year link (`services/workspace/media.py`), `POST /storage/fresh-url` (only the caller's own `workspace-resources` paths), BlockNote `resolveFileUrl: freshFileUrl` in `BlockEditor.tsx`. The mirror reads expired capture URLs by storage path (`notion/files.py` `storage_path_of`, `CompositeFiles`).
+4. UI visual check never done: dark mode of the panel/Settings sections, keyboard flow of the review panel, mobile widths. Only vitest + tsc.
+5. Known gaps (declared, by design): `SB ID` column is visible in Notion; numbered-list start index is lost (Notion rejects `list_start_index`, L1); files in database properties are skipped; `people`/`created_by`/`last_edited_by`/`verification`/`button` properties are skipped with a declared loss; `notion_file_uploads` table is unused (no cross-block upload dedup); restore does not re-create database rows or files (they are in the archive); no per-request rate adaptation beyond -20 % for 10 min after a 429; a person's edit in Notion is detected by `last_edited_by` + blocks we did not create (the test token cannot act as a human).
+6. Test results at handoff: backend `cd backend && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 venv/bin/python -m pytest -p asyncio tests/notion_sync tests/test_backup.py tests/test_storage_urls.py tests/test_secrets.py` → 319 passed. Frontend `cd frontend && npx vitest run` → 90 files / 1253 passed; `npx tsc --noEmit` clean. The wider backend suite (`tests/`) was not re-run end to end this session (it needs two venvs; see below).
+
+## 4. Next tasks, in order
+1. Read the diff of the last 3 commits (B2, B1, e2e spec) and the B1 editor code; fix anything wrong you can find by reading + unit tests. Add a vitest for the `NoteEditorPage` migration effect (fake `editorRef`) and one for `InteractiveBlockSpec` rendering via the existing `customBlocks.test.tsx` pattern.
+2. Run the whole backend suite the way `backend/tests` expects (read `STATUS.md` "Backend test quirks"; `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 … -p asyncio`; the repo's `scripts/pgtest/up.sh` if the DB tests need Postgres) and the whole vitest; report red tests with their cause. Fix only what this work broke.
+3. Write a short user-facing doc `docs/notion-sync/USER_GUIDE.md` (connect, review panel, what each state/loss word means, auto-sync limits, backup/restore commands) from the existing UI strings and PROGRESS.md.
+4. Polish pass on the UI by reading: accessibility labels, focus handling in `SendToNotionPanel`, empty/error states in the Settings sections. Keep every `data-testid` the e2e spec uses.
+5. Update `STATUS.md` (M1–M11 rows to done, with the verification caveats from §3) and `docs/notion-sync/PROGRESS.md`.
+6. Open a PR `wip/cloud-handoff` → `feat/ai-harness` with a description listing §3 honestly. Do NOT merge.
+
+## 5. Decisions and gotchas that are NOT in the repo docs
+- Notion limits found live (also in RESULTS.md): nesting = top block + 2 levels per request (`MAX_DEPTH = 3`); a positioned insert (`position: start|after_block`) returns the new blocks FOLLOWED by every later sibling (take the first N); a dashboard view also needs `data_source_id`; chart axes must carry `type`; `verification` properties cannot be created; Notion rejects `list_start_index`.
+- `FakeDB` (tests/fake_db.py) copies the rows it is given at construction, and inserts do NOT apply column defaults (e.g. `updated_at`): code that depends on a default must set it (the store does). `fake_notion.py` mirrors the verified Notion rules (validation errors, pagination, views, moves) — when real Notion behaviour differs, fix the fake AND add a RESULTS.md row.
+- Two Python venvs in `backend/`: `venv` (has pytest, no trafilatura) and `.venv` (runs the app). Tests: `venv`. `pytest` must be run from `backend/` (running from the repo root fails to collect).
+- Dev server (`next dev`) cold-compiles pages in minutes; Playwright specs need generous timeouts (`--timeout=420000`) the first time.
+- `.gitignore` covers `backend/.env`, `frontend/.env.local`, `frontend/e2e/.auth/`. **A root `.env` with an `HF_TOKEN` is tracked in git history (commit `dbdc7a8`, already on origin).** Do not read or print it; tell me to rotate that token.
+- A plan item's `selected` flag drives what is sent; the server re-plans every send and never trusts a client plan; privacy is checked in the planner AND at the engine boundary; auto-sync never releases private notes, never overwrites a page edited in Notion, never archives deletes. Do not weaken these.
+- Never put Notion shapes outside `backend/services/notion_sync/notion/` (a lint test enforces it); never delete a Notion block we did not create; never use Notion's trash for pages.
+
+## 6. Needs ME locally — do NOT attempt in the cloud
+- Any live Notion call (`evals/notion_m1_live.py --m2/--m3/--m4/--m6/--m9`, `evals/notion_canary.py`, `evals/notion_scale.py`) and the Playwright project `notion-sync-live` (needs `backend/.env` NOTION_TEST_TOKEN, my Supabase login, the running stack: `./app.sh status`, then start backend + frontend only).
+- Migrations: none new. Migration 030 is applied. (For the WebMCP fork deployment `029` and `030` still have to be applied in ITS Supabase.)
+- Syncing into the WebMCP fork (`/home/ayoub/projects/second-brain-webmcp`, branch `sync/notion-m1`, unpushed) and deploying it.
+- Real backups/restores (`python -m tools.backup`, `tools.restore --apply`) touch my data.
+- Rotating the leaked `HF_TOKEN`.
+
+## 7. Rules
+Inline work. Small commits, push after each. Run the relevant tests before every commit; report failures with their output, never claim a check you did not run, mark anything unverified as such. If a design detail turns out wrong against what the tests show, stop and write it in the PR description rather than silently changing the design.
