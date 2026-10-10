@@ -13,6 +13,7 @@ const ALLOWED_PREFIXES = [
   "routing",         // Settings → Routing: policy, test bench, decisions
   "notion",          // Settings → Notion + "Send to Notion…" (push-only mirror)
   "backup",          // Settings → Notion → Local backup
+  "storage",         // a fresh link for one of your own stored files (ledger B2)
 ];
 
 async function proxy(req: Request, path: string[]) {

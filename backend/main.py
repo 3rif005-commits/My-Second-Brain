@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
-from routers import gateway, notes, ingest, retrieval, internal, agent, agent_inline, agent_ingest, skills_api, mcp_api, note_sources, databases, db_import, connected_apps, jobs, routing, notion_sync, backup
+from routers import gateway, notes, ingest, retrieval, internal, agent, agent_inline, agent_ingest, skills_api, mcp_api, note_sources, databases, db_import, connected_apps, jobs, routing, notion_sync, backup, storage_urls
 from services.db.connection import close_pool
 from services.db.scheduler import start_scheduler, stop_scheduler
 
@@ -69,6 +69,7 @@ app.include_router(jobs.router)
 app.include_router(routing.router)
 app.include_router(notion_sync.router)
 app.include_router(backup.router)
+app.include_router(storage_urls.router)
 
 
 @app.middleware("http")
