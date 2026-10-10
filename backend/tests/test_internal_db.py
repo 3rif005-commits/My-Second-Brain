@@ -55,8 +55,22 @@ def _fake_pool(conn) -> MagicMock:
     return pool
 
 
+@pytest.fixture
+def note_levels(monkeypatch):
+    """The routes filter rows through `privacy.fetch_levels`, which reads note
+    levels over Supabase REST. These tests' notes exist only in the local pgtest
+    Postgres, so the real lookup finds nothing and the gate fails closed (403 /
+    empty rows). Serve the levels from a dict instead: every id is `personal`
+    unless a test puts it in `levels`."""
+    from services import privacy
+    levels: dict[str, str] = {}
+    monkeypatch.setattr(privacy, "fetch_levels", lambda ids, uid: {
+        i: {"level": levels.get(i, "personal"), "title": ""} for i in ids})
+    return levels
+
+
 @pytest_asyncio.fixture
-async def patched_pool(db_conn):
+async def patched_pool(db_conn, note_levels):
     fake_pool = _fake_pool(db_conn)
     with patch("routers.internal.get_pool", AsyncMock(return_value=fake_pool)):
         yield db_conn
@@ -272,6 +286,19 @@ async def test_query_database_correct_key_and_owner_returns_real_rows(
         uuid.UUID(row_id),
     )
     assert db_value == "42"
+
+
+async def test_query_database_withholds_a_private_row(patched_pool, db_conn, test_user, note_levels):
+    ds_id = await _make_data_source(db_conn, test_user)
+    await _insert_property(db_conn, test_user, ds_id, "num1", "Score", "number")
+    shown = await _make_row(db_conn, test_user, ds_id, properties={"num1": {"type": "number", "number": 1}})
+    hidden = await _make_row(db_conn, test_user, ds_id, properties={"num1": {"type": "number", "number": 2}})
+    note_levels[hidden] = "private"
+
+    res = await client_post_internal(
+        db_conn, "/internal/db/query_database", {"data_source_id": ds_id, "user_id": test_user})
+    assert res.status_code == 200, res.text
+    assert [r["id"] for r in res.json()["rows"]] == [shown]
 
 
 # ===========================================================================
