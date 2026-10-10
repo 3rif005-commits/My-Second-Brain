@@ -700,10 +700,26 @@ snapshot · D4 Notion = trusted, private blocked · D5 whole brain = notes/colle
 files · fix B1, B2, B3 · U1–U4 keep. **Waiting on:** a throwaway test workspace token and the go-ahead for M0.
 
 
-## Send to Notion: handoff (2026-10-10)
-M0–M11 are built and committed on `wip/cloud-handoff` (backend 319 tests, vitest 1253, tsc clean); B1/B2 fixed in code. Not verified: the extended Playwright spec, B1/B2 in a real browser, a visual pass of the UI. See `docs/notion-sync/PROGRESS.md` ("Handoff state") and `CLOUD_HANDOFF_PROMPT.md`.
+## Send to Notion: state after the live verification session (2026-10-10)
+M0–M11 are built on `claude/peaceful-goodall-p53g39` (PR #3 head + verification commits); B1/B2/B3 fixed. This session ran them against the real Supabase project (demo account) and the SB-TEST Notion workspace. Details and raw numbers: `docs/notion-sync/evidence/live/RESULTS.md`, `docs/notion-sync/PROGRESS.md` ("Live verification session").
 
+### Verified (ran, with the date 2026-10-10)
+- Backend, full suite against local Postgres 16 + pgvector with migrations 001–030: **2782 passed, 0 failed**. (The 4 `test_internal_db.py` failures from the previous session were a test-isolation bug, fixed.)
+- Frontend: `tsc --noEmit` clean; vitest 91 files / 1260 passed.
+- Playwright `notion-sync-live` (4 tests: connect + send + re-send, folder send/dots/Activity/Health/kill switch, B1 migration) all pass against the real app; `unknown-block-live` (B3) passes; the new `notion-visual-live` (light/dark × 1280/390 px screenshots, keyboard-only: focus lands in the dialog, Tab/Shift+Tab stay inside, Esc closes and returns focus, no sideways scroll) passes.
+- Live Notion evals: `notion_m1_live` (plain, `--m2 --m3 --m4 --m6 --m9`), `notion_canary` (14/14), `notion_scale`. All passed; nothing needed fixing.
+- Real backup + non-destructive restore on the demo account: counts and content match; what the restore created was deleted afterwards.
+- B2 live: an expired capture link returns 400; `POST /storage/fresh-url` returns a working link for the caller's own file, 404 for another user's path, 422 without auth.
 
-### Verification caveats (updated at the end of the cloud session)
-✅ = built and green offline, NOT "verified live". Verified: backend `tests/` minus `test_mcp_server.py`: 2306 passed, 0 failed; 466 errors, ALL setup errors (no Postgres on :55432 for the DB-fixture tests, and `test_mcp_remote.py` against a newer `mcp` library than the code expects). Vitest 91 files / 1258 passed, `tsc --noEmit` clean.
-NOT verified: `frontend/e2e/notion-sync-live.spec.ts` tests (b) folder send/dots/Activity/Health/kill switch and (c) B1 migration have never run (they need Supabase + `NOTION_TEST_TOKEN`); B1/B2 in a real browser; dark mode / mobile / keyboard of the new UI beyond unit tests; any live Notion eval after M2-M9 was written (`evals/notion_*`); real backup/restore. User guide: `docs/notion-sync/USER_GUIDE.md`.
+### Found and fixed this session
+- `e2e/notion-sync-live.spec.ts` B1 test looked for the block title with `getByText`; the title is an `<input>`.
+- `components/ui/button.tsx`: the `ghost` variant had no dark-mode colours ("Back up now" looked disabled in dark mode).
+- `tests/test_internal_db.py`: note levels are now served from a stub (+ a test that a private row is withheld).
+
+### Still NOT verified / needs the user
+- Looking at the sent pages inside Notion's own UI (only API read-back; a page's rendering in Notion was not viewed).
+- The BlockNote `resolveFileUrl` path for B2 in a real browser with a truly expired link (backend half is verified live; the editor half by vitest only).
+- Known app behaviours seen in the visual pass, not changed: on a phone the sidebar drawer stays open across navigation and covers the page; the Settings tab bar scrolls sideways at 390 px.
+- llama.cpp / local-model paths, Android, the WebMCP fork (apply 029/030 in its Supabase, sync `sync/notion-m1`, deploy), rotating the leaked `HF_TOKEN` (root `.env`, commit `dbdc7a8`).
+- Two empty folders named "SB-TEST folder" (created 2026-10-08) are in the `aubrif005@gmail.com` account, left by an earlier run; not touched. Delete when convenient.
+- Live runs with the scheduler/auto-sync ticking for hours, and the 10,000-note scale (extrapolated: ~50,700 requests ≈ 5.6 h at 2.5 req/s).

@@ -74,3 +74,13 @@
 - UI polish by reading: dialog focus trap + focus restore, panel can be closed during a background run (the text said so, the buttons did not), polling stops on unmount, Settings loading/error states, status words. Found a real gap and closed it: a note paused with "Stop mirroring" had no way back; the row menu now has "Resume mirroring".
 - Full suites run in the sandbox: see STATUS.md "Verification caveats". No credentials were available in the sandbox, so the browser spec and every live Notion eval were NOT run.
 - `docs/notion-sync/USER_GUIDE.md` written from the UI strings.
+
+## Live verification session (2026-10-10, branch claude/peaceful-goodall-p53g39)
+- Ran against the real Supabase project (demo account) and the SB-TEST Notion workspace; everything the runs created was removed by id/title.
+- `notion-sync-live` 4/4 pass. The B1 test needed one spec fix (the block title is an `<input>`); the app code was right.
+- Live evals M1/M2/M3/M4/M6/M9, canary (14/14) and scale: all pass, no code change (see RESULTS.md).
+- Backup/restore on the demo account: verify 0 problems; restore into a scratch folder matched 13/13 notes (content identical); then deleted.
+- `test_internal_db.py` (4 failures): the routes gate rows through `privacy.fetch_levels` (Supabase REST), the fixtures' notes exist only in the local Postgres, so the real lookup found nothing and failed closed. Test isolation, not a code bug: levels are now served from a stub, plus a test that a private row is withheld. Full backend suite: 2782 passed.
+- Visual/keyboard pass (`e2e/notion-visual-live.spec.ts`, screenshots in `e2e/screenshots/notion-sync/visual/`, light/dark × 1280/390): one real bug found and fixed (ghost Button had no dark colours); panel, review, menu, dots and all four Settings sections otherwise fine; no sideways overflow; the focus trap, Esc and focus return work (tab order in `tab-order.txt`).
+- Not changed (outside this feature): the phone drawer stays open across navigation; Settings tabs scroll sideways at 390 px; the Next dev badge overlaps the footer in dev builds.
+- Still open: see STATUS.md "Still NOT verified / needs the user".

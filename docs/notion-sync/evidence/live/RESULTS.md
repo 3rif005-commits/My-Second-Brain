@@ -65,3 +65,12 @@ Cleanup: each script moves what it made to the test workspace's trash; afterward
 | `python -m tools.restore --dry-run` | `ok`, would create 0 folders / 13 notes / 0 chats; names the 14 database rows and 3 deleted notes as not restored (as designed). |
 | `restore.apply` into the demo account | Created one "Restored from backup <date>" folder holding 13 notes. Notes 16 → 29, folders 0 → 1; the 16 existing notes were not touched. All 13 restored notes matched the archive by title and by content. |
 | Cleanup | The 13 restored notes and the scratch folder were deleted by id (only what the restore created). Notes back to 16, folders 0. |
+
+## Browser, B2 and B3 (2026-10-10, real app against real Supabase, TEST Notion workspace)
+
+| Check | Result (VERIFIED) |
+|---|---|
+| `notion-sync-live` ×4 | pass (connect/send/re-send; folder send, dots, Activity, Health, kill switch; B1 migration) |
+| `unknown-block-live` (B3) | pass |
+| `notion-visual-live` | pass: screenshots light/dark × 1280/390 px, focus trap, Esc, focus return, no sideways overflow. Found: ghost Button invisible in dark mode (fixed). |
+| B2: expired link | 400 from storage; `POST /storage/fresh-url` → 200 and the new link serves the file; another user's path → 404; no auth → 422. Test object removed. |
