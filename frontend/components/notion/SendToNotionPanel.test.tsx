@@ -97,4 +97,22 @@ describe("SendToNotionPanel", () => {
     render(<SendToNotionPanel scope={{ note_ids: ["n1"] }} onClose={() => {}} />);
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Notion is not connected."));
   });
+
+  it("moves focus into the dialog, traps Tab inside it and gives focus back to the opener on close", async () => {
+    route({ "/status": () => json(CONNECTED), "/plan": () => json(plan()) });
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const { unmount } = render(<SendToNotionPanel scope={{ note_ids: ["n1"] }} onClose={() => {}} />);
+    await screen.findByTestId("notion-item");
+    expect(screen.getByRole("dialog")).toHaveFocus();
+    const dialog = screen.getByRole("dialog");
+    const focusables = [...dialog.querySelectorAll<HTMLElement>("button:not([disabled]),a[href],input:not([disabled])")];
+    focusables[focusables.length - 1].focus();
+    await userEvent.tab();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    unmount();
+    expect(opener).toHaveFocus();
+    opener.remove();
+  });
 });

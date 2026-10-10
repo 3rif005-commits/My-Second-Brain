@@ -54,10 +54,27 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
   }, [scopeKey, options]);
 
   useEffect(() => { void load(); }, [load]);
-  useEffect(() => { panelRef.current?.focus(); }, []);
+  // Focus moves into the dialog on open and goes back to whatever opened it on close; polling stops once it is gone.
+  const mounted = useRef(true);
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
+    mounted.current = true;
+    return () => { mounted.current = false; opener?.focus?.(); };
+  }, []);
+  // A background run (more than one item) keeps going on the server, so the panel may be closed meanwhile.
+  const canClose = phase !== "sending" || !!run;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && phase !== "sending") onClose();
+      if (e.key === "Escape" && canClose) onClose();
+      if (e.key === "Tab" && panelRef.current) {
+        const f = [...panelRef.current.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])')];
+        if (!f.length) return;
+        const first = f[0], last = f[f.length - 1], at = document.activeElement;
+        if (e.shiftKey && (at === first || at === panelRef.current)) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && phase === "review" && sendable.length > 0) void send();
     };
     window.addEventListener("keydown", onKey);
@@ -105,7 +122,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
     for (;;) {
       const d = await notionApi.run(id);
       setRun(d);
-      if (!["queued", "running"].includes(d.status)) return d;
+      if (!["queued", "running"].includes(d.status) || !mounted.current) return d;
       await new Promise((res) => setTimeout(res, 1000));
     }
   }
@@ -134,13 +151,13 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
 
   return createPortal(
     <div className="fixed inset-0 z-[9998] flex justify-end bg-black/30"
-      onClick={(e) => { if (e.target === e.currentTarget && phase !== "sending") onClose(); }}>
+      onClick={(e) => { if (e.target === e.currentTarget && canClose) onClose(); }}>
       <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="notion-panel-title"
         className="w-full sm:w-[483px] h-full flex flex-col outline-none shadow-2xl
           bg-[var(--menu-bg)] text-[color:var(--menu-fg)] border-l border-[color:var(--menu-divider)]">
         <header className="flex items-center justify-between px-5 h-12 shrink-0 border-b border-[color:var(--menu-divider)]">
           <h2 id="notion-panel-title" className="text-[15px] font-semibold truncate">Send to Notion{title ? ` · ${title}` : ""}</h2>
-          <button onClick={onClose} aria-label="Close" disabled={phase === "sending"}
+          <button onClick={onClose} aria-label="Close" disabled={!canClose}
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--menu-row-hover-bg)]"><X size={15} /></button>
         </header>
 
@@ -236,7 +253,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
           )}
 
           {phase === "done" && (
-            <section aria-label="Result" className="space-y-3" data-testid="notion-result">
+            <section aria-label="Result" aria-live="polite" className="space-y-3" data-testid="notion-result">
               {finalItems.length === 0 ? (
                 <p>Nothing to send: this is already in sync ✓</p>
               ) : single ? (
@@ -286,7 +303,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
               : ""}
           </span>
           <div className="flex gap-2">
-            <Button size="sm" variant="ghost" onClick={onClose} disabled={phase === "sending"}>
+            <Button size="sm" variant="ghost" onClick={onClose} disabled={!canClose}>
               {phase === "done" ? "Close" : "Cancel"}
             </Button>
             {phase === "review" && sendable.length > 0 && (

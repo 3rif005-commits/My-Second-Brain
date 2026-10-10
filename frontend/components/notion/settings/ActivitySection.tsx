@@ -24,7 +24,7 @@ export function ActivitySection() {
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(() => notionApi.runs().then((r) => setRuns(r.runs)).catch((e) => setError(e.message)), []);
+  const load = useCallback(() => notionApi.runs().then((r) => { setRuns(r.runs); setError(null); }).catch((e) => setError(e.message)), []);
   useEffect(() => { void load(); }, [load]);
   // a run in progress refreshes itself
   useEffect(() => {
@@ -47,10 +47,10 @@ export function ActivitySection() {
     <section id="activity" aria-label="Activity" className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">Activity</h2>
-        <Button size="sm" variant="ghost" onClick={load}>Refresh</Button>
+        <Button size="sm" variant="ghost" onClick={() => void load()} aria-label="Refresh activity">Refresh</Button>
       </div>
       {error && <p role="alert" className="text-[13px] text-rose-600">{error}</p>}
-      {runs === null ? <div className="h-10 rounded-md animate-pulse bg-gray-50 dark:bg-white/5" />
+      {runs === null ? (error ? null : <div className="h-10 rounded-md animate-pulse bg-gray-50 dark:bg-white/5" aria-busy="true" />)
         : runs.length === 0 ? <p className="text-[13px] text-gray-500" data-testid="activity-empty">Nothing has been sent yet.</p>
         : (
           <ul className="rounded-lg border border-gray-200 dark:border-white/10 divide-y divide-gray-100 dark:divide-white/10" data-testid="activity-list">
@@ -73,7 +73,7 @@ export function ActivitySection() {
                         <ul className="space-y-1 text-[13px]">
                           {detail.items.map((i) => (
                             <li key={i.id} className="flex gap-2">
-                              <span className="w-24 shrink-0 text-gray-500">{i.status}</span>
+                              <span className="w-24 shrink-0 text-gray-500">{i.status.replace(/_/g, " ")}</span>
                               <span className="min-w-0 flex-1"><span className="font-medium">{i.title || i.local_id}</span>
                                 {i.message && i.status !== "done" ? <span className="block text-gray-500">{i.message}</span> : null}</span>
                             </li>

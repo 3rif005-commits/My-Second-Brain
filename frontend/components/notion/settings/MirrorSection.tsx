@@ -62,7 +62,7 @@ export function MirrorSection() {
                 <div className="text-[12px] text-gray-500">{s.help}</div>
               </div>
               <button role="switch" aria-checked={!!inc?.[s.key]} aria-label={s.label} disabled={!inc} onClick={() => flip(s.key)}
-                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${inc?.[s.key] ? "bg-indigo-500" : "bg-gray-300 dark:bg-gray-600"}`}>
+                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 ${inc?.[s.key] ? "bg-indigo-500" : "bg-gray-300 dark:bg-gray-600"}`}>
                 <span className={`inline-block h-4 w-4 translate-y-0.5 rounded-full bg-white shadow transition-transform ${inc?.[s.key] ? "translate-x-[18px]" : "translate-x-0.5"}`} />
               </button>
             </li>

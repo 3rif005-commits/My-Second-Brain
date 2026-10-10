@@ -20,7 +20,7 @@ export function HealthSection({ paused, onChanged }: { paused: boolean; onChange
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(() => {
-    notionApi.health().then(setH).catch((e) => setError(e.message));
+    notionApi.health().then((x) => { setH(x); setError(null); }).catch((e) => setError(e.message));
     backupApi.status().then(setBk).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -42,6 +42,7 @@ export function HealthSection({ paused, onChanged }: { paused: boolean; onChange
   return (
     <section id="health" aria-label="Health" className="space-y-4">
       <h2 className="font-semibold">Health</h2>
+      {!h && !error && <div className="h-10 rounded-md animate-pulse bg-gray-50 dark:bg-white/5" aria-busy="true" />}
       {error && <p role="alert" className="text-[13px] text-rose-600">{error}</p>}
       {h && (
         <dl className="grid grid-cols-[10rem_1fr] gap-y-1.5 text-[13px]" data-testid="health">
