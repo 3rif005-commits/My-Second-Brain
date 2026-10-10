@@ -1,0 +1,62 @@
+[
+ {
+  "type": "paragraph",
+  "paragraph": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "front"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "type": "callout",
+  "callout": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "Not fully represented: a “flashcard” block that Notion cannot show. Its original data is in the toggle below."
+     }
+    }
+   ],
+   "icon": {
+    "type": "emoji",
+    "emoji": "⚠️"
+   },
+   "color": "gray_background"
+  }
+ },
+ {
+  "type": "toggle",
+  "toggle": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "Original data (flashcard)"
+     }
+    }
+   ],
+   "children": [
+    {
+     "type": "code",
+     "code": {
+      "rich_text": [
+       {
+        "type": "text",
+        "text": {
+         "content": "{\n \"id\": \"f1\",\n \"type\": \"flashcard\",\n \"props\": {\n  \"back\": \"back side\"\n },\n \"content\": [\n  {\n   \"type\": \"text\",\n   \"text\": \"front\",\n   \"styles\": {}\n  }\n ],\n \"children\": []\n}"
+        }
+       }
+      ],
+      "language": "json"
+     }
+    }
+   ]
+  }
+ }
+]

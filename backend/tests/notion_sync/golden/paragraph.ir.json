@@ -1,0 +1,19 @@
+[
+ {
+  "type": "paragraph",
+  "inline": [
+   {
+    "type": "text",
+    "text": "Hello "
+   },
+   {
+    "type": "text",
+    "text": "world",
+    "marks": {
+     "bold": true
+    }
+   }
+  ],
+  "src_id": "b1"
+ }
+]

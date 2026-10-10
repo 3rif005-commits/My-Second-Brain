@@ -1,0 +1,17 @@
+[
+ {
+  "id": "b1",
+  "type": "quote",
+  "props": {
+   "backgroundColor": "yellow"
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "wise words",
+    "styles": {}
+   }
+  ],
+  "children": []
+ }
+]

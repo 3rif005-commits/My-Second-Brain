@@ -8,6 +8,7 @@ import { Logo } from "@/components/brand/Logo";
 import { SearchModal } from "@/components/search/SearchModal";
 import { SidePanel, SidePanelToggleButton } from "@/components/ai/SidePanel";
 import { AIThreadProvider } from "@/context/AIThreadContext";
+import { NotionProvider } from "@/context/NotionContext";
 import { AIPanelControlsContext, type AIPanelControls } from "@/context/AIPanelContext";
 import type { WorkspaceBinding } from "@/components/ai/Chat";
 import { IngestStreamDialog } from "@/components/ingestion/IngestStreamDialog";
@@ -167,6 +168,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
 
   return (
     <AIThreadProvider>
+    <NotionProvider>
     <AIPanelControlsContext.Provider value={controls}>
       <div className="print-layout flex h-screen overflow-hidden bg-white dark:bg-gray-900">
 
@@ -251,6 +253,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
         onClose={() => setIngestSource(null)}
       />
     </AIPanelControlsContext.Provider>
+    </NotionProvider>
     </AIThreadProvider>
   );
 }

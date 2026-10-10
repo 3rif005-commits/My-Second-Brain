@@ -1,0 +1,54 @@
+[
+ {
+  "type": "media",
+  "attrs": {
+   "kind": "image",
+   "url": "https://example.com/a.png",
+   "name": "a.png",
+   "sized": true
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "A figure"
+   }
+  ],
+  "src_id": "i1"
+ },
+ {
+  "type": "media",
+  "attrs": {
+   "kind": "video",
+   "url": "https://www.youtube.com/watch?v=abc",
+   "name": ""
+  },
+  "src_id": "v1"
+ },
+ {
+  "type": "media",
+  "attrs": {
+   "kind": "file",
+   "url": "https://example.com/doc.pdf",
+   "name": "doc.pdf"
+  },
+  "src_id": "f1"
+ },
+ {
+  "type": "media",
+  "attrs": {
+   "kind": "audio",
+   "url": "https://example.com/a.mp3",
+   "name": "a.mp3"
+  },
+  "src_id": "a1"
+ },
+ {
+  "type": "media",
+  "attrs": {
+   "kind": "image",
+   "url": "",
+   "name": ""
+  },
+  "src_id": "empty"
+ }
+]

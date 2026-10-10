@@ -1,0 +1,122 @@
+{
+  "result": {
+    "4.9MiB": {
+      "create_status": 400,
+      "create_error": "Provided `filename` has an extension that is not supported for the File Upload API."
+    },
+    "5.1MiB": {
+      "create_status": 400,
+      "create_error": "Provided `filename` has an extension that is not supported for the File Upload API."
+    }
+  },
+  "calls": [
+    {
+      "method": "POST",
+      "path": "/pages",
+      "request": {
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81f1-b486-f0e6ffabad60"
+        },
+        "properties": {
+          "title": {
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T7 file cap"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "page",
+        "id": "3f37b5cb-32d0-8146-8b5e-ed8515d08a96",
+        "created_time": "2026-10-08T10:30:00.000Z",
+        "last_edited_time": "2026-10-08T10:30:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "cover": null,
+        "icon": null,
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81f1-b486-f0e6ffabad60"
+        },
+        "in_trash": false,
+        "is_archived": false,
+        "is_locked": false,
+        "properties": {
+          "title": {
+            "id": "title",
+            "type": "title",
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T7 file cap",
+                  "link": null
+                },
+                "annotations": {
+                  "bold": false,
+                  "italic": false,
+                  "strikethrough": false,
+                  "underline": false,
+                  "code": false,
+                  "color": "default"
+                },
+                "plain_text": "T7 file cap",
+                "href": null
+              }
+            ]
+          }
+        },
+        "url": "https://app.notion.com/p/T7-file-cap-3f37b5cb32d081468b5eed8515d08a96",
+        "public_url": null,
+        "request_id": "bc634ceb-d529-4ab9-8f76-b31d6c4ea400"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/file_uploads",
+      "request": {
+        "mode": "single_part",
+        "filename": "cap-4.9MiB.bin",
+        "content_type": "application/octet-stream"
+      },
+      "status": 400,
+      "response": {
+        "object": "error",
+        "status": 400,
+        "code": "validation_error",
+        "message": "Provided `filename` has an extension that is not supported for the File Upload API.",
+        "request_id": "a5b327ff-79de-48b5-994b-1e81cead6d30"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/file_uploads",
+      "request": {
+        "mode": "single_part",
+        "filename": "cap-5.1MiB.bin",
+        "content_type": "application/octet-stream"
+      },
+      "status": 400,
+      "response": {
+        "object": "error",
+        "status": 400,
+        "code": "validation_error",
+        "message": "Provided `filename` has an extension that is not supported for the File Upload API.",
+        "request_id": "09665d44-6e52-4331-9c87-bd71a82c4bfb"
+      }
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+[
+ {
+  "type": "callout",
+  "callout": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "Key idea · 12:34"
+     }
+    }
+   ],
+   "icon": {
+    "type": "emoji",
+    "emoji": "📍"
+   },
+   "color": "gray_background"
+  }
+ },
+ {
+  "type": "callout",
+  "callout": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "Figure · page 14"
+     }
+    }
+   ],
+   "icon": {
+    "type": "emoji",
+    "emoji": "📍"
+   },
+   "color": "gray_background"
+  }
+ }
+]

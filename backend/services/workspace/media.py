@@ -113,7 +113,8 @@ def capture(resource: dict, capture_type: str, start: float, end: float | None) 
             data = f.read()
 
     storage.upload(dest, data, mime)
-    return {"path": dest, "url": storage.signed_url(dest, 86400), "mime": mime}
+    # Long-lived on purpose (ledger B2): a capture sits inside a note, and a 24-hour link broke the picture the next day.
+    return {"path": dest, "url": storage.signed_url(dest, 10 * 365 * 24 * 3600), "mime": mime}
 
 
 FORMULA_OCR_PROMPT = (

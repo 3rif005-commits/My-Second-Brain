@@ -1,0 +1,30 @@
+[
+ {
+  "id": "n1",
+  "type": "numberedListItem",
+  "props": {
+   "start": 3
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "three",
+    "styles": {}
+   }
+  ],
+  "children": []
+ },
+ {
+  "id": "n2",
+  "type": "numberedListItem",
+  "props": {},
+  "content": [
+   {
+    "type": "text",
+    "text": "four",
+    "styles": {}
+   }
+  ],
+  "children": []
+ }
+]

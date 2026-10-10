@@ -1,0 +1,16 @@
+[
+ {
+  "type": "quote",
+  "quote": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "wise words"
+     }
+    }
+   ],
+   "color": "yellow_background"
+  }
+ }
+]

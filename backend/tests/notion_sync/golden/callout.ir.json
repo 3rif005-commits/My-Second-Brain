@@ -1,0 +1,44 @@
+[
+ {
+  "type": "callout",
+  "attrs": {
+   "variant": "WARNING",
+   "icon": "⚠️",
+   "color": "orange"
+  },
+  "children": [
+   {
+    "type": "paragraph",
+    "inline": [
+     {
+      "type": "text",
+      "text": "careful"
+     }
+    ],
+    "src_id": "p"
+   }
+  ],
+  "src_id": "b1"
+ },
+ {
+  "type": "callout",
+  "attrs": {
+   "variant": "TIP",
+   "icon": "🚀",
+   "color": "green"
+  },
+  "children": [
+   {
+    "type": "paragraph",
+    "inline": [
+     {
+      "type": "text",
+      "text": "rocket tip"
+     }
+    ],
+    "src_id": "q"
+   }
+  ],
+  "src_id": "c2"
+ }
+]

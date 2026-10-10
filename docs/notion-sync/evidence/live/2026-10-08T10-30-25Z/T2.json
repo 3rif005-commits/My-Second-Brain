@@ -1,0 +1,411 @@
+{
+  "result": {
+    "page_id": "3f37b5cb-32d0-817a-8846-d380c8588a92",
+    "inner_block_id": "3f37b5cb-32d0-8114-8a74-d660f4feb3d4",
+    "page_last_edited_before": "2026-10-08T10:31:00.000Z",
+    "page_last_edited_after": "2026-10-08T10:32:00.000Z",
+    "page_last_edited_by_after": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1",
+    "bumped": true
+  },
+  "calls": [
+    {
+      "method": "POST",
+      "path": "/pages",
+      "request": {
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81f1-b486-f0e6ffabad60"
+        },
+        "properties": {
+          "title": {
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T2 nested edit"
+                }
+              }
+            ]
+          }
+        },
+        "children": [
+          {
+            "type": "toggle",
+            "toggle": {
+              "rich_text": [
+                {
+                  "type": "text",
+                  "text": {
+                    "content": "outer"
+                  }
+                }
+              ],
+              "children": [
+                {
+                  "type": "paragraph",
+                  "paragraph": {
+                    "rich_text": [
+                      {
+                        "type": "text",
+                        "text": {
+                          "content": "inner"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "status": 200,
+      "response": {
+        "object": "page",
+        "id": "3f37b5cb-32d0-817a-8846-d380c8588a92",
+        "created_time": "2026-10-08T10:31:00.000Z",
+        "last_edited_time": "2026-10-08T10:31:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "cover": null,
+        "icon": null,
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81f1-b486-f0e6ffabad60"
+        },
+        "in_trash": false,
+        "is_archived": false,
+        "is_locked": false,
+        "properties": {
+          "title": {
+            "id": "title",
+            "type": "title",
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T2 nested edit",
+                  "link": null
+                },
+                "annotations": {
+                  "bold": false,
+                  "italic": false,
+                  "strikethrough": false,
+                  "underline": false,
+                  "code": false,
+                  "color": "default"
+                },
+                "plain_text": "T2 nested edit",
+                "href": null
+              }
+            ]
+          }
+        },
+        "url": "https://app.notion.com/p/T2-nested-edit-3f37b5cb32d0817a8846d380c8588a92",
+        "public_url": null,
+        "request_id": "1e8958a4-4182-457f-b816-64405010fceb"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/3f37b5cb-32d0-817a-8846-d380c8588a92/children?page_size=100",
+      "request": null,
+      "status": 200,
+      "response": {
+        "object": "list",
+        "results": [
+          {
+            "object": "block",
+            "id": "3f37b5cb-32d0-8168-a965-dfce4950bc4f",
+            "parent": {
+              "type": "page_id",
+              "page_id": "3f37b5cb-32d0-817a-8846-d380c8588a92"
+            },
+            "created_time": "2026-10-08T10:31:00.000Z",
+            "last_edited_time": "2026-10-08T10:31:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "has_children": true,
+            "in_trash": false,
+            "type": "toggle",
+            "toggle": {
+              "rich_text": [
+                {
+                  "type": "text",
+                  "text": {
+                    "content": "outer",
+                    "link": null
+                  },
+                  "annotations": {
+                    "bold": false,
+                    "italic": false,
+                    "strikethrough": false,
+                    "underline": false,
+                    "code": false,
+                    "color": "default"
+                  },
+                  "plain_text": "outer",
+                  "href": null
+                }
+              ],
+              "color": "default"
+            }
+          }
+        ],
+        "next_cursor": null,
+        "has_more": false,
+        "type": "block",
+        "block": {},
+        "request_id": "18aaeaa2-86b3-4b2f-9907-7c65aadf143e"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/3f37b5cb-32d0-8168-a965-dfce4950bc4f/children?page_size=100",
+      "request": null,
+      "status": 200,
+      "response": {
+        "object": "list",
+        "results": [
+          {
+            "object": "block",
+            "id": "3f37b5cb-32d0-8114-8a74-d660f4feb3d4",
+            "parent": {
+              "type": "block_id",
+              "block_id": "3f37b5cb-32d0-8168-a965-dfce4950bc4f"
+            },
+            "created_time": "2026-10-08T10:31:00.000Z",
+            "last_edited_time": "2026-10-08T10:31:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "has_children": false,
+            "in_trash": false,
+            "type": "paragraph",
+            "paragraph": {
+              "rich_text": [
+                {
+                  "type": "text",
+                  "text": {
+                    "content": "inner",
+                    "link": null
+                  },
+                  "annotations": {
+                    "bold": false,
+                    "italic": false,
+                    "strikethrough": false,
+                    "underline": false,
+                    "code": false,
+                    "color": "default"
+                  },
+                  "plain_text": "inner",
+                  "href": null
+                }
+              ],
+              "icon": null,
+              "color": "default"
+            }
+          }
+        ],
+        "next_cursor": null,
+        "has_more": false,
+        "type": "block",
+        "block": {},
+        "request_id": "7779fedb-c967-4db0-b0f6-772c71a7bf01"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/pages/3f37b5cb-32d0-817a-8846-d380c8588a92",
+      "request": null,
+      "status": 200,
+      "response": {
+        "object": "page",
+        "id": "3f37b5cb-32d0-817a-8846-d380c8588a92",
+        "created_time": "2026-10-08T10:31:00.000Z",
+        "last_edited_time": "2026-10-08T10:31:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "cover": null,
+        "icon": null,
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81f1-b486-f0e6ffabad60"
+        },
+        "in_trash": false,
+        "is_archived": false,
+        "is_locked": false,
+        "properties": {
+          "title": {
+            "id": "title",
+            "type": "title",
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T2 nested edit",
+                  "link": null
+                },
+                "annotations": {
+                  "bold": false,
+                  "italic": false,
+                  "strikethrough": false,
+                  "underline": false,
+                  "code": false,
+                  "color": "default"
+                },
+                "plain_text": "T2 nested edit",
+                "href": null
+              }
+            ]
+          }
+        },
+        "url": "https://app.notion.com/p/T2-nested-edit-3f37b5cb32d0817a8846d380c8588a92",
+        "public_url": null,
+        "request_id": "072b34a2-fe53-4cb4-8cfb-2630ffe1ae96"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/blocks/3f37b5cb-32d0-8114-8a74-d660f4feb3d4",
+      "request": {
+        "paragraph": {
+          "rich_text": [
+            {
+              "type": "text",
+              "text": {
+                "content": "inner edited"
+              }
+            }
+          ]
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "block",
+        "id": "3f37b5cb-32d0-8114-8a74-d660f4feb3d4",
+        "parent": {
+          "type": "block_id",
+          "block_id": "3f37b5cb-32d0-8168-a965-dfce4950bc4f"
+        },
+        "created_time": "2026-10-08T10:31:00.000Z",
+        "last_edited_time": "2026-10-08T10:32:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "has_children": false,
+        "in_trash": false,
+        "type": "paragraph",
+        "paragraph": {
+          "rich_text": [
+            {
+              "type": "text",
+              "text": {
+                "content": "inner edited",
+                "link": null
+              },
+              "annotations": {
+                "bold": false,
+                "italic": false,
+                "strikethrough": false,
+                "underline": false,
+                "code": false,
+                "color": "default"
+              },
+              "plain_text": "inner edited",
+              "href": null
+            }
+          ],
+          "icon": null,
+          "color": "default"
+        },
+        "request_id": "1ae5e3d1-8c4c-4235-b85e-f1ede03ceac4"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/pages/3f37b5cb-32d0-817a-8846-d380c8588a92",
+      "request": null,
+      "status": 200,
+      "response": {
+        "object": "page",
+        "id": "3f37b5cb-32d0-817a-8846-d380c8588a92",
+        "created_time": "2026-10-08T10:31:00.000Z",
+        "last_edited_time": "2026-10-08T10:32:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "cover": null,
+        "icon": null,
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81f1-b486-f0e6ffabad60"
+        },
+        "in_trash": false,
+        "is_archived": false,
+        "is_locked": false,
+        "properties": {
+          "title": {
+            "id": "title",
+            "type": "title",
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T2 nested edit",
+                  "link": null
+                },
+                "annotations": {
+                  "bold": false,
+                  "italic": false,
+                  "strikethrough": false,
+                  "underline": false,
+                  "code": false,
+                  "color": "default"
+                },
+                "plain_text": "T2 nested edit",
+                "href": null
+              }
+            ]
+          }
+        },
+        "url": "https://app.notion.com/p/T2-nested-edit-3f37b5cb32d0817a8846d380c8588a92",
+        "public_url": null,
+        "request_id": "411de487-011e-4ee0-8362-1bd174b1e4a1"
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import { useState } from "react";
 import { createReactBlockSpec } from "@blocknote/react";
 // @ts-ignore — @blocknote/core@0.48.0 ships an empty index.d.ts (upstream bug); runtime exports are fine
 import { createInlineContentSpec } from "@blocknote/core";
+import { unknownTypeOf } from "./unknownBlocks";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
@@ -408,3 +409,31 @@ export function insertCalloutBlock(editor: AnyBlock, afterBlockId: string | unde
   const body = inserted?.children?.[0];
   if (body) editor.setTextCursorPosition(body, "start");
 }
+
+// ---------------------------------------------------------------------------
+// unknownBlock — a placeholder for a block of a type this editor doesn't know.
+// It carries the original block as JSON; BlockEditor swaps the original back
+// in on every save (see unknownBlocks.ts), so the note's stored content never
+// changes. Read-only: editing a block we can't interpret would be guessing.
+// ---------------------------------------------------------------------------
+
+export const UnknownBlockSpec = createReactBlockSpec(
+  {
+    type: "unknownBlock",
+    propSchema: {
+      original: { default: "" },
+    },
+    content: "none",
+  },
+  {
+    render: (props) => (
+      <div
+        contentEditable={false}
+        className="w-full rounded-md border border-dashed border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-500 dark:text-gray-400"
+        role="note"
+      >
+        Unsupported block “{unknownTypeOf(props.block.props.original)}”: kept as it is, not shown here.
+      </div>
+    ),
+  }
+);

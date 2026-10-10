@@ -30,6 +30,16 @@ class Settings(BaseSettings):
     # Milestone 2 flips this to True once the migration is applied.
     database_rows_enabled: bool = False
 
+    # Encryption key(s) for secrets at rest (services/secrets.py). Comma-separated
+    # Fernet keys; the first encrypts. Empty = secrets cannot be stored (fail closed).
+    secrets_key: str = ""
+    # Local backup archive (.sbz). Off until you turn it on: it contains your private notes.
+    backup_enabled: bool = False
+    backup_dir: str = ""
+    # Notion sync tests only: a token for a THROWAWAY workspace whose root page is
+    # named SB-TEST-… (docs/notion-sync/ROBUSTNESS.md §6). Never your real workspace.
+    notion_test_token: str = ""
+
     # AI substrate — Phase 1
     api_provider: str = "openrouter"        # "openrouter" | "anthropic" | "openai"
     anthropic_api_key: str | None = None

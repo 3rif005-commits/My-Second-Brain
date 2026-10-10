@@ -1,0 +1,17 @@
+[
+ {
+  "id": "f1",
+  "type": "flashcard",
+  "props": {
+   "back": "back side"
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "front",
+    "styles": {}
+   }
+  ],
+  "children": []
+ }
+]

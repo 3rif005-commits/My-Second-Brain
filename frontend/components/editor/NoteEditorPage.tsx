@@ -4,7 +4,7 @@ import React, { Component, useState, useCallback, useEffect, useRef } from "reac
 import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Link, Check, Layers } from "lucide-react";
+import { ChevronRight, Link, Check, Layers, Send } from "lucide-react";
 import type { Note } from "@/lib/types/database";
 import { Button } from "@/components/ui/button";
 import { wsApi } from "@/lib/workspace";
@@ -16,8 +16,10 @@ import { anchorRows, readDraftAnchors } from "@/components/workspace/anchorHeadi
 import { NoteProperties } from "./NoteProperties";
 import { DatabaseRowProperties } from "../database/DatabaseRowProperties";
 import { BacklinksPanel } from "./BacklinksPanel";
-import { InteractiveBlockCard } from "./InteractiveBlockCard";
-import type { BlockEditorHandle, InteractiveBlock } from "./BlockEditor";
+import { useLegacyInteractiveMigration } from "./useLegacyInteractiveMigration";
+import { useNotion } from "@/context/NotionContext";
+import { NotionChip } from "../notion/NotionChip";
+import type { BlockEditorHandle } from "./BlockEditor";
 
 const EMOJIS = [
   "📄","📝","📋","📌","📍","📎","🔗","📚","📖","📕","📗","📘","📙","🗒️","🗓️",
@@ -80,14 +82,9 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [ingestHtml, setIngestHtml] = useState<string | undefined>();
-  const [interactiveBlocks, setInteractiveBlocks] = useState<InteractiveBlock[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      return JSON.parse(localStorage.getItem(`interactive-${note.id}`) ?? "[]");
-    } catch { return []; }
-  });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const notion = useNotion();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [sourceCount, setSourceCount] = useState(0);
@@ -252,16 +249,21 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
     persistTitle(title);
   }
 
+  // Ledger B1: interactive blocks used to live only in this browser's localStorage. Move any that are here INTO
+  // the note (as real blocks); the browser's copy is deleted only after the note, with them, has been saved.
+  const afterSave = useLegacyInteractiveMigration(editorRef, note.id);
+
   const handleSaveContent = useCallback(
     async (blocks: AnyBlock[], plainText: string) => {
       setSaving(true);
-      await fetch(`/api/notes/${note.id}`, {
+      const res = await fetch(`/api/notes/${note.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: blocks, content_text: plainText }),
       });
       setSaving(false);
       setLastSaved(new Date());
+      afterSave(res.ok, blocks);
 
       // Debounce re-index: fire 30s after last block change
       if (reindexDebounceRef.current) clearTimeout(reindexDebounceRef.current);
@@ -336,6 +338,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
                 ? "Applying…"
                 : ""}
             </span>
+            <NotionChip noteId={note.id} />
             {sourceCount > 0 && (
               <button
                 onClick={() => router.push(`/brain/workspace/${note.id}`)}
@@ -381,6 +384,14 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
                   onClick={handleExportPdf}
                 >
                   Export as PDF
+                </button>
+
+                <button
+                  role="menuitem"
+                  className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+                  onClick={() => { setShowMenu(false); notion.open({ note_ids: [note.id] }); }}
+                >
+                  <Send size={13} /> Send to Notion…
                 </button>
 
                 {/* Divider */}
@@ -517,38 +528,8 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
                 }
                 onSave={handleSaveContent}
                 ingestHtml={ingestHtml}
-                onInteractiveBlocks={(blocks) => {
-                  localStorage.setItem(`interactive-${note.id}`, JSON.stringify(blocks));
-                  setInteractiveBlocks(blocks);
-                }}
-                onAddInteractiveBlock={(block) => {
-                  setInteractiveBlocks((prev) => {
-                    const next = [...prev, block];
-                    localStorage.setItem(`interactive-${note.id}`, JSON.stringify(next));
-                    return next;
-                  });
-                }}
               />
             </EditorErrorBoundary>
-
-            {/* Disco Blocks — sandboxed interactive blocks */}
-            {interactiveBlocks.map((block, i) => (
-              <InteractiveBlockCard
-                key={i}
-                index={i}
-                block={block}
-                onUpdate={(idx, updated) => {
-                  const next = interactiveBlocks.map((b, j) => j === idx ? updated : b);
-                  localStorage.setItem(`interactive-${note.id}`, JSON.stringify(next));
-                  setInteractiveBlocks(next);
-                }}
-                onRemove={(idx) => {
-                  const next = interactiveBlocks.filter((_, j) => j !== idx);
-                  localStorage.setItem(`interactive-${note.id}`, JSON.stringify(next));
-                  setInteractiveBlocks(next);
-                }}
-              />
-            ))}
 
             {/* Backlinks — notes that @mention this one */}
             <BacklinksPanel noteId={note.id} />

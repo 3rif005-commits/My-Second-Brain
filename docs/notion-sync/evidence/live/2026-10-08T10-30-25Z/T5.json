@@ -1,0 +1,1412 @@
+{
+  "result": {
+    "F_mul": {
+      "expr": "prop(\"A\") * 2",
+      "schema_status": 200,
+      "error": null,
+      "value": {
+        "type": "number",
+        "number": 6
+      }
+    },
+    "F_if": {
+      "expr": "if(prop(\"A\") > 2, \"big\", \"small\")",
+      "schema_status": 200,
+      "error": null,
+      "value": {
+        "type": "string",
+        "string": "big"
+      }
+    },
+    "F_concat": {
+      "expr": "prop(\"Name\") + \" (\" + format(prop(\"A\")) + \")\"",
+      "schema_status": 200,
+      "error": null,
+      "value": {
+        "type": "string",
+        "string": "row (3)"
+      }
+    },
+    "F_date": {
+      "expr": "dateBetween(prop(\"D\"), parseDate(\"2026-01-01\"), \"days\")",
+      "schema_status": 200,
+      "error": null,
+      "value": {
+        "type": "number",
+        "number": 10
+      }
+    },
+    "F_let": {
+      "expr": "let(x, prop(\"A\") + 1, x * x)",
+      "schema_status": 200,
+      "error": null,
+      "value": {
+        "type": "number",
+        "number": 16
+      }
+    },
+    "F_map": {
+      "expr": "prop(\"Tags\").map(current + \"!\").join(\", \")",
+      "schema_status": 200,
+      "error": null,
+      "value": {
+        "type": "string",
+        "string": "x!, y!"
+      }
+    },
+    "F_bad": {
+      "expr": "nosuchfunction(prop(\"A\"))",
+      "schema_status": 400,
+      "error": "Type error with formula"
+    }
+  },
+  "calls": [
+    {
+      "method": "POST",
+      "path": "/pages",
+      "request": {
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81f1-b486-f0e6ffabad60"
+        },
+        "properties": {
+          "title": {
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T5 formulas"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "page",
+        "id": "3f37b5cb-32d0-81fa-8d26-f1e81335f19c",
+        "created_time": "2026-10-08T10:30:00.000Z",
+        "last_edited_time": "2026-10-08T10:30:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "cover": null,
+        "icon": null,
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81f1-b486-f0e6ffabad60"
+        },
+        "in_trash": false,
+        "is_archived": false,
+        "is_locked": false,
+        "properties": {
+          "title": {
+            "id": "title",
+            "type": "title",
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T5 formulas",
+                  "link": null
+                },
+                "annotations": {
+                  "bold": false,
+                  "italic": false,
+                  "strikethrough": false,
+                  "underline": false,
+                  "code": false,
+                  "color": "default"
+                },
+                "plain_text": "T5 formulas",
+                "href": null
+              }
+            ]
+          }
+        },
+        "url": "https://app.notion.com/p/T5-formulas-3f37b5cb32d081fa8d26f1e81335f19c",
+        "public_url": null,
+        "request_id": "9013607b-8a8f-4568-89d8-dabe1a85261f"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/databases",
+      "request": {
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81fa-8d26-f1e81335f19c"
+        },
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "T5 DB"
+            }
+          }
+        ],
+        "is_inline": false,
+        "initial_data_source": {
+          "properties": {
+            "Name": {
+              "title": {}
+            },
+            "A": {
+              "number": {}
+            },
+            "D": {
+              "date": {}
+            },
+            "Tags": {
+              "multi_select": {
+                "options": [
+                  {
+                    "name": "x"
+                  },
+                  {
+                    "name": "y"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "database",
+        "id": "70ad6940-c6ba-4b3d-ad90-81e8addfaed8",
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "T5 DB",
+              "link": null
+            },
+            "annotations": {
+              "bold": false,
+              "italic": false,
+              "strikethrough": false,
+              "underline": false,
+              "code": false,
+              "color": "default"
+            },
+            "plain_text": "T5 DB",
+            "href": null
+          }
+        ],
+        "description": [],
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81fa-8d26-f1e81335f19c"
+        },
+        "is_inline": false,
+        "database_type": null,
+        "in_trash": false,
+        "is_locked": false,
+        "created_time": "2026-10-08T10:30:41.440+00:00",
+        "last_edited_time": "2026-10-08T10:30:41.440+00:00",
+        "data_sources": [
+          {
+            "id": "2399825e-116e-43fd-95e5-06d2a081de79",
+            "name": "T5 DB"
+          }
+        ],
+        "icon": null,
+        "cover": null,
+        "url": "https://app.notion.com/p/70ad6940c6ba4b3dad9081e8addfaed8",
+        "public_url": null,
+        "request_id": "896403a8-f60e-47ab-b993-ce88d14d7c34"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/data_sources/2399825e-116e-43fd-95e5-06d2a081de79",
+      "request": {
+        "properties": {
+          "F_mul": {
+            "formula": {
+              "expression": "prop(\"A\") * 2"
+            }
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "data_source",
+        "id": "2399825e-116e-43fd-95e5-06d2a081de79",
+        "cover": null,
+        "icon": null,
+        "created_time": "2026-10-08T10:30:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_time": "2026-10-08T10:30:00.000Z",
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "T5 DB",
+              "link": null
+            },
+            "annotations": {
+              "bold": false,
+              "italic": false,
+              "strikethrough": false,
+              "underline": false,
+              "code": false,
+              "color": "default"
+            },
+            "plain_text": "T5 DB",
+            "href": null
+          }
+        ],
+        "description": [],
+        "is_inline": false,
+        "database_type": null,
+        "properties": {
+          "A": {
+            "id": "KX~a",
+            "name": "A",
+            "description": null,
+            "type": "number",
+            "number": {
+              "format": "number"
+            }
+          },
+          "D": {
+            "id": "iQj%40",
+            "name": "D",
+            "description": null,
+            "type": "date",
+            "date": {}
+          },
+          "F_mul": {
+            "id": "zwfM",
+            "name": "F_mul",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "prop(\"A\") * 2"
+            }
+          },
+          "Tags": {
+            "id": "%7CHCn",
+            "name": "Tags",
+            "description": null,
+            "type": "multi_select",
+            "multi_select": {
+              "options": [
+                {
+                  "id": "22c5fb27-f401-46ac-b1cd-c118fa233d09",
+                  "name": "x",
+                  "color": "default",
+                  "description": null
+                },
+                {
+                  "id": "f222bf32-8119-44b4-aa7b-8585e4ddee19",
+                  "name": "y",
+                  "color": "default",
+                  "description": null
+                }
+              ]
+            }
+          },
+          "Name": {
+            "id": "title",
+            "name": "Name",
+            "description": null,
+            "type": "title",
+            "title": {}
+          }
+        },
+        "parent": {
+          "type": "database_id",
+          "database_id": "70ad6940-c6ba-4b3d-ad90-81e8addfaed8"
+        },
+        "database_parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81fa-8d26-f1e81335f19c"
+        },
+        "url": "https://app.notion.com/p/70ad6940c6ba4b3dad9081e8addfaed8",
+        "public_url": null,
+        "in_trash": false,
+        "request_id": "b87101e1-4976-4bd9-ba18-7b3f28c18084"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/data_sources/2399825e-116e-43fd-95e5-06d2a081de79",
+      "request": {
+        "properties": {
+          "F_if": {
+            "formula": {
+              "expression": "if(prop(\"A\") > 2, \"big\", \"small\")"
+            }
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "data_source",
+        "id": "2399825e-116e-43fd-95e5-06d2a081de79",
+        "cover": null,
+        "icon": null,
+        "created_time": "2026-10-08T10:30:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_time": "2026-10-08T10:30:00.000Z",
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "T5 DB",
+              "link": null
+            },
+            "annotations": {
+              "bold": false,
+              "italic": false,
+              "strikethrough": false,
+              "underline": false,
+              "code": false,
+              "color": "default"
+            },
+            "plain_text": "T5 DB",
+            "href": null
+          }
+        ],
+        "description": [],
+        "is_inline": false,
+        "database_type": null,
+        "properties": {
+          "A": {
+            "id": "KX~a",
+            "name": "A",
+            "description": null,
+            "type": "number",
+            "number": {
+              "format": "number"
+            }
+          },
+          "F_if": {
+            "id": "TuWK",
+            "name": "F_if",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "if(prop(\"A\") > 2, \"big\", \"small\")"
+            }
+          },
+          "D": {
+            "id": "iQj%40",
+            "name": "D",
+            "description": null,
+            "type": "date",
+            "date": {}
+          },
+          "F_mul": {
+            "id": "zwfM",
+            "name": "F_mul",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "prop(\"A\") * 2"
+            }
+          },
+          "Tags": {
+            "id": "%7CHCn",
+            "name": "Tags",
+            "description": null,
+            "type": "multi_select",
+            "multi_select": {
+              "options": [
+                {
+                  "id": "22c5fb27-f401-46ac-b1cd-c118fa233d09",
+                  "name": "x",
+                  "color": "default",
+                  "description": null
+                },
+                {
+                  "id": "f222bf32-8119-44b4-aa7b-8585e4ddee19",
+                  "name": "y",
+                  "color": "default",
+                  "description": null
+                }
+              ]
+            }
+          },
+          "Name": {
+            "id": "title",
+            "name": "Name",
+            "description": null,
+            "type": "title",
+            "title": {}
+          }
+        },
+        "parent": {
+          "type": "database_id",
+          "database_id": "70ad6940-c6ba-4b3d-ad90-81e8addfaed8"
+        },
+        "database_parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81fa-8d26-f1e81335f19c"
+        },
+        "url": "https://app.notion.com/p/70ad6940c6ba4b3dad9081e8addfaed8",
+        "public_url": null,
+        "in_trash": false,
+        "request_id": "53f3a26b-e8b9-46a0-87d7-0a51c6b9ec9d"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/data_sources/2399825e-116e-43fd-95e5-06d2a081de79",
+      "request": {
+        "properties": {
+          "F_concat": {
+            "formula": {
+              "expression": "prop(\"Name\") + \" (\" + format(prop(\"A\")) + \")\""
+            }
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "data_source",
+        "id": "2399825e-116e-43fd-95e5-06d2a081de79",
+        "cover": null,
+        "icon": null,
+        "created_time": "2026-10-08T10:30:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_time": "2026-10-08T10:30:00.000Z",
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "T5 DB",
+              "link": null
+            },
+            "annotations": {
+              "bold": false,
+              "italic": false,
+              "strikethrough": false,
+              "underline": false,
+              "code": false,
+              "color": "default"
+            },
+            "plain_text": "T5 DB",
+            "href": null
+          }
+        ],
+        "description": [],
+        "is_inline": false,
+        "database_type": null,
+        "properties": {
+          "A": {
+            "id": "KX~a",
+            "name": "A",
+            "description": null,
+            "type": "number",
+            "number": {
+              "format": "number"
+            }
+          },
+          "F_if": {
+            "id": "TuWK",
+            "name": "F_if",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "if(prop(\"A\") > 2, \"big\", \"small\")"
+            }
+          },
+          "D": {
+            "id": "iQj%40",
+            "name": "D",
+            "description": null,
+            "type": "date",
+            "date": {}
+          },
+          "F_concat": {
+            "id": "pPI%3D",
+            "name": "F_concat",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "prop(\"Name\") + \" (\" + format(prop(\"A\")) + \")\""
+            }
+          },
+          "F_mul": {
+            "id": "zwfM",
+            "name": "F_mul",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "prop(\"A\") * 2"
+            }
+          },
+          "Tags": {
+            "id": "%7CHCn",
+            "name": "Tags",
+            "description": null,
+            "type": "multi_select",
+            "multi_select": {
+              "options": [
+                {
+                  "id": "22c5fb27-f401-46ac-b1cd-c118fa233d09",
+                  "name": "x",
+                  "color": "default",
+                  "description": null
+                },
+                {
+                  "id": "f222bf32-8119-44b4-aa7b-8585e4ddee19",
+                  "name": "y",
+                  "color": "default",
+                  "description": null
+                }
+              ]
+            }
+          },
+          "Name": {
+            "id": "title",
+            "name": "Name",
+            "description": null,
+            "type": "title",
+            "title": {}
+          }
+        },
+        "parent": {
+          "type": "database_id",
+          "database_id": "70ad6940-c6ba-4b3d-ad90-81e8addfaed8"
+        },
+        "database_parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81fa-8d26-f1e81335f19c"
+        },
+        "url": "https://app.notion.com/p/70ad6940c6ba4b3dad9081e8addfaed8",
+        "public_url": null,
+        "in_trash": false,
+        "request_id": "9535832e-2cae-4d1c-89cc-0989067fbf60"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/data_sources/2399825e-116e-43fd-95e5-06d2a081de79",
+      "request": {
+        "properties": {
+          "F_date": {
+            "formula": {
+              "expression": "dateBetween(prop(\"D\"), parseDate(\"2026-01-01\"), \"days\")"
+            }
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "data_source",
+        "id": "2399825e-116e-43fd-95e5-06d2a081de79",
+        "cover": null,
+        "icon": null,
+        "created_time": "2026-10-08T10:30:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_time": "2026-10-08T10:30:00.000Z",
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "T5 DB",
+              "link": null
+            },
+            "annotations": {
+              "bold": false,
+              "italic": false,
+              "strikethrough": false,
+              "underline": false,
+              "code": false,
+              "color": "default"
+            },
+            "plain_text": "T5 DB",
+            "href": null
+          }
+        ],
+        "description": [],
+        "is_inline": false,
+        "database_type": null,
+        "properties": {
+          "A": {
+            "id": "KX~a",
+            "name": "A",
+            "description": null,
+            "type": "number",
+            "number": {
+              "format": "number"
+            }
+          },
+          "F_if": {
+            "id": "TuWK",
+            "name": "F_if",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "if(prop(\"A\") > 2, \"big\", \"small\")"
+            }
+          },
+          "D": {
+            "id": "iQj%40",
+            "name": "D",
+            "description": null,
+            "type": "date",
+            "date": {}
+          },
+          "F_date": {
+            "id": "k~ZW",
+            "name": "F_date",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "dateBetween(prop(\"D\"), parseDate(\"2026-01-01\"), \"days\")"
+            }
+          },
+          "F_concat": {
+            "id": "pPI%3D",
+            "name": "F_concat",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "prop(\"Name\") + \" (\" + format(prop(\"A\")) + \")\""
+            }
+          },
+          "F_mul": {
+            "id": "zwfM",
+            "name": "F_mul",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "prop(\"A\") * 2"
+            }
+          },
+          "Tags": {
+            "id": "%7CHCn",
+            "name": "Tags",
+            "description": null,
+            "type": "multi_select",
+            "multi_select": {
+              "options": [
+                {
+                  "id": "22c5fb27-f401-46ac-b1cd-c118fa233d09",
+                  "name": "x",
+                  "color": "default",
+                  "description": null
+                },
+                {
+                  "id": "f222bf32-8119-44b4-aa7b-8585e4ddee19",
+                  "name": "y",
+                  "color": "default",
+                  "description": null
+                }
+              ]
+            }
+          },
+          "Name": {
+            "id": "title",
+            "name": "Name",
+            "description": null,
+            "type": "title",
+            "title": {}
+          }
+        },
+        "parent": {
+          "type": "database_id",
+          "database_id": "70ad6940-c6ba-4b3d-ad90-81e8addfaed8"
+        },
+        "database_parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81fa-8d26-f1e81335f19c"
+        },
+        "url": "https://app.notion.com/p/70ad6940c6ba4b3dad9081e8addfaed8",
+        "public_url": null,
+        "in_trash": false,
+        "request_id": "7c7b3318-24cc-49b8-9c46-a57a634dc5cb"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/data_sources/2399825e-116e-43fd-95e5-06d2a081de79",
+      "request": {
+        "properties": {
+          "F_let": {
+            "formula": {
+              "expression": "let(x, prop(\"A\") + 1, x * x)"
+            }
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "data_source",
+        "id": "2399825e-116e-43fd-95e5-06d2a081de79",
+        "cover": null,
+        "icon": null,
+        "created_time": "2026-10-08T10:30:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_time": "2026-10-08T10:30:00.000Z",
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "T5 DB",
+              "link": null
+            },
+            "annotations": {
+              "bold": false,
+              "italic": false,
+              "strikethrough": false,
+              "underline": false,
+              "code": false,
+              "color": "default"
+            },
+            "plain_text": "T5 DB",
+            "href": null
+          }
+        ],
+        "description": [],
+        "is_inline": false,
+        "database_type": null,
+        "properties": {
+          "A": {
+            "id": "KX~a",
+            "name": "A",
+            "description": null,
+            "type": "number",
+            "number": {
+              "format": "number"
+            }
+          },
+          "F_if": {
+            "id": "TuWK",
+            "name": "F_if",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "if(prop(\"A\") > 2, \"big\", \"small\")"
+            }
+          },
+          "D": {
+            "id": "iQj%40",
+            "name": "D",
+            "description": null,
+            "type": "date",
+            "date": {}
+          },
+          "F_date": {
+            "id": "k~ZW",
+            "name": "F_date",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "dateBetween(prop(\"D\"), parseDate(\"2026-01-01\"), \"days\")"
+            }
+          },
+          "F_let": {
+            "id": "n%7Da%3A",
+            "name": "F_let",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "let(x, prop(\"A\") + 1, x * x)"
+            }
+          },
+          "F_concat": {
+            "id": "pPI%3D",
+            "name": "F_concat",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "prop(\"Name\") + \" (\" + format(prop(\"A\")) + \")\""
+            }
+          },
+          "F_mul": {
+            "id": "zwfM",
+            "name": "F_mul",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "prop(\"A\") * 2"
+            }
+          },
+          "Tags": {
+            "id": "%7CHCn",
+            "name": "Tags",
+            "description": null,
+            "type": "multi_select",
+            "multi_select": {
+              "options": [
+                {
+                  "id": "22c5fb27-f401-46ac-b1cd-c118fa233d09",
+                  "name": "x",
+                  "color": "default",
+                  "description": null
+                },
+                {
+                  "id": "f222bf32-8119-44b4-aa7b-8585e4ddee19",
+                  "name": "y",
+                  "color": "default",
+                  "description": null
+                }
+              ]
+            }
+          },
+          "Name": {
+            "id": "title",
+            "name": "Name",
+            "description": null,
+            "type": "title",
+            "title": {}
+          }
+        },
+        "parent": {
+          "type": "database_id",
+          "database_id": "70ad6940-c6ba-4b3d-ad90-81e8addfaed8"
+        },
+        "database_parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81fa-8d26-f1e81335f19c"
+        },
+        "url": "https://app.notion.com/p/70ad6940c6ba4b3dad9081e8addfaed8",
+        "public_url": null,
+        "in_trash": false,
+        "request_id": "bf9015c2-79bb-4018-86f4-6f4adf8b27f0"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/data_sources/2399825e-116e-43fd-95e5-06d2a081de79",
+      "request": {
+        "properties": {
+          "F_map": {
+            "formula": {
+              "expression": "prop(\"Tags\").map(current + \"!\").join(\", \")"
+            }
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "data_source",
+        "id": "2399825e-116e-43fd-95e5-06d2a081de79",
+        "cover": null,
+        "icon": null,
+        "created_time": "2026-10-08T10:30:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_time": "2026-10-08T10:30:00.000Z",
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "T5 DB",
+              "link": null
+            },
+            "annotations": {
+              "bold": false,
+              "italic": false,
+              "strikethrough": false,
+              "underline": false,
+              "code": false,
+              "color": "default"
+            },
+            "plain_text": "T5 DB",
+            "href": null
+          }
+        ],
+        "description": [],
+        "is_inline": false,
+        "database_type": null,
+        "properties": {
+          "F_map": {
+            "id": "%3EU%7Dw",
+            "name": "F_map",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "prop(\"Tags\").map(current + \"!\").join(\", \")"
+            }
+          },
+          "A": {
+            "id": "KX~a",
+            "name": "A",
+            "description": null,
+            "type": "number",
+            "number": {
+              "format": "number"
+            }
+          },
+          "F_if": {
+            "id": "TuWK",
+            "name": "F_if",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "if(prop(\"A\") > 2, \"big\", \"small\")"
+            }
+          },
+          "D": {
+            "id": "iQj%40",
+            "name": "D",
+            "description": null,
+            "type": "date",
+            "date": {}
+          },
+          "F_date": {
+            "id": "k~ZW",
+            "name": "F_date",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "dateBetween(prop(\"D\"), parseDate(\"2026-01-01\"), \"days\")"
+            }
+          },
+          "F_let": {
+            "id": "n%7Da%3A",
+            "name": "F_let",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "let(x, prop(\"A\") + 1, x * x)"
+            }
+          },
+          "F_concat": {
+            "id": "pPI%3D",
+            "name": "F_concat",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "prop(\"Name\") + \" (\" + format(prop(\"A\")) + \")\""
+            }
+          },
+          "F_mul": {
+            "id": "zwfM",
+            "name": "F_mul",
+            "description": null,
+            "type": "formula",
+            "formula": {
+              "expression": "prop(\"A\") * 2"
+            }
+          },
+          "Tags": {
+            "id": "%7CHCn",
+            "name": "Tags",
+            "description": null,
+            "type": "multi_select",
+            "multi_select": {
+              "options": [
+                {
+                  "id": "22c5fb27-f401-46ac-b1cd-c118fa233d09",
+                  "name": "x",
+                  "color": "default",
+                  "description": null
+                },
+                {
+                  "id": "f222bf32-8119-44b4-aa7b-8585e4ddee19",
+                  "name": "y",
+                  "color": "default",
+                  "description": null
+                }
+              ]
+            }
+          },
+          "Name": {
+            "id": "title",
+            "name": "Name",
+            "description": null,
+            "type": "title",
+            "title": {}
+          }
+        },
+        "parent": {
+          "type": "database_id",
+          "database_id": "70ad6940-c6ba-4b3d-ad90-81e8addfaed8"
+        },
+        "database_parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81fa-8d26-f1e81335f19c"
+        },
+        "url": "https://app.notion.com/p/70ad6940c6ba4b3dad9081e8addfaed8",
+        "public_url": null,
+        "in_trash": false,
+        "request_id": "19000035-2416-483c-907f-a7e3b9c0937f"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/data_sources/2399825e-116e-43fd-95e5-06d2a081de79",
+      "request": {
+        "properties": {
+          "F_bad": {
+            "formula": {
+              "expression": "nosuchfunction(prop(\"A\"))"
+            }
+          }
+        }
+      },
+      "status": 400,
+      "response": {
+        "object": "error",
+        "status": 400,
+        "code": "validation_error",
+        "message": "Type error with formula",
+        "request_id": "02e231b6-eb8b-4eda-ab59-7ceef15e9931"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/pages",
+      "request": {
+        "parent": {
+          "type": "data_source_id",
+          "data_source_id": "2399825e-116e-43fd-95e5-06d2a081de79"
+        },
+        "properties": {
+          "Name": {
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "row"
+                }
+              }
+            ]
+          },
+          "A": {
+            "number": 3
+          },
+          "D": {
+            "date": {
+              "start": "2026-01-11"
+            }
+          },
+          "Tags": {
+            "multi_select": [
+              {
+                "name": "x"
+              },
+              {
+                "name": "y"
+              }
+            ]
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "page",
+        "id": "3f37b5cb-32d0-81cd-925a-f4ea4cae2805",
+        "created_time": "2026-10-08T10:30:00.000Z",
+        "last_edited_time": "2026-10-08T10:30:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "cover": null,
+        "icon": null,
+        "parent": {
+          "type": "data_source_id",
+          "data_source_id": "2399825e-116e-43fd-95e5-06d2a081de79",
+          "database_id": "70ad6940-c6ba-4b3d-ad90-81e8addfaed8"
+        },
+        "in_trash": false,
+        "is_archived": false,
+        "is_locked": false,
+        "properties": {
+          "F_map": {
+            "id": "%3EU%7Dw",
+            "type": "formula",
+            "formula": {
+              "type": "string",
+              "string": "x!, y!"
+            }
+          },
+          "A": {
+            "id": "KX~a",
+            "type": "number",
+            "number": 3
+          },
+          "F_if": {
+            "id": "TuWK",
+            "type": "formula",
+            "formula": {
+              "type": "string",
+              "string": "big"
+            }
+          },
+          "D": {
+            "id": "iQj%40",
+            "type": "date",
+            "date": {
+              "start": "2026-01-11",
+              "end": null,
+              "time_zone": null
+            }
+          },
+          "F_date": {
+            "id": "k~ZW",
+            "type": "formula",
+            "formula": {
+              "type": "number",
+              "number": 10
+            }
+          },
+          "F_let": {
+            "id": "n%7Da%3A",
+            "type": "formula",
+            "formula": {
+              "type": "number",
+              "number": 16
+            }
+          },
+          "F_concat": {
+            "id": "pPI%3D",
+            "type": "formula",
+            "formula": {
+              "type": "string",
+              "string": "row (3)"
+            }
+          },
+          "F_mul": {
+            "id": "zwfM",
+            "type": "formula",
+            "formula": {
+              "type": "number",
+              "number": 6
+            }
+          },
+          "Tags": {
+            "id": "%7CHCn",
+            "type": "multi_select",
+            "multi_select": [
+              {
+                "id": "22c5fb27-f401-46ac-b1cd-c118fa233d09",
+                "name": "x",
+                "color": "default"
+              },
+              {
+                "id": "f222bf32-8119-44b4-aa7b-8585e4ddee19",
+                "name": "y",
+                "color": "default"
+              }
+            ]
+          },
+          "Name": {
+            "id": "title",
+            "type": "title",
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "row",
+                  "link": null
+                },
+                "annotations": {
+                  "bold": false,
+                  "italic": false,
+                  "strikethrough": false,
+                  "underline": false,
+                  "code": false,
+                  "color": "default"
+                },
+                "plain_text": "row",
+                "href": null
+              }
+            ]
+          }
+        },
+        "url": "https://app.notion.com/p/row-3f37b5cb32d081cd925af4ea4cae2805",
+        "public_url": null,
+        "request_id": "6f0d202d-a4b3-49d9-bb86-90115f055778"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/pages/3f37b5cb-32d0-81cd-925a-f4ea4cae2805",
+      "request": null,
+      "status": 200,
+      "response": {
+        "object": "page",
+        "id": "3f37b5cb-32d0-81cd-925a-f4ea4cae2805",
+        "created_time": "2026-10-08T10:30:00.000Z",
+        "last_edited_time": "2026-10-08T10:30:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "cover": null,
+        "icon": null,
+        "parent": {
+          "type": "data_source_id",
+          "data_source_id": "2399825e-116e-43fd-95e5-06d2a081de79",
+          "database_id": "70ad6940-c6ba-4b3d-ad90-81e8addfaed8"
+        },
+        "in_trash": false,
+        "is_archived": false,
+        "is_locked": false,
+        "properties": {
+          "F_map": {
+            "id": "%3EU%7Dw",
+            "type": "formula",
+            "formula": {
+              "type": "string",
+              "string": "x!, y!"
+            }
+          },
+          "A": {
+            "id": "KX~a",
+            "type": "number",
+            "number": 3
+          },
+          "F_if": {
+            "id": "TuWK",
+            "type": "formula",
+            "formula": {
+              "type": "string",
+              "string": "big"
+            }
+          },
+          "D": {
+            "id": "iQj%40",
+            "type": "date",
+            "date": {
+              "start": "2026-01-11",
+              "end": null,
+              "time_zone": null
+            }
+          },
+          "F_date": {
+            "id": "k~ZW",
+            "type": "formula",
+            "formula": {
+              "type": "number",
+              "number": 10
+            }
+          },
+          "F_let": {
+            "id": "n%7Da%3A",
+            "type": "formula",
+            "formula": {
+              "type": "number",
+              "number": 16
+            }
+          },
+          "F_concat": {
+            "id": "pPI%3D",
+            "type": "formula",
+            "formula": {
+              "type": "string",
+              "string": "row (3)"
+            }
+          },
+          "F_mul": {
+            "id": "zwfM",
+            "type": "formula",
+            "formula": {
+              "type": "number",
+              "number": 6
+            }
+          },
+          "Tags": {
+            "id": "%7CHCn",
+            "type": "multi_select",
+            "multi_select": [
+              {
+                "id": "22c5fb27-f401-46ac-b1cd-c118fa233d09",
+                "name": "x",
+                "color": "default"
+              },
+              {
+                "id": "f222bf32-8119-44b4-aa7b-8585e4ddee19",
+                "name": "y",
+                "color": "default"
+              }
+            ]
+          },
+          "Name": {
+            "id": "title",
+            "type": "title",
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "row",
+                  "link": null
+                },
+                "annotations": {
+                  "bold": false,
+                  "italic": false,
+                  "strikethrough": false,
+                  "underline": false,
+                  "code": false,
+                  "color": "default"
+                },
+                "plain_text": "row",
+                "href": null
+              }
+            ]
+          }
+        },
+        "url": "https://app.notion.com/p/row-3f37b5cb32d081cd925af4ea4cae2805",
+        "public_url": null,
+        "request_id": "564a084d-87e3-46d3-b0f5-2d718bfb6e5d"
+      }
+    }
+  ]
+}

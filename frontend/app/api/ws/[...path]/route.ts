@@ -11,6 +11,9 @@ const ALLOWED_PREFIXES = [
   "connected-apps",  // Settings → Connected apps (remote MCP, 5.4)
   "jobs",            // background jobs: queue, list, cancel, apply (5.3)
   "routing",         // Settings → Routing: policy, test bench, decisions
+  "notion",          // Settings → Notion + "Send to Notion…" (push-only mirror)
+  "backup",          // Settings → Notion → Local backup
+  "storage",         // a fresh link for one of your own stored files (ledger B2)
 ];
 
 async function proxy(req: Request, path: string[]) {

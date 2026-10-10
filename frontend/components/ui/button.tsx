@@ -12,7 +12,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variants = {
       primary: "bg-brand text-white hover:bg-brand-600",
-      ghost:   "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+      ghost:   "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100",
       danger:  "bg-red-500 text-white hover:bg-red-600",
     };
 

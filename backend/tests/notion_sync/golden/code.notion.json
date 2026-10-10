@@ -1,0 +1,38 @@
+[
+ {
+  "type": "code",
+  "code": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "print('hi')\nx = 1"
+     }
+    }
+   ],
+   "language": "python"
+  }
+ },
+ {
+  "type": "code",
+  "code": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "<A/>"
+     }
+    }
+   ],
+   "language": "javascript",
+   "caption": [
+    {
+     "type": "text",
+     "text": {
+      "content": "lang: jsx"
+     }
+    }
+   ]
+  }
+ }
+]

@@ -1,0 +1,29 @@
+[
+ {
+  "type": "list_item",
+  "attrs": {
+   "style": "numbered",
+   "start": 3
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "three"
+   }
+  ],
+  "src_id": "n1"
+ },
+ {
+  "type": "list_item",
+  "attrs": {
+   "style": "numbered"
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "four"
+   }
+  ],
+  "src_id": "n2"
+ }
+]

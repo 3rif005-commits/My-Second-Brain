@@ -1,0 +1,54 @@
+[
+ {
+  "id": "i1",
+  "type": "image",
+  "props": {
+   "url": "https://example.com/a.png",
+   "name": "a.png",
+   "caption": "A figure",
+   "previewWidth": 300
+  },
+  "content": [],
+  "children": []
+ },
+ {
+  "id": "v1",
+  "type": "video",
+  "props": {
+   "url": "https://www.youtube.com/watch?v=abc",
+   "name": ""
+  },
+  "content": [],
+  "children": []
+ },
+ {
+  "id": "f1",
+  "type": "file",
+  "props": {
+   "url": "https://example.com/doc.pdf",
+   "name": "doc.pdf"
+  },
+  "content": [],
+  "children": []
+ },
+ {
+  "id": "a1",
+  "type": "audio",
+  "props": {
+   "url": "https://example.com/a.mp3",
+   "name": "a.mp3"
+  },
+  "content": [],
+  "children": []
+ },
+ {
+  "id": "empty",
+  "type": "image",
+  "props": {
+   "url": "",
+   "name": ""
+  },
+  "content": [],
+  "children": []
+ }
+]

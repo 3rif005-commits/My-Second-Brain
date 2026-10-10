@@ -1,0 +1,40 @@
+button:Close
+button:New 1
+button:Changed 1
+button:Unchanged 2
+div:SB-TEST visual three (new)
+input:Send SB-TEST visual three (new
+button:Cancel
+button:Send 2 items
+button:Close
+button:New 1
+button:Changed 1
+button:Unchanged 2
+div:SB-TEST visual three (new)
+input:Send SB-TEST visual three (new
+button:Cancel
+button:Send 2 items
+button:Close
+button:New 1
+button:Changed 1
+button:Unchanged 2
+div:SB-TEST visual three (new)
+input:Send SB-TEST visual three (new
+button:Cancel
+button:Send 2 items
+button:Close
+button:New 1
+button:Changed 1
+button:Unchanged 2
+div:SB-TEST visual three (new)
+input:Send SB-TEST visual three (new
+button:Cancel
+button:Send 2 items
+button:Close
+button:New 1
+button:Changed 1
+button:Unchanged 2
+div:SB-TEST visual three (new)
+input:Send SB-TEST visual three (new
+button:Cancel
+button:Send 2 items

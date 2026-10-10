@@ -1,0 +1,50 @@
+[
+ {
+  "type": "image",
+  "image": {
+   "__sb_file": {
+    "url": "https://example.com/a.png",
+    "name": "a.png",
+    "kind": "image"
+   },
+   "caption": [
+    {
+     "type": "text",
+     "text": {
+      "content": "A figure"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "type": "video",
+  "video": {
+   "__sb_file": {
+    "url": "https://www.youtube.com/watch?v=abc",
+    "name": "",
+    "kind": "video"
+   }
+  }
+ },
+ {
+  "type": "pdf",
+  "pdf": {
+   "__sb_file": {
+    "url": "https://example.com/doc.pdf",
+    "name": "doc.pdf",
+    "kind": "pdf"
+   }
+  }
+ },
+ {
+  "type": "audio",
+  "audio": {
+   "__sb_file": {
+    "url": "https://example.com/a.mp3",
+    "name": "a.mp3",
+    "kind": "audio"
+   }
+  }
+ }
+]

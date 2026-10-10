@@ -1,0 +1,22 @@
+[
+ {
+  "id": "b1",
+  "type": "paragraph",
+  "props": {},
+  "content": [
+   {
+    "type": "text",
+    "text": "Hello ",
+    "styles": {}
+   },
+   {
+    "type": "text",
+    "text": "world",
+    "styles": {
+     "bold": true
+    }
+   }
+  ],
+  "children": []
+ }
+]

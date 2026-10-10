@@ -1,0 +1,13 @@
+[
+ {
+  "id": "b1",
+  "type": "button",
+  "props": {
+   "label": "Make flashcards",
+   "icon": "⚡",
+   "actionsJson": "[{\"type\":\"run_skill\",\"skill\":\"flashcards\"}]"
+  },
+  "content": [],
+  "children": []
+ }
+]

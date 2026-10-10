@@ -1,0 +1,233 @@
+{
+  "result": {
+    "create_status": 200,
+    "send_status": 200,
+    "attach_status": 200,
+    "attach_error": null,
+    "readback_types": [
+      "embed"
+    ],
+    "page_url": "https://app.notion.com/p/T8-HTML-embed-open-me-in-Notion-and-click-the-button-3f37b5cb32d08166abe4cd7008d20f85"
+  },
+  "calls": [
+    {
+      "method": "POST",
+      "path": "/pages",
+      "request": {
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81f1-b486-f0e6ffabad60"
+        },
+        "properties": {
+          "title": {
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T8 HTML embed (open me in Notion and click the button)"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "status": 200,
+      "response": {
+        "object": "page",
+        "id": "3f37b5cb-32d0-8166-abe4-cd7008d20f85",
+        "created_time": "2026-10-08T10:30:00.000Z",
+        "last_edited_time": "2026-10-08T10:30:00.000Z",
+        "created_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "last_edited_by": {
+          "object": "user",
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+        },
+        "cover": null,
+        "icon": null,
+        "parent": {
+          "type": "page_id",
+          "page_id": "3f37b5cb-32d0-81f1-b486-f0e6ffabad60"
+        },
+        "in_trash": false,
+        "is_archived": false,
+        "is_locked": false,
+        "properties": {
+          "title": {
+            "id": "title",
+            "type": "title",
+            "title": [
+              {
+                "type": "text",
+                "text": {
+                  "content": "T8 HTML embed (open me in Notion and click the button)",
+                  "link": null
+                },
+                "annotations": {
+                  "bold": false,
+                  "italic": false,
+                  "strikethrough": false,
+                  "underline": false,
+                  "code": false,
+                  "color": "default"
+                },
+                "plain_text": "T8 HTML embed (open me in Notion and click the button)",
+                "href": null
+              }
+            ]
+          }
+        },
+        "url": "https://app.notion.com/p/T8-HTML-embed-open-me-in-Notion-and-click-the-button-3f37b5cb32d08166abe4cd7008d20f85",
+        "public_url": null,
+        "request_id": "1655a617-ca4f-412f-bd6d-0e160f416c48"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/file_uploads",
+      "request": {
+        "mode": "single_part",
+        "filename": "disco-probe.html",
+        "content_type": "text/html"
+      },
+      "status": 200,
+      "response": {
+        "object": "file_upload",
+        "id": "3f37b5cb-32d0-8122-bef6-00b2533633a3",
+        "created_time": "2026-10-08T10:31:00.000Z",
+        "created_by": {
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1",
+          "type": "bot"
+        },
+        "last_edited_time": "2026-10-08T10:31:00.000Z",
+        "expiry_time": "2026-10-08T11:31:00.000Z",
+        "upload_url": "https://api.notion.com/v1/file_uploads/3f37b5cb-32d0-8122-bef6-00b2533633a3/send",
+        "in_trash": false,
+        "status": "pending",
+        "filename": "disco-probe.html",
+        "content_type": "text/html",
+        "content_length": null,
+        "request_id": "b538954b-6f5a-4e5b-b9bf-ead17d474f43"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/file_uploads/{id}/send",
+      "request": "<177 bytes text/html>",
+      "status": 200,
+      "response": {
+        "object": "file_upload",
+        "id": "3f37b5cb-32d0-8122-bef6-00b2533633a3",
+        "created_time": "2026-10-08T10:31:00.000Z",
+        "created_by": {
+          "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1",
+          "type": "bot"
+        },
+        "last_edited_time": "2026-10-08T10:31:00.000Z",
+        "expiry_time": "2026-10-08T11:31:00.000Z",
+        "in_trash": false,
+        "status": "uploaded",
+        "filename": "disco-probe.html",
+        "content_type": "text/html",
+        "content_length": 177,
+        "request_id": "5341fc79-c59b-4a43-a549-c8c002e90730"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/blocks/3f37b5cb-32d0-8166-abe4-cd7008d20f85/children",
+      "request": {
+        "children": [
+          {
+            "type": "embed",
+            "embed": {
+              "type": "file_upload",
+              "file_upload": {
+                "id": "3f37b5cb-32d0-8122-bef6-00b2533633a3"
+              }
+            }
+          }
+        ]
+      },
+      "status": 200,
+      "response": {
+        "object": "list",
+        "results": [
+          {
+            "object": "block",
+            "id": "3f37b5cb-32d0-813f-bad3-c8b5106e7cce",
+            "parent": {
+              "type": "page_id",
+              "page_id": "3f37b5cb-32d0-8166-abe4-cd7008d20f85"
+            },
+            "created_time": "2026-10-08T10:31:00.000Z",
+            "last_edited_time": "2026-10-08T10:31:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "has_children": false,
+            "in_trash": false,
+            "type": "embed",
+            "embed": {
+              "caption": [],
+              "url": "https://prod-files-secure.s3.us-west-2.amazonaws.com/a5b7b5cb-32d0-81a5-990d-00034b062237/673939da-fb40-4bad-8bf6-1de16fd3c047/disco-probe.html?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=ASIAZI2LB466RNR7SJ42%2F20261008%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20261008T103102Z&X-Amz-Expires=3600&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEFgaCXVzLXdlc3QtMiJIMEYCIQCn5Q1%2B%2FN8x4AQ9XA%2B%2Bw3LcQtF9EKJOPB1oCP8VKjZ6xwIhALcHIMDns2eLygQVmwKHI97%2BTDkqE2rfZhAYxwEawqKAKv8DCCEQABoMNjM3NDIzMTgzODA1Igy%2BCSPW6qW0GgzoCiQq3ANHPIL9MWfX0J1nYXJ3ArzLEIoonCYqOmE%2FGAjNwXld3ck1IplC551fpqLTXxq7u8oXDrWAQVY59iPAvSbrrtjS0xc74w4rZ5P9Pifg0HKkCU8imzVG3JM6Mpm5tbBqwmH%2Fg2T%2BAvVwjwOyDxEtozCrTtkQ8vfZ5gJUFkYBM%2BvgeA6G0M4MFhH99eJ07rr46o3OblJ581SLmYomlKjXFfqe0rVQ%2FMCW51wuI%2B2KlwqaDXDMjxrgnykOKj5kLP2knddwEuznEh8syICKfEjs%2BJJ%2BcpX8R1%2FS3xatsuDlP0YKdezsxGfzpgWbNd206VaNUo7DJ646WKoFFANNq0Ym318bVlH4e%2BWfd4TrNXo79L4PgO01EPQn5MTW4mubBTn3d2DpwiV9mknuMGCiAR%2FreDOnttwcIt9UPnkyBaz9dMqQjIZ7pc5IXtPFdOhtHqAtXM66tWlqfc%2BAfeRvLOjVL7ZFNHMm4jUYsBSXZUknPTcgxK98UaeySf4Yxmd6yE0S%2F6aoG6EnbWW2fFSgYeZkD7yCgTij1Rf3XezT7hk5XEAvTfip8Yfm8oMDbtQHPVbDbZx8iFQVed8Ve6o5GdT7Bb8zrnYi63eAnU8BB3NjhP6tcL5nK3Ky3bSfgf4VXzCTmZ3WBjqkASKD0HFImaJtpro0k8lUFU9ZerVgw%2BpMJEIO8w7mNDPImYae4UBsCsQ1d9%2F535dEcngIdeUQ28tLn8UdauZm3IarsaJx0BGUAGsPBDtR9HdQIoRF%2BCL%2B6kE7Tk2uKN1Z16b72opIZ2EMrsJqlxGl%2BmUQxLQ23Di4BA5OQ4RqjKJtBbUIX4WeW9Y8YgiLZS2QkCeOn2zaGkepLCd7Ys0yqPgp%2FAkc&X-Amz-Signature=95089c1cc881e1c0180169fae73d1c804b784e0e6a2305ca16688cb5efc2bc4b&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject"
+            }
+          }
+        ],
+        "next_cursor": null,
+        "has_more": false,
+        "type": "block",
+        "block": {},
+        "request_id": "d77916e3-9709-47bd-b3da-4eeec233da0c"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/blocks/3f37b5cb-32d0-8166-abe4-cd7008d20f85/children?page_size=100",
+      "request": null,
+      "status": 200,
+      "response": {
+        "object": "list",
+        "results": [
+          {
+            "object": "block",
+            "id": "3f37b5cb-32d0-813f-bad3-c8b5106e7cce",
+            "parent": {
+              "type": "page_id",
+              "page_id": "3f37b5cb-32d0-8166-abe4-cd7008d20f85"
+            },
+            "created_time": "2026-10-08T10:31:00.000Z",
+            "last_edited_time": "2026-10-08T10:31:00.000Z",
+            "created_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "last_edited_by": {
+              "object": "user",
+              "id": "3f37b5cb-32d0-814d-a4f4-0027ee70b4b1"
+            },
+            "has_children": false,
+            "in_trash": false,
+            "type": "embed",
+            "embed": {
+              "caption": [],
+              "url": "https://prod-files-secure.s3.us-west-2.amazonaws.com/a5b7b5cb-32d0-81a5-990d-00034b062237/673939da-fb40-4bad-8bf6-1de16fd3c047/disco-probe.html?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=ASIAZI2LB466UAHVI2DD%2F20261008%2Fus-west-2%2Fs3%2Faws4_request&X-Amz-Date=20261008T103102Z&X-Amz-Expires=3600&X-Amz-Security-Token=IQoJb3JpZ2luX2VjEFgaCXVzLXdlc3QtMiJHMEUCID1I0me%2FC1KDL%2BPHTHz39vMfxSGSXwZ%2BsiA36gQ8VzJuAiEAjOBHGCZ00YZKPxlhQqmvZ7CBsS7Fqfu%2F4PEcqPjaZUQq%2FwMIIRAAGgw2Mzc0MjMxODM4MDUiDKsZdkojdSbSuOM9jCrcA%2BBIwufbX4m7XzIDAQPvptXsABQTLETov9D52BpwKh8NNJh5pw1IwA8UwNosTh%2FlQkwz1PYAnfC%2Fvl6Ivu4tg0yNjHiIcD%2B3kYNxwOt5x9qOdMZ9PqEHCuoNoHkowloYg7pTgxxDJyabt4LmKE%2FJwVIUW86oVmnecO80U0y11NnOIKluCoyqueOD%2BOHRk1lTflOAXnoROm0em21%2BMdmUmktox1ExpzV1diU3r2pvUYxIhqFiXBIBSFsvsLqfuwaJ0AYjMZ9Wb47bQxyIGa2o5kkCpOcni4u%2Bd7RXRCK%2BZuOXiNe3bipwH3TKLIkv0txaILCxJNG4Z4NOlV1kpEBWVRIpXubd4kel2g5lE7EIERRfADyHrl6DIAmQiWxQ44whwFTRClSYMeO2iBYqJ%2FpPYB6wGIvodh6tskSHuFoXV%2Bg42fBV7l8H2TLIgaMHTn%2FD0zzgVG3AOWqDaYIz5OBqMa9Z%2BWe1GsJquaz1uUm4TngmFpMw9FjCh87O0QiI7taN%2BRYDoGefgX99twtK0HzfbESqkbFWci9EHwUflEazQFZ3bEneJLlJVsieRX%2FjSoycSL8lUl77KBP7ilQXS8VJAjNksMX0NAHvqWAsy389xctQTL%2FPKPW9vUkis%2FeqMN2XndYGOqUBCEgl2FMDeMMvKEWneFtrfGLw%2BqGh0R4DTwR8oPFDT1DiA4woLs1Ndd8rylkpw%2BtDfixM8rso2mSrn2EpTofEiKEaw0V02d1knnALIZfI8nfMEfc2nRG2ZEIi1C68AvYZzvWg57qd2FI0rriNFf0nzuc5JjVLM56mkorf1vLjxaoDRDJ7FVfGeKA12nBiMj8ylOlClidVduE8%2BIqMoUMEtHNQ2yIl&X-Amz-Signature=163cd4b8a2dd39f151e196cb2b64702dda83eed0f9a581b8e1ae06464eede207&X-Amz-SignedHeaders=host&x-amz-checksum-mode=ENABLED&x-id=GetObject"
+            }
+          }
+        ],
+        "next_cursor": null,
+        "has_more": false,
+        "type": "block",
+        "block": {},
+        "request_id": "e0f7f5d7-3f02-4590-8a9c-77dc7f841903"
+      }
+    }
+  ]
+}

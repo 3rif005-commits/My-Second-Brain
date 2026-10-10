@@ -1,0 +1,11 @@
+[
+ {
+  "id": "b1",
+  "type": "math",
+  "props": {
+   "latex": "E = mc^2"
+  },
+  "content": [],
+  "children": []
+ }
+]

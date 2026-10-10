@@ -129,7 +129,7 @@ class Query:
             return SimpleNamespace(data=[copy.deepcopy(r) for r in hit])
         if self._order:
             col, desc = self._order
-            hit = sorted(hit, key=lambda r: r.get(col) or "", reverse=desc)
+            hit = sorted(hit, key=lambda r: (r.get(col) is None, r.get(col) if r.get(col) is not None else 0), reverse=desc)
         if self._range is not None:
             hit = hit[self._range[0]: self._range[1] + 1]
         if self._limit is not None:

@@ -1,0 +1,77 @@
+[
+ {
+  "id": "h1",
+  "type": "heading",
+  "props": {
+   "level": 1
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "One",
+    "styles": {}
+   }
+  ],
+  "children": []
+ },
+ {
+  "id": "h4",
+  "type": "heading",
+  "props": {
+   "level": 4
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "Four",
+    "styles": {}
+   }
+  ],
+  "children": []
+ },
+ {
+  "id": "h6",
+  "type": "heading",
+  "props": {
+   "level": 6
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "Six",
+    "styles": {}
+   }
+  ],
+  "children": []
+ },
+ {
+  "id": "ht",
+  "type": "heading",
+  "props": {
+   "level": 2,
+   "isToggleable": true
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "Toggle",
+    "styles": {}
+   }
+  ],
+  "children": [
+   {
+    "id": "c",
+    "type": "paragraph",
+    "props": {},
+    "content": [
+     {
+      "type": "text",
+      "text": "inside",
+      "styles": {}
+     }
+    ],
+    "children": []
+   }
+  ]
+ }
+]

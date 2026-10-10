@@ -664,3 +664,62 @@ found while building the M0 harness (unrelated to this feature, not yet addresse
 `005_notion_phase.sql` uses `CREATE POLICY IF NOT EXISTS` (invalid in every Postgres
 version — `anon_read_public_notes` was probably never created); `010_mcp_servers.sql`
 collides with `009_ai_substrate.sql` (migration set not replayable from 001 in order).
+
+---
+
+## Send to Notion (push-only mirror) — DESIGN, awaiting approval (2026-10-07)
+
+> Research `docs/notion-sync/RESEARCH.md` · matrix `FIDELITY_MATRIX.md` · ledger
+> `DIVERGENCE_LEDGER.md` · design `DESIGN.md` (+ `mockups/index.html`) · `ROBUSTNESS.md`
+> (ADRs, tests, failure modes) · progress ledger `docs/notion-sync/PROGRESS.md`.
+> **Built (M0–M11), see the row marks below and the caveats at the end.** Push only: Second Brain → Notion, never pulled back.
+> Every milestone ships on its own and is tested with a THROWAWAY Notion workspace
+> (`NOTION_TEST_TOKEN`, root page named `SB-TEST-…`), never your real one.
+
+Common test prefix (backend): `cd backend && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 venv/bin/python -m pytest -p asyncio` (needs dummy `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` in the environment when there is no `backend/.env`)
+App: `./app.sh status` first (never stop a running stack you didn't start), then `./app.sh start`.
+
+| M | What ships | Depends | Test it |
+|---|---|---|---|
+| 0 ✅ 2026-10-08 | **Groundwork.** Live tests T1–T10 against the test workspace (cassettes recorded); `services/secrets.py` (Fernet); migration `030_notion_sync.sql` (+ proof SELECT); ledger fix **B3** (unknown blocks kept, not deleted) | your test token; migration applied by you | `… tests/notion_sync/contract -v` · `… tests/test_secrets.py` · in Supabase SQL editor: the migration's proof row |
+| 1 ✅ 2026-10-08 | **Connect + send ONE plain note faithfully, with dry-run preview.** Settings → Notion connect (token, pick root); note ••• → "Send to Notion…" review panel (Exact/Approximated/Lossy pills, plain-word losses, Send, Open in Notion ↗); text blocks (paragraph, headings 1–6, lists, to-do, toggle, quote, code, divider, inline styles, links, inline math; unknown blocks → opaque note + raw JSON toggle); mapping table; re-send = 0 writes. Known gaps: changed notes are replaced (no block diff), numbered-list start index not settable in Notion (verified), `SB ID` column visible | M0 | `cd backend && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 venv/bin/python -m pytest -p asyncio tests/notion_sync -q` (145) · `venv/bin/python -m evals.notion_m1_live` (test workspace, cleans up) · `cd frontend && npx vitest run components/notion` · browser: `./app.sh status`, start backend+frontend, `npx playwright test --project=notion-sync-live` (connects to the TEST workspace, sends + re-sends a fixture note, cleans up; refuses if Notion is already connected) · by hand: Settings → Notion → paste token → pick page → open a note → ••• → Send to Notion… |
+| 2 ✅ built 2026-10-10 | **Every block type + files.** Callouts, math, columns, tables, media upload (dedup, 1-h attach), covers/icons, checkpoint/button/opaque fallbacks + markers; golden files for every type; coverage guard | 1 | `… tests/notion_sync/golden tests/notion_sync/test_coverage_guard.py` · `python -m evals.notion_roundtrip --fixture all-blocks` (test workspace) |
+| 3 ✅ built 2026-10-10 | **Hierarchy (D1) + mentions + moves/renames/deletes→archive.** Collections → pages/containers, two-pass mentions, move API, `🗄 Deleted in Second Brain` | 2 | `… -k "hierarchy or mention or archive"` · browser: send a test collection with 2 notes that mention each other; mention opens the right Notion page; trash one note → next preview lists it unchecked |
+| 4 ✅ built 2026-10-10 | **Changed-in-Notion protection.** Cheap + deep edit check, Needs-you tab, side-by-side diff, Overwrite / Skip / Send as copy, per-item pause | 3 | `… -k notion_side_edit` (all 3 choices; Skip = 0 writes) · browser: edit the mirrored test page in Notion, re-send → diff appears |
+| 5 ✅ built 2026-10-10 | **Background engine hardening.** Runs/items, phases + deps, crash reconcile, token bucket + Retry-After, cursors, kill switch, Activity + Retry failed, notifications | 4 | `… -k "crash or ratelimit or killswitch"` (fault injection at every request) · measure: `python -m evals.notion_scale --notes 500` (test workspace) |
+| 6 ✅ built 2026-10-10 | **Databases.** Schemas (24 types), rows, relations (dual), rollups, formulas + snapshot (D3), unique_id, files props, order property | 5 | `… tests/notion_sync/databases` · round-trip fixture DB with every property type |
+| 7 ✅ built 2026-10-10 | **Views.** All 10 creatable types, filters/sorts/groups, feed→list fallback, inline DBs in position (T3) | 6 | `… -k views` · browser: open the test DB in Notion, check each view |
+| 8 ✅ built 2026-10-10 | **Status everywhere + auto-sync.** Sidebar dots, header chip, DB column, ⌘K, multi-select, rules (on change / daily), privacy D4 in auto mode | 7 | `npx playwright test e2e/notion-sync.spec.ts` (creates + deletes its own fixture note) |
+| 9 ✅ built 2026-10-10 | **The rest of the brain.** Workspace source files (opt-in), threads, skills (D5), "whole brain" send | 8 | `… -k "threads or skills or sources"` · whole-brain dry run on the test workspace with a fixture brain |
+| 10 ✅ built 2026-10-10 | **Change detection.** Daily canary, contract tests in CI, `NOTION_CHANGES.md` process | 9 | `python -m evals.notion_canary` → Health card ✓ |
+| 11 ✅ built 2026-10-10 | **Local backup archive** `.sbz` + `tools.restore --dry-run` + scheduled retention (can be moved earlier, it doesn't depend on Notion) | IR from 1 | `python -m tools.backup --out /tmp/sb.sbz && python -m tools.restore /tmp/sb.sbz --dry-run` |
+| — | Divergence fixes you approve: **B1** (interactive blocks out of localStorage), **B2** (24-h capture URLs) | — | per fix |
+
+**Decided 2026-10-07:** D1 tree of databases · D2 deletes listed unchecked → archive page · D3 formula +
+snapshot · D4 Notion = trusted, private blocked · D5 whole brain = notes/collections/databases/embedded
+files · fix B1, B2, B3 · U1–U4 keep. **Waiting on:** a throwaway test workspace token and the go-ahead for M0.
+
+
+## Send to Notion: state after the live verification session (2026-10-10)
+M0–M11 are built on `claude/peaceful-goodall-p53g39` (PR #3 head + verification commits); B1/B2/B3 fixed. This session ran them against the real Supabase project (demo account) and the SB-TEST Notion workspace. Details and raw numbers: `docs/notion-sync/evidence/live/RESULTS.md`, `docs/notion-sync/PROGRESS.md` ("Live verification session").
+
+### Verified (ran, with the date 2026-10-10)
+- Backend, full suite against local Postgres 16 + pgvector with migrations 001–030: **2782 passed, 0 failed**. (The 4 `test_internal_db.py` failures from the previous session were a test-isolation bug, fixed.)
+- Frontend: `tsc --noEmit` clean; vitest 91 files / 1260 passed.
+- Playwright `notion-sync-live` (4 tests: connect + send + re-send, folder send/dots/Activity/Health/kill switch, B1 migration) all pass against the real app; `unknown-block-live` (B3) passes; the new `notion-visual-live` (light/dark × 1280/390 px screenshots, keyboard-only: focus lands in the dialog, Tab/Shift+Tab stay inside, Esc closes and returns focus, no sideways scroll) passes.
+- Live Notion evals: `notion_m1_live` (plain, `--m2 --m3 --m4 --m6 --m9`), `notion_canary` (14/14), `notion_scale`. All passed; nothing needed fixing.
+- Real backup + non-destructive restore on the demo account: counts and content match; what the restore created was deleted afterwards.
+- B2 live: an expired capture link returns 400; `POST /storage/fresh-url` returns a working link for the caller's own file, 404 for another user's path, 422 without auth.
+
+### Found and fixed this session
+- `e2e/notion-sync-live.spec.ts` B1 test looked for the block title with `getByText`; the title is an `<input>`.
+- `components/ui/button.tsx`: the `ghost` variant had no dark-mode colours ("Back up now" looked disabled in dark mode).
+- `tests/test_internal_db.py`: note levels are now served from a stub (+ a test that a private row is withheld).
+
+### Still NOT verified / needs the user
+- Looking at the sent pages inside Notion's own UI (only API read-back; a page's rendering in Notion was not viewed).
+- The BlockNote `resolveFileUrl` path for B2 in a real browser with a truly expired link (backend half is verified live; the editor half by vitest only).
+- Known app behaviours seen in the visual pass, not changed: on a phone the sidebar drawer stays open across navigation and covers the page; the Settings tab bar scrolls sideways at 390 px.
+- llama.cpp / local-model paths, Android, the WebMCP fork (apply 029/030 in its Supabase, sync `sync/notion-m1`, deploy), rotating the leaked `HF_TOKEN` (root `.env`, commit `dbdc7a8`).
+- Two empty folders named "SB-TEST folder" (created 2026-10-08) are in the `aubrif005@gmail.com` account, left by an earlier run; not touched. Delete when convenient.
+- Live runs with the scheduler/auto-sync ticking for hours, and the 10,000-note scale (extrapolated: ~50,700 requests ≈ 5.6 h at 2.5 req/s).

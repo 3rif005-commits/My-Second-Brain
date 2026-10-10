@@ -16,7 +16,8 @@ import { en as coreEn } from "@blocknote/core/locales";
 import { en as aiEn } from "@blocknote/xl-ai/locales";
 import { withMultiColumn, multiColumnDropCursor, getMultiColumnSlashMenuItems, locales as multiColumnLocales } from "@blocknote/xl-multi-column";
 import { useTheme } from "@/app/providers";
-import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec, InlineMathSpec, insertMathBlock, insertCalloutBlock } from "./customBlocks";
+import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec, UnknownBlockSpec, InlineMathSpec, insertMathBlock, insertCalloutBlock } from "./customBlocks";
+import { wrapUnknown, restoreUnknown } from "./unknownBlocks";
 import {
   extractCalloutChildren, attachCalloutChildren, inlineMathInTableCells,
   mergeRedundantToggleHeadings,
@@ -27,8 +28,10 @@ import { SkillAIMenu } from "./selectionSkills";
 import { transformNotionHtml } from "./notionPaste";
 import { readNotionJson, notionJsonToBlocks } from "./notionBlocks";
 import { NoteIdContext } from "./noteIdContext";
+import { freshFileUrl } from "@/lib/freshFileUrl";
 import { DatabaseBlockSpec, insertDatabaseBlock } from "../database/DatabaseBlock";
 import { ButtonBlockSpec, insertButtonBlock } from "../database/ButtonBlock";
+import { InteractiveBlockSpec, insertInteractiveBlock } from "./InteractiveBlock";
 
 // Inline @mention — links to another note in the brain
 const MentionSpec = createInlineContentSpec(
@@ -69,6 +72,8 @@ const multiColSchema = withMultiColumn(
       callout: CalloutBlockSpec(),
       database: DatabaseBlockSpec(),
       button: ButtonBlockSpec(),
+      interactive: InteractiveBlockSpec(),
+      unknownBlock: UnknownBlockSpec(),
     },
     inlineContentSpecs: {
       ...defaultInlineContentSpecs,
@@ -81,12 +86,11 @@ const multiColSchema = withMultiColumn(
 
 const VALID_BLOCK_TYPES = new Set(Object.keys(multiColSchema.blockSpecs));
 
-// Recursively remove blocks with types unknown to the schema so
-// useCreateBlockNote never receives unrecognized content.
+// useCreateBlockNote can't hold a block of an unregistered type, so each one is
+// swapped for an `unknownBlock` placeholder that keeps the original; `persist`
+// below swaps it back before anything is saved (unknownBlocks.ts).
 function sanitizeBlocks(blocks: AnyBlock[]): AnyBlock[] {
-  return blocks
-    .filter((b) => b != null && VALID_BLOCK_TYPES.has(b?.type))
-    .map((b) => ({ ...b, children: Array.isArray(b.children) ? sanitizeBlocks(b.children) : [] }));
+  return wrapUnknown(blocks, VALID_BLOCK_TYPES);
 }
 
 /** Reorders slash-menu items so every group's items sit in one contiguous
@@ -234,10 +238,6 @@ interface BlockEditorProps {
   onSave?: (blocks: AnyBlock[], plainText: string) => void;
   /** Raw HTML from the ingest pipeline — parsed to blocks and applied on mount. */
   ingestHtml?: string;
-  /** Called once during ingest with any <div data-type="interactive"> blocks found. */
-  onInteractiveBlocks?: (blocks: InteractiveBlock[]) => void;
-  /** Called when the user inserts a Knowledge Check via the slash menu. */
-  onAddInteractiveBlock?: (block: InteractiveBlock) => void;
   /** Called once after ingestHtml has been parsed and applied (workspace anchors). */
   onBlocksApplied?: (blocks: AnyBlock[]) => void;
   /** Fires on every editor change, before the debounced save — lets a consumer
@@ -275,7 +275,7 @@ function getPlainText(blocks: AnyBlock[]): string {
 }
 
 export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
-  function BlockEditorComponent({ noteId: _noteId, initialContent, onSave, ingestHtml, onInteractiveBlocks, onAddInteractiveBlock, onBlocksApplied, onDirty, extraSlashItems }, ref) {
+  function BlockEditorComponent({ noteId: _noteId, initialContent, onSave, ingestHtml, onBlocksApplied, onDirty, extraSlashItems }, ref) {
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastUserBlockRef = useRef<string | null>(null);
     const { resolvedTheme } = useTheme();
@@ -310,6 +310,9 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           return safe.length > 0 ? safe : undefined;
         })(),
         extensions: [AIExtension({ transport: inlineTransport })],
+        // Pictures captured into a note used to carry a 24-hour link (ledger B2): swap an old link to our own
+        // storage for a fresh one when it is shown. Stored content is untouched.
+        resolveFileUrl: freshFileUrl,
         dropCursor: multiColumnDropCursor,
         // Merge the xl-ai locale under the `ai` key so getAIDictionary(editor)
         // works, and the multi-column one under `multi_column` — its
@@ -394,6 +397,13 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       } as Parameters<typeof useCreateBlockNote>[0]
     );
 
+    // Every save goes through here: placeholders become their original blocks
+    // again, so a block this editor can't show is never lost on save.
+    const persist = (blocks: AnyBlock[]) => {
+      const stored = restoreUnknown(blocks);
+      onSave?.(stored, getPlainText(stored));
+    };
+
     // A generated draft → blocks, with the callout bodies BlockNote's own
     // parser would drop (see calloutChildren.ts).
     const parseDraftHtml = async (html: string): Promise<AnyBlock[]> => {
@@ -407,14 +417,16 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     };
 
     useImperativeHandle(ref, () => ({
+      // Callers save what this returns, so it is the stored form.
       getDocument() {
-        return editor.document as AnyBlock[];
+        return restoreUnknown(editor.document as AnyBlock[]);
       },
       replaceDocument(blocks: AnyBlock[]) {
         // An empty note is one empty paragraph: replaceBlocks with nothing
         // would leave BlockNote without a block to put the cursor in.
+        const safe = sanitizeBlocks(blocks);
         editor.replaceBlocks(editor.document,
-          blocks.length ? blocks : [{ type: "paragraph" }] as AnyBlock[]);
+          safe.length ? safe : [{ type: "paragraph" }] as AnyBlock[]);
       },
       async exportMarkdown(title: string) {
         const md = await editor.blocksToMarkdownLossy(editor.document);
@@ -466,7 +478,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         editor.replaceBlocks(editor.document, parsed);
         const now = editor.document as AnyBlock[];
         if (saveTimer.current) clearTimeout(saveTimer.current);
-        onSave?.(now, getPlainText(now));
+        persist(now);
         return now;
       },
       async insertHtmlAtEnd(html: string) {
@@ -478,7 +490,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         const now = editor.document as AnyBlock[];
         const added = last ? now.slice(before) : now;
         if (saveTimer.current) clearTimeout(saveTimer.current);
-        onSave?.(now, getPlainText(now));
+        persist(now);
         return added;
       },
       blockIds() {
@@ -505,8 +517,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 
     const save = useCallback(() => {
       if (!onSave) return;
-      const blocks = editor.document as AnyBlock[];
-      onSave(blocks, getPlainText(blocks));
+      persist(editor.document as AnyBlock[]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [editor, onSave]);
 
     // 2-second debounced auto-save on every content change
@@ -544,12 +556,13 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           async (h: string) => (await editor.tryParseHTMLToBlocks(h)) as AnyBlock[]
         );
         const rawBlocks = await editor.tryParseHTMLToBlocks(strippedHtml);
-        const blocks = attachCalloutChildren(rawBlocks as AnyBlock[], calloutChildren);
+        const blocks = [...attachCalloutChildren(rawBlocks as AnyBlock[], calloutChildren),
+          // interactive blocks found in the ingest are real blocks of the note now (ledger B1)
+          ...interactiveData.map((d) => ({ type: "interactive", props: { title: d.title, html: d.html } }))] as AnyBlock[];
         editor.replaceBlocks(editor.document, blocks);
         if (saveTimer.current) clearTimeout(saveTimer.current);
-        onSave(blocks as AnyBlock[], getPlainText(blocks as AnyBlock[]));
+        persist(blocks as AnyBlock[]);
 
-        if (interactiveData.length > 0) onInteractiveBlocks?.(interactiveData);
         onBlocksApplied?.(blocks as AnyBlock[]);
       })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -595,20 +608,15 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                 aliases: item.aliases,
                 onItemClick: item.onItemClick,
               }));
-              const custom = onAddInteractiveBlock
-                ? [{
-                    title: "Knowledge Check",
-                    group: "Interactive",
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    icon: <span style={{ fontSize: 18 }}>⚡</span> as any,
-                    subtext: "Sandboxed interactive quiz block",
-                    aliases: ["quiz", "interactive", "disco"],
-                    onItemClick: () => onAddInteractiveBlock({
-                      title: "Knowledge Check",
-                      html: DEFAULT_BLOCK_HTML,
-                    }),
-                  }]
-                : [];
+              const custom = [{
+                title: "Knowledge Check",
+                group: "Interactive",
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                icon: <span style={{ fontSize: 18 }}>⚡</span> as any,
+                subtext: "Sandboxed interactive quiz block",
+                aliases: ["quiz", "interactive", "disco"],
+                onItemClick: () => insertInteractiveBlock(editor, editor.getTextCursorPosition()?.block?.id, { title: "Knowledge Check", html: DEFAULT_BLOCK_HTML }),
+              }];
               // Own "Databases" group (rather than folding into "Interactive",
               // which is really about the Knowledge Check quiz block above) —
               // a database is a distinct kind of thing from an interactive

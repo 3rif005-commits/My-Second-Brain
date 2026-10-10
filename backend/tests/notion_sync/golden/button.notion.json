@@ -1,0 +1,51 @@
+[
+ {
+  "type": "callout",
+  "callout": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "⚡ Make flashcards"
+     }
+    }
+   ],
+   "icon": {
+    "type": "emoji",
+    "emoji": "⚡"
+   },
+   "color": "gray_background",
+   "children": [
+    {
+     "type": "toggle",
+     "toggle": {
+      "rich_text": [
+       {
+        "type": "text",
+        "text": {
+         "content": "Button actions (not runnable in Notion)"
+        }
+       }
+      ],
+      "children": [
+       {
+        "type": "code",
+        "code": {
+         "rich_text": [
+          {
+           "type": "text",
+           "text": {
+            "content": "[\n {\n  \"type\": \"run_skill\",\n  \"skill\": \"flashcards\"\n }\n]"
+           }
+          }
+         ],
+         "language": "json"
+        }
+       }
+      ]
+     }
+    }
+   ]
+  }
+ }
+]

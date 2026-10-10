@@ -1,0 +1,43 @@
+[
+ {
+  "type": "list_item",
+  "attrs": {
+   "style": "bullet"
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "a"
+   }
+  ],
+  "children": [
+   {
+    "type": "list_item",
+    "attrs": {
+     "style": "bullet"
+    },
+    "inline": [
+     {
+      "type": "text",
+      "text": "nested"
+     }
+    ],
+    "src_id": "n"
+   }
+  ],
+  "src_id": "l1"
+ },
+ {
+  "type": "list_item",
+  "attrs": {
+   "style": "bullet"
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "b"
+   }
+  ],
+  "src_id": "l2"
+ }
+]

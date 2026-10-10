@@ -1,0 +1,19 @@
+[
+ {
+  "id": "b1",
+  "type": "paragraph",
+  "props": {
+   "textAlignment": "center",
+   "textColor": "red",
+   "backgroundColor": "green"
+  },
+  "content": [
+   {
+    "type": "text",
+    "text": "centered",
+    "styles": {}
+   }
+  ],
+  "children": []
+ }
+]

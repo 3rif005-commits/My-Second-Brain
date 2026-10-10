@@ -1,0 +1,28 @@
+[
+ {
+  "type": "code",
+  "attrs": {
+   "language": "python"
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "print('hi')\nx = 1"
+   }
+  ],
+  "src_id": "c1"
+ },
+ {
+  "type": "code",
+  "attrs": {
+   "language": "jsx"
+  },
+  "inline": [
+   {
+    "type": "text",
+    "text": "<A/>"
+   }
+  ],
+  "src_id": "c2"
+ }
+]

@@ -1,0 +1,87 @@
+[
+ {
+  "id": "b1",
+  "type": "columnList",
+  "props": {},
+  "content": [],
+  "children": [
+   {
+    "id": "c1",
+    "type": "column",
+    "props": {
+     "width": 1
+    },
+    "content": [],
+    "children": [
+     {
+      "id": "l",
+      "type": "paragraph",
+      "props": {},
+      "content": [
+       {
+        "type": "text",
+        "text": "left",
+        "styles": {}
+       }
+      ],
+      "children": []
+     }
+    ]
+   },
+   {
+    "id": "c2",
+    "type": "column",
+    "props": {
+     "width": 3
+    },
+    "content": [],
+    "children": [
+     {
+      "id": "r",
+      "type": "paragraph",
+      "props": {},
+      "content": [
+       {
+        "type": "text",
+        "text": "right",
+        "styles": {}
+       }
+      ],
+      "children": []
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "id": "cl2",
+  "type": "columnList",
+  "props": {},
+  "content": [],
+  "children": [
+   {
+    "id": "c3",
+    "type": "column",
+    "props": {
+     "width": 1
+    },
+    "content": [],
+    "children": [
+     {
+      "id": "a",
+      "type": "paragraph",
+      "props": {},
+      "content": [
+       {
+        "type": "text",
+        "text": "alone",
+        "styles": {}
+       }
+      ],
+      "children": []
+     }
+    ]
+   }
+  ]
+ }
+]

@@ -1,0 +1,16 @@
+[
+ {
+  "type": "paragraph",
+  "paragraph": {
+   "rich_text": [
+    {
+     "type": "text",
+     "text": {
+      "content": "centered"
+     }
+    }
+   ],
+   "color": "green_background"
+  }
+ }
+]

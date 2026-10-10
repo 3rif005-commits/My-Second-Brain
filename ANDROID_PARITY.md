@@ -321,6 +321,22 @@ Block types in the web app but **missing** from `editor.html`: toggle, callout, 
 
 ---
 
+### 22. Send to Notion (push-only mirror) — added 2026-10-08
+
+- **Web:** Settings → Notion (connect with an internal token, pick the destination page, what "everything"
+  includes, auto-sync rules, activity, health, kill switch, local backup), a review panel with a dry-run
+  preview for a note / folder / database / selection / the whole brain, a mirror chip on every note, status
+  dots in the sidebar, a "Send to Notion…" item in the note, folder and database menus, ⌘⇧N, and ⌘P commands.
+  Everything runs in the backend (`backend/services/notion_sync/`, `backend/routers/notion_sync.py`).
+- **Android:** Nothing, and nothing needs to sync: the engine is server-side, so the tablet's notes are sent
+  like any other note once they reach Supabase. Interactive blocks (ledger B1) are now real blocks of the
+  note, so they reach the tablet with it (it will show them as an unsupported block until it renders them).
+- **Android target:** the chip + a "Send to Notion" menu item + read-only status (`GET /notion/notes/{id}`,
+  `GET /notion/mirror`). No sync code, no token on the device.
+- [ ] Not started — no Android build in scope.
+
+---
+
 ## Implementation Priority Order
 
 ```

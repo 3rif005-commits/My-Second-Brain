@@ -1,0 +1,13 @@
+[
+ {
+  "type": "embed",
+  "embed": {
+   "__sb_file": {
+    "inline": "<p>hi</p><script>1</script>",
+    "name": "Quiz.html",
+    "mime": "text/html",
+    "kind": "interactive block"
+   }
+  }
+ }
+]
