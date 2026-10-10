@@ -1,4 +1,4 @@
-You are continuing the "Send to Notion" feature (plus two small app fixes) of my app, Second Brain, on branch `wip/cloud-handoff`. You are in a cloud sandbox with NO access to my real Supabase data, my secrets, llama.cpp, the running app or my browser. Work only on what runs offline. Work inline: no subagents. Small commits, `git push` after each, report faithfully (say what you ran and what you did not).
+You are continuing the "Send to Notion" feature (plus two small app fixes) of my app, Second Brain, on branch `wip/cloud-handoff`. You are in a cloud sandbox with NO access to my real Supabase data, my secrets, llama.cpp or my browser. Do NOT ask me to run anything locally: run the app and its tests yourself, in this sandbox (see §6b). Work inline: no subagents. Small commits, `git push` after each, report faithfully (say what you ran and what you did not).
 
 ## 1. Orient (read, do not guess)
 `git log --oneline -25`, `STATUS.md` (the Send to Notion section), `docs/notion-sync/PROGRESS.md` (read the whole "M1 … M11" log at the end), `docs/notion-sync/DESIGN.md`, `ROBUSTNESS.md` (§10 ADRs: don't undo one without asking), `docs/notion-sync/evidence/live/RESULTS.md` (L1–L13: verified live Notion behaviour), `docs/notion-sync/NOTION_CHANGES.md`.
@@ -11,7 +11,7 @@ A push-only mirror of the brain into the user's Notion workspace, in 11 mileston
 Code: `backend/services/notion_sync/` (+ `services/portable/`, `services/backup/`, `routers/notion_sync.py`, `routers/backup.py`, `routers/storage_urls.py`), tests in `backend/tests/notion_sync/`, `tests/test_backup.py`, `tests/test_storage_urls.py`.
 
 ## 3. Exact state: what is NOT finished or NOT verified
-1. **The extended live browser spec was never run to completion.** `frontend/e2e/notion-sync-live.spec.ts` has 4 tests: (a) connect + one note [PASSED earlier in a previous version], (b) folder with notes: right-click → review → send → mirror state → Activity → Health → kill switch, (c) B1 localStorage→note migration. (b) and (c) are written but unrun. They need my app + my Notion test token: do NOT try in the cloud.
+1. **The extended live browser spec was never run to completion.** `frontend/e2e/notion-sync-live.spec.ts` has 4 tests: (a) connect + one note [PASSED earlier in a previous version], (b) folder with notes: right-click → review → send → mirror state → Activity → Health → kill switch, (c) B1 localStorage→note migration. (b) and (c) are written but unrun. They need a running app + a Notion test token: run them in the cloud sandbox if the environment has the credentials (§6b), otherwise report what is missing.
 2. **B1 is verified only by unit tests.** Not verified in a real browser: that `InteractiveBlock` renders inside the editor (`components/editor/InteractiveBlock.tsx`, registered as `interactive` in `BlockEditor.tsx`), that the migration effect in `NoteEditorPage.tsx` (poll for the editor ref, `insertBlocksAtEnd`, delete the localStorage key only after a successful PATCH) behaves, and that the old "Knowledge Check" slash item inserts a block. Review that code carefully by reading it.
 3. **B2 is verified by unit tests only**: new captures use a 10-year link (`services/workspace/media.py`), `POST /storage/fresh-url` (only the caller's own `workspace-resources` paths), BlockNote `resolveFileUrl: freshFileUrl` in `BlockEditor.tsx`. The mirror reads expired capture URLs by storage path (`notion/files.py` `storage_path_of`, `CompositeFiles`).
 4. UI visual check never done: dark mode of the panel/Settings sections, keyboard flow of the review panel, mobile widths. Only vitest + tsc.
@@ -41,6 +41,11 @@ Code: `backend/services/notion_sync/` (+ `services/portable/`, `services/backup/
 - Syncing into the WebMCP fork (`/home/ayoub/projects/second-brain-webmcp`, branch `sync/notion-m1`, unpushed) and deploying it.
 - Real backups/restores (`python -m tools.backup`, `tools.restore --apply`) touch my data.
 - Rotating the leaked `HF_TOKEN`.
+
+## 6b. Use the app in the cloud, not on my machine
+- Install and run it in this sandbox: backend (`cd backend && python -m venv .venv && .venv/bin/pip install -r requirements.txt`, then `uvicorn main:app --port 8000`) and frontend (`cd frontend && npm ci && npm run dev`). Use the second venv rule from §5 for pytest.
+- For the browser spec (`npx playwright test --project=notion-sync-live`), you need a Supabase project, a test user and a Notion TEST workspace. If the cloud environment provides `SUPABASE_*`, `SECRETS_KEY` and `NOTION_TEST_TOKEN` (check `env | grep -c .` without printing values), run it against that. If it does not, say exactly which variables are missing, run everything else, and do not invent credentials or point it at my real account.
+- Never print a secret. Never touch my real data: use throwaway test users/workspaces only.
 
 ## 7. Rules
 Inline work. Small commits, push after each. Run the relevant tests before every commit; report failures with their output, never claim a check you did not run, mark anything unverified as such. If a design detail turns out wrong against what the tests show, stop and write it in the PR description rather than silently changing the design.
