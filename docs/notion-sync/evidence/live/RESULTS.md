@@ -38,3 +38,21 @@ Cleanup: both probe pages moved to the TEST workspace's trash (SB-TEST-root kept
 | L11 | M7 live (views) | The Views API accepts table, board, list, gallery, calendar, timeline, form, chart, dashboard with the configurations we send; **chart axes must be typed** (`x_axis.type`), **a dashboard needs `data_source_id` too**, a board needs `group_by`, map needs a place property (we send a table). Widgets are views created with `dashboard_view_id`. `GET /views?database_id=` lists ids only; Notion's auto "Default view" can be deleted once another view exists. 11 views sent in one run; re-send 0 writes. | none |
 | L12 | Inline database in position (T3 trick, live) | Host page `[before, DB, after]` is written exactly in that order: the blocks before go in with `position: start`, the ones after with `position: after_block <the database block>`. **A positioned insert returns the new blocks followed by every later sibling** (an unpositioned append returns only the new ones), so the adapter keeps the first N results. | none |
 | L13 | M8-M9 live (chat thread, skill with a reference, a note's sources: an uploaded file from "storage:", a YouTube link, a website bookmark) | Thread = a page of 🧑/🤖 callouts under "💬 Chats"; skill = a page under "🧠 Skills" with the frontmatter in a callout and each reference in a toggle; the Sources toggle holds a `file_upload` block, an external video and a bookmark. Re-send: 0 writes. | none |
+
+
+## Re-run of the live evals (2026-10-10, cloud sandbox, API 2026-03-11, TEST workspace)
+
+Run on branch `claude/peaceful-goodall-p53g39` (= PR #3 head + spec fixes) against `SB-TEST-root`. No code changes were needed.
+
+| Script | Result |
+|---|---|
+| `evals.notion_m1_live` (M1 fixture) | passed: 18 requests; re-send 0 writes; changed note 5 requests |
+| `--m2` (tables, callouts, columns, files, cover) | passed: 29 requests |
+| `--m3` (hierarchy, mentions, move, archive) | passed: 52 requests |
+| `--m4` (edited-in-Notion protection) | passed: 37 requests |
+| `--m6` (databases, relations, rollup, formula, rows) | passed: 93 requests |
+| `--m9` (chat thread, skill, note sources) | passed: 29 requests |
+| `evals.notion_canary` | 14/14 checks ok (incl. Notion computes our rollup and formula; all view types accepted; re-sends write nothing) |
+| `evals.notion_scale --notes 30 --blocks 20` | first send 152 requests / 61.8 s (2.46 req/s); 5% edit 7 requests (5 writes); no change 0; extrapolated 10,000 notes ≈ 50,667 requests ≈ 5.6 h at 2.5 req/s (L9 measured 7 h at 1.97 req/s: the API was faster this time) |
+
+Cleanup: each script moves what it made to the test workspace's trash; afterwards a search shows only `SB-TEST-root` live (plus one trashed data source).
