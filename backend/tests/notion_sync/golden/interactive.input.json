@@ -1,0 +1,12 @@
+[
+ {
+  "id": "i1",
+  "type": "interactive",
+  "props": {
+   "title": "Quiz",
+   "html": "<p>hi</p><script>1</script>"
+  },
+  "content": [],
+  "children": []
+ }
+]

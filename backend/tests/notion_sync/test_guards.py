@@ -12,13 +12,13 @@ FRONTEND_EDITOR = ROOT.parent / "frontend" / "components" / "editor" / "BlockEdi
 #: BlockNote default blocks + our custom ones that M1 reads
 M1_READ = {"paragraph", "heading", "quote", "codeBlock", "bulletListItem", "numberedListItem",
            "checkListItem", "toggleListItem", "divider", "table", "image", "video", "audio", "file",
-           "columnList", "column", "callout", "math", "checkpoint", "button", "pageBreak"}
+           "columnList", "column", "callout", "math", "checkpoint", "button", "pageBreak", "database", "interactive"}
 #: block types that exist in the editor but still travel as `opaque` (milestone that adds them)
 KNOWN_UNREAD = {
     "unknownBlock": "never persisted (B3 placeholder)",
 }
 #: IR block types without a writer yet (they degrade to OpaqueWriter)
-KNOWN_UNWRITTEN = {"table_row", "table_cell", "column", "embed"}   # table_row/cell are written by the table writer
+KNOWN_UNWRITTEN = {"table_row", "table_cell", "column"}   # table_row/cell are written by the table writer
 
 
 def test_every_ir_block_type_has_a_writer_or_is_listed():

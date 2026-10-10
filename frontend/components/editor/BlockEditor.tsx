@@ -28,8 +28,10 @@ import { SkillAIMenu } from "./selectionSkills";
 import { transformNotionHtml } from "./notionPaste";
 import { readNotionJson, notionJsonToBlocks } from "./notionBlocks";
 import { NoteIdContext } from "./noteIdContext";
+import { freshFileUrl } from "@/lib/freshFileUrl";
 import { DatabaseBlockSpec, insertDatabaseBlock } from "../database/DatabaseBlock";
 import { ButtonBlockSpec, insertButtonBlock } from "../database/ButtonBlock";
+import { InteractiveBlockSpec, insertInteractiveBlock } from "./InteractiveBlock";
 
 // Inline @mention — links to another note in the brain
 const MentionSpec = createInlineContentSpec(
@@ -70,6 +72,7 @@ const multiColSchema = withMultiColumn(
       callout: CalloutBlockSpec(),
       database: DatabaseBlockSpec(),
       button: ButtonBlockSpec(),
+      interactive: InteractiveBlockSpec(),
       unknownBlock: UnknownBlockSpec(),
     },
     inlineContentSpecs: {
@@ -235,10 +238,6 @@ interface BlockEditorProps {
   onSave?: (blocks: AnyBlock[], plainText: string) => void;
   /** Raw HTML from the ingest pipeline — parsed to blocks and applied on mount. */
   ingestHtml?: string;
-  /** Called once during ingest with any <div data-type="interactive"> blocks found. */
-  onInteractiveBlocks?: (blocks: InteractiveBlock[]) => void;
-  /** Called when the user inserts a Knowledge Check via the slash menu. */
-  onAddInteractiveBlock?: (block: InteractiveBlock) => void;
   /** Called once after ingestHtml has been parsed and applied (workspace anchors). */
   onBlocksApplied?: (blocks: AnyBlock[]) => void;
   /** Fires on every editor change, before the debounced save — lets a consumer
@@ -276,7 +275,7 @@ function getPlainText(blocks: AnyBlock[]): string {
 }
 
 export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
-  function BlockEditorComponent({ noteId: _noteId, initialContent, onSave, ingestHtml, onInteractiveBlocks, onAddInteractiveBlock, onBlocksApplied, onDirty, extraSlashItems }, ref) {
+  function BlockEditorComponent({ noteId: _noteId, initialContent, onSave, ingestHtml, onBlocksApplied, onDirty, extraSlashItems }, ref) {
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastUserBlockRef = useRef<string | null>(null);
     const { resolvedTheme } = useTheme();
@@ -311,6 +310,9 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           return safe.length > 0 ? safe : undefined;
         })(),
         extensions: [AIExtension({ transport: inlineTransport })],
+        // Pictures captured into a note used to carry a 24-hour link (ledger B2): swap an old link to our own
+        // storage for a fresh one when it is shown. Stored content is untouched.
+        resolveFileUrl: freshFileUrl,
         dropCursor: multiColumnDropCursor,
         // Merge the xl-ai locale under the `ai` key so getAIDictionary(editor)
         // works, and the multi-column one under `multi_column` — its
@@ -554,12 +556,13 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           async (h: string) => (await editor.tryParseHTMLToBlocks(h)) as AnyBlock[]
         );
         const rawBlocks = await editor.tryParseHTMLToBlocks(strippedHtml);
-        const blocks = attachCalloutChildren(rawBlocks as AnyBlock[], calloutChildren);
+        const blocks = [...attachCalloutChildren(rawBlocks as AnyBlock[], calloutChildren),
+          // interactive blocks found in the ingest are real blocks of the note now (ledger B1)
+          ...interactiveData.map((d) => ({ type: "interactive", props: { title: d.title, html: d.html } }))] as AnyBlock[];
         editor.replaceBlocks(editor.document, blocks);
         if (saveTimer.current) clearTimeout(saveTimer.current);
         persist(blocks as AnyBlock[]);
 
-        if (interactiveData.length > 0) onInteractiveBlocks?.(interactiveData);
         onBlocksApplied?.(blocks as AnyBlock[]);
       })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -605,20 +608,15 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                 aliases: item.aliases,
                 onItemClick: item.onItemClick,
               }));
-              const custom = onAddInteractiveBlock
-                ? [{
-                    title: "Knowledge Check",
-                    group: "Interactive",
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    icon: <span style={{ fontSize: 18 }}>⚡</span> as any,
-                    subtext: "Sandboxed interactive quiz block",
-                    aliases: ["quiz", "interactive", "disco"],
-                    onItemClick: () => onAddInteractiveBlock({
-                      title: "Knowledge Check",
-                      html: DEFAULT_BLOCK_HTML,
-                    }),
-                  }]
-                : [];
+              const custom = [{
+                title: "Knowledge Check",
+                group: "Interactive",
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                icon: <span style={{ fontSize: 18 }}>⚡</span> as any,
+                subtext: "Sandboxed interactive quiz block",
+                aliases: ["quiz", "interactive", "disco"],
+                onItemClick: () => insertInteractiveBlock(editor, editor.getTextCursorPosition()?.block?.id, { title: "Knowledge Check", html: DEFAULT_BLOCK_HTML }),
+              }];
               // Own "Databases" group (rather than folding into "Interactive",
               // which is really about the Knowledge Check quiz block above) —
               // a database is a distinct kind of thing from an interactive

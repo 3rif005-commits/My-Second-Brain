@@ -1,0 +1,10 @@
+[
+ {
+  "type": "embed",
+  "attrs": {
+   "title": "Quiz",
+   "html": "<p>hi</p><script>1</script>"
+  },
+  "src_id": "i1"
+ }
+]

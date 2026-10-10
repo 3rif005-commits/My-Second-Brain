@@ -187,3 +187,28 @@ def test_an_expired_capture_url_is_fetched_from_storage_by_its_path():
     from services.notion_sync.notion.files import FileUnavailable
     with pytest.raises(FileUnavailable):                                      # someone else's host is never rewritten
         got.fetch("https://evil.example/storage/v1/object/sign/workspace-resources/u1/r1/frame.png?token=x", 1000)
+
+
+# ---- ledger B1: the interactive block is a real block and travels as an uploaded .html embed ----------------
+
+def test_an_interactive_block_is_uploaded_as_html_and_embedded(world):
+    n = world.add_note(content=[B("interactive", None, {"title": "Quiz: entropy", "html": "<button onclick=\"this.textContent='ok'\">go</button>"}, id_="i")])
+    res, plan = world.send(n)
+    assert res.items[0].status == "done", res.items[0].message
+    emb = sent_tree(world, n)[0]["embed"]
+    assert emb["type"] == "file_upload"
+    up = world.notion.uploads[emb["file_upload"]["id"]]
+    assert up["filename"] == "Quiz_ entropy.html" or up["filename"].endswith(".html")
+    assert up["content_type"] == "text/html" and up["status"] == "uploaded"
+    writes = world.notion.writes()
+    assert world.send(n)[0].items == [] and world.notion.writes() == writes
+    assert world.plan(n).items[0].state == "unchanged"
+
+
+def test_changing_the_html_of_an_interactive_block_re_uploads_it(world):
+    n = world.add_note(content=[B("interactive", None, {"title": "Q", "html": "<p>v1</p>"}, id_="i")])
+    world.send(n)
+    n["content"][0]["props"]["html"] = "<p>v2</p>"
+    assert world.plan(n).items[0].state == "changed"
+    res, _ = world.send(n)
+    assert res.items[0].status == "done" and len(world.notion.uploads) == 2

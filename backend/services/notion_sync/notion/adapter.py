@@ -234,14 +234,23 @@ class NotionAdapter:
                 self._cap = DEFAULT_CAP
         return self._cap
 
-    def _file_ref(self, url: str, name: str, losses: list[Loss], cache: dict) -> dict | None:
-        """-> {"type": "external", ...} | {"type": "file_upload", ...} | None (a note is shown)."""
-        if self.files.is_public_link(url):
+    def _file_ref(self, url: str, name: str, losses: list[Loss], cache: dict, inline: str | None = None,
+                  mime: str = "") -> dict | None:
+        """-> {"type": "external", ...} | {"type": "file_upload", ...} | None (a note is shown).
+        `inline` is content we hold ourselves (an interactive block's HTML): uploaded, never fetched."""
+        if inline is None and self.files.is_public_link(url):
             return {"type": "external", "external": {"url": url}}
         cap = self._cap_bytes()
         key = f"{url}"
         try:
-            f = cache.get(key) or self.files.fetch(url, cap, name)
+            if inline is not None:
+                from .files import Fetched
+                data = inline.encode("utf-8")
+                if len(data) > cap:
+                    raise FileTooLarge(len(data))
+                f = Fetched(data, mime or "text/html", name)
+            else:
+                f = cache.get(key) or self.files.fetch(url, cap, name)
             cache[key] = f
         except FileTooLarge as e:
             size = f" ({e.size / 1048576:.1f} MB)" if e.size else ""
@@ -271,9 +280,9 @@ class NotionAdapter:
 
     def _resolve_block(self, block: dict, body: dict, losses: list[Loss], cache: dict) -> None:
         ph = body.pop(SB_FILE)
-        ref = self._file_ref(ph["url"], ph.get("name", ""), losses, cache)
+        ref = self._file_ref(ph.get("url", ""), ph.get("name", ""), losses, cache, ph.get("inline"), ph.get("mime", ""))
         if ref is None:
-            label = ph.get("name") or ph["url"].rsplit("/", 1)[-1].split("?")[0] or ph["kind"]
+            label = ph.get("name") or ph.get("url", "").rsplit("/", 1)[-1].split("?")[0] or ph["kind"]
             block.clear()
             block.update(self._marker(f"Not fully represented: the {ph['kind']} “{label}” could not be copied to Notion."))
             return

@@ -54,3 +54,15 @@ class DatabaseEmbedReader:
         return [ir.Block("db_embed", attrs={"database_id": str(p.get("databaseId") or ""),
                                             "view_id": str(p.get("viewId") or "")},
                          src_id=str(src.get("id", "")))]
+
+
+@register_reader
+class InteractiveReader:
+    """The sandboxed interactive ("Disco") block: a self-contained HTML page stored in the note (ledger B1)."""
+    handles = "blocknote:interactive"
+    version = 1
+
+    def read(self, src, ctx):
+        p = src.get("props") or {}
+        return [ir.Block("embed", attrs={"title": str(p.get("title") or "Interactive block"), "html": str(p.get("html") or "")},
+                         src_id=str(src.get("id", "")))]

@@ -230,6 +230,23 @@ class ActionWriter:
                 "children": code_blocks(text or "(none)", "json", child_losses)}}]}}], losses + child_losses)
 
 
+class EmbedWriter:
+    """An interactive block: its HTML is uploaded as a file and embedded; JavaScript keeps running in Notion
+    (T8, verified by hand). If the upload is refused the page shows a note instead."""
+    handles = "ir:embed"
+    version = 1
+
+    def write(self, node, ctx):
+        html = node.attrs.get("html", "")
+        title = node.attrs.get("title", "Interactive block")
+        losses = list(node.losses)
+        if not html.strip():
+            return WriteResult([], losses)
+        name = (title or "interactive").strip()[:60] or "interactive"
+        return WriteResult([{"type": "embed", "embed": {SB_FILE: {"inline": html, "name": f"{name}.html", "mime": "text/html",
+                                                                 "kind": "interactive block"}}}], losses)
+
+
 class BookmarkWriter:
     handles = "ir:bookmark"
     version = 1
