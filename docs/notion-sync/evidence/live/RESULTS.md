@@ -56,3 +56,12 @@ Run on branch `claude/peaceful-goodall-p53g39` (= PR #3 head + spec fixes) again
 | `evals.notion_scale --notes 30 --blocks 20` | first send 152 requests / 61.8 s (2.46 req/s); 5% edit 7 requests (5 writes); no change 0; extrapolated 10,000 notes ≈ 50,667 requests ≈ 5.6 h at 2.5 req/s (L9 measured 7 h at 1.97 req/s: the API was faster this time) |
 
 Cleanup: each script moves what it made to the test workspace's trash; afterwards a search shows only `SB-TEST-root` live (plus one trashed data source).
+
+## Real backup and restore (2026-10-10, demo account, real Supabase project)
+
+| Step | Result (VERIFIED) |
+|---|---|
+| `python -m tools.backup --user <demo>` | 80,187-byte `.sbz`, `verify` found 0 problems. Counts: 13 notes, 3 deleted notes, 0 folders, 6 databases, 14 rows, 0 chats, 7 skills, 0 files. |
+| `python -m tools.restore --dry-run` | `ok`, would create 0 folders / 13 notes / 0 chats; names the 14 database rows and 3 deleted notes as not restored (as designed). |
+| `restore.apply` into the demo account | Created one "Restored from backup <date>" folder holding 13 notes. Notes 16 → 29, folders 0 → 1; the 16 existing notes were not touched. All 13 restored notes matched the archive by title and by content. |
+| Cleanup | The 13 restored notes and the scratch folder were deleted by id (only what the restore created). Notes back to 16, folders 0. |
