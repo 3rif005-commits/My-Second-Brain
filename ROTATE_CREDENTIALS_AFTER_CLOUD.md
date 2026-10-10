@@ -11,3 +11,5 @@ Treat all of them as exposed. When the cloud session ends, and before using the 
 - [ ] Update `backend/.env`, `frontend/.env.local` and the deployed environment with the new values, then restart with `./app.sh`.
 - [ ] Delete the secrets from the cloud environment settings.
 - [ ] The spec ran against real data: look for stray notes/folders it created.
+- [ ] The app login password was hardcoded in `frontend/e2e/setup/auth.setup.ts` and is in git history of the GitHub repo. Change it (Supabase Auth, or the app), then set `E2E_EMAIL`/`E2E_PASSWORD` in `frontend/.env.local` (the setup now reads them from the environment or that file).
+- [ ] The old password is also written in: STATUS.md, frontend/e2e/phase2-sidepanel.spec.ts, frontend/e2e/auth-flow.spec.ts, docs/prompts/workspace-video-testing-prompt.md, docs/superpowers/plans/2026-05-18-phase2-three-doors.md. Remove it there too.
