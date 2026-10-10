@@ -222,9 +222,9 @@ test("interactive blocks move from this browser's localStorage into the note (le
       return c.some((b) => b.type === "interactive" && b.props?.html === "<p>old browser-only block</p>");
     }, { timeout: 120_000 }).toBe(true);
     await expect.poll(() => page.evaluate((id) => localStorage.getItem(`interactive-${id}`), noteId)).toBeNull();   // only after it was saved
-    await slow(page.getByText("My quiz")).toBeVisible();
+    await slow(page.getByRole("textbox", { name: "Block title" })).toHaveValue("My quiz");
     await page.reload();
-    await slow(page.getByText("My quiz")).toBeVisible();                       // it comes from the note now
+    await slow(page.getByRole("textbox", { name: "Block title" })).toHaveValue("My quiz");                       // it comes from the note now
   } finally {
     await page.request.delete(`/api/notes/${noteId}`, { timeout: 120_000 });
     await page.request.delete(`/api/notes/${noteId}/permanent`, { timeout: 120_000 });
