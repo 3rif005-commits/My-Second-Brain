@@ -38,30 +38,42 @@ export function ConnectInline({ status, onChange }: Props) {
   // Connected already (token saved, no page chosen yet): list the pages.
   useEffect(() => { if (status.connected && pages === null) void refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const step = status.connected ? 2 : 1;
   return (
     <div className="space-y-4" data-testid="notion-not-connected">
+      <div className="flex items-center gap-2 text-[12px]" aria-label={`Step ${step} of 2`}>
+        {[1, 2].map((n) => (
+          <span key={n} className="flex items-center gap-2">
+            <span className={`w-5 h-5 rounded-full grid place-items-center text-[11px] font-semibold ${n <= step ? "bg-indigo-600 text-white" : "bg-[var(--menu-field-bg)] opacity-70"}`}>{n}</span>
+            <span className={n === step ? "font-medium" : "opacity-60"}>{n === 1 ? "Connect" : "Choose a page"}</span>
+            {n === 1 && <span className="w-6 h-px bg-[color:var(--menu-divider)]" />}
+          </span>
+        ))}
+      </div>
       {error && <p role="alert" className="rounded-md px-3 py-2 text-[13px] bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">{error}</p>}
       {!status.connected ? (
         <section aria-label="Connect Notion" className="space-y-3">
-          <p className="font-medium">Connect Notion once, then this note is sent.</p>
-          <ol className="list-decimal pl-5 space-y-1 text-[13px] opacity-80">
-            <li>Open <a className="underline inline-flex items-center gap-1" href="https://www.notion.so/profile/integrations" target="_blank" rel="noreferrer">notion.so/profile/integrations <ExternalLink size={11} /></a>, choose <em>New integration</em> → <em>Internal</em>, and copy its token.</li>
-            <li>In Notion, open the page you want notes under → <em>•••</em> → <em>Connections</em> → add your integration.</li>
-            <li>Paste the token here.</li>
+          <p className="text-[13px] opacity-80">One-time set-up, then this note is sent. You never leave this note.</p>
+          <ol className="space-y-1.5 text-[13px] rounded-lg border border-[color:var(--menu-divider)] p-3 list-decimal pl-8 bg-[var(--menu-field-bg)]/40">
+            <li>Create an <em>Internal</em> integration at <a className="underline inline-flex items-center gap-1" href="https://www.notion.so/profile/integrations" target="_blank" rel="noreferrer">notion.so/profile/integrations <ExternalLink size={11} /></a> and copy its token.</li>
+            <li>In Notion, open the page to send under → <em>•••</em> → <em>Connections</em> → add your integration.</li>
           </ol>
-          <form onSubmit={connect} className="flex gap-2">
-            <input type="password" autoComplete="off" spellCheck={false} value={token} onChange={(e) => setToken(e.target.value)}
-              placeholder="ntn_…" aria-label="Notion token"
-              className="flex-1 h-9 px-3 rounded-md border border-[color:var(--menu-divider)] bg-transparent text-[13px] font-mono" />
-            <Button type="submit" size="sm" variant="primary" disabled={busy || token.trim().length < 8}>
-              {busy ? <Loader2 size={14} className="animate-spin" /> : "Connect"}
-            </Button>
+          <form onSubmit={connect} className="space-y-2">
+            <label htmlFor="notion-token" className="text-[12px] font-medium">Integration token</label>
+            <div className="flex gap-2">
+              <input id="notion-token" type="password" autoComplete="off" spellCheck={false} value={token} onChange={(e) => setToken(e.target.value)}
+                placeholder="ntn_…" aria-label="Notion token"
+                className="flex-1 h-9 px-3 rounded-md border border-[color:var(--menu-divider)] bg-transparent text-[13px] font-mono outline-none focus:border-indigo-500" />
+              <Button type="submit" size="sm" variant="primary" disabled={busy || token.trim().length < 8}>
+                {busy ? <Loader2 size={14} className="animate-spin" /> : "Connect"}
+              </Button>
+            </div>
+            <p className="text-[12px] opacity-60">Encrypted before it is stored, and never shown again.</p>
           </form>
-          <p className="text-[12px] opacity-60">The token is encrypted before it is stored and never shown again.</p>
         </section>
       ) : (
         <section aria-label="Choose a page" className="space-y-3">
-          <p className="font-medium">Connected to {status.workspace_name ?? "Notion"}. Where should notes go?</p>
+          <p className="text-[13px]"><span className="text-emerald-600 dark:text-emerald-400">✓</span> Connected to <strong>{status.workspace_name ?? "Notion"}</strong>. Pick the page your notes go under:</p>
           {pages === null ? <div className="h-10 rounded-md animate-pulse bg-[var(--menu-field-bg)]" />
             : pages.length === 0 ? (
               <p className="text-[13px] rounded-md px-3 py-2 bg-amber-50 dark:bg-amber-500/10" data-testid="no-pages">
@@ -69,7 +81,7 @@ export function ConnectInline({ status, onChange }: Props) {
                 <button className="underline" onClick={refresh}>check again</button>.
               </p>
             ) : (
-              <ul className="rounded-lg border border-[color:var(--menu-divider)] divide-y divide-[color:var(--menu-divider)]">
+              <ul className="rounded-lg border border-[color:var(--menu-divider)] divide-y divide-[color:var(--menu-divider)] max-h-56 overflow-y-auto">
                 {pages.map((p) => (
                   <li key={p.id}>
                     <button onClick={() => choose(p)} disabled={busy}

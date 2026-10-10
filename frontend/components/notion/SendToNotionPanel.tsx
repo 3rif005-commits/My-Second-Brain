@@ -151,13 +151,16 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
   const progress = run ? run.items.filter((i) => !["queued", "running"].includes(i.status)).length : 0;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9998] flex justify-end bg-black/30"
+    <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4 bg-black/40 backdrop-blur-[1px]"
       onClick={(e) => { if (e.target === e.currentTarget && canClose) onClose(); }}>
       <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="notion-panel-title"
-        className="w-full sm:w-[483px] h-full flex flex-col outline-none shadow-2xl
-          bg-[var(--menu-bg)] text-[color:var(--menu-fg)] border-l border-[color:var(--menu-divider)]">
-        <header className="flex items-center justify-between px-5 h-12 shrink-0 border-b border-[color:var(--menu-divider)]">
-          <h2 id="notion-panel-title" className="text-[15px] font-semibold truncate">Send to Notion{title ? ` · ${title}` : ""}</h2>
+        className="w-full max-w-[460px] max-h-[min(82vh,620px)] flex flex-col outline-none rounded-2xl overflow-hidden shadow-2xl
+          bg-[var(--menu-bg)] text-[color:var(--menu-fg)] border border-[color:var(--menu-divider)]">
+        <header className="flex items-center justify-between gap-3 px-5 py-3.5 shrink-0 border-b border-[color:var(--menu-divider)]">
+          <div className="min-w-0">
+            <h2 id="notion-panel-title" className="text-[15px] font-semibold leading-tight">Send to Notion</h2>
+            {title && <p className="text-[12px] opacity-60 truncate mt-0.5">{title}</p>}
+          </div>
           <button onClick={onClose} aria-label="Close" disabled={!canClose}
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--menu-row-hover-bg)]"><X size={15} /></button>
         </header>
@@ -186,7 +189,9 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                   <strong>{conn?.root?.title ?? "your Notion page"}</strong>
                 </p>
                 <p className="text-[12px] opacity-60">
-                  Sends the last saved version. Folders become pages with a Notes table inside; notes without a folder go to the Notes table at the top.
+                  {items.length > 1
+                    ? "Sends the last saved version. Folders become pages with a Notes table inside; notes without a folder go to the Notes table at the top."
+                    : "Sends the last saved version of this note."}
                 </p>
               </section>
 
@@ -252,7 +257,9 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                 <p>Nothing to send: this is already in sync ✓</p>
               ) : single ? (
                 single.status === "done" ? (
-                  <p className="font-medium">✓ {single.action === "update" ? "Updated" : "Sent"} to Notion</p>
+                  <p className="flex items-center gap-2 font-medium text-[15px]">
+                    <CheckCircle2 size={20} className="text-emerald-500" /> {single.action === "update" ? "Updated" : "Sent"} to Notion
+                  </p>
                 ) : (
                   <p role="alert" className="rounded-md px-3 py-2 text-[13px] bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">{single.message}</p>
                 )
@@ -261,7 +268,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
               )}
               {single && urlOf(single.local_id) && single.status === "done" && (
                 <a href={urlOf(single.local_id)!} target="_blank" rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 text-[14px] text-indigo-600 dark:text-indigo-400 hover:underline">
+                  className="inline-flex h-9 items-center gap-1.5 px-4 rounded-md text-[13px] font-medium bg-indigo-600 text-white hover:bg-indigo-700">
                   Open in Notion <ExternalLink size={13} />
                 </a>
               )}
@@ -290,7 +297,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
           )}
         </div>
 
-        <footer className="shrink-0 flex items-center justify-between gap-3 px-5 h-14 border-t border-[color:var(--menu-divider)]">
+        <footer className="shrink-0 flex items-center justify-between gap-3 px-5 py-3 border-t border-[color:var(--menu-divider)]">
           <span className="text-[12px] opacity-60">
             {phase === "review" && sendable.length > 0 && plan
               ? `${sendable.length} item${sendable.length === 1 ? "" : "s"} · about ${sendable.reduce((n, i) => n + i.est_requests, 0)} requests`
@@ -301,7 +308,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
               {phase === "done" ? "Close" : "Cancel"}
             </Button>
             {phase === "review" && sendable.length > 0 && (
-              <Button size="sm" variant="primary" onClick={send}>
+              <Button size="sm" variant="primary" onClick={send} className="whitespace-nowrap">
                 {sendable.length === 1 ? "Send" : `Send ${sendable.length} items`}
               </Button>
             )}
