@@ -68,4 +68,15 @@ describe("RowMenu", () => {
     await userEvent.click(await screen.findByRole("menuitem", { name: /Keep in sync/ }));
     await waitFor(() => expect(calls).toContain("POST /api/ws/notion/rules"));
   });
+  it("offers to resume a paused note and un-pauses it", async () => {
+    state = "paused";
+    const calls: { url: string; body: string }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, body: String(init?.body ?? "") });
+      return json(url.endsWith("/rules") ? { rules: [] } : { paused: false });
+    }));
+    render(<RowMenu target={{ kind: "note", id: "n1", title: "Lecture", x: 0, y: 0 }} onClose={() => {}} />);
+    await userEvent.click(await screen.findByRole("menuitem", { name: /Resume mirroring/ }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/notes/n1/pause") && c.body.includes('"paused":false'))).toBe(true));
+  });
 });

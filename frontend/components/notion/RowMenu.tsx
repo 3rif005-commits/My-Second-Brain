@@ -3,9 +3,9 @@
 // Right-click on a note, folder or database in the sidebar: "Send to Notion…" (and "Open in Notion").
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ExternalLink, RefreshCw, Send } from "lucide-react";
+import { ExternalLink, Play, RefreshCw, Send } from "lucide-react";
 import { useNotion } from "@/context/NotionContext";
-import { notionApi, scopeOf, type ItemKind, type Rule } from "@/lib/notion";
+import { announceNotionChange, notionApi, scopeOf, type ItemKind, type Rule } from "@/lib/notion";
 
 export interface RowMenuTarget { kind: ItemKind; id: string; title: string; x: number; y: number }
 
@@ -45,6 +45,11 @@ export function RowMenu({ target, onClose }: { target: RowMenuTarget; onClose: (
     } catch { /* nothing to open */ }
   }
 
+  async function resumeNote() {
+    onClose();
+    try { await notionApi.pauseNote(target.id, false); announceNotionChange(); } catch { /* the dot stays grey; retry from here */ }
+  }
+
   const state = target.kind === "note" ? notion.stateOf("note", target.id) : null;
   const left = Math.min(target.x, (typeof window !== "undefined" ? window.innerWidth : 1200) - 230);
   return createPortal(
@@ -59,6 +64,12 @@ export function RowMenu({ target, onClose }: { target: RowMenuTarget; onClose: (
         <button role="menuitem" className="w-full flex items-center gap-2 px-3 h-[var(--menu-row-height)] text-[13px] hover:bg-[var(--menu-row-hover-bg)] text-left"
           onClick={openInNotion}>
           <ExternalLink size={13} /> Open in Notion
+        </button>
+      )}
+      {state === "paused" && (
+        <button role="menuitem" className="w-full flex items-center gap-2 px-3 h-[var(--menu-row-height)] text-[13px] hover:bg-[var(--menu-row-hover-bg)] text-left"
+          onClick={resumeNote}>
+          <Play size={13} /> Resume mirroring
         </button>
       )}
       {ruleKind && notion.connected && rule !== undefined && (

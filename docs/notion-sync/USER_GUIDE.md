@@ -52,7 +52,7 @@ The row opens with a side-by-side diff (*In Notion now* / *What we would send*) 
 - **Overwrite with Second Brain…** — asks again, then replaces the Notion edit.
 - **Keep both: send as a copy** — a new page; the edited one stays.
 - **Create again** / **Forget it (leave Notion alone)** — for a page deleted in Notion: send it anew, or stop mirroring it.
-- **Stop mirroring this page** — pauses this one note. Resume it from the note's Notion chip.
+- **Stop mirroring this page** — pauses this one note. Resume it from the note’s right-click menu in the sidebar ("Resume mirroring").
 Second Brain never deletes a block it did not create.
 
 ## 5. Auto-sync (Settings → Notion → Auto-sync)
