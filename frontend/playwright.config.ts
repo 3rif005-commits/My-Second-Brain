@@ -55,6 +55,16 @@ export default defineConfig({
       retries: 0,
     },
 
+    // Send to Notion visual + keyboard pass (light/dark, 1280 and 390 px). Same safety as
+    // notion-sync-live: TEST workspace only, refuses if Notion is already connected, cleans up.
+    {
+      name: "notion-visual-live",
+      testMatch: "**/notion-visual-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      retries: 0,
+    },
+
     {
       name: "routing-live",
       testMatch: "**/routing-live.spec.ts",
