@@ -16,7 +16,7 @@ import { anchorRows, readDraftAnchors } from "@/components/workspace/anchorHeadi
 import { NoteProperties } from "./NoteProperties";
 import { DatabaseRowProperties } from "../database/DatabaseRowProperties";
 import { BacklinksPanel } from "./BacklinksPanel";
-import { legacyInteractive } from "./InteractiveBlock";
+import { useLegacyInteractiveMigration } from "./useLegacyInteractiveMigration";
 import { useNotion } from "@/context/NotionContext";
 import { NotionChip } from "../notion/NotionChip";
 import type { BlockEditorHandle } from "./BlockEditor";
@@ -251,28 +251,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
 
   // Ledger B1: interactive blocks used to live only in this browser's localStorage. Move any that are here INTO
   // the note (as real blocks); the browser's copy is deleted only after the note, with them, has been saved.
-  const legacyKey = `interactive-${note.id}`;
-  const migrating = useRef(false);
-  useEffect(() => {
-    let tries = 0;
-    const t = setInterval(() => {
-      tries += 1;
-      const ed = editorRef.current;
-      if (!ed && tries < 40) return;
-      clearInterval(t);
-      if (!ed) return;
-      try {
-        const legacy = legacyInteractive(localStorage.getItem(legacyKey));
-        if (!legacy.length) { localStorage.removeItem(legacyKey); return; }
-        const have = new Set((ed.getDocument() as AnyBlock[]).filter((b) => b.type === "interactive").map((b) => b.props?.html));
-        const fresh = legacy.filter((b) => !have.has(b.html));
-        migrating.current = true;
-        if (fresh.length) ed.insertBlocksAtEnd(fresh.map((b) => ({ type: "interactive", props: { title: b.title, html: b.html } })));
-        else { localStorage.removeItem(legacyKey); migrating.current = false; }
-      } catch { /* the browser copy stays; the next visit tries again */ }
-    }, 250);
-    return () => clearInterval(t);
-  }, [legacyKey]);
+  const afterSave = useLegacyInteractiveMigration(editorRef, note.id);
 
   const handleSaveContent = useCallback(
     async (blocks: AnyBlock[], plainText: string) => {
@@ -284,10 +263,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
       });
       setSaving(false);
       setLastSaved(new Date());
-      if (res.ok && migrating.current && blocks.some((b) => b.type === "interactive")) {
-        migrating.current = false;
-        try { localStorage.removeItem(`interactive-${note.id}`); } catch { /* ignore */ }
-      }
+      afterSave(res.ok, blocks);
 
       // Debounce re-index: fire 30s after last block change
       if (reindexDebounceRef.current) clearTimeout(reindexDebounceRef.current);

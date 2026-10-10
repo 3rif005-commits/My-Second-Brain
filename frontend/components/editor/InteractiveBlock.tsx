@@ -55,3 +55,25 @@ export function legacyInteractive(raw: string | null): { title: string; html: st
       : [];
   } catch { return []; }
 }
+
+export type LegacyPlan = { action: "keep" | "clear" | "insert"; fresh: { title: string; html: string }[] };
+
+/** What to do with the browser's old copy. Unreadable data is KEPT (never deleted unseen); an empty or missing
+ *  list is cleared; blocks whose html the note already has are not inserted twice. */
+export function planLegacyMigration(raw: string | null, doc: AnyBlock[]): LegacyPlan {
+  if (raw === null) return { action: "clear", fresh: [] };
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return { action: "keep", fresh: [] }; }
+  if (!Array.isArray(parsed)) return { action: "keep", fresh: [] };
+  const legacy = legacyInteractive(raw);
+  if (!legacy.length) return { action: parsed.length ? "keep" : "clear", fresh: [] };
+  const have = new Set(doc.filter((b) => b?.type === "interactive").map((b) => b.props?.html));
+  const fresh = legacy.filter((b) => !have.has(b.html));
+  return { action: fresh.length ? "insert" : "clear", fresh };
+}
+
+/** True once EVERY migrated block is in the saved document (an unrelated autosave must not release the old copy). */
+export function migrationSaved(pendingHtml: string[], savedBlocks: AnyBlock[]): boolean {
+  const saved = new Set(savedBlocks.filter((b) => b?.type === "interactive").map((b) => b.props?.html));
+  return pendingHtml.every((h) => saved.has(h));
+}
