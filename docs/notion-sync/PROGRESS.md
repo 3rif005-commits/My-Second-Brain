@@ -68,3 +68,9 @@
 - NOT verified: the extended Playwright spec (folder send, dots, Activity, Health, kill switch, B1 migration) was never run to completion; B1/B2 only by unit tests; no visual/dark-mode/keyboard pass of the new UI; the wider backend suite was not re-run end to end.
 - Needs the owner locally: all live Notion runs and the browser spec, applying 029/030 in the WebMCP fork's Supabase, syncing/deploying the fork, rotating `HF_TOKEN` (a root `.env` with it is tracked in git history, commit dbdc7a8).
 - Next steps for whoever continues: `CLOUD_HANDOFF_PROMPT.md` §4.
+
+## Cloud session 2 (2026-10-10, branch wip/cloud-handoff)
+- B1 review found and fixed two things: the browser copy was deleted after ANY save that held an interactive block (now only once EVERY migrated block is in a successful save), and unreadable localStorage data was deleted unseen (now kept). The effect is now `useLegacyInteractiveMigration` with vitest; `InteractiveBlockSpec` has a real-editor test.
+- UI polish by reading: dialog focus trap + focus restore, panel can be closed during a background run (the text said so, the buttons did not), polling stops on unmount, Settings loading/error states, status words. Found a real gap and closed it: a note paused with "Stop mirroring" had no way back; the row menu now has "Resume mirroring".
+- Full suites run in the sandbox: see STATUS.md "Verification caveats". No credentials were available in the sandbox, so the browser spec and every live Notion eval were NOT run.
+- `docs/notion-sync/USER_GUIDE.md` written from the UI strings.
