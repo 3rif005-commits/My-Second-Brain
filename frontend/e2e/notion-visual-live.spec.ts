@@ -39,8 +39,22 @@ async function noHorizontalScroll(page: Page, what: string) {
 }
 /** The sidebar may be closed (desktop: floating "Open sidebar" button; phone: a drawer). */
 async function showSidebar(page: Page) {
-  const open = page.getByRole("button", { name: "Open sidebar" });
-  if (await open.isVisible().catch(() => false)) await open.click();
+  for (let i = 0; i < 4; i++) {
+    await page.waitForTimeout(500);                         // let the slide transition settle
+    const box = await page.getByRole("button", { name: "Collapse sidebar" }).boundingBox().catch(() => null);
+    if (box && box.x >= 0 && box.x < 260) return;           // on screen (a closed drawer is translated off-screen)
+    const open = page.getByRole("button", { name: "Open sidebar" });          // desktop: floating button
+    const menu = page.getByRole("button", { name: "Open menu" });             // phone: header hamburger
+    if (await open.isVisible().catch(() => false)) await open.click();
+    else if (await menu.isVisible().catch(() => false)) await menu.click();
+  }
+}
+/** Phone: the drawer stays open across navigation and covers the page, so close it before page shots. */
+async function hideDrawer(page: Page) {
+  if ((page.viewportSize()?.width ?? 1280) >= 768) return;
+  await page.waitForTimeout(800);
+  const box = await page.getByRole("button", { name: "Collapse sidebar" }).boundingBox().catch(() => null);
+  if (box && box.x >= 0 && box.x < 260) { await page.mouse.click(350, 420); await page.waitForTimeout(800); }   // the backdrop closes it
 }
 async function openFolderPanel(page: Page) {
   await showSidebar(page);
@@ -96,7 +110,12 @@ test("Send to Notion: visual pass (light/dark, desktop/phone) and keyboard use",
         await page.goto("/brain/settings/notion");
         await setTheme(page, theme);
         await slow(page.getByTestId("notion-connected")).toBeVisible({ timeout: 120_000 });
+        await slow(page.getByTestId("health")).toContainText("2026-03-11");           // loaded, not the skeleton
+        await hideDrawer(page);
         await page.screenshot({ path: `${OUT}/settings-${tag}.png`, fullPage: true });
+        for (const name of ["Mirror status", "Auto-sync", "Activity", "Health"]) {       // the page scrolls inside a container, so shoot each section
+          await page.getByRole("region", { name }).screenshot({ path: `${OUT}/settings-${name.toLowerCase().replace(/\W+/g, "-")}-${tag}.png` });
+        }
         await noHorizontalScroll(page, `settings ${tag}`).catch((e) => findings.push(String(e.message)));
         // sidebar with dots + folder context menu + review panel
         await page.goto("/brain");
