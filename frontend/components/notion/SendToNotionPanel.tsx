@@ -12,6 +12,7 @@ import {
   announceNotionChange, notionApi, type NotionStatus, type Plan, type PlanItem, type Resolution, type RunDetail,
   type Scope, type SendResult,
 } from "@/lib/notion";
+import { ConnectInline } from "./ConnectInline";
 import { PlanRow, TAB_LABEL, tabOf, type TabId } from "./PlanReview";
 
 interface Props {
@@ -173,14 +174,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
           )}
 
           {phase !== "loading" && conn && !ready && (
-            <div className="space-y-3" data-testid="notion-not-connected">
-              <p>{conn.connected ? "Pick the Notion page to send to, then come back."
-                : "Notion isn't connected yet. It takes about a minute: you paste a token and choose one page."}</p>
-              <Link href="/brain/settings/notion" onClick={onOpenSettings}
-                className="inline-flex h-8 items-center px-3 rounded-md text-[13px] font-medium bg-indigo-600 text-white hover:bg-indigo-700">
-                Open Settings → Notion
-              </Link>
-            </div>
+            <ConnectInline status={conn} onChange={(s) => { setConn(s); if (s.connected && s.root) void load(); }} />
           )}
 
           {phase === "review" && ready && plan && (

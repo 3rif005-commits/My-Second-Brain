@@ -65,6 +65,15 @@ export default defineConfig({
       retries: 0,
     },
 
+    // Send ONE note from a fresh account: connect + pick the page inside the panel (no Settings trip).
+    {
+      name: "notion-onenote-live",
+      testMatch: "**/notion-onenote-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      retries: 0,
+    },
+
     {
       name: "routing-live",
       testMatch: "**/routing-live.spec.ts",
