@@ -126,3 +126,107 @@ test("connect, send a note, open it, and re-send makes nothing", async ({ page }
     await page.request.post("/api/ws/notion/disconnect");
   }
 });
+
+test("a folder with notes: right-click → review with tabs → send → dots → Activity → Health", async ({ page }) => {
+  test.setTimeout(480_000);
+  const token = testToken();
+  const st = await (await page.request.get("/api/ws/notion/status")).json();
+  test.skip(st.connected, "Notion is already connected: not replacing a real connection");
+
+  const col = await (await page.request.post("/api/collections", { data: { name: "SB-TEST folder", icon: "🧪" } })).json();
+  const mk = async (title: string, text: string) => (await (await page.request.post("/api/notes", {
+    data: { title, collection_id: col.id, content: [para(`p-${title}`, text)] } })).json()).id as string;
+  const ids = [await mk("SB-TEST one", "first note"), await mk("SB-TEST two", "second note")];
+
+  try {
+    await page.goto("/brain/settings/notion");
+    await slow(page.getByTestId("notion-empty")).toBeVisible({ timeout: 180_000 });
+    await page.getByLabel("Notion token").fill(token);
+    await page.getByRole("button", { name: "Connect" }).click();
+    await slow(page.getByTestId("notion-connected")).toBeVisible();
+    await page.getByRole("button", { name: /SB-TEST-/ }).click();
+    await slow(page.getByText("Sending here")).toBeVisible();
+    // the sections of M3-M11 are on the page
+    for (const name of ["Mirror status", "Auto-sync", "Activity", "Health"]) await slow(page.getByRole("region", { name })).toBeVisible();
+    await slow(page.getByTestId("activity-empty")).toBeVisible();
+
+    // right-click the folder in the sidebar
+    await page.goto("/brain");
+    const header = page.getByText("SB-TEST folder", { exact: true });
+    await header.waitFor({ timeout: 180_000 });
+    await header.click({ button: "right" });
+    await page.getByRole("menuitem", { name: /Send to Notion/ }).click();
+    await slow(page.getByTestId("notion-item").first()).toBeVisible();
+    const tabs = page.getByRole("tab");
+    await expect(tabs.first()).toContainText("New 3");                       // the folder + its 2 notes
+    await page.screenshot({ path: "e2e/screenshots/notion-sync/folder-review.png" });
+    await page.getByRole("button", { name: "Send 3 items" }).click();
+    await slow(page.getByTestId("notion-result")).toContainText("3 sent to Notion", { timeout: 120_000 });
+    await page.screenshot({ path: "e2e/screenshots/notion-sync/folder-sent.png" });
+    await page.getByRole("button", { name: "Close" }).last().click();
+
+    // they now show an in-sync state (the ring is only drawn on hover, so look at the attribute)
+    await expect.poll(async () => (await (await page.request.get("/api/ws/notion/mirror")).json()).collections[col.id]).toBe("synced");
+
+    // Activity lists the run, Retry failed absent because nothing failed
+    await page.goto("/brain/settings/notion?tab=activity");
+    await slow(page.getByTestId("activity-list")).toBeVisible();
+    await page.getByTestId("activity-list").getByRole("button").first().click();
+    await slow(page.getByText("SB-TEST one").first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retry failed" })).toHaveCount(0);
+    // Health shows the pinned version and the kill switch
+    await expect(page.getByTestId("health")).toContainText("2026-03-11");
+    await page.screenshot({ path: "e2e/screenshots/notion-sync/settings-full.png", fullPage: true });
+    // the kill switch pauses and resumes
+    await page.getByRole("button", { name: "Pause all syncing" }).click();
+    await slow(page.getByRole("button", { name: "Resume syncing" })).toBeVisible();
+    await page.getByRole("button", { name: "Resume syncing" }).click();
+    await slow(page.getByRole("button", { name: "Pause all syncing" })).toBeVisible();
+
+    // edit one note → it shows as changed and the panel offers just that one
+    await page.request.patch(`/api/notes/${ids[0]}`, { data: { content: [para("p2", "first note, edited")], content_text: "first note, edited" } });
+    await expect.poll(async () => (await (await page.request.get("/api/ws/notion/mirror")).json()).notes[ids[0]]).toBe("changed");
+    const plan = await (await page.request.post("/api/ws/notion/plan", { data: { collection_ids: [col.id] } })).json();
+    expect(plan.items.filter((i: any) => i.state === "changed").map((i: any) => i.title)).toEqual(["SB-TEST one"]);
+  } finally {
+    for (const id of ids) {
+      await page.request.delete(`/api/notes/${id}`, { timeout: 120_000 });
+      await page.request.delete(`/api/notes/${id}/permanent`, { timeout: 120_000 });
+    }
+    await page.request.delete(`/api/collections/${col.id}`);
+    try {
+      const root = (await notion(token, "POST", "/search", { filter: { property: "object", value: "page" } }))
+        .results.find((p: any) => p.parent?.type === "workspace");
+      if (root && /^SB-TEST-/.test(root.properties?.title?.title?.[0]?.plain_text ?? "")) {
+        const kids = await notion(token, "GET", `/blocks/${root.id}/children?page_size=100`);
+        for (const b of kids.results ?? []) {
+          const title = b.child_page?.title ?? b.child_database?.title ?? "";
+          if (b.type === "child_database" || title.startsWith("SB-TEST")) await notion(token, "DELETE", `/blocks/${b.id}`);
+        }
+      }
+    } catch { /* best effort */ }
+    await page.request.post("/api/ws/notion/disconnect");
+  }
+});
+
+test("interactive blocks move from this browser's localStorage into the note (ledger B1)", async ({ page }) => {
+  test.setTimeout(300_000);
+  const created = await page.request.post("/api/notes", { data: { title: "SB-TEST interactive (safe to delete)", content: [para("p1", "text")] } });
+  const noteId: string = (await created.json()).id;
+  try {
+    await page.goto("/brain");
+    await page.evaluate(([id]) => localStorage.setItem(`interactive-${id}`, JSON.stringify([{ title: "My quiz", html: "<p>old browser-only block</p>" }])), [noteId]);
+    await page.goto(`/brain/${noteId}`);
+    await expect.poll(async () => {
+      const c = (await (await page.request.get(`/api/notes/${noteId}`)).json()).content as any[];
+      return c.some((b) => b.type === "interactive" && b.props?.html === "<p>old browser-only block</p>");
+    }, { timeout: 120_000 }).toBe(true);
+    await expect.poll(() => page.evaluate((id) => localStorage.getItem(`interactive-${id}`), noteId)).toBeNull();   // only after it was saved
+    await slow(page.getByText("My quiz")).toBeVisible();
+    await page.reload();
+    await slow(page.getByText("My quiz")).toBeVisible();                       // it comes from the note now
+  } finally {
+    await page.request.delete(`/api/notes/${noteId}`, { timeout: 120_000 });
+    await page.request.delete(`/api/notes/${noteId}/permanent`, { timeout: 120_000 });
+  }
+});
