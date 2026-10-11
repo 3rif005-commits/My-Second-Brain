@@ -289,3 +289,21 @@ def test_a_failing_collection_blocks_only_its_notes(world):
     res, _ = world.send(inside, outside)
     by_title = {i.title: i.status for i in res.items}
     assert by_title["Outside"] == "done" and by_title["Physics"] == "failed" and by_title["A note"] == "failed"
+
+
+def test_the_notes_table_opens_tidy_and_a_changed_view_is_left_alone(world):
+    n = world.add_note(title="Lenses")
+    world.send(n)
+    did = next(iter(world.notion.dbs))
+    views = [v for v in world.notion.views.values() if v["parent"]["database_id"] == did and not v.get("deleted")]
+    assert [v["name"] for v in views] == ["All notes"]                        # renamed from "Default view"
+    v = views[0]
+    shown = {p["property_id"]: p["visible"] for p in v["configuration"]["properties"]}
+    src = next(iter(world.notion.sources.values()))
+    assert shown[src["ids"]["Name"]] and shown[src["ids"]["Edited in Second Brain"]]
+    assert not shown[src["ids"]["SB ID"]] and not shown[src["ids"]["Created in Second Brain"]]
+    assert v["sorts"] == [{"property": src["ids"]["Edited in Second Brain"], "direction": "descending"}]
+    # a person who renamed the view keeps their version through later sends
+    v["name"] = "My view"
+    world.send(world.add_note(title="Second"))
+    assert v["name"] == "My view"

@@ -75,11 +75,23 @@ describe("SendToNotionPanel", () => {
     expect((calls.filter((c) => c.path === "/plan").at(-1)?.body as { released: string[] }).released).toEqual(["n1"]);
   });
 
-  it("points to Settings when Notion is not connected", async () => {
-    route({ "/status": () => json({ connected: false }) });
+  it("connects and picks the page inside the panel, then shows the note (no trip to Settings)", async () => {
+    let connected = false;
+    const calls = route({
+      "/status": () => json(connected ? CONNECTED : { connected: false }),
+      "/connect": () => { connected = true; return json({ connected: true, workspace_name: "Test WS", pages: [{ id: "r", title: "SB-TEST-root", url: "https://n/r" }] }); },
+      "/root": () => json(CONNECTED),
+      "/plan": () => json(plan()),
+    });
     render(<SendToNotionPanel scope={{ note_ids: ["n1"] }} onClose={() => {}} />);
     expect(await screen.findByTestId("notion-not-connected")).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Settings → Notion/ })).toHaveAttribute("href", "/brain/settings/notion");
+    expect(screen.queryByRole("link", { name: /Settings/ })).toBeNull();
+    await userEvent.type(screen.getByLabelText("Notion token"), "ntn_secret_token");
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await userEvent.click(await screen.findByRole("button", { name: /SB-TEST-root/ }));
+    expect(await screen.findByTestId("notion-item")).toHaveTextContent("Lecture 10");
+    expect(screen.getByRole("button", { name: "Send" })).toBeTruthy();
+    expect(calls.some((c) => c.path.startsWith("/send"))).toBe(false);
   });
 
   it("Escape closes without sending", async () => {
@@ -114,5 +126,26 @@ describe("SendToNotionPanel", () => {
     unmount();
     expect(opener).toHaveFocus();
     opener.remove();
+  });
+
+  it("Sync tab: switch on keeps the note in sync (adds a rule), switch off removes it", async () => {
+    const calls = route({
+      "/status": () => json(CONNECTED),
+      "/plan": () => json(plan()),
+      "/rules/r1": () => json({ deleted: "r1" }),
+      "/rules": (b) => (b ? json({ id: "r1", scope_kind: "note", scope_id: "n1", mode: "on_change", include: {} }) : json({ rules: [] })),
+      "/notes/n1": () => json({ connected: true, state: "synced", paused: false, notion_url: "https://www.notion.so/abc" }),
+    });
+    render(<SendToNotionPanel scope={{ note_ids: ["n1"] }} onClose={() => {}} />);
+    await screen.findByTestId("notion-item");
+    await userEvent.click(screen.getByRole("button", { name: "Sync tab" }));
+    const sw = await screen.findByRole("switch", { name: "Keep this note in sync" });
+    await waitFor(() => expect(sw).toBeEnabled());
+    await userEvent.click(sw);
+    await waitFor(() => expect(sw).toHaveAttribute("aria-checked", "true"));
+    expect(calls.some((c) => c.path === "/rules" && (c.body as { mode: string })?.mode === "on_change")).toBe(true);
+    await userEvent.click(sw);
+    await waitFor(() => expect(sw).toHaveAttribute("aria-checked", "false"));
+    expect(screen.getByRole("link", { name: /Open in Notion/ })).toHaveAttribute("href", "https://www.notion.so/abc");
   });
 });

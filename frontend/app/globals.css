@@ -528,3 +528,13 @@ body {
   }
   .ws-shimmer { color: inherit; -webkit-background-clip: border-box; background-clip: border-box; background: none; }
 }
+
+/* Send to Notion popover: a quick fade-and-rise, like the other anchored menus */
+@keyframes sb-pop { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+.sb-pop { animation: sb-pop 120ms ease-out; transform-origin: top right; }
+@media (prefers-reduced-motion: reduce) { .sb-pop { animation: none; } }
+
+/* Send to Notion: phases (review → sending → done) fade in instead of snapping */
+@keyframes sb-fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+.sb-fade { animation: sb-fade 160ms ease-out; }
+@media (prefers-reduced-motion: reduce) { .sb-fade { animation: none; } }

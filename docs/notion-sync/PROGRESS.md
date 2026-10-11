@@ -84,3 +84,8 @@
 - Visual/keyboard pass (`e2e/notion-visual-live.spec.ts`, screenshots in `e2e/screenshots/notion-sync/visual/`, light/dark × 1280/390): one real bug found and fixed (ghost Button had no dark colours); panel, review, menu, dots and all four Settings sections otherwise fine; no sideways overflow; the focus trap, Esc and focus return work (tab order in `tab-order.txt`).
 - Not changed (outside this feature): the phone drawer stays open across navigation; Settings tabs scroll sideways at 390 px; the Next dev badge overlaps the footer in dev builds.
 - Still open: see STATUS.md "Still NOT verified / needs the user".
+
+## Sending ONE note when Notion is not connected (2026-10-10)
+- Problem reported on the deployed fork: ••• → Send to Notion sent you to Settings → Notion, whose main actions are about the whole brain.
+- Fix: the panel now holds the set-up itself (`components/notion/ConnectInline.tsx`): paste token → pick the page → the note's review appears in the same panel; the URL never changes. Verified live (`e2e/notion-onenote-live.spec.ts`, screenshots in `e2e/screenshots/notion-sync/onenote/`) against the SB-TEST workspace, and by vitest.
+- Needs a redeploy of the fork to reach https://second-brain-webmcp.vercel.app (see DEPLOY_TO_FORK.md).

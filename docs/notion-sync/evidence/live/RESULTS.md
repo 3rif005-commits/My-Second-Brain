@@ -74,3 +74,9 @@ Cleanup: each script moves what it made to the test workspace's trash; afterward
 | `unknown-block-live` (B3) | pass |
 | `notion-visual-live` | pass: screenshots light/dark × 1280/390 px, focus trap, Esc, focus return, no sideways overflow. Found: ghost Button invisible in dark mode (fixed). |
 | B2: expired link | 400 from storage; `POST /storage/fresh-url` → 200 and the new link serves the file; another user's path → 404; no auth → 422. Test object removed. |
+
+## Tidy "Notes" table (2026-10-11, live)
+| Check | Result (VERIFIED) |
+|---|---|
+| `PATCH /views/{id}` on a new Notes database's default view with `name`, `configuration.properties` (visible flags, in order) and `sorts` | Accepted: view renamed "All notes"; Name, Topics, Mastery, Privacy, Favorite, Edited shown; Source, Source URL, Created, SB ID hidden; sorted by "Edited in Second Brain" descending. Applied once at creation; a view a person already renamed is never touched. |
+| `notion_m1_live` (plain, `--m3`) and `notion_canary` after the change | pass (canary 14/14); +1 get/patch round trip per new Notes database |
