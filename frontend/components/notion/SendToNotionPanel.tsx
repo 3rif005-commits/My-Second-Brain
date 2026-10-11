@@ -24,6 +24,8 @@ interface Props {
   onOpenSettings?: () => void;
 }
 
+/** The page we made earlier is gone (deleted or unshared in Notion). */
+const GONE = /no longer reachable/i;
 const TAB_ORDER: TabId[] = ["new", "changed", "needs_you", "unchanged", "not_sent"];
 
 export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSettings }: Props) {
@@ -146,6 +148,15 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
       const r = await notionApi.retry(run?.id ?? result!.run_id!);
       if (r.run_id) setRun(await poll(r.run_id));
       setPhase("done"); announceNotionChange();
+    } catch (e) { setError((e as Error).message); setPhase("done"); }
+  }
+
+  /** The page was deleted (or unshared) in Notion: send it again as a new page. Second Brain is the source of truth. */
+  async function createAgain(id: string) {
+    setPhase("sending"); setError(null); setRun(null);
+    try {
+      const r = await notionApi.send({ note_ids: [id] }, { resolutions: { [id]: "recreate" } });
+      setResult(r); setPhase("done"); announceNotionChange();
     } catch (e) { setError((e as Error).message); setPhase("done"); }
   }
 
@@ -306,7 +317,15 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                     <p className="text-[12px] opacity-60">{single.action === "update" ? "The page in Notion now matches this note." : `This note is now a page in ${conn?.root?.title ?? "Notion"}.`}</p>
                   </div>
                 ) : (
-                  <p role="alert" className="rounded-md px-3 py-2 text-[13px] bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">{single.message}</p>
+                  <div className="space-y-2">
+                    <p role="alert" className="rounded-md px-3 py-2 text-[13px] bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">{single.message}</p>
+                    {GONE.test(single.message ?? "") && (
+                      <button onClick={() => createAgain(single.local_id)}
+                        className="flex h-9 w-full items-center justify-center rounded-lg text-[13px] font-medium bg-indigo-600 text-white hover:bg-indigo-700">
+                        Create it again in Notion
+                      </button>
+                    )}
+                  </div>
                 )
               ) : (
                 <p className="font-medium">✓ {done.length} sent to Notion{problems.length ? ` · ${problems.length} with a problem` : ""}</p>
@@ -323,7 +342,10 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                     <li key={i.id} className="flex items-start gap-2">
                       {i.status === "done" ? <CheckCircle2 size={14} className="mt-0.5 text-emerald-600" /> : <XCircle size={14} className="mt-0.5 text-rose-600" />}
                       <span className="min-w-0 flex-1"><span className="font-medium">{i.title || i.local_id}</span>
-                        {i.status !== "done" && i.message ? <span className="block opacity-70">{i.message}</span> : null}</span>
+                        {i.status !== "done" && i.message ? <span className="block opacity-70">{i.message}</span> : null}
+                        {i.status !== "done" && GONE.test(i.message ?? "") && (
+                          <button className="mt-1 underline text-indigo-600 dark:text-indigo-400" onClick={() => createAgain(i.local_id)}>Create it again</button>
+                        )}</span>
                       {i.status === "done" && urlOf(i.local_id) && (
                         <a href={urlOf(i.local_id)!} target="_blank" rel="noreferrer" aria-label={`Open ${i.title} in Notion`}
                           className="text-indigo-600 dark:text-indigo-400"><ExternalLink size={13} /></a>

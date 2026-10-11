@@ -56,7 +56,7 @@ def detail_of(err: Exception, limit: int = 160) -> str:
 PLAIN = {
     "unauthorized": "Notion disconnected this app. Reconnect to resume. Your notes are safe.",
     "restricted_resource": "Notion no longer lets this connection see that page. Share it again in Notion.",
-    "object_not_found": "This page is no longer reachable in Notion (deleted or unshared).",
+    "object_not_found": "This page is no longer reachable in Notion (deleted or unshared). You can create it again.",
     "rate_limited": "Notion asked us to slow down; it will be retried.",
     "validation_error": "Notion refused part of this note.",
     "public_api_request_blocked": "Your Notion workspace blocks this connection.",

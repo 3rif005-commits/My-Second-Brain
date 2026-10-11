@@ -233,7 +233,7 @@ class Engine(DatabaseMixin):
         info = self.adapter.get_page(page_id)
         if info.unreachable:
             raise ItemFailure("needs_you", "needs_user", "object_not_found",
-                              "This page is no longer reachable in Notion (deleted or unshared).")
+                              "This page is no longer reachable in Notion (deleted or unshared). You can create it again.")
         if self.conn.bot_user_id and info.last_edited_by and info.last_edited_by != self.conn.bot_user_id:
             raise ItemFailure("needs_you", "needs_user", "edited_in_notion",
                               "This page was changed in Notion since the last send. Nothing was "

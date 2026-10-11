@@ -148,4 +148,20 @@ describe("SendToNotionPanel", () => {
     await waitFor(() => expect(sw).toHaveAttribute("aria-checked", "false"));
     expect(screen.getByRole("link", { name: /Open in Notion/ })).toHaveAttribute("href", "https://www.notion.so/abc");
   });
+
+  it("a page deleted in Notion offers 'Create it again', which re-sends with the recreate choice", async () => {
+    const calls = route({
+      "/status": () => json(CONNECTED),
+      "/plan": () => json(plan(item({ state: "changed" }))),
+      "/send": (b) => ((b as { resolutions: Record<string, string> }).resolutions?.n1 === "recreate"
+        ? json({ status: "succeeded", requests: 4, plan: plan(), items: [{ note_id: "n1", title: "Lecture 10", status: "done", action: "create", message: "Sent.", notion_url: "https://www.notion.so/new", losses: [] }] })
+        : json({ status: "failed", requests: 1, plan: plan(), items: [{ note_id: "n1", title: "Lecture 10", status: "needs_you", action: "", message: "This page is no longer reachable in Notion (deleted or unshared). You can create it again.", notion_url: null, losses: [] }] })),
+    });
+    render(<SendToNotionPanel scope={{ note_ids: ["n1"] }} onClose={() => {}} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Send" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Create it again in Notion" }));
+    expect(await screen.findByTestId("notion-result")).toHaveTextContent("Sent to Notion");
+    expect(screen.getByRole("link", { name: /Open in Notion/ })).toHaveAttribute("href", "https://www.notion.so/new");
+    expect(calls.filter((c) => c.path.startsWith("/send")).length).toBe(2);
+  });
 });
