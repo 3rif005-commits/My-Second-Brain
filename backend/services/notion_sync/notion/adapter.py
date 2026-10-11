@@ -17,7 +17,7 @@ import logging
 from .chunker import children_of, plan_steps
 from .client import NotionClient
 from .adapter_emoji import looks_like_emoji
-from .errors import AmbiguousWrite, NotionError
+from .errors import AmbiguousWrite, NotionError, detail_of
 from .files import (DEFAULT_CAP, FileSource, FileTooLarge, FileUnavailable, HttpFileSource,
                     upload_name)
 from .richtext import plain_rich, rich_text, split_units
@@ -93,6 +93,7 @@ class NotionAdapter:
         self._cap: int | None = None
         self._cache: dict[str, object] = {}              # files fetched during this send
         self._run_losses: list[Loss] = []                # losses found while writing (files)
+        self._refused = 0                                # blocks Notion refused in this send
 
     # ---- connect ---------------------------------------------------------------
     def whoami(self) -> BotInfo:
@@ -208,6 +209,11 @@ class NotionAdapter:
     def take_losses(self) -> list[Loss]:
         out, self._run_losses = self._run_losses, []
         return out
+
+    def take_refused(self) -> int:
+        """How many blocks Notion refused (and a note replaced) since the last call."""
+        n, self._refused = self._refused, 0
+        return n
 
     def materialize_cover(self, r: Rendered) -> Rendered:
         """Resolve only the cover. Bodies are resolved block by block as they are written, so a
@@ -649,6 +655,29 @@ class NotionAdapter:
             if landed is not None:
                 return landed
             return self._append_once(parent_id, blocks, after)   # confirmed absent: safe
+        except NotionError as e:
+            if e.code != "validation_error" or not blocks:
+                raise
+            return self._append_isolating(parent_id, blocks, known, after, e)
+
+    def _append_isolating(self, parent_id: str, blocks: list[dict], known: set[str], after: str | None,
+                          err: NotionError) -> list[str]:
+        """Notion refused this request (400). An append is atomic (T1), so nothing landed: find the block
+        it dislikes by halving, and put a visible note in its place. One bad block never fails a note."""
+        if len(blocks) == 1:
+            kind = blocks[0].get("type", "block")
+            what = detail_of(err, 120)
+            self._refused += 1
+            self._run_losses.append(Loss("lossy", f"A {kind} block that Notion refused" + (f" ({what})." if what else "."),
+                                         "A note marks where it was.", "block_refused"))
+            log.warning("notion: replaced a refused %s block: %s", kind, what)
+            marker = self._marker(f"Not fully represented: Notion refused a {kind} block here"
+                                  f"{f' ({what})' if what else ''}.")
+            return self._append_once(parent_id, [marker], after)
+        mid = len(blocks) // 2
+        left = self._append(parent_id, blocks[:mid], known, after)
+        right = self._append(parent_id, blocks[mid:], known | set(left), left[-1])
+        return left + right
 
     def _append_once(self, parent_id: str, blocks: list[dict], after: str | None = None) -> list[str]:
         body: dict = {"children": blocks}
