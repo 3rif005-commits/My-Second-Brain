@@ -80,9 +80,10 @@ class FakeNotion:
         return sum(1 for m, p in self.calls if m in ("PATCH", "DELETE") or
                    (m == "POST" and not (p == "/search" or p.endswith("/query"))))
 
-    def page_ids_in(self, ds_id: str) -> list[str]:
-        return [p["id"] for p in self.pages.values()
-                if p["parent"].get("data_source_id") == ds_id]
+    def page_ids_in(self, parent_id: str) -> list[str]:
+        """Live pages whose parent is this data source (rows) or this page (sub-pages)."""
+        return [p["id"] for p in self.pages.values() if not p["in_trash"]
+                and parent_id in (p["parent"].get("data_source_id"), p["parent"].get("page_id"))]
 
     def top_blocks(self, page_id: str) -> list[dict]:
         return [self.blocks[b] for b in self.pages[page_id]["children"]]

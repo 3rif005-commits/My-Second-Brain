@@ -219,7 +219,7 @@ def test_pause_and_resume_endpoints_and_health(env):
     assert c.post("/notion/resume", headers=H).json()["status"] == "active"
     c.post("/notion/send", json={"note_ids": [n["id"]]}, headers=H)
     h = c.get("/notion/health", headers=H).json()
-    assert h["status"] == "active" and h["api_version"] == "2026-03-11" and h["mappings"]["synced"] >= 2
+    assert h["status"] == "active" and h["api_version"] == "2026-03-11" and h["mappings"]["synced"] >= 1
     assert h["failing"] == 0 and h["last_ok_at"]
 
 

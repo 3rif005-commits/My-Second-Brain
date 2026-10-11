@@ -70,7 +70,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
     mounted.current = true;
     return () => { mounted.current = false; opener?.focus?.(); };
   }, []);
-  // The first send also builds the Notes table in Notion: say so if it takes a moment, instead of a bare spinner.
+  // A big first send (folders, tables, files) can take a while: say so if it takes a moment, instead of a bare spinner.
   useEffect(() => {
     if (phase !== "sending") { setSlowSend(false); return; }
     const t = setTimeout(() => setSlowSend(true), 3500);
@@ -281,7 +281,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                   <div className="h-1 rounded-full bg-[var(--menu-field-bg)] overflow-hidden" aria-hidden>
                     <div className="h-full w-1/3 rounded-full bg-indigo-600 ws-indeterminate" />
                   </div>
-                  {slowSend && <p className="text-[12px] opacity-60 sb-fade">Still working. A first send also sets up your Notes table in Notion, which takes a few seconds longer.</p>}
+                  {slowSend && <p className="text-[12px] opacity-60 sb-fade">Still working. A first send also sets up its folders in Notion, which takes a few seconds longer.</p>}
                 </>
               )}
               {run && (

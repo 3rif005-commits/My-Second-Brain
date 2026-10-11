@@ -26,7 +26,6 @@ from services.notion_sync.engine.resolver import MentionResolver, db_page_resolv
 from services.notion_sync.engine.store import CONTAINER, Store, now
 from services.notion_sync.notion import dbschema
 from services.notion_sync.notion.adapter import (ARCHIVE_TITLE, NotionAdapter, Rendered, page_url)
-from services.notion_sync.notion.properties import TITLE_PROP
 from services.notion_sync.notion.errors import AmbiguousWrite, NotionError, SyncPaused, plain_message
 from services.notion_sync.planner import (CHANGED, DELETED, NEW, PlanItem, fetch_collections, fetch_notes,
                                           object_hash)
@@ -103,7 +102,6 @@ class Engine(DatabaseMixin):
         self.db, self.conn, self.adapter = db, conn, adapter
         self.store = Store(db, conn.user_id, conn.id)
         self._colls: dict[str, dict] | None = None
-        self._schema_ok: set[str] = set()
         self._suffix: dict[str, str] = {}       # note id -> title suffix, for 'Keep both' copies
 
     @property
@@ -112,7 +110,7 @@ class Engine(DatabaseMixin):
             self._colls = fetch_collections(self.db, self.conn.user_id)
         return self._colls
 
-    # ---- the tree: collection pages, Notes databases, the archive ---------------------
+    # ---- the tree: collection pages, the archive ---------------------
     def _root(self) -> str:
         if not self.conn.root_page_id:
             raise ItemFailure("needs_you", "needs_user", "no_root", "Pick a Notion page to send to first.")
@@ -156,33 +154,6 @@ class Engine(DatabaseMixin):
             return page_id
         except AmbiguousWrite:
             raise _ambiguous()
-
-    def ensure_container(self, cid: str | None) -> str:
-        """-> data source id of the Notes database of collection `cid` (None = the root)."""
-        parent_page = self.ensure_collection_page(cid) if cid else self._root()
-        m, ours = self.store.begin_create(CONTAINER, cid or parent_page, "notes_db", parent=parent_page)
-        if m.get("state") == "synced" and m.get("notion_id"):
-            ds = m["notion_id"]
-        else:
-            found = self.adapter.find_notes_databases(parent_page)       # reconcile before creating
-            if found:
-                db = found[0]
-                if len(found) > 1:
-                    log.warning("notion: %d 'Notes' databases under one page; adopting the oldest", len(found))
-            else:
-                try:
-                    db = self.adapter.create_notes_database(parent_page)
-                except AmbiguousWrite:
-                    raise _ambiguous()
-            self.store.cas(m["id"], "creating", {
-                "notion_id": db.data_source_id, "notion_kind": "data_source", "notion_parent_id": db.database_id,
-                "state": "synced", "last_pushed_at": now()})
-            ds = db.data_source_id
-            self._schema_ok.add(ds)
-        if ds not in self._schema_ok:
-            self.adapter.ensure_schema(ds)                               # keep the schema in step
-            self._schema_ok.add(ds)
-        return ds
 
     def ensure_archive(self) -> str:
         """The "🗄 Deleted in Second Brain" page: deletes move here, never to Notion's trash."""
@@ -289,8 +260,9 @@ class Engine(DatabaseMixin):
                            e.error_class, e.code, plain_message(e))
 
     def _destination(self, row: dict):
-        """Where a note's page lives: a database's data source if it is a row, else the Notes
-        database of its collection. -> (data source id, title property name, DbState | None)."""
+        """Where a note's page lives: a database's data source if it is a row, else a plain
+        sub-page of its collection's page (or of the root).
+        -> (data source id | parent page id, title property name | None for a plain page, DbState | None)."""
         ctx = self.row_context(str(row["id"]))
         if ctx is not None:
             st = self.build_database(ctx[0])
@@ -298,7 +270,7 @@ class Engine(DatabaseMixin):
                 self.finish_schemas([st])
             return st.notion_ds, st.layout.names[st.layout.title_key], st
         cid = str(row["collection_id"]) if row.get("collection_id") else None
-        return self.ensure_container(cid), TITLE_PROP, None
+        return (self.ensure_collection_page(cid) if cid else self._root()), None, None
 
     def _row_props(self, st, obj: ir.Obj, r: Rendered, resolver) -> None:
         """Fill a database row's property values (an empty one is an explicit clear)."""
@@ -324,21 +296,26 @@ class Engine(DatabaseMixin):
     def _shell(self, item: PlanItem, row: dict, resolver) -> None:
         """Create the empty page for a new note (title + SB ID), so links can point at it."""
         ds, title_prop, st = self._destination(row)
-        m, _ = self.store.begin_create("note", item.note_id, parent=ds)
+        m, ours = self.store.begin_create("note", item.note_id, parent=ds)
         if m.get("notion_id"):
             return
         obj = note_to_ir(self._titled(row))
         r = self.adapter.materialize_cover(self.adapter.render(obj, resolver))
         r.props = {}                                              # the shell has a title and an SB ID only
         skip = self.store.detached_page_ids(item.note_id)
-        rows = [r for r in self.adapter.find_rows(ds, item.note_id) if r[0] not in skip]   # reconcile: a crash or a lost mapping
-        if rows:
-            page_id = rows[0][0]
+        if title_prop is None:                # a plain sub-page: after a crash, reconcile by title as collections do,
+            found = [] if ours else self.adapter.find_child_pages(ds, "".join(t.text for t in obj.title))
+            taken = skip | self.store.claimed([p[0] for p in found])          # never another note's page of the same title
+            page_id = self._adopt_or_none(m, ours, [p for p in found if p[0] not in taken])
+        else:                                                     # a row: reconcile by SB ID (a crash or a lost mapping)
+            rows = [r for r in self.adapter.find_rows(ds, item.note_id) if r[0] not in skip]
             if len(rows) > 1:
                 log.warning("notion: %d rows for note %s; adopting the oldest", len(rows), item.note_id)
-        else:
+            page_id = rows[0][0] if rows else None
+        if not page_id:
             try:
-                page_id = self.adapter.create_row(ds, r, item.note_id, title_prop)
+                page_id = (self.adapter.create_page(ds, r) if title_prop is None
+                           else self.adapter.create_row(ds, r, item.note_id, title_prop))
             except AmbiguousWrite:
                 raise _ambiguous()
         if not self.store.cas(m["id"], "creating", {"notion_id": page_id, "notion_kind": "page",
@@ -358,11 +335,10 @@ class Engine(DatabaseMixin):
         return ItemResult(item.note_id, item.title, "done", "forget",
                           "No longer tracked. The page in Notion was left alone.", None, kind=kind)
 
-    def send_note(self, item: PlanItem, row: dict, resolver: MentionResolver, _healed: bool = False) -> ItemResult:
+    def send_note(self, item: PlanItem, row: dict, resolver: MentionResolver) -> ItemResult:
         if item.resolution == "forget":
             return self._forget(item, "note")
         action = "create" if item.state == NEW else "update"
-        ds = None
         try:
             ds, title_prop, st = self._destination(row)
             obj = self._obj_for(row, st)
@@ -378,10 +354,16 @@ class Engine(DatabaseMixin):
                 self._row_props(st, obj, r, resolver)
             if (action == "update" or m.get("local_hash")) and item.resolution != "overwrite":
                 self._edit_check(page_id)
-            if m.get("notion_parent_id") != ds:                    # moved to another collection, or restored
-                self.adapter.move_page(page_id, under_source=ds)
+            if m.get("notion_parent_id") != ds:                    # moved to another collection, restored, or out of an old Notes table
+                if title_prop is None:
+                    self.adapter.move_page(page_id, under_page=ds)
+                else:
+                    self.adapter.move_page(page_id, under_source=ds)
                 self.store.update(m["id"], {"notion_parent_id": ds})
-            self.adapter.update_properties(page_id, r, title_prop=title_prop)
+            if title_prop is None:
+                self.adapter.update_properties(page_id, r, row=False)
+            else:
+                self.adapter.update_properties(page_id, r, title_prop=title_prop)
             top = self._replace_body(m, page_id, r, everything=item.resolution == "overwrite")
             losses = [loss.to_dict() for loss in dedupe(list(r.losses) + self.adapter.take_losses())]   # + what files taught us
             refused = self.adapter.take_refused()
@@ -398,25 +380,7 @@ class Engine(DatabaseMixin):
         except AmbiguousWrite as e:
             raise ItemFailure("failed", "retryable", "ambiguous_write", plain_message(e))
         except NotionError as e:
-            if e.code == "object_not_found" and ds and not _healed and self._container_gone(row, ds):
-                return self.send_note(item, row, resolver, _healed=True)      # the Notes table is rebuilt, then we go on
             raise self._notion_failure(e)
-
-    def _container_gone(self, row: dict, ds: str | None = None) -> bool:
-        """The Notes table of this note was deleted in Notion: forget it so the next step builds a new one.
-        (The page we may have made inside it went with it; a note that is only changed asks first, as before.)"""
-        if self.row_context(str(row["id"])) is not None:
-            return False                                           # a database row: its database is another matter
-        local = str(row["collection_id"]) if row.get("collection_id") else self._root()
-        if ds is None:
-            m = self.store.mapping(CONTAINER, local, "notes_db")
-            ds = m.get("notion_id") if m else None
-        if not ds or self.adapter.data_source_exists(ds):
-            return False
-        log.warning("notion: the Notes table %s is gone in Notion; building a new one", ds)
-        self.store.forget_one(CONTAINER, local, "notes_db")
-        self._schema_ok.discard(ds)
-        return True
 
     def _finish_db_item(self, it: PlanItem, st) -> None:
         """Title/icon/description changes, then remember what we sent (so the next plan is a no-op)."""
@@ -637,12 +601,7 @@ class Engine(DatabaseMixin):
                 if self._paused():              # the kill switch is checked before any request
                     break
                 try:
-                    try:
-                        self._shell(it, row, store_resolver)
-                    except NotionError as e:
-                        if e.code != "object_not_found" or not self._container_gone(row):
-                            raise
-                        self._shell(it, row, store_resolver)          # the Notes table was rebuilt: once more
+                    self._shell(it, row, store_resolver)
                 except SyncPaused:
                     halted["paused"] = True
                     break

@@ -309,7 +309,9 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
         losses = [x.to_dict() for x in rendered.losses]
         restore = bool(m and m.get("state") == "archived")
         exists = bool(m and m.get("notion_id") and m.get("state") in ("synced", "failed", "archived"))
-        if exists and m.get("local_hash") == h and m.get("state") == "synced":
+        # a plain note whose page sits elsewhere (another folder, or an old "Notes" table) is moved by the next send
+        moved = bool(exists and not rowdb and m.get("notion_parent_id") != _target_page(store, conn, cid))
+        if exists and m.get("local_hash") == h and m.get("state") == "synced" and not moved:
             state, est = UNCHANGED, 0
         elif exists:
             old = len((m.get("block_index") or {}).get("top") or [])
@@ -329,7 +331,7 @@ def plan_scope(db, conn: Connection, adapter: NotionAdapter, *, note_ids=(), col
         released_now = nid in released and not privacy.allows(conn.privacy_ceiling, level)
         items.append(PlanItem(nid, title, state, "note", fid, losses, est, url, h, m["id"] if m else None,
                               released=released_now, restore=restore,
-                              moved=bool(exists and m.get("notion_parent_id") != _target_ds(store, conn, cid)),
+                              moved=moved,
                               path=path, needs=needs, resolution=res_choice))
 
     for nid, row in trashed.items():
@@ -414,10 +416,12 @@ def _pd(p: dict) -> dict:
     return prop_def(p)
 
 
-def _target_ds(store: Store, conn: Connection, cid: str | None) -> str | None:
-    """The data source a note of collection `cid` belongs in, if it exists yet."""
-    m = store.mapping("container", cid or conn.root_page_id or "", "notes_db")
-    return m.get("notion_id") if m and m.get("state") == "synced" else None
+def _target_page(store: Store, conn: Connection, cid: str | None) -> str | None:
+    """The page a plain note of collection `cid` is a sub-page of (None: that page does not exist yet)."""
+    if not cid:
+        return conn.root_page_id
+    m = store.mapping("collection", cid)
+    return m.get("notion_id") if m and m.get("state") in ("synced", "failed") else None
 
 
 def plan_notes(db, conn, adapter, note_ids, released=frozenset()) -> Plan:

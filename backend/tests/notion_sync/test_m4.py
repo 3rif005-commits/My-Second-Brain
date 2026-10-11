@@ -146,19 +146,36 @@ def test_pause_mirroring_for_one_note(world):
     assert plan.items[0].state == PAUSED and world.send(n)[0].items == []
 
 
-def test_a_notes_table_deleted_in_notion_is_rebuilt_when_the_note_is_created_again(world):
-    """Create-again used to fail forever: the note's new page was made inside the deleted table."""
+def test_a_page_deleted_in_notion_is_created_again_as_a_plain_page(world):
     n = world.add_note()
     world.send(n)
     old_page = world.mapping(n)["notion_id"]
-    table = next(iter(world.notion.dbs))
     world.notion.pages[old_page]["in_trash"] = True
-    world.notion.dbs[table]["in_trash"] = True
-    world.notion.blocks[table]["in_trash"] = True
+    world.notion.blocks[old_page]["in_trash"] = True
     n["title"] = "renamed"
     it = world.plan(n).items[0]
     assert it.state == NEEDS_YOU
     res, _ = run_with(world, n, "recreate")
     assert res.items[0].status == "done", res.items[0].message
-    assert world.mapping(n)["notion_id"] != old_page
-    assert len(world.notion.dbs) == 2                                  # a new Notes table stands next to the deleted one
+    new = world.mapping(n)["notion_id"]
+    assert new != old_page and world.notion.pages[new]["parent"] == {"type": "page_id", "page_id": world.notion.root}
+    assert world.notion.dbs == {}
+
+
+def test_a_note_still_in_an_old_notes_table_moves_out_on_the_next_send(world):
+    """Notes sent before plain pages lived as rows of a "Notes" table: the next send moves the same page out."""
+    n = world.add_note(title="Old row")
+    world.send(n)
+    pid = world.mapping(n)["notion_id"]
+    db = world.notion._new_page({"type": "page_id", "page_id": world.notion.root}, "Notes")      # stands in for the old table
+    world.notion.pages[pid]["parent"] = {"type": "data_source_id", "data_source_id": "old-ds"}
+    m = world.mapping(n)
+    world.engine().store.update(m["id"], {"notion_parent_id": "old-ds"})
+    it = world.plan(n).items[0]
+    assert it.state == CHANGED and it.moved is True                    # unedited, but still offered so it can move
+    res, _ = world.send(n)
+    assert res.items[0].status == "done", res.items[0].message
+    assert world.mapping(n)["notion_id"] == pid                        # the same page, not a copy
+    assert world.notion.pages[pid]["parent"] == {"type": "page_id", "page_id": world.notion.root}
+    assert world.plan(n).items[0].state == UNCHANGED
+    assert db in world.notion.pages                                    # the old table itself is left alone

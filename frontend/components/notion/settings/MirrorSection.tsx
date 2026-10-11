@@ -8,7 +8,7 @@ import { announceNotionChange, notionApi, type Include, type MirrorMap } from "@
 
 const SWITCHES: { key: keyof Include; label: string; help: string }[] = [
   { key: "collections", label: "Folders", help: "Each folder becomes a page with its notes in a table." },
-  { key: "notes", label: "Notes", help: "Every note, with its topics, mastery and source as columns." },
+  { key: "notes", label: "Notes", help: "Every note, as its own page under its folder." },
   { key: "databases", label: "Databases", help: "Tables with their rows, relations, formulas and views." },
   { key: "embedded_files", label: "Files inside notes", help: "Images and attachments, uploaded to Notion." },
   { key: "source_files", label: "Workspace source files", help: "PDFs and videos attached to a note (can be large). Off by default." },

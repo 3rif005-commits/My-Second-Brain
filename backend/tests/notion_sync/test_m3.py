@@ -32,11 +32,10 @@ def test_note_in_nested_collection_builds_the_tree(world):
     assert world.notion.pages[phys]["icon"] == {"type": "emoji", "emoji": "⚛️"}
     assert ("child_page", "Optics") in children_titles(world, phys)
     optics = world.mapping(b)["notion_id"]
-    assert [t for t, _ in children_titles(world, optics)] == ["child_database"]
-    ds = world.mapping(n)["notion_parent_id"]
-    assert world.notion.sources[ds]["db"] == world.notion.blocks[
-        next(x for x in world.notion.pages[optics]["children"] if world.notion.blocks[x]["type"] == "child_database")]["id"]
-    assert world.notion.page_ids_in(ds) == [world.mapping(n)["notion_id"]]
+    assert children_titles(world, optics) == [("child_page", "Lenses")]          # a plain sub-page, no Notes table
+    assert world.mapping(n)["notion_parent_id"] == optics
+    assert world.notion.page_ids_in(optics) == [world.mapping(n)["notion_id"]]
+    assert world.notion.dbs == {}
 
 
 def test_second_send_of_a_tree_makes_zero_writes(world):
@@ -64,12 +63,12 @@ def test_send_a_collection_with_everything_inside(world):
     assert world.mapping(n1)["notion_parent_id"] != world.mapping(n2)["notion_parent_id"]
 
 
-def test_collection_description_is_a_paragraph_before_the_notes_database(world):
+def test_collection_description_is_a_paragraph_before_the_note_pages(world):
     a = world.add_collection("Physics", description="All about forces")
     n = world.add_note(collection_id=a["id"])
     world.send(n)
     kids = world.notion.top_blocks(world.mapping(a)["notion_id"])
-    assert [b["type"] for b in kids] == ["paragraph", "child_database"]
+    assert [b["type"] for b in kids] == ["paragraph", "child_page"]
     assert kids[0]["paragraph"]["rich_text"][0]["text"]["content"] == "All about forces"
 
 
@@ -108,24 +107,21 @@ def test_moving_a_note_between_collections_uses_the_move_api_no_duplicate(world)
     assert next(i for i in plan.items if i.kind == "note").moved is True
     res, _ = world.send(n)
     assert all(i.status == "done" for i in res.items)
-    ds_b = world.mapping(b)["notion_id"]
+    page_b = world.mapping(b)["notion_id"]
     assert world.mapping(n)["notion_id"] == pid                      # same page, moved
-    assert world.notion.pages[pid]["parent"]["database_id"] in world.notion.dbs
-    assert world.notion.page_ids_in(world.mapping(n)["notion_parent_id"]) == [pid]
-    assert len([p for p in world.notion.pages.values() if p["parent"].get("type") == "data_source_id"]) == 1
+    assert world.notion.pages[pid]["parent"] == {"type": "page_id", "page_id": page_b}
+    assert world.notion.page_ids_in(page_b) == [pid]
+    assert world.notion.page_ids_in(world.mapping(a)["notion_id"]) == []
 
 
-def test_note_properties_are_real_columns(world):
+def test_a_note_page_is_a_plain_page_with_a_title_only(world):
     n = world.add_note(title="Props", topics=["optics", "a,b"], mastery_status="learning", source_type="pdf",
-                       source_url="https://x.org/a.pdf", is_favorited=True, sensitivity="open",
-                       created_at="2026-10-01T10:00:00+00:00", updated_at="2026-10-02T10:00:00+00:00")
+                       source_url="https://x.org/a.pdf", is_favorited=True, sensitivity="open")
     res, plan = world.send(n)
+    assert res.items[0].status == "done"
     props = world.notion.pages[world.mapping(n)["notion_id"]]["properties"]
-    assert [o["name"] for o in props["Topics"]["multi_select"]] == ["optics", "a;b"]
-    assert props["Mastery"]["select"]["name"] == "Learning" and props["Source URL"]["url"] == "https://x.org/a.pdf"
-    assert props["Favorite"]["checkbox"] is True and props["Privacy"]["select"]["name"] == "Open"
-    assert props["Created in Second Brain"]["date"]["start"].startswith("2026-10-01")
-    assert "topic_adjusted" in {loss["code"] for loss in plan.items[0].losses}
+    assert list(props) == ["title"] and props["title"]["title"][0]["text"]["content"] == "Props"
+    assert "topic_adjusted" not in {loss["code"] for loss in plan.items[0].losses}
 
 
 def test_a_timestamp_alone_does_not_make_a_note_changed(world):
@@ -133,17 +129,6 @@ def test_a_timestamp_alone_does_not_make_a_note_changed(world):
     world.send(n)
     n["updated_at"] = "2026-10-09T10:00:00+00:00"
     assert world.plan(n).items[0].state == UNCHANGED
-
-
-def test_schema_is_kept_in_step_for_an_older_database(world):
-    n1 = world.add_note()
-    world.send(n1)
-    ds = world.mapping(n1)["notion_parent_id"]
-    del world.notion.sources[ds]["properties"]["Favorite"]
-    del world.notion.sources[ds]["properties"]["Topics"]
-    n2 = world.add_note()
-    world.send(n2)
-    assert {"Favorite", "Topics"} <= set(world.notion.sources[ds]["properties"])
 
 
 # ---- mentions ------------------------------------------------------------------------------
@@ -241,7 +226,6 @@ def test_restoring_a_deleted_note_moves_it_back(world):
     n = world.add_note(title="Phoenix")
     world.send(n)
     pid = world.mapping(n)["notion_id"]
-    ds = world.mapping(n)["notion_parent_id"]
     n["deleted_at"] = "2026-10-08T12:00:00+00:00"
     world.send(n, archive=[n["id"]])
     n["deleted_at"] = None
@@ -249,7 +233,7 @@ def test_restoring_a_deleted_note_moves_it_back(world):
     assert plan.items[0].state == CHANGED and plan.items[0].restore is True
     res, _ = world.send(n)
     assert res.items[0].status == "done" and world.mapping(n)["state"] == "synced"
-    assert world.notion.pages[pid]["parent"]["data_source_id"] == ds
+    assert world.notion.pages[pid]["parent"] == {"type": "page_id", "page_id": world.notion.root}
     assert world.plan(n).items[0].state == UNCHANGED
 
 
@@ -272,16 +256,6 @@ def test_collection_page_created_but_answer_lost_is_adopted_not_duplicated(world
     assert children_titles(world, world.notion.root).count(("child_page", "Physics")) == 1
 
 
-def test_database_created_but_answer_lost_is_adopted(world):
-    a = world.add_collection("Physics")
-    n = world.add_note(collection_id=a["id"])
-    world.notion.fail("POST /databases", "timeout_after")
-    world.send(n)
-    world.send(n)
-    assert len(world.notion.dbs) == 1
-    assert world.mapping(n)["state"] == "synced"
-
-
 def test_a_failing_collection_blocks_only_its_notes(world):
     a = world.add_collection("Physics")
     inside, outside = world.add_note(collection_id=a["id"]), world.add_note(title="Outside")
@@ -290,20 +264,3 @@ def test_a_failing_collection_blocks_only_its_notes(world):
     by_title = {i.title: i.status for i in res.items}
     assert by_title["Outside"] == "done" and by_title["Physics"] == "failed" and by_title["A note"] == "failed"
 
-
-def test_the_notes_table_opens_tidy_and_a_changed_view_is_left_alone(world):
-    n = world.add_note(title="Lenses")
-    world.send(n)
-    did = next(iter(world.notion.dbs))
-    views = [v for v in world.notion.views.values() if v["parent"]["database_id"] == did and not v.get("deleted")]
-    assert [v["name"] for v in views] == ["All notes"]                        # renamed from "Default view"
-    v = views[0]
-    shown = {p["property_id"]: p["visible"] for p in v["configuration"]["properties"]}
-    src = next(iter(world.notion.sources.values()))
-    assert shown[src["ids"]["Name"]] and shown[src["ids"]["Edited in Second Brain"]]
-    assert not shown[src["ids"]["SB ID"]] and not shown[src["ids"]["Created in Second Brain"]]
-    assert v["sorts"] == [{"property": src["ids"]["Edited in Second Brain"], "direction": "descending"}]
-    # a person who renamed the view keeps their version through later sends
-    v["name"] = "My view"
-    world.send(world.add_note(title="Second"))
-    assert v["name"] == "My view"

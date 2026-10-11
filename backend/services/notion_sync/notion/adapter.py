@@ -26,7 +26,7 @@ from .richtext import plain_rich, rich_text, split_units
 from .writers.rich import SB_FILE
 from .writers import write_block
 
-from .properties import (P_CREATED, P_EDITED, P_PRIVACY, P_SOURCE, P_SOURCE_URL, P_FAVORITE, P_MASTERY, P_TOPICS, SB_ID_PROP, SCHEMA, TITLE_PROP, row_properties, sb_id_value,
+from .properties import (P_CREATED, P_EDITED, P_PRIVACY, P_SOURCE, P_SOURCE_URL, P_FAVORITE, P_MASTERY, P_TOPICS, SB_ID_PROP, SCHEMA, TITLE_PROP, sb_id_value,
                          title_value)
 from .richtext import DB_RESOLVER, RESOLVER
 from .writers.rich import DB_EMBED
@@ -179,9 +179,8 @@ class NotionAdapter:
         _drop_nested_anchors(blocks, losses)
         pending = sum(1 for b in _walk(blocks) if SB_FILE in (b.get(b.get("type", ""), {}) or {}))
         pending += 1 if obj.cover else 0
-        props = row_properties(obj, losses) if obj.kind == "page" else {}
-        return Rendered(title, icon, blocks, src, dedupe(losses), cover_url=obj.cover, pending_files=pending,
-                        props=props)
+        # a note is a plain page (title only); a database row gets its values from the engine
+        return Rendered(title, icon, blocks, src, dedupe(losses), cover_url=obj.cover, pending_files=pending)
 
     def estimate_requests(self, r: Rendered, *, create: bool, old_blocks: int = 0) -> int:
         n = len(plan_steps(r.blocks))

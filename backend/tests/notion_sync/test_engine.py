@@ -9,15 +9,16 @@ def page_of(world, n):
     return world.mapping(n)["notion_id"]
 
 
-def test_first_send_creates_one_row_with_body(world):
+def test_first_send_creates_one_sub_page_with_body(world):
     n = world.add_note(title="Hello")
     res, plan = world.send(n)
     assert plan.items[0].state == NEW
     assert res.status == "succeeded" and res.items[0].status == "done"
     m = world.mapping(n)
     assert m["state"] == "synced" and m["local_hash"] and m["notion_id"]
-    ds = m["notion_parent_id"]
-    assert world.notion.page_ids_in(ds) == [m["notion_id"]]
+    assert m["notion_parent_id"] == world.notion.root                  # a plain page under the root, no table
+    assert world.notion.page_ids_in(world.notion.root) == [m["notion_id"]]
+    assert world.notion.pages[m["notion_id"]]["parent"] == {"type": "page_id", "page_id": world.notion.root}
     blocks = world.notion.top_blocks(m["notion_id"])
     assert [b["type"] for b in blocks] == ["paragraph"]
     assert res.items[0].notion_url.endswith(m["notion_id"].replace("-", ""))
@@ -126,12 +127,13 @@ def test_open_and_personal_are_sent(world):
     assert len(world.notion.page_ids_in(world.mapping(a)["notion_parent_id"])) == 2
 
 
-def test_container_is_created_once(world):
+def test_plain_notes_never_build_a_notes_table(world):
     a, b = world.add_note(), world.add_note()
     world.send(a)
     world.send(b)
-    assert len(world.notion.dbs) == 1
-    assert len([m for m in world.db.tables["notion_mappings"] if m["local_kind"] == "container"]) == 1
+    assert world.notion.dbs == {} and world.notion.sources == {}
+    assert not [m for m in world.db.tables["notion_mappings"] if m["local_kind"] == "container"]
+    assert sorted(world.notion.page_ids_in(world.notion.root)) == sorted([page_of(world, a), page_of(world, b)])
 
 
 def test_missing_and_deleted_notes(world):
@@ -162,9 +164,9 @@ def test_long_note_with_nesting_and_many_blocks(world):
 
 # ---- crash recovery: the create protocol --------------------------------------------------
 
-def test_crash_after_create_timeout_adopts_existing_row_no_duplicate(world):
-    n = world.add_note()
-    world.send(world.add_note())                       # warm container so the fault hits the note create
+def test_crash_after_create_timeout_adopts_existing_page_no_duplicate(world):
+    n = world.add_note(title="Lost answer")
+    world.send(world.add_note())                       # a first send, so the fault hits this note's create
     world.notion.fail("POST /pages", "timeout_after")  # row IS created, but the answer is lost
     res, _ = world.send(n)
     assert res.items[0].status == "failed" and "check what arrived" in res.items[0].message
@@ -173,10 +175,8 @@ def test_crash_after_create_timeout_adopts_existing_row_no_duplicate(world):
     res2, plan2 = world.send(n)                        # next send reconciles
     assert plan2.items[0].state == NEW
     assert res2.items[0].status == "done"
-    ds = world.mapping(n)["notion_parent_id"]
-    rows = [world.notion.pages[p]["properties"]["SB ID"]["rich_text"][0]["text"]["content"]
-            for p in world.notion.page_ids_in(ds)]
-    assert rows.count(n["id"]) == 1                    # exactly one row for the note
+    titles = [world.notion._title_of(p) for p in world.notion.page_ids_in(world.notion.root)]
+    assert titles.count("Lost answer") == 1            # exactly one page for the note
 
 
 def test_crash_before_create_creates_it_next_time(world):
@@ -200,18 +200,17 @@ def test_create_is_never_retried_blindly(world):
     assert after - before == 1 and res.items[0].status == "failed"
 
 
-def test_duplicate_rows_adopt_oldest(world):
-    n = world.add_note()
-    world.send(world.add_note())
-    # a lost mapping: two rows exist already for this note
-    ds = next(iter(world.notion.sources))
-    for _ in range(2):
-        world.notion._new_page({"type": "data_source_id", "data_source_id": ds}, "",
-                               {"Name": {"id": "t", "type": "title", "title": [{"type": "text", "text": {"content": "x"}}]},
-                                "SB ID": {"id": "s", "type": "rich_text", "rich_text": [{"type": "text", "text": {"content": n["id"]}}]}})
-    res, _ = world.send(n)
+def test_same_title_pages_are_never_adopted(world):
+    """A page someone made in Notion, or another note's page, with the same title is left alone."""
+    a = world.add_note(title="Same")
+    world.send(a)
+    theirs = world.notion._new_page({"type": "page_id", "page_id": world.notion.root}, "Same")
+    world.notion._register_child_page(theirs, world.notion.root)
+    b = world.add_note(title="Same")
+    res, _ = world.send(b)
     assert res.items[0].status == "done"
-    assert len(world.notion.page_ids_in(ds)) == 3      # nothing created, nothing deleted
+    assert page_of(world, b) not in (page_of(world, a), theirs)
+    assert len(world.notion.page_ids_in(world.notion.root)) == 3
 
 
 def _note_250(world):
@@ -274,7 +273,7 @@ def test_failed_body_resumes_without_duplicates(world):
 
 def test_429_is_honoured_and_retried(world):
     n = world.add_note()
-    world.notion.fail("POST /databases", "429")
+    world.notion.fail("POST /pages", "429")
     res, _ = world.send(n)
     assert res.items[0].status == "done"
     assert 1.0 in world.sleeps                            # Retry-After honoured
