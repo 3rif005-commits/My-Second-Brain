@@ -1,6 +1,8 @@
 """Notion errors, classified the way the engine needs them (ROBUSTNESS §9)."""
 from __future__ import annotations
 
+import re
+
 
 class NotionError(Exception):
     def __init__(self, status: int, code: str, message: str = "", retry_after: float | None = None):
@@ -40,12 +42,23 @@ def classify(err: NotionError) -> str:
     return "permanent"
 
 
+def detail_of(err: Exception, limit: int = 160) -> str:
+    """Where Notion says the problem is ("body.children[3].table...should be defined"), with every quoted
+    value and the "instead was ..." tail removed, so no note content can leak into a message."""
+    msg = getattr(err, "message", "") or ""
+    msg = re.sub(r"instead was.*", "", msg, flags=re.S)
+    msg = re.sub(r"(`[^`]*`|\"[^\"]*\")", "…", msg)
+    msg = re.sub(r"(…[,\s]*(or\s+)?)+", "… ", msg)                       # "should be one of: a, b, c, …" -> "should be one of …"
+    msg = re.sub(r"^(body failed validation|Content creation Failed)[:.]?\s*(Fix the following:\s*)?", "", msg)
+    return re.sub(r"\s+", " ", msg).strip(" .")[:limit]
+
+
 PLAIN = {
     "unauthorized": "Notion disconnected this app. Reconnect to resume. Your notes are safe.",
     "restricted_resource": "Notion no longer lets this connection see that page. Share it again in Notion.",
     "object_not_found": "This page is no longer reachable in Notion (deleted or unshared).",
     "rate_limited": "Notion asked us to slow down; it will be retried.",
-    "validation_error": "Notion refused part of this note. It was reported as a bug; nothing was lost here.",
+    "validation_error": "Notion refused part of this note.",
     "public_api_request_blocked": "Your Notion workspace blocks this connection.",
 }
 
@@ -55,7 +68,10 @@ def plain_message(err: Exception) -> str:
     if isinstance(err, NotionError):
         if err.status >= 500:
             return "Notion isn't responding. We'll retry; nothing is lost."
-        return PLAIN.get(err.code, "Notion refused the request.")
+        base = PLAIN.get(err.code, "Notion refused the request.")
+        if err.code == "validation_error" and detail_of(err):
+            return f"Notion refused part of this note ({detail_of(err)}). Nothing in Second Brain was changed."
+        return base
     if isinstance(err, AmbiguousWrite):
         return "Notion didn't answer in time. We'll check what arrived before trying again."
     return "Something went wrong."

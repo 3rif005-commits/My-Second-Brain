@@ -91,6 +91,13 @@ def _parse(ts: str | None) -> datetime | None:
         return None
 
 
+def _done_message(created: bool, refused: int) -> str:
+    base = "Sent." if created else "Updated."
+    if refused:
+        base += f" Notion refused {refused} block{'s' if refused != 1 else ''}; a note marks where {'they were' if refused != 1 else 'it was'}."
+    return base
+
+
 class Engine(DatabaseMixin):
     def __init__(self, db, conn: Connection, adapter: NotionAdapter):
         self.db, self.conn, self.adapter = db, conn, adapter
@@ -376,6 +383,7 @@ class Engine(DatabaseMixin):
             self.adapter.update_properties(page_id, r, title_prop=title_prop)
             top = self._replace_body(m, page_id, r, everything=item.resolution == "overwrite")
             losses = [loss.to_dict() for loss in dedupe(list(r.losses) + self.adapter.take_losses())]   # + what files taught us
+            refused = self.adapter.take_refused()
             fin = self.adapter.get_page(page_id)
             self.store.update(m["id"], {
                 "state": "synced", "local_hash": h, "mapper_set_version": registry.mapper_set_version(),
@@ -383,7 +391,7 @@ class Engine(DatabaseMixin):
                 "notion_last_edited_by": fin.last_edited_by, "last_pushed_at": now(), "block_index": {"v": 1, "top": top},
                 "losses": losses, "error_class": None, "error_code": None, "error_message": None})
             return ItemResult(item.note_id, item.title, "done", action,
-                              "Sent." if action == "create" else "Updated.", page_url(page_id), losses)
+                              _done_message(action == "create", refused), page_url(page_id), losses)
         except ItemFailure:
             raise
         except AmbiguousWrite as e:
@@ -474,14 +482,16 @@ class Engine(DatabaseMixin):
             if created or m.get("local_hash") != h:
                 top = self._replace_body(m, pid, r, everything=item.resolution == "overwrite")
                 losses = [x.to_dict() for x in dedupe(list(r.losses) + self.adapter.take_losses())]
+                refused = self.adapter.take_refused()
                 self.store.update(m["id"], {"local_hash": h, "block_index": {"v": 1, "top": top}, "last_pushed_at": now(),
                                             "state": "synced", "mapper_set_version": registry.mapper_set_version(),
                                             "ir_version": ir.IR_VERSION, "losses": losses, "error_class": None,
                                             "error_code": None, "error_message": None})
             else:
                 losses = [x.to_dict() for x in r.losses]
+                refused = 0
             return ItemResult(item.note_id, item.title, "done", "create" if created else "update",
-                              "Sent." if created else "Updated.", page_url(pid), losses, item.kind)
+                              _done_message(created, refused), page_url(pid), losses, item.kind)
         except AmbiguousWrite as e:
             raise ItemFailure("failed", "retryable", "ambiguous_write", plain_message(e))
         except NotionError as e:
