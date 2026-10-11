@@ -151,21 +151,22 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
   const progress = run ? run.items.filter((i) => !["queued", "running"].includes(i.status)).length : 0;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4 bg-black/40 backdrop-blur-[1px]"
+    <div className="fixed inset-0 z-[9998]"
       onClick={(e) => { if (e.target === e.currentTarget && canClose) onClose(); }}>
       <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="notion-panel-title"
-        className="w-full max-w-[460px] max-h-[min(82vh,620px)] flex flex-col outline-none rounded-2xl overflow-hidden shadow-2xl
-          bg-[var(--menu-bg)] text-[color:var(--menu-fg)] border border-[color:var(--menu-divider)]">
-        <header className="flex items-center justify-between gap-3 px-5 py-3.5 shrink-0 border-b border-[color:var(--menu-divider)]">
-          <div className="min-w-0">
-            <h2 id="notion-panel-title" className="text-[15px] font-semibold leading-tight">Send to Notion</h2>
-            {title && <p className="text-[12px] opacity-60 truncate mt-0.5">{title}</p>}
+        className="sb-pop absolute top-14 right-3 sm:right-5 w-[400px] max-w-[calc(100vw-1.5rem)] max-h-[min(78vh,580px)] flex flex-col outline-none rounded-xl overflow-hidden
+          shadow-[0_0_0_1px_rgba(15,15,15,0.06),0_8px_28px_rgba(15,15,15,0.18)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_10px_32px_rgba(0,0,0,0.55)]
+          bg-[var(--menu-bg)] text-[color:var(--menu-fg)]">
+        <header className="flex items-center justify-between gap-3 px-4 h-11 shrink-0 border-b border-[color:var(--menu-divider)]">
+          <div className="min-w-0 flex items-baseline gap-2">
+            <h2 id="notion-panel-title" className="text-[13px] font-semibold">Send to Notion</h2>
+            {title && <span className="text-[12px] opacity-50 truncate">{title}</span>}
           </div>
           <button onClick={onClose} aria-label="Close" disabled={!canClose}
-            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--menu-row-hover-bg)]"><X size={15} /></button>
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--menu-row-hover-bg)] opacity-60 hover:opacity-100"><X size={14} /></button>
         </header>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4 text-[14px]">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3 text-[13px]">
           {phase === "loading" && (
             <div className="space-y-2" aria-busy="true" data-testid="notion-loading">
               {[0, 1, 2].map((i) => <div key={i} className="h-10 rounded-md animate-pulse bg-[var(--menu-field-bg)]" />)}
@@ -182,17 +183,11 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
 
           {phase === "review" && ready && plan && (
             <>
-              <section aria-label="Destination" className="space-y-1">
-                <div className="text-[11px] font-semibold uppercase tracking-widest opacity-60">Destination</div>
-                <p>
-                  <span className="opacity-70">{conn?.workspace_name} › </span>
-                  <strong>{conn?.root?.title ?? "your Notion page"}</strong>
-                </p>
-                <p className="text-[12px] opacity-60">
-                  {items.length > 1
-                    ? "Sends the last saved version. Folders become pages with a Notes table inside; notes without a folder go to the Notes table at the top."
-                    : "Sends the last saved version of this note."}
-                </p>
+              <section aria-label="Destination" className="flex items-center gap-1.5 text-[12px]">
+                <span className="opacity-60">Sending to</span>
+                <span className="opacity-60 truncate">{conn?.workspace_name}</span>
+                <span className="opacity-40">/</span>
+                <strong className="font-medium truncate">{conn?.root?.title ?? "your Notion page"}</strong>
               </section>
 
               {items.length > 1 && (
@@ -220,7 +215,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                     onKeyNav={(d) => rows.current[Math.min(Math.max(idx + d, 0), shown.length - 1)]?.focus()} />
                 ))}
                 {plan.nothing_to_send && shown.every((i) => i.state === "unchanged") && (
-                  <p data-testid="nothing-to-send" className="text-[14px]">Nothing to send: everything here is already in sync ✓</p>
+                  <p data-testid="nothing-to-send" className="text-[13px]">Nothing to send: everything here is already in sync ✓</p>
                 )}
                 {released.length > 0 && <p className="text-[12px] text-amber-700 dark:text-amber-300">Released for this send only.</p>}
               </section>
@@ -257,8 +252,8 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                 <p>Nothing to send: this is already in sync ✓</p>
               ) : single ? (
                 single.status === "done" ? (
-                  <p className="flex items-center gap-2 font-medium text-[15px]">
-                    <CheckCircle2 size={20} className="text-emerald-500" /> {single.action === "update" ? "Updated" : "Sent"} to Notion
+                  <p className="flex items-center gap-2 font-medium text-[14px]">
+                    <CheckCircle2 size={18} className="text-emerald-500" /> {single.action === "update" ? "Updated" : "Sent"} to Notion
                   </p>
                 ) : (
                   <p role="alert" className="rounded-md px-3 py-2 text-[13px] bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">{single.message}</p>
@@ -268,7 +263,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
               )}
               {single && urlOf(single.local_id) && single.status === "done" && (
                 <a href={urlOf(single.local_id)!} target="_blank" rel="noreferrer"
-                  className="inline-flex h-9 items-center gap-1.5 px-4 rounded-md text-[13px] font-medium bg-indigo-600 text-white hover:bg-indigo-700">
+                  className="inline-flex h-8 items-center gap-1.5 px-3 rounded-md text-[13px] font-medium bg-indigo-600 text-white hover:bg-indigo-700">
                   Open in Notion <ExternalLink size={13} />
                 </a>
               )}
@@ -297,7 +292,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
           )}
         </div>
 
-        <footer className="shrink-0 flex items-center justify-between gap-3 px-5 py-3 border-t border-[color:var(--menu-divider)]">
+        <footer className="shrink-0 flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[color:var(--menu-divider)]">
           <span className="text-[12px] opacity-60">
             {phase === "review" && sendable.length > 0 && plan
               ? `${sendable.length} item${sendable.length === 1 ? "" : "s"} · about ${sendable.reduce((n, i) => n + i.est_requests, 0)} requests`
