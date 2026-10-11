@@ -15,6 +15,8 @@ import copy
 import logging
 
 from .chunker import children_of, plan_steps
+
+_REQUIRES_CHILDREN = ("table", "column_list", "column")
 from .client import NotionClient
 from .adapter_emoji import looks_like_emoji
 from .errors import AmbiguousWrite, NotionError, detail_of
@@ -94,6 +96,7 @@ class NotionAdapter:
         self._cache: dict[str, object] = {}              # files fetched during this send
         self._run_losses: list[Loss] = []                # losses found while writing (files)
         self._refused = 0                                # blocks Notion refused in this send
+        self._markers: set[str] = set()                  # ids of the notes we put where a block was refused
 
     # ---- connect ---------------------------------------------------------------
     def whoami(self) -> BotInfo:
@@ -515,7 +518,9 @@ class NotionAdapter:
             if on_blocks:
                 on_blocks(entries)
             for d in step.deferred:
-                self._append_tree(self._resolve(ids, d.path), self.materialize_blocks(d.children))
+                target = self._resolve(ids, d.path)
+                if target:
+                    self._append_tree(target, self.materialize_blocks(d.children))
         return placed
 
     def _sync_with_anchors(self, page_id: str, r: Rendered, old: list[dict], on_top=None) -> list[dict]:
@@ -664,6 +669,15 @@ class NotionAdapter:
                           err: NotionError) -> list[str]:
         """Notion refused this request (400). An append is atomic (T1), so nothing landed: find the block
         it dislikes by halving, and put a visible note in its place. One bad block never fails a note."""
+        if len(blocks) == 1 and children_of(blocks[0]) and blocks[0].get("type") not in _REQUIRES_CHILDREN:
+            # the refusal may be about a DESCENDANT: send the block alone, then its children one request at a time,
+            # each isolated in turn, so only the guilty descendant is replaced and not the whole branch
+            shell = copy.deepcopy(blocks[0])
+            kids = children_of(shell)
+            shell[shell["type"]].pop("children", None)
+            ids = self._append(parent_id, [shell], known, after)
+            self._append_tree(ids[0], kids)
+            return ids
         if len(blocks) == 1:
             kind = blocks[0].get("type", "block")
             what = detail_of(err, 120)
@@ -673,7 +687,9 @@ class NotionAdapter:
             log.warning("notion: replaced a refused %s block: %s", kind, what)
             marker = self._marker(f"Not fully represented: Notion refused a {kind} block here"
                                   f"{f' ({what})' if what else ''}.")
-            return self._append_once(parent_id, [marker], after)
+            ids = self._append_once(parent_id, [marker], after)
+            self._markers.update(ids)
+            return ids
         mid = len(blocks) // 2
         left = self._append(parent_id, blocks[:mid], known, after)
         right = self._append(parent_id, blocks[mid:], known | set(left), left[-1])
@@ -719,13 +735,21 @@ class NotionAdapter:
             ids = self._append(parent_id, step.blocks, known)
             known.update(ids)
             for d in step.deferred:
-                self._append_tree(self._resolve(ids, d.path), d.children)
+                target = self._resolve(ids, d.path)
+                if target:
+                    self._append_tree(target, d.children)
 
-    def _resolve(self, ids: list[str], path: tuple[int, ...]) -> str:
+    def _resolve(self, ids: list[str], path: tuple[int, ...]) -> str | None:
+        """The id of the block at `path`, or None when it is not there (it was refused and replaced by a note)."""
         node = ids[path[0]]
         for j in path[1:]:
-            node = self._children(node)[j]["id"]
-        return node
+            if node in self._markers:
+                return None
+            kids = self._children(node)
+            if j >= len(kids):
+                return None
+            node = kids[j]["id"]
+        return None if node in self._markers else node
 
     def reclaim_pending(self, page_id: str, pending: dict, known: set[str]) -> list[dict]:
         """A previous send died between an append landing and its bookkeeping. If the

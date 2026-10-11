@@ -212,3 +212,21 @@ def test_changing_the_html_of_an_interactive_block_re_uploads_it(world):
     assert world.plan(n).items[0].state == "changed"
     res, _ = world.send(n)
     assert res.items[0].status == "done" and len(world.notion.uploads) == 2
+
+
+def test_a_table_three_levels_deep_is_created_after_its_parent_not_refused(world):
+    """bullet > bullet > table: the table needs its rows in the same request (3 levels), so it waits
+    until its parent bullet exists and goes in as a block of its own request. Order is kept."""
+    tbl = B("table", {"type": "tableContent", "headerRows": 1, "rows": [
+        {"cells": [[T("a")], [T("b")]]}, {"cells": [[T("c")], [T("d")]]}]})
+    n = world.add_note(content=[
+        B("bulletListItem", [T("top")], None, [
+            B("bulletListItem", [T("middle")], None, [P("before", "b1"), tbl, P("after", "a1")], "mid")], "top")])
+    res, _ = world.send(n)
+    item = res.items[0]
+    assert item.status == "done" and item.message == "Sent.", item.message
+    top = sent_tree(world, n)[0]
+    mid = top["bulleted_list_item"]["children"][0]
+    assert [c["type"] for c in mid["bulleted_list_item"]["children"]] == ["paragraph", "table", "paragraph"]
+    rows = mid["bulleted_list_item"]["children"][1]["table"]["children"]
+    assert [r["table_row"]["cells"][0][0]["text"]["content"] for r in rows] == ["a", "c"]
