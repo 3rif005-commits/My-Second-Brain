@@ -12,6 +12,7 @@ from services.portable.canonical import digest
 from services.portable.losses import Loss, dedupe
 
 import copy
+import logging
 
 from .chunker import children_of, plan_steps
 from .client import NotionClient
@@ -23,11 +24,12 @@ from .richtext import plain_rich, rich_text, split_units
 from .writers.rich import SB_FILE
 from .writers import write_block
 
-from .properties import (SB_ID_PROP, SCHEMA, TITLE_PROP, row_properties, sb_id_value,
+from .properties import (P_CREATED, P_EDITED, P_PRIVACY, P_SOURCE, P_SOURCE_URL, P_FAVORITE, P_MASTERY, P_TOPICS, SB_ID_PROP, SCHEMA, TITLE_PROP, row_properties, sb_id_value,
                          title_value)
 from .richtext import DB_RESOLVER, RESOLVER
 from .writers.rich import DB_EMBED
 
+log = logging.getLogger(__name__)
 NOTES_DB_TITLE = "Notes"
 ARCHIVE_TITLE = "🗄 Deleted in Second Brain"
 
@@ -300,8 +302,35 @@ class NotionAdapter:
             "parent": {"type": "page_id", "page_id": parent_page_id},
             "title": plain_rich(NOTES_DB_TITLE), "is_inline": True,
             "initial_data_source": {"properties": SCHEMA}}, create=True)
-        return DbInfo(db["id"], (db.get("data_sources") or [{}])[0].get("id", ""),
-                      db.get("created_time"))
+        info = DbInfo(db["id"], (db.get("data_sources") or [{}])[0].get("id", ""), db.get("created_time"))
+        self.tidy_notes_view(info)
+        return info
+
+    # What a person sees first in the Notes table: the useful columns, newest edit on top, the
+    # plumbing (SB ID, source, created) tucked away but one click from visible.
+    _NOTES_VIEW_ORDER = (TITLE_PROP, P_TOPICS, P_MASTERY, P_PRIVACY, P_FAVORITE, P_EDITED,
+                         P_SOURCE, P_SOURCE_URL, P_CREATED, SB_ID_PROP)
+    _NOTES_VIEW_HIDDEN = {P_SOURCE, P_SOURCE_URL, P_CREATED, SB_ID_PROP}
+
+    def tidy_notes_view(self, db: DbInfo) -> bool:
+        """Rename Notion's "Default view" to "All notes", hide the plumbing columns and sort by the
+        last edit (verified live, 2026-10-10). Cosmetic: a failure is logged, never raised, and a
+        view someone already renamed or changed is left alone."""
+        try:
+            ids = {k: v["id"] for k, v in (self.c.get(f"/data_sources/{db.data_source_id}").get("properties") or {}).items()}
+            views = self.list_view_ids(db.database_id)
+            if not views or self.get_view(views[0]).get("name") != "Default view":
+                return False
+            props = [{"property_id": ids[k], "visible": k not in self._NOTES_VIEW_HIDDEN}
+                     for k in self._NOTES_VIEW_ORDER if k in ids]
+            payload = {"name": "All notes", "configuration": {"type": "table", "properties": props}}
+            if P_EDITED in ids:
+                payload["sorts"] = [{"property": ids[P_EDITED], "direction": "descending"}]
+            self.patch_view(views[0], payload)
+            return True
+        except Exception as e:                                       # cosmetic only
+            log.warning("notion: could not tidy the Notes view: %s", e)
+            return False
 
     def ensure_schema(self, data_source_id: str) -> int:
         """Keep the Notes schema in step: add any property it lacks (an older
