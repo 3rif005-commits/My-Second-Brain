@@ -37,12 +37,18 @@ test("one note, not connected: connect + pick page + send, all inside the panel"
     await page.getByRole("button", { name: "Connect" }).click();
     await slow(page.getByRole("button", { name: /SB-TEST-/ })).toBeVisible();
     await page.screenshot({ path: `${OUT}/2-pick-page.png` });
+    const t1 = Date.now();
     await page.getByRole("button", { name: /SB-TEST-/ }).click();
     await slow(page.getByTestId("notion-item")).toContainText("SB-TEST one note");
+    console.log(`TIMING pick page→preview: ${Date.now() - t1} ms`);
     expect(page.url()).toContain(`/brain/${note.id}`);                       // never left the note
     await page.screenshot({ path: `${OUT}/3-review.png` });
+    const t0 = Date.now();
     await page.getByRole("button", { name: "Send", exact: true }).click();
+    await page.waitForTimeout(4500);
+    await page.screenshot({ path: `${OUT}/3b-sending.png` });             // the "still working" state
     await slow(page.getByTestId("notion-result")).toContainText("Sent to Notion", { timeout: 60_000 });
+    console.log(`TIMING send→result: ${Date.now() - t0} ms`);
     const href = await page.getByRole("link", { name: /Open in Notion/ }).getAttribute("href");
     await page.screenshot({ path: `${OUT}/4-sent.png` });
     const kids = await notion(token, "GET", `/blocks/${href!.split("/").pop()}/children?page_size=50`);

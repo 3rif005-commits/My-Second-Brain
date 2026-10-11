@@ -313,13 +313,12 @@ class NotionAdapter:
     _NOTES_VIEW_HIDDEN = {P_SOURCE, P_SOURCE_URL, P_CREATED, SB_ID_PROP}
 
     def tidy_notes_view(self, db: DbInfo) -> bool:
-        """Rename Notion's "Default view" to "All notes", hide the plumbing columns and sort by the
-        last edit (verified live, 2026-10-10). Cosmetic: a failure is logged, never raised, and a
-        view someone already renamed or changed is left alone."""
+        """Rename a NEW database's only view ("Default view") to "All notes", hide the plumbing columns
+        and sort by the last edit (verified live). 3 requests. Cosmetic: a failure is logged, never raised."""
         try:
             ids = {k: v["id"] for k, v in (self.c.get(f"/data_sources/{db.data_source_id}").get("properties") or {}).items()}
             views = self.list_view_ids(db.database_id)
-            if not views or self.get_view(views[0]).get("name") != "Default view":
+            if len(views) != 1:                                      # a fresh database has exactly Notion's own view
                 return False
             props = [{"property_id": ids[k], "visible": k not in self._NOTES_VIEW_HIDDEN}
                      for k in self._NOTES_VIEW_ORDER if k in ids]

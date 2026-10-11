@@ -37,6 +37,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
   const [result, setResult] = useState<SendResult | null>(null);
   const [run, setRun] = useState<RunDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [slowSend, setSlowSend] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const rows = useRef<(HTMLDivElement | null)[]>([]);
   const scopeKey = JSON.stringify(scope);
@@ -63,6 +64,12 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
     mounted.current = true;
     return () => { mounted.current = false; opener?.focus?.(); };
   }, []);
+  // The first send also builds the Notes table in Notion: say so if it takes a moment, instead of a bare spinner.
+  useEffect(() => {
+    if (phase !== "sending") { setSlowSend(false); return; }
+    const t = setTimeout(() => setSlowSend(true), 3500);
+    return () => clearTimeout(t);
+  }, [phase]);
   // A background run (more than one item) keeps going on the server, so the panel may be closed meanwhile.
   const canClose = phase !== "sending" || !!run;
   useEffect(() => {
@@ -182,7 +189,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
           )}
 
           {phase === "review" && ready && plan && (
-            <>
+            <div className="space-y-3 sb-fade">
               <section aria-label="Destination" className="flex items-center gap-1.5 text-[12px]">
                 <span className="opacity-60">Sending to</span>
                 <span className="opacity-60 truncate">{conn?.workspace_name}</span>
@@ -219,12 +226,20 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                 )}
                 {released.length > 0 && <p className="text-[12px] text-amber-700 dark:text-amber-300">Released for this send only.</p>}
               </section>
-            </>
+            </div>
           )}
 
           {phase === "sending" && (
-            <div className="space-y-3" role="status" aria-live="polite">
-              <p className="flex items-center gap-2"><Loader2 size={15} className="animate-spin" /> Sending to Notion…</p>
+            <div className="space-y-3 sb-fade" role="status" aria-live="polite">
+              <p className="flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Sending to Notion…</p>
+              {!run && (
+                <>
+                  <div className="h-1 rounded-full bg-[var(--menu-field-bg)] overflow-hidden" aria-hidden>
+                    <div className="h-full w-1/3 rounded-full bg-indigo-600 ws-indeterminate" />
+                  </div>
+                  {slowSend && <p className="text-[12px] opacity-60 sb-fade">Still working. A first send also sets up your Notes table in Notion, which takes a few seconds longer.</p>}
+                </>
+              )}
               {run && (
                 <>
                   <div className="h-1.5 rounded bg-[var(--menu-field-bg)] overflow-hidden">
@@ -247,7 +262,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
           )}
 
           {phase === "done" && (
-            <section aria-label="Result" aria-live="polite" className="space-y-3" data-testid="notion-result">
+            <section aria-label="Result" aria-live="polite" className="space-y-3 sb-fade" data-testid="notion-result">
               {finalItems.length === 0 ? (
                 <p>Nothing to send: this is already in sync ✓</p>
               ) : single ? (
