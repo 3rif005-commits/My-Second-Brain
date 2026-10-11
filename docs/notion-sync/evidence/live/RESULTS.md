@@ -80,3 +80,14 @@ Cleanup: each script moves what it made to the test workspace's trash; afterward
 |---|---|
 | `PATCH /views/{id}` on a new Notes database's default view with `name`, `configuration.properties` (visible flags, in order) and `sorts` | Accepted: view renamed "All notes"; Name, Topics, Mastery, Privacy, Favorite, Edited shown; Source, Source URL, Created, SB ID hidden; sorted by "Edited in Second Brain" descending. Applied once at creation; a view a person already renamed is never touched. |
 | `notion_m1_live` (plain, `--m3`) and `notion_canary` after the change | pass (canary 14/14); +1 get/patch round trip per new Notes database |
+
+## Real notes through the real engine (2026-10-11)
+All 13 live notes of the demo account (read-only from Supabase) were sent to the SB-TEST workspace with `Engine` and trashed afterwards.
+
+| Finding (VERIFIED live) | Fix |
+|---|---|
+| **A table inside a bullet inside a bullet (3 levels) is refused** (`…bulleted_list_item.children[2].embed should be defined`; Notion creates a table only with its rows in the same request, so it needs 2 levels and the chunker had put it on level 3 with its rows deferred). The study-guide notes made from lecture slides have exactly this shape. | `chunker.levels_needed`: a table / column_list / column that does not fit at its depth waits, with the siblings after it, until its parent exists, then goes in as a block of its own request. |
+| One refused block failed the whole note, and the message gave no hint where. | A 400 `validation_error` on an append (atomic, T1) is halved until the block is found; a block with children is retried as shell + children so only the guilty descendant is replaced by a ⚠️ note. The result says "Notion refused N blocks". Failure messages carry Notion's field path, never a value. |
+| After a replacement, the children queued for that block crashed the send (`IndexError`). | `_resolve` returns None for a replaced block and the children are skipped. |
+
+After the fixes: 13/13 notes `done`, 0 refused blocks, 64 requests, 26 s here; `notion_canary` 14/14; backend 2786 passed.

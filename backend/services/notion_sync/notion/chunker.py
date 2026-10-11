@@ -63,6 +63,19 @@ def _size(block: dict) -> int:
     return len(json.dumps(block, ensure_ascii=False).encode("utf-8"))
 
 
+#: Blocks Notion refuses to create without their children in the SAME request (live: a table needs its rows,
+#: a column_list its columns, a column a child). They count as extra nesting levels.
+_NEEDS_CHILDREN = ("table", "column_list", "column")
+
+
+def levels_needed(block: dict) -> int:
+    """Nesting levels this block needs inside ONE request (1 = just itself)."""
+    if block.get("type") not in _NEEDS_CHILDREN:
+        return 1
+    ch = children_of(block) or []
+    return 1 + max((levels_needed(c) for c in ch), default=0)
+
+
 def _trim(block: dict, depth: int, path: tuple[int, ...], out: list[Deferred]) -> dict:
     """Copy of `block` with children cut to what one request may carry."""
     b = copy.deepcopy(block)
@@ -74,6 +87,13 @@ def _trim(block: dict, depth: int, path: tuple[int, ...], out: list[Deferred]) -
         _set_children(b, None)
         return b
     keep, rest = ch[:MAX_CHILDREN], ch[MAX_CHILDREN:]
+    # A child that cannot be created at this depth (a table three levels down has no room for its rows) waits,
+    # with everything after it, until its parent exists: it is then appended as a block of its own request.
+    if b.get("type") not in _NEEDS_CHILDREN:
+        for j, c in enumerate(keep):
+            if depth + 1 + levels_needed(c) - 1 > MAX_DEPTH:
+                keep, rest = ch[:j], ch[j:]
+                break
     kept = [_trim(c, depth + 1, path + (j,), out) for j, c in enumerate(keep)]
     _set_children(b, kept)
     if rest:
