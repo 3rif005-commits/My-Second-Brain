@@ -235,7 +235,8 @@ class FakeNotion:
             props[name] = {"id": self._prop_id(sid, name), "name": name, "type": t, **schema}
             if t == "status":
                 props[name]["status"] = self._status_view(sid, name)
-        return {"object": "data_source", "id": sid, "properties": props}
+        return {"object": "data_source", "id": sid, "properties": props,
+                "in_trash": bool(self.dbs.get(src["db"], {}).get("in_trash"))}
 
     def _status_view(self, sid: str, name: str) -> dict:
         st = self.sources[sid]["properties"][name]["status"]
@@ -417,7 +418,8 @@ class FakeNotion:
                 return ok(self._public_page(p))
         if method == "POST" and path == "/pages":
             parent = body["parent"]
-            if parent["type"] == "data_source_id" and parent["data_source_id"] not in self.sources:
+            if parent["type"] == "data_source_id" and (parent["data_source_id"] not in self.sources
+                                                       or self.dbs.get(self.sources[parent["data_source_id"]]["db"], {}).get("in_trash")):
                 raise _Missing
             if parent["type"] == "page_id" and parent["page_id"] not in self.pages:
                 raise _Missing
@@ -499,6 +501,8 @@ class FakeNotion:
             if b is None or b["in_trash"]:
                 raise _Missing
             b["in_trash"] = True
+            if m[1] in self.dbs:                                   # a deleted table: its data sources go with it (verified live)
+                self.dbs[m[1]]["in_trash"] = True
             parent = b["parent"]["id"]
             kids, _ = self._container(parent)
             if kids is not None and m[1] in kids:

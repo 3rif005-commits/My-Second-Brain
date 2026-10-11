@@ -91,3 +91,9 @@ All 13 live notes of the demo account (read-only from Supabase) were sent to the
 | After a replacement, the children queued for that block crashed the send (`IndexError`). | `_resolve` returns None for a replaced block and the children are skipped. |
 
 After the fixes: 13/13 notes `done`, 0 refused blocks, 64 requests, 26 s here; `notion_canary` 14/14; backend 2786 passed.
+
+## A deleted Notes table (2026-10-11, live)
+| Finding (VERIFIED) | Fix |
+|---|---|
+| A deleted database/data source still answers `GET` with `in_trash: true` (no 404); creating a page under it answers 404 `object_not_found`. | `adapter.data_source_exists` checks the flag. |
+| After the Notes table was deleted in Notion, "Create it again" failed forever: the new page was made inside the dead table. | On `object_not_found` the engine checks the table, forgets its mapping, and `_shell`/`send_note` build a new Notes table once, then go on (live: first send, delete table, edit, recreate → done; next send unchanged). |

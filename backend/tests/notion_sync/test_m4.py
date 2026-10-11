@@ -144,3 +144,21 @@ def test_pause_mirroring_for_one_note(world):
     n["title"] = "renamed"
     plan = world.plan(n)
     assert plan.items[0].state == PAUSED and world.send(n)[0].items == []
+
+
+def test_a_notes_table_deleted_in_notion_is_rebuilt_when_the_note_is_created_again(world):
+    """Create-again used to fail forever: the note's new page was made inside the deleted table."""
+    n = world.add_note()
+    world.send(n)
+    old_page = world.mapping(n)["notion_id"]
+    table = next(iter(world.notion.dbs))
+    world.notion.pages[old_page]["in_trash"] = True
+    world.notion.dbs[table]["in_trash"] = True
+    world.notion.blocks[table]["in_trash"] = True
+    n["title"] = "renamed"
+    it = world.plan(n).items[0]
+    assert it.state == NEEDS_YOU
+    res, _ = run_with(world, n, "recreate")
+    assert res.items[0].status == "done", res.items[0].message
+    assert world.mapping(n)["notion_id"] != old_page
+    assert len(world.notion.dbs) == 2                                  # a new Notes table stands next to the deleted one

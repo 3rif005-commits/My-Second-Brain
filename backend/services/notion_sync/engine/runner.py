@@ -358,10 +358,11 @@ class Engine(DatabaseMixin):
         return ItemResult(item.note_id, item.title, "done", "forget",
                           "No longer tracked. The page in Notion was left alone.", None, kind=kind)
 
-    def send_note(self, item: PlanItem, row: dict, resolver: MentionResolver) -> ItemResult:
+    def send_note(self, item: PlanItem, row: dict, resolver: MentionResolver, _healed: bool = False) -> ItemResult:
         if item.resolution == "forget":
             return self._forget(item, "note")
         action = "create" if item.state == NEW else "update"
+        ds = None
         try:
             ds, title_prop, st = self._destination(row)
             obj = self._obj_for(row, st)
@@ -397,7 +398,25 @@ class Engine(DatabaseMixin):
         except AmbiguousWrite as e:
             raise ItemFailure("failed", "retryable", "ambiguous_write", plain_message(e))
         except NotionError as e:
+            if e.code == "object_not_found" and ds and not _healed and self._container_gone(row, ds):
+                return self.send_note(item, row, resolver, _healed=True)      # the Notes table is rebuilt, then we go on
             raise self._notion_failure(e)
+
+    def _container_gone(self, row: dict, ds: str | None = None) -> bool:
+        """The Notes table of this note was deleted in Notion: forget it so the next step builds a new one.
+        (The page we may have made inside it went with it; a note that is only changed asks first, as before.)"""
+        if self.row_context(str(row["id"])) is not None:
+            return False                                           # a database row: its database is another matter
+        local = str(row["collection_id"]) if row.get("collection_id") else self._root()
+        if ds is None:
+            m = self.store.mapping(CONTAINER, local, "notes_db")
+            ds = m.get("notion_id") if m else None
+        if not ds or self.adapter.data_source_exists(ds):
+            return False
+        log.warning("notion: the Notes table %s is gone in Notion; building a new one", ds)
+        self.store.forget_one(CONTAINER, local, "notes_db")
+        self._schema_ok.discard(ds)
+        return True
 
     def _finish_db_item(self, it: PlanItem, st) -> None:
         """Title/icon/description changes, then remember what we sent (so the next plan is a no-op)."""
@@ -618,7 +637,12 @@ class Engine(DatabaseMixin):
                 if self._paused():              # the kill switch is checked before any request
                     break
                 try:
-                    self._shell(it, row, store_resolver)
+                    try:
+                        self._shell(it, row, store_resolver)
+                    except NotionError as e:
+                        if e.code != "object_not_found" or not self._container_gone(row):
+                            raise
+                        self._shell(it, row, store_resolver)          # the Notes table was rebuilt: once more
                 except SyncPaused:
                     halted["paused"] = True
                     break
