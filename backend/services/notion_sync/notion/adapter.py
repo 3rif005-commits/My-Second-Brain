@@ -340,6 +340,16 @@ class NotionAdapter:
             log.warning("notion: could not tidy the Notes view: %s", e)
             return False
 
+    def data_source_exists(self, data_source_id: str) -> bool:
+        """False when the table was deleted or is no longer shared with the connection."""
+        try:
+            r = self.c.get(f"/data_sources/{data_source_id}")
+            return not (r.get("in_trash") or r.get("archived"))        # a deleted table still answers, flagged (verified live)
+        except NotionError as e:
+            if e.status == 404 or e.code in ("object_not_found", "restricted_resource"):
+                return False
+            raise
+
     def ensure_schema(self, data_source_id: str) -> int:
         """Keep the Notes schema in step: add any property it lacks (an older
         database made before a property existed). One read; a write only when
