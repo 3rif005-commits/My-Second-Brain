@@ -6,13 +6,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { CheckCircle2, ExternalLink, Loader2, X, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, ExternalLink, Info, Loader2, Settings, X, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   announceNotionChange, notionApi, type NotionStatus, type Plan, type PlanItem, type Resolution, type RunDetail,
   type Scope, type SendResult,
 } from "@/lib/notion";
 import { ConnectInline } from "./ConnectInline";
+import { SyncTab } from "./SyncTab";
 import { PlanRow, TAB_LABEL, tabOf, type TabId } from "./PlanReview";
 
 interface Props {
@@ -38,6 +39,9 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
   const [run, setRun] = useState<RunDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [slowSend, setSlowSend] = useState(false);
+  const [top, setTop] = useState<"send" | "sync">("send");
+  const [changing, setChanging] = useState(false);
+  const [infoShown, setInfoShown] = useState(() => { try { return localStorage.getItem("sb-notion-info") !== "x"; } catch { return true; } });
   const panelRef = useRef<HTMLDivElement>(null);
   const rows = useRef<(HTMLDivElement | null)[]>([]);
   const scopeKey = JSON.stringify(scope);
@@ -161,20 +165,32 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
     <div className="fixed inset-0 z-[9998]"
       onClick={(e) => { if (e.target === e.currentTarget && canClose) onClose(); }}>
       <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="notion-panel-title"
-        className="sb-pop absolute top-14 right-3 sm:right-5 w-[400px] max-w-[calc(100vw-1.5rem)] max-h-[min(78vh,580px)] flex flex-col outline-none rounded-xl overflow-hidden
+        className="sb-pop absolute top-14 right-3 sm:right-5 w-[440px] max-w-[calc(100vw-1.5rem)] max-h-[min(80vh,600px)] flex flex-col outline-none rounded-xl overflow-hidden
           shadow-[0_0_0_1px_rgba(15,15,15,0.06),0_8px_28px_rgba(15,15,15,0.18)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_10px_32px_rgba(0,0,0,0.55)]
           bg-[var(--menu-bg)] text-[color:var(--menu-fg)]">
-        <header className="flex items-center justify-between gap-3 px-4 h-11 shrink-0 border-b border-[color:var(--menu-divider)]">
-          <div className="min-w-0 flex items-baseline gap-2">
-            <h2 id="notion-panel-title" className="text-[13px] font-semibold">Send to Notion</h2>
-            {title && <span className="text-[12px] opacity-50 truncate">{title}</span>}
+        <header className="flex items-end justify-between gap-3 px-4 shrink-0 border-b border-[color:var(--menu-divider)]">
+          <h2 id="notion-panel-title" className="sr-only">Send to Notion{title ? ` · ${title}` : ""}</h2>
+          <div role="group" aria-label="Panel" className="flex gap-4 text-[13px]">
+            {(["send", "sync"] as const).map((t) => (
+              <button key={t} aria-pressed={top === t} aria-label={t === "send" ? "Send tab" : "Sync tab"} onClick={() => setTop(t)}
+                className={`h-10 -mb-px border-b-2 transition-colors ${top === t ? "border-current font-medium" : "border-transparent opacity-50 hover:opacity-80"}`}>
+                {t === "send" ? "Send" : "Sync"}
+              </button>
+            ))}
           </div>
-          <button onClick={onClose} aria-label="Close" disabled={!canClose}
-            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--menu-row-hover-bg)] opacity-60 hover:opacity-100"><X size={14} /></button>
+          <div className="flex items-center gap-1 pb-1.5">
+            <Link href="/brain/settings/notion" onClick={onOpenSettings} aria-label="Notion settings" title="Notion settings"
+              className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--menu-row-hover-bg)] opacity-60 hover:opacity-100"><Settings size={14} /></Link>
+            <button onClick={onClose} aria-label="Close" disabled={!canClose}
+              className="w-6 h-6 flex items-center justify-center rounded hover:bg-[var(--menu-row-hover-bg)] opacity-60 hover:opacity-100"><X size={14} /></button>
+          </div>
         </header>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3 text-[13px]">
-          {phase === "loading" && (
+          {top === "sync" && ready && <SyncTab scope={scope} onNavigate={onOpenSettings} />}
+          {top === "sync" && !ready && phase !== "loading" && <p className="text-[13px] opacity-70 py-2">Connect Notion on the Send tab first.</p>}
+
+          {top === "send" && phase === "loading" && (
             <div className="space-y-2" aria-busy="true" data-testid="notion-loading">
               {[0, 1, 2].map((i) => <div key={i} className="h-10 rounded-md animate-pulse bg-[var(--menu-field-bg)]" />)}
             </div>
@@ -184,17 +200,26 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
             <p role="alert" className="rounded-md px-3 py-2 text-[13px] bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">{error}</p>
           )}
 
-          {phase !== "loading" && conn && !ready && (
+          {top === "send" && phase !== "loading" && conn && !ready && (
             <ConnectInline status={conn} onChange={(s) => { setConn(s); if (s.connected && s.root) void load(); }} />
           )}
 
-          {phase === "review" && ready && plan && (
+          {top === "send" && phase === "review" && ready && plan && changing && conn && (
+            <ConnectInline status={{ ...conn, root: null }} onChange={(c) => { setConn(c); if (c.root) { setChanging(false); void load(); } }} />
+          )}
+
+          {top === "send" && phase === "review" && ready && plan && !changing && (
             <div className="space-y-3 sb-fade">
-              <section aria-label="Destination" className="flex items-center gap-1.5 text-[12px]">
-                <span className="opacity-60">Sending to</span>
-                <span className="opacity-60 truncate">{conn?.workspace_name}</span>
-                <span className="opacity-40">/</span>
-                <strong className="font-medium truncate">{conn?.root?.title ?? "your Notion page"}</strong>
+              <section aria-label="Destination">
+                <button onClick={() => setChanging(true)} title="Choose a different Notion page"
+                  className="w-full flex items-center gap-3 px-1.5 py-1.5 rounded-lg text-left hover:bg-[var(--menu-row-hover-bg)]">
+                  <span aria-hidden className="w-8 h-8 rounded-lg grid place-items-center text-[16px] bg-[var(--menu-field-bg)] shrink-0">📄</span>
+                  <span className="flex-1 min-w-0">
+                    <strong className="block text-[13px] font-medium truncate">{conn?.root?.title ?? "your Notion page"}</strong>
+                    <span className="block text-[12px] opacity-60 truncate">{conn?.workspace_name}</span>
+                  </span>
+                  <span className="flex items-center gap-0.5 text-[12px] opacity-60">Change <ChevronDown size={13} /></span>
+                </button>
               </section>
 
               {items.length > 1 && (
@@ -226,10 +251,18 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                 )}
                 {released.length > 0 && <p className="text-[12px] text-amber-700 dark:text-amber-300">Released for this send only.</p>}
               </section>
+              {infoShown && (
+                <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] leading-snug bg-sky-50 text-sky-900 dark:bg-sky-500/10 dark:text-sky-200" data-testid="notion-info">
+                  <Info size={14} className="mt-px shrink-0" />
+                  <span className="flex-1">Notion gets a copy. Changes made in Notion are never overwritten without asking you first.</span>
+                  <button aria-label="Dismiss" className="opacity-60 hover:opacity-100"
+                    onClick={() => { setInfoShown(false); try { localStorage.setItem("sb-notion-info", "x"); } catch { /* fine */ } }}><X size={13} /></button>
+                </div>
+              )}
             </div>
           )}
 
-          {phase === "sending" && (
+          {top === "send" && phase === "sending" && (
             <div className="space-y-3 sb-fade" role="status" aria-live="polite">
               <p className="flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Sending to Notion…</p>
               {!run && (
@@ -261,15 +294,17 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
             </div>
           )}
 
-          {phase === "done" && (
+          {top === "send" && phase === "done" && (
             <section aria-label="Result" aria-live="polite" className="space-y-3 sb-fade" data-testid="notion-result">
               {finalItems.length === 0 ? (
                 <p>Nothing to send: this is already in sync ✓</p>
               ) : single ? (
                 single.status === "done" ? (
-                  <p className="flex items-center gap-2 font-medium text-[14px]">
-                    <CheckCircle2 size={18} className="text-emerald-500" /> {single.action === "update" ? "Updated" : "Sent"} to Notion
-                  </p>
+                  <div className="text-center pt-1 space-y-1">
+                    <span className="mx-auto w-10 h-10 rounded-full grid place-items-center bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400"><CheckCircle2 size={22} /></span>
+                    <p className="text-[15px] font-semibold">{single.action === "update" ? "Updated in Notion" : "Sent to Notion"}</p>
+                    <p className="text-[12px] opacity-60">{single.action === "update" ? "The page in Notion now matches this note." : `This note is now a page in ${conn?.root?.title ?? "Notion"}.`}</p>
+                  </div>
                 ) : (
                   <p role="alert" className="rounded-md px-3 py-2 text-[13px] bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">{single.message}</p>
                 )
@@ -278,7 +313,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
               )}
               {single && urlOf(single.local_id) && single.status === "done" && (
                 <a href={urlOf(single.local_id)!} target="_blank" rel="noreferrer"
-                  className="inline-flex h-8 items-center gap-1.5 px-3 rounded-md text-[13px] font-medium bg-indigo-600 text-white hover:bg-indigo-700">
+                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg text-[13px] font-medium bg-indigo-600 text-white hover:bg-indigo-700">
                   Open in Notion <ExternalLink size={13} />
                 </a>
               )}
@@ -300,13 +335,14 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
               {problems.some((p) => p.status === "failed") && (
                 <Button size="sm" variant="primary" onClick={retryFailed}>Retry failed</Button>
               )}
-              <p className="text-[12px] opacity-60">
+              <p className="text-[12px] opacity-60 text-center">
                 <Link href="/brain/settings/notion?tab=activity" onClick={onOpenSettings} className="underline">See the Activity</Link>
               </p>
             </section>
           )}
         </div>
 
+        {top === "send" && (phase === "review" || phase === "done" || phase === "sending") && (
         <footer className="shrink-0 flex items-center justify-between gap-3 px-4 py-2.5 border-t border-[color:var(--menu-divider)]">
           <span className="text-[12px] opacity-60">
             {phase === "review" && sendable.length > 0 && plan
@@ -324,6 +360,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
             )}
           </div>
         </footer>
+        )}
       </div>
     </div>,
     document.body,

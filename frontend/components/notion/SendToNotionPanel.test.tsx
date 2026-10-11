@@ -127,4 +127,25 @@ describe("SendToNotionPanel", () => {
     expect(opener).toHaveFocus();
     opener.remove();
   });
+
+  it("Sync tab: switch on keeps the note in sync (adds a rule), switch off removes it", async () => {
+    const calls = route({
+      "/status": () => json(CONNECTED),
+      "/plan": () => json(plan()),
+      "/rules/r1": () => json({ deleted: "r1" }),
+      "/rules": (b) => (b ? json({ id: "r1", scope_kind: "note", scope_id: "n1", mode: "on_change", include: {} }) : json({ rules: [] })),
+      "/notes/n1": () => json({ connected: true, state: "synced", paused: false, notion_url: "https://www.notion.so/abc" }),
+    });
+    render(<SendToNotionPanel scope={{ note_ids: ["n1"] }} onClose={() => {}} />);
+    await screen.findByTestId("notion-item");
+    await userEvent.click(screen.getByRole("button", { name: "Sync tab" }));
+    const sw = await screen.findByRole("switch", { name: "Keep this note in sync" });
+    await waitFor(() => expect(sw).toBeEnabled());
+    await userEvent.click(sw);
+    await waitFor(() => expect(sw).toHaveAttribute("aria-checked", "true"));
+    expect(calls.some((c) => c.path === "/rules" && (c.body as { mode: string })?.mode === "on_change")).toBe(true);
+    await userEvent.click(sw);
+    await waitFor(() => expect(sw).toHaveAttribute("aria-checked", "false"));
+    expect(screen.getByRole("link", { name: /Open in Notion/ })).toHaveAttribute("href", "https://www.notion.so/abc");
+  });
 });

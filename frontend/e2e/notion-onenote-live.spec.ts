@@ -43,6 +43,21 @@ test("one note, not connected: connect + pick page + send, all inside the panel"
     console.log(`TIMING pick page→preview: ${Date.now() - t1} ms`);
     expect(page.url()).toContain(`/brain/${note.id}`);                       // never left the note
     await page.screenshot({ path: `${OUT}/3-review.png` });
+    // the Sync tab (switch rows, like Notion's own menu) and the destination chooser
+    await page.getByRole("button", { name: "Sync tab" }).click();
+    const sw = page.getByRole("switch", { name: "Keep this note in sync" });
+    await expect(sw).toBeEnabled();
+    await sw.click();
+    await expect(sw).toHaveAttribute("aria-checked", "true");
+    await page.screenshot({ path: `${OUT}/3a-sync-tab.png` });
+    await sw.click();
+    await expect(sw).toHaveAttribute("aria-checked", "false");
+    await page.getByRole("button", { name: "Send tab" }).click();
+    await page.getByRole("button", { name: /Change/ }).click();
+    await slow(page.getByRole("button", { name: /SB-TEST-/ })).toBeVisible();
+    await page.screenshot({ path: `${OUT}/3c-change-destination.png` });
+    await page.getByRole("button", { name: /SB-TEST-/ }).click();
+    await slow(page.getByTestId("notion-item")).toBeVisible();
     const t0 = Date.now();
     await page.getByRole("button", { name: "Send", exact: true }).click();
     await page.waitForTimeout(4500);
