@@ -74,6 +74,15 @@ export default defineConfig({
       retries: 0,
     },
 
+    // The Notion copy was deleted by hand: the next send must offer "Create it again" and work.
+    {
+      name: "notion-gone-live",
+      testMatch: "**/notion-gone-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      retries: 0,
+    },
+
     {
       name: "routing-live",
       testMatch: "**/routing-live.spec.ts",
