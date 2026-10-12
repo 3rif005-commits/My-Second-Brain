@@ -32,6 +32,48 @@ need. Thoroughness matters more than speed. Measure things instead of eyeballing
 - Work at a desktop viewport of **1440×900** at 100% zoom. Notion's left sidebar should be
   expanded unless a step says otherwise.
 
+### How to run this: split the work across models
+Start this session on **Opus** (`/model opus`). You are the **orchestrator**. Do the
+thinking yourself, and hand the long, mechanical browser work to cheaper subagents using
+the Agent tool's `model` parameter.
+
+| Role | Model | Does |
+|---|---|---|
+| Orchestrator (you) | **Opus** | Plans the batches, writes each subagent's brief, reviews every batch for gaps, and writes the final files (`tokens.json`, `surfaces/*.md`, `preferences.md`, `checklist.md`) |
+| Builder | **Sonnet** | Step 1: builds the reference page and databases in Notion |
+| Capturers | **Sonnet** | Step 2: one subagent per surface group. Screenshots, `getComputedStyle` measurements, states, and behavior notes |
+| Checker | **Haiku** | Mechanical checks: the privacy scan (grep text for emails and names, list images to inspect), image file sizes, and that every file linked from the README exists |
+
+Rules for this setup:
+1. **Test first.** Before anything else, start one Sonnet subagent whose only job is to
+   call a Claude in Chrome tool (for example, list the open tabs) and report back. If
+   subagents **can't** reach the Chrome tools, stop using subagents for the browser.
+   Instead, tell me to switch with `/model sonnet` for Steps 1–2 and back with
+   `/model opus` for Step 3, and continue in this session.
+2. **Run browser subagents one at a time, never in parallel.** They all drive the same
+   Chrome window. Run them in the foreground (`run_in_background: false`).
+3. **Use small batches.** Suggested groups: (a) the build in Step 1; (b) the app shell and
+   search; (c) page and blocks; (d) table view; (e) table editing, property menus and
+   panels; (f) board and gallery; (g) list, calendar, timeline and chart; (h) the row page,
+   peek and view settings; (i) empty states, menus and overlays; (j) settings and
+   preferences. Each group is captured in light, then dark. Switch the theme once
+   between the light and dark passes, not once per surface.
+4. **Raw notes go to files, not into your context.** Each capturer writes everything to
+   `docs/notion-reference/_raw/<group>.md` (plus screenshots in `screenshots/`) and
+   returns to you **only** a summary of 10 lines or fewer: what it covered, what it
+   missed, and any problems. This keeps your context small and saves tokens.
+5. **Give each capturer a full brief.** It starts with no context. Paste in the ground
+   rules, its exact list of surfaces, the measurement method in Step 2, the output paths,
+   and the instruction to return only the short summary.
+6. **Review every batch.** After each batch, read its raw file. Compare it with the
+   surface list and the checklist goals. If anything is missing (a state, a theme, a
+   property type, a measurement), send the same subagent back with a precise follow-up
+   (SendMessage to continue it) rather than starting a new one. Move on only when the
+   group is complete.
+7. **Opus writes the synthesis.** In Step 3, you write the final files yourself from the
+   raw notes. Don't delegate the synthesis or the checklist. Then run the Haiku checker,
+   fix what it reports, and do Step 4.
+
 ### Step 1: Build the reference page in Notion
 Create the page **"UI Reference (Claude)"** with:
 - **Page chrome:** a cover image, an emoji icon, and a short description line.
@@ -155,7 +197,8 @@ Surfaces to capture:
   will offer a similar "customize your experience" settings page.
 
 ### Step 3: Write the output files
-Put everything under `docs/notion-reference/`:
+Put everything under `docs/notion-reference/`. Keep the capturers' `_raw/` notes too;
+the cloud session can use the extra detail.
 
 - **`README.md`**
   - an index of everything captured, with links to each screenshot
