@@ -33,23 +33,28 @@ need. Thoroughness matters more than speed. Measure things instead of eyeballing
   expanded unless a step says otherwise.
 
 ### How to run this: split the work across models
-Start this session on **Opus** (`/model opus`). You are the **orchestrator**. Do the
-thinking yourself, and hand the long, mechanical browser work to cheaper subagents using
-the Agent tool's `model` parameter.
+Start this session on **Opus** (`/model opus`). You are the **orchestrator**.
+
+**Quality comes first. Saving tokens comes second.** Experience on this project: Sonnet
+can burn many tokens going around in circles on a hard task that Opus then solves in one
+pass. So send Sonnet **only work that is truly mechanical and easy to verify**. Anything
+that needs judgment, or where a miss would hurt the redesign, goes to **Opus**, either in
+this session or as an Opus subagent (`model: "opus"`). When unsure, choose Opus.
 
 | Role | Model | Does |
 |---|---|---|
 | Orchestrator (you) | **Opus** | Plans the batches, writes each subagent's brief, reviews every batch for gaps, and writes the final files (`tokens.json`, `surfaces/*.md`, `preferences.md`, `checklist.md`) |
-| Builder | **Sonnet** | Step 1: builds the reference page and databases in Notion |
-| Capturers | **Sonnet** | Step 2: one subagent per surface group. Screenshots, `getComputedStyle` measurements, states, and behavior notes |
-| Checker | **Haiku** | Mechanical checks: the privacy scan (grep text for emails and names, list images to inspect), image file sizes, and that every file linked from the README exists |
+| Critical capturers | **Opus** | The surfaces that decide whether the clone feels like Notion: **table view (d)**, **table editing, property menus and panels (e)**, **row page, peek and view settings (h)**, and **settings and preferences (j)**. Also any batch escalated under rule 7. |
+| Builder | **Sonnet** | Step 1: builds the reference page and databases in Notion. This is clicking and typing, and easy to check. |
+| Simple capturers | **Sonnet** | The more straightforward groups: **shell and search (b)**, **page and blocks (c)**, **board and gallery (f)**, **list, calendar, timeline and chart (g)**, **empty states, menus and overlays (i)** |
+| Checker | **Haiku** | Mechanical checks only: the privacy scan (grep text for emails and names, list images to inspect), image file sizes, and that every file linked from the README exists. You, Opus, look at the flagged images yourself. |
 
 Rules for this setup:
 1. **Test first.** Before anything else, start one Sonnet subagent whose only job is to
    call a Claude in Chrome tool (for example, list the open tabs) and report back. If
    subagents **can't** reach the Chrome tools, stop using subagents for the browser.
-   Instead, tell me to switch with `/model sonnet` for Steps 1–2 and back with
-   `/model opus` for Step 3, and continue in this session.
+   Instead, do all the browser work yourself in this session, on **Opus**. Don't ask me
+   to switch to Sonnet; quality matters more here than tokens.
 2. **Run browser subagents one at a time, never in parallel.** They all drive the same
    Chrome window. Run them in the foreground (`run_in_background: false`).
 3. **Use small batches.** Suggested groups: (a) the build in Step 1; (b) the app shell and
@@ -70,7 +75,17 @@ Rules for this setup:
    property type, a measurement), send the same subagent back with a precise follow-up
    (SendMessage to continue it) rather than starting a new one. Move on only when the
    group is complete.
-7. **Opus writes the synthesis.** In Step 3, you write the final files yourself from the
+7. **Escalate quickly. Don't let Sonnet loop.** A Sonnet subagent gets **at most one**
+   follow-up. Escalate the batch to an **Opus** subagent (or do it yourself) at once if
+   any of these happen:
+   - its batch is still incomplete after that one follow-up
+   - its measurements look wrong or inconsistent (for example, values that contradict
+     the screenshot or the earlier spec)
+   - it reports being stuck, or it retries the same action more than twice
+   
+   Give the Opus subagent the raw file so far and the list of what's missing, so it
+   doesn't redo the finished parts.
+8. **Opus writes the synthesis.** In Step 3, you write the final files yourself from the
    raw notes. Don't delegate the synthesis or the checklist. Then run the Haiku checker,
    fix what it reports, and do Step 4.
 
