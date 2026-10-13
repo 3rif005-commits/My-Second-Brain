@@ -549,3 +549,7 @@ body {
 @keyframes sb-fade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 .sb-fade { animation: sb-fade 160ms ease-out; }
 @media (prefers-reduced-motion: reduce) { .sb-fade { animation: none; } }
+
+/* Kit motion (components/ui). */
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes tooltip-in { from { opacity: 0; } to { opacity: 1; } }

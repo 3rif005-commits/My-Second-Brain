@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import {
   DEFAULT_PREFERENCES,
   applyPreferences,
@@ -59,19 +60,20 @@ export function useToast() {
 function ToastStack({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: (id: number) => void }) {
   if (typeof document === "undefined" || toasts.length === 0) return null;
   return createPortal(
-    <div className="fixed bottom-20 right-4 z-[10000] flex flex-col gap-2 max-w-sm">
+    // Notion's toast: centred, 24px above the bottom, near-black in both themes,
+    // radius 8px, 14px text, sliding up over 0.27s (checklist #62-63).
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[1000000] flex flex-col items-center gap-2 px-4">
       {toasts.map((t) => (
         <div
           key={t.id}
-          role="alert"
-          className={`flex items-start gap-2 px-3.5 py-2.5 rounded-lg shadow-lg text-sm text-white ${
-            t.variant === "error" ? "bg-red-600" : "bg-gray-800"
-          }`}
+          role={t.variant === "error" ? "alert" : "status"}
+          className="pointer-events-auto flex max-w-md items-center gap-2.5 rounded-lg bg-surface-tooltip px-4 py-[11px] text-sm text-ink-on-tooltip shadow-tooltip animate-[toast-in_0.27s_ease-out]"
         >
+          {t.variant === "error" && <span aria-hidden className="size-2 shrink-0 rounded-full bg-ink-danger" />}
           <span className="flex-1">{t.message}</span>
           <button
             onClick={() => onDismiss(t.id)}
-            className="opacity-70 hover:opacity-100 shrink-0"
+            className="shrink-0 rounded px-1 text-ink-tooltip-hint hover:text-ink-on-tooltip"
             aria-label="Dismiss"
           >
             ✕
@@ -147,7 +149,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeContext.Provider value={{ resolvedTheme, setTheme }}>
       <PreferencesContext.Provider value={{ preferences, updatePreferences }}>
         <ToastContext.Provider value={{ showToast }}>
-          {children}
+          <TooltipProvider>{children}</TooltipProvider>
           <ToastStack toasts={toasts} onDismiss={dismissToast} />
         </ToastContext.Provider>
       </PreferencesContext.Provider>

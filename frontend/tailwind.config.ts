@@ -81,6 +81,8 @@ const config: Config = {
           disabled: "var(--c-text-disabled)",
           "on-accent": "var(--c-text-on-accent)",
           danger: "var(--c-text-danger)",
+          "on-tooltip": "var(--c-text-on-tooltip)",
+          "tooltip-hint": "var(--c-text-tooltip-hint)",
           icon: "var(--c-icon)",
           "icon-strong": "var(--c-icon-strong)",
           "icon-subtle": "var(--c-icon-subtle)",

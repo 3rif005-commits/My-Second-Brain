@@ -36,6 +36,8 @@
   --c-text-disabled: rgb(188, 186, 182);
   --c-text-on-accent: rgb(255, 255, 255);
   --c-text-danger: rgb(229, 100, 88);
+  --c-text-on-tooltip: rgb(240, 239, 237);
+  --c-text-tooltip-hint: rgb(173, 169, 163);
 
   /* icons */
   --c-icon: rgb(142, 139, 134);
@@ -176,6 +178,7 @@
   --c-bg-backdrop: rgba(15, 15, 15, 0.8);
   --c-bg-weekend: rgb(32, 32, 32);
   --c-bg-accent-chip: rgba(67, 155, 255, 0.24);
+  --c-bg-danger-soft: rgba(255, 104, 92, 0.24);
 
   --c-border: rgba(255, 255, 243, 0.082);
   --c-border-strong: rgba(255, 255, 235, 0.1);
