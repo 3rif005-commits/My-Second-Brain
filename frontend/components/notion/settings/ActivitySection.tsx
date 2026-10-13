@@ -11,7 +11,7 @@ const STATUS_WORD: Record<string, string> = {
 };
 const TONE: Record<string, string> = {
   succeeded: "text-emerald-700 dark:text-emerald-300", partial: "text-amber-700 dark:text-amber-300",
-  failed: "text-rose-700 dark:text-rose-300", paused: "text-gray-500", running: "text-indigo-600", queued: "text-gray-500",
+  failed: "text-rose-700 dark:text-rose-300", paused: "text-gray-500", running: "text-accent-600", queued: "text-gray-500",
 };
 
 function when(ts: string | null) {

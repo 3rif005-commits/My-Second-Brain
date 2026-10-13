@@ -67,12 +67,12 @@ export function StyleTab({ skill, reportDirty, onSkillChanged }: TabCtx) {
         aria-label="Your style" disabled={saved === null}
         className="w-full min-h-[220px] resize-y rounded-xl px-4 py-3 font-mono text-[12.5px] leading-relaxed
           bg-gray-50/80 dark:bg-white/[0.03] border border-gray-200/80 dark:border-white/10 outline-none
-          focus:border-indigo-300 text-gray-800 dark:text-gray-100 disabled:opacity-50" />
+          focus:border-accent-300 text-gray-800 dark:text-gray-100 disabled:opacity-50" />
       <div className="flex items-center gap-2">
         {canLearn && <button type="button" onClick={learn} disabled={learning}
           className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] ring-1 ring-gray-200
             dark:ring-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50">
-          <Sparkles size={13} className="text-indigo-500" />
+          <Sparkles size={13} className="text-accent-500" />
           {learning ? "Reading your edits…" : "Learn from my edits"}
         </button>}
         {error && <span className="text-[12px] text-red-500">{error}</span>}
@@ -84,7 +84,7 @@ export function StyleTab({ skill, reportDirty, onSkillChanged }: TabCtx) {
           </button>
         )}
         <button type="button" onClick={save} disabled={!dirty || busy}
-          className="h-8 px-3.5 rounded-lg text-[12.5px] font-medium bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40">
+          className="h-8 px-3.5 rounded-lg text-[12.5px] font-medium bg-accent-600 text-white hover:bg-accent-500 disabled:opacity-40">
           {busy ? "Saving…" : "Save"}
         </button>
       </div>
@@ -102,8 +102,8 @@ export function StyleTab({ skill, reportDirty, onSkillChanged }: TabCtx) {
                   {s.evidence && <p className="text-[11.5px] text-gray-500 dark:text-gray-400">{s.evidence}</p>}
                 </div>
                 <button type="button" disabled={added} onClick={() => setText((t) => withPreference(t, s.preference))}
-                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[12px] ring-1 ring-indigo-200
-                    dark:ring-indigo-500/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 disabled:opacity-40">
+                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[12px] ring-1 ring-accent-200
+                    dark:ring-accent-500/40 text-accent-700 dark:text-accent-300 hover:bg-accent-50 dark:hover:bg-accent-500/10 disabled:opacity-40">
                   <Plus size={12} /> {added ? "Added" : "Add"}
                 </button>
               </div>

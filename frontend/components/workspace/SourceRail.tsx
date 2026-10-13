@@ -95,9 +95,9 @@ export function SourceRail({
             disabled={busy}
             title="Add a source"
             className="inline-flex items-center gap-1 h-7 pl-1.5 pr-2.5 rounded-full text-[11.5px] font-medium
-              text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300
-              hover:bg-indigo-500/10 disabled:opacity-40 transition-colors
-              focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+              text-gray-500 dark:text-gray-400 hover:text-accent-600 dark:hover:text-accent-300
+              hover:bg-accent-500/10 disabled:opacity-40 transition-colors
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400"
           >
             {busy
               ? <span className="w-3.5 h-3.5 m-[1px] rounded-full border-2 border-current border-t-transparent animate-spin" />
@@ -111,7 +111,7 @@ export function SourceRail({
                   text-gray-700 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                 onClick={() => { setShowAdd(false); fileInputRef.current?.click(); }}
               >
-                <span className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-lg bg-accent-500/10 text-accent-500 flex items-center justify-center shrink-0">
                   <Upload size={14} />
                 </span>
                 <span className="min-w-0">
@@ -124,7 +124,7 @@ export function SourceRail({
                   text-gray-700 dark:text-gray-200 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                 onClick={() => { setShowAdd(false); setShowUrl(true); }}
               >
-                <span className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-lg bg-accent-500/10 text-accent-500 flex items-center justify-center shrink-0">
                   <Link2 size={14} />
                 </span>
                 <span className="min-w-0">
@@ -162,15 +162,15 @@ export function SourceRail({
               className={`group relative flex items-center gap-2.5 h-9 pl-2 pr-1.5 rounded-xl cursor-pointer
                 overflow-hidden transition-all duration-150 ${
                 active
-                  ? "bg-indigo-500/[0.09] ring-1 ring-inset ring-indigo-500/20"
+                  ? "bg-accent-500/[0.09] ring-1 ring-inset ring-accent-500/20"
                   : "hover:bg-black/[0.035] dark:hover:bg-white/[0.05]"
-              } focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400`}
+              } focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400`}
             >
               <KindTile source={s} />
               <span
                 className={`flex-1 min-w-0 truncate text-[12.5px] ${
                   active
-                    ? "text-indigo-700 dark:text-indigo-200 font-medium"
+                    ? "text-accent-700 dark:text-accent-200 font-medium"
                     : "text-gray-700 dark:text-gray-300"
                 }`}
                 title={s.error ? `Failed: ${s.error}` : s.title}
@@ -197,7 +197,7 @@ export function SourceRail({
                   className={`shrink-0 w-6 h-6 flex items-center justify-center rounded-lg transition-colors ${
                     s.status === "failed"
                       ? "text-red-400 hover:text-red-600 hover:bg-red-500/10"
-                      : "text-gray-400 hover:text-indigo-500 hover:bg-indigo-500/10"}`}
+                      : "text-gray-400 hover:text-accent-500 hover:bg-accent-500/10"}`}
                 >
                   <RefreshCw size={12} />
                 </button>

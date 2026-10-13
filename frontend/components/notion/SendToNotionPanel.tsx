@@ -238,7 +238,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                   {TAB_ORDER.filter((t) => byTab[t].length).map((t) => (
                     <button key={t} role="tab" aria-selected={shownTab === t} onClick={() => setTab(t)}
                       className={`h-7 px-2.5 rounded-full text-[12px] border transition-colors ${shownTab === t
-                        ? "bg-indigo-600 text-white border-indigo-600" : "border-[color:var(--menu-divider)] hover:bg-[var(--menu-row-hover-bg)]"}`}>
+                        ? "bg-accent-600 text-white border-accent-600" : "border-[color:var(--menu-divider)] hover:bg-[var(--menu-row-hover-bg)]"}`}>
                       {TAB_LABEL[t]} {byTab[t].length}
                     </button>
                   ))}
@@ -263,7 +263,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                 {released.length > 0 && <p className="text-[12px] text-amber-700 dark:text-amber-300">Released for this send only.</p>}
               </section>
               {infoShown && (
-                <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] leading-snug bg-sky-50 text-sky-900 dark:bg-sky-500/10 dark:text-sky-200" data-testid="notion-info">
+                <div className="flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] leading-snug bg-accent-50 text-accent-900 dark:bg-accent-500/10 dark:text-accent-200" data-testid="notion-info">
                   <Info size={14} className="mt-px shrink-0" />
                   <span className="flex-1">Notion gets a copy. Changes made in Notion are never overwritten without asking you first.</span>
                   <button aria-label="Dismiss" className="opacity-60 hover:opacity-100"
@@ -279,7 +279,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
               {!run && (
                 <>
                   <div className="h-1 rounded-full bg-[var(--menu-field-bg)] overflow-hidden" aria-hidden>
-                    <div className="h-full w-1/3 rounded-full bg-indigo-600 ws-indeterminate" />
+                    <div className="h-full w-1/3 rounded-full bg-accent-600 ws-indeterminate" />
                   </div>
                   {slowSend && <p className="text-[12px] opacity-60 sb-fade">Still working. A first send also sets up its folders in Notion, which takes a few seconds longer.</p>}
                 </>
@@ -287,7 +287,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
               {run && (
                 <>
                   <div className="h-1.5 rounded bg-[var(--menu-field-bg)] overflow-hidden">
-                    <div className="h-full bg-indigo-600 transition-all" style={{ width: `${(100 * progress) / Math.max(run.items.length, 1)}%` }} />
+                    <div className="h-full bg-accent-600 transition-all" style={{ width: `${(100 * progress) / Math.max(run.items.length, 1)}%` }} />
                   </div>
                   <ul className="space-y-1 text-[13px]">
                     {run.items.map((i) => (
@@ -321,7 +321,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                     <p role="alert" className="rounded-md px-3 py-2 text-[13px] bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">{single.message}</p>
                     {GONE.test(single.message ?? "") && (
                       <button onClick={() => createAgain(single.local_id)}
-                        className="flex h-9 w-full items-center justify-center rounded-lg text-[13px] font-medium bg-indigo-600 text-white hover:bg-indigo-700">
+                        className="flex h-9 w-full items-center justify-center rounded-lg text-[13px] font-medium bg-accent-600 text-white hover:bg-accent-700">
                         Create it again in Notion
                       </button>
                     )}
@@ -332,7 +332,7 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
               )}
               {single && urlOf(single.local_id) && single.status === "done" && (
                 <a href={urlOf(single.local_id)!} target="_blank" rel="noreferrer"
-                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg text-[13px] font-medium bg-indigo-600 text-white hover:bg-indigo-700">
+                  className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg text-[13px] font-medium bg-accent-600 text-white hover:bg-accent-700">
                   Open in Notion <ExternalLink size={13} />
                 </a>
               )}
@@ -344,11 +344,11 @@ export function SendToNotionPanel({ scope, title, onClose, onSent, onOpenSetting
                       <span className="min-w-0 flex-1"><span className="font-medium">{i.title || i.local_id}</span>
                         {i.status !== "done" && i.message ? <span className="block opacity-70">{i.message}</span> : null}
                         {i.status !== "done" && GONE.test(i.message ?? "") && (
-                          <button className="mt-1 underline text-indigo-600 dark:text-indigo-400" onClick={() => createAgain(i.local_id)}>Create it again</button>
+                          <button className="mt-1 underline text-accent-600 dark:text-accent-400" onClick={() => createAgain(i.local_id)}>Create it again</button>
                         )}</span>
                       {i.status === "done" && urlOf(i.local_id) && (
                         <a href={urlOf(i.local_id)!} target="_blank" rel="noreferrer" aria-label={`Open ${i.title} in Notion`}
-                          className="text-indigo-600 dark:text-indigo-400"><ExternalLink size={13} /></a>
+                          className="text-accent-600 dark:text-accent-400"><ExternalLink size={13} /></a>
                       )}
                     </li>
                   ))}

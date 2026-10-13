@@ -1,7 +1,7 @@
 {
-  "offPaletteColour": 407,
-  "arbitraryColour": 8,
-  "nativeSelect": 76,
+  "offPaletteColour": 0,
+  "arbitraryColour": 0,
+  "nativeSelect": 75,
   "nativeCheckbox": 22,
-  "nativeDialog": 1
+  "nativeDialog": 0
 }

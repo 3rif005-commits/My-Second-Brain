@@ -136,7 +136,7 @@ export function IngestStreamDialog({ source, onClose }: Props) {
             <p className="text-xs text-gray-600 whitespace-pre-wrap leading-relaxed">{preview}</p>
           ) : phase === "streaming" ? (
             <div className="flex items-center gap-2 text-sm text-gray-400">
-              <div className="h-4 w-4 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
+              <div className="h-4 w-4 rounded-full border-2 border-accent-400 border-t-transparent animate-spin" />
               Extracting and generating note…
             </div>
           ) : (
@@ -147,7 +147,7 @@ export function IngestStreamDialog({ source, onClose }: Props) {
         {/* Progress bar */}
         {phase === "streaming" && (
           <div className="h-1 bg-gray-100">
-            <div className="h-full bg-indigo-500 animate-pulse" style={{ width: "60%" }} />
+            <div className="h-full bg-accent-500 animate-pulse" style={{ width: "60%" }} />
           </div>
         )}
       </div>

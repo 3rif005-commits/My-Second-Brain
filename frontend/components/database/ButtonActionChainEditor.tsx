@@ -570,7 +570,7 @@ export function ButtonActionChainEditor({ actions, allowed, properties, dataSour
           {renderActionForm(action, index)}
         </div>
       ))}
-      <button type="button" onClick={handleAdd} className="text-xs px-2.5 py-1 rounded bg-indigo-600 text-white">
+      <button type="button" onClick={handleAdd} className="text-xs px-2.5 py-1 rounded bg-accent-600 text-white">
         + Add action
       </button>
     </div>

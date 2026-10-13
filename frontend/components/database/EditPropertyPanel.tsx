@@ -240,7 +240,7 @@ function ShowAsBlock({
             onClick={() => selectShowAs(card.id)}
             className={`flex h-12 flex-col items-center justify-center gap-1 rounded border ${
               showAs === card.id
-                ? "border-brand text-brand"
+                ? "border-accent text-accent"
                 : "border-menu-divider text-menu-disabled hover:bg-menu-hover"
             }`}
           >

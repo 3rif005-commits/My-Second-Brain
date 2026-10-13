@@ -254,7 +254,7 @@ export function InlineDatabaseTable({ databaseId, viewId }: { databaseId: string
           // since changed to something else.
           <div className="px-3 py-4 text-sm text-gray-400 dark:text-gray-500">
             This view isn&apos;t supported inline yet —{" "}
-            <a href={href} className="text-indigo-500 hover:underline">
+            <a href={href} className="text-accent-500 hover:underline">
               open the full database
             </a>
             .

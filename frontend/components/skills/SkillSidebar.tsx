@@ -14,7 +14,7 @@ export function SourceMark({ source }: { source: Skill["source"] }) {
   return (
     <span className={`shrink-0 text-[10.5px] px-1.5 py-px rounded-full ${source === "edited"
       ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
-      : "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300"}`}>
+      : "bg-accent-100 text-accent-700 dark:bg-accent-500/15 dark:text-accent-300"}`}>
       {source === "edited" ? "Edited" : "Yours"}
     </span>
   );
@@ -38,12 +38,12 @@ export function SkillSidebar({ skills, selected, query, onQuery, onSelect, onNew
           <h1 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100">Skills</h1>
           <button type="button" onClick={onNew}
             className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[12.5px] font-medium
-              bg-indigo-600 text-white hover:bg-indigo-500 transition-colors">
+              bg-accent-600 text-white hover:bg-accent-500 transition-colors">
             <Plus size={13} strokeWidth={2.5} /> New
           </button>
         </div>
         <label className="flex items-center gap-2 h-8 px-2.5 rounded-lg bg-gray-100/80 dark:bg-white/5
-          focus-within:ring-1 focus-within:ring-indigo-300">
+          focus-within:ring-1 focus-within:ring-accent-300">
           <Search size={13} className="text-gray-400 shrink-0" />
           <input value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Search skills"
             aria-label="Search skills"
@@ -74,7 +74,7 @@ export function SkillSidebar({ skills, selected, query, onQuery, onSelect, onNew
                     <button type="button" aria-current={s.name === selected ? "page" : undefined}
                       onClick={() => onSelect(s.name)}
                       className={`w-full flex items-center gap-2 pl-2 pr-9 h-8 rounded-md text-left select-none outline-none
-                        focus-visible:ring-1 focus-visible:ring-indigo-300 ${s.name === selected
+                        focus-visible:ring-1 focus-visible:ring-accent-300 ${s.name === selected
                         ? "bg-gray-200/70 dark:bg-white/10 text-gray-900 dark:text-gray-100"
                         : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5"}`}>
                       <span className="w-5 text-center text-[15px] leading-none shrink-0" aria-hidden>{s.icon ?? g.defaultIcon}</span>

@@ -46,7 +46,7 @@ export function IngestDropzone({ onSubmit, disabled }: IngestDropzoneProps) {
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
         className={`flex flex-col items-center justify-center gap-2 h-36 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
-          dragging ? "border-brand bg-brand-50" : "border-gray-300 hover:border-brand hover:bg-gray-50"
+          dragging ? "border-accent bg-accent-50" : "border-gray-300 hover:border-accent hover:bg-gray-50"
         } ${disabled ? "opacity-50 pointer-events-none" : ""}`}
       >
         <span className="text-2xl">📎</span>
@@ -71,12 +71,12 @@ export function IngestDropzone({ onSubmit, disabled }: IngestDropzoneProps) {
           onKeyDown={(e) => e.key === "Enter" && handleUrlSubmit()}
           placeholder="YouTube URL or article link"
           disabled={disabled}
-          className="flex-1 px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent disabled:opacity-50"
+          className="flex-1 px-3 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent disabled:opacity-50"
         />
         <button
           onClick={handleUrlSubmit}
           disabled={disabled || !url.trim()}
-          className="px-4 py-2 text-sm font-medium bg-brand text-white rounded-lg hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-2 text-sm font-medium bg-accent text-white rounded-lg hover:bg-accent-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           Import
         </button>

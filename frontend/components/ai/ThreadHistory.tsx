@@ -105,7 +105,7 @@ export function ThreadHistory({ activeThreadId, onSelect, onClose, onNew }: Prop
             <button
               onClick={onNew}
               aria-label="New thread"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-accent-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
               <SquarePen size={14} />
             </button>
@@ -178,14 +178,14 @@ function ThreadItem({ thread, active, onSelect, onPin, onRename, onRemove }: Ite
         "group w-full flex items-center gap-2 px-3 py-2 text-left rounded-lg mx-1 transition-colors",
         "w-[calc(100%-8px)]",
         active
-          ? "bg-indigo-50 dark:bg-indigo-950/40"
+          ? "bg-accent-50 dark:bg-accent-950/40"
           : "hover:bg-gray-100 dark:hover:bg-gray-800/60",
       ].join(" ")}
     >
       {thread.pinned && (
         <span className="text-amber-400 shrink-0 text-xs">📌</span>
       )}
-      <span className={`flex-1 truncate text-sm ${active ? "text-indigo-700 dark:text-indigo-300 font-medium" : "text-gray-700 dark:text-gray-300"}`}>
+      <span className={`flex-1 truncate text-sm ${active ? "text-accent-700 dark:text-accent-300 font-medium" : "text-gray-700 dark:text-gray-300"}`}>
         {thread.title ?? "Untitled"}
       </span>
       {/* Actions — only visible on hover */}
@@ -202,7 +202,7 @@ function ThreadItem({ thread, active, onSelect, onPin, onRename, onRemove }: Ite
           role="button"
           onClick={onRename}
           title="Rename"
-          className="p-1 rounded-md text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
+          className="p-1 rounded-md text-gray-400 hover:text-accent-500 hover:bg-accent-50 dark:hover:bg-accent-950/30 transition-colors"
         >
           <Pencil size={12} />
         </span>

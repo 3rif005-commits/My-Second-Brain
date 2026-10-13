@@ -74,7 +74,7 @@ export function SelectValue<T extends string>({ value, options, onChange, locked
             <button key={o.value} type="button" role="option" aria-selected={o.value === value}
               onClick={() => { onChange(o.value); setOpen(false); }}
               className="w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5">
-              <span className="w-4 pt-0.5 shrink-0">{o.value === value && <Check size={13} className="text-indigo-500" />}</span>
+              <span className="w-4 pt-0.5 shrink-0">{o.value === value && <Check size={13} className="text-accent-500" />}</span>
               <span>
                 <span className="block text-[13px] text-gray-800 dark:text-gray-100">{o.label}</span>
                 {o.hint && <span className="block text-[11.5px] text-gray-500 dark:text-gray-400">{o.hint}</span>}
@@ -104,7 +104,7 @@ export function GrowingText({ value, onChange, placeholder, label }: {
       className="w-full -mx-1.5 px-1.5 py-1 rounded-md resize-none overflow-hidden bg-transparent text-[13px]
         leading-relaxed text-gray-800 dark:text-gray-100 placeholder:text-gray-400 outline-none
         hover:bg-gray-100/70 dark:hover:bg-white/5 focus:bg-white dark:focus:bg-white/5
-        focus:ring-1 focus:ring-indigo-300 dark:focus:ring-indigo-500/40 transition-colors" />
+        focus:ring-1 focus:ring-accent-300 dark:focus:ring-accent-500/40 transition-colors" />
   );
 }
 

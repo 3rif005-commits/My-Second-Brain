@@ -52,9 +52,9 @@ export function InstructionsTab({ policy, onChange, targets, defaultInstructions
         <div className="mt-2 space-y-1.5" role="radiogroup" aria-label="Brain">
           {BRAINS.map((b) => (
             <label key={b.value} className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer ${
-              policy.brain.kind === b.value ? "border-indigo-300 bg-indigo-50/50 dark:border-indigo-800 dark:bg-indigo-950/20"
+              policy.brain.kind === b.value ? "border-accent-300 bg-accent-50/50 dark:border-accent-800 dark:bg-accent-950/20"
                 : "border-gray-200 dark:border-gray-700"}`}>
-              <input type="radio" name="brain" className="mt-1 accent-indigo-600" checked={policy.brain.kind === b.value}
+              <input type="radio" name="brain" className="mt-1 accent-accent-600" checked={policy.brain.kind === b.value}
                 onChange={() => setBrain({ kind: b.value })} />
               <span>
                 <span className="block text-[13px] font-medium text-gray-800 dark:text-gray-100">{b.label}</span>
@@ -91,7 +91,7 @@ export function InstructionsTab({ policy, onChange, targets, defaultInstructions
           <h2 id="instr-h" className="text-[14px] font-semibold text-gray-800 dark:text-gray-100">Instructions</h2>
           <span className="flex-1" />
           <button type="button" onClick={() => onChange({ ...policy, instructions: defaultInstructions })}
-            className="inline-flex items-center gap-1 text-[12px] text-gray-500 hover:text-indigo-600">
+            className="inline-flex items-center gap-1 text-[12px] text-gray-500 hover:text-accent-600">
             <RotateCcw size={11} /> Default
           </button>
         </div>

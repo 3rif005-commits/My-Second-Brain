@@ -123,7 +123,7 @@ export function FormulaEditor({
         rows={4}
         spellCheck={false}
         placeholder='prop("Price") * 2'
-        className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5 font-mono text-sm outline-none focus:border-indigo-400 dark:focus:border-indigo-500"
+        className="w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5 font-mono text-sm outline-none focus:border-accent-400 dark:focus:border-accent-500"
       />
       <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
         {validating && <span>Checking…</span>}

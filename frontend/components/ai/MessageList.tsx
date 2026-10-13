@@ -60,7 +60,7 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
         if (item.kind === "user") {
           return (
             <div key={item.id} className="flex justify-end">
-              <div className="max-w-[84%] bg-indigo-600 text-white rounded-2xl rounded-br-sm px-3.5 py-2.5 text-sm leading-relaxed shadow-sm">
+              <div className="max-w-[84%] bg-accent-600 text-white rounded-2xl rounded-br-sm px-3.5 py-2.5 text-sm leading-relaxed shadow-sm">
                 <p className="whitespace-pre-wrap">{item.content}</p>
               </div>
             </div>
@@ -111,8 +111,8 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
         return (
           <div key={item.id} className="flex gap-2.5 items-start">
             {/* Avatar */}
-            <div className="mt-0.5 w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-sm">
-              <Sparkles size={11} className="text-white" />
+            <div className="mt-0.5 w-6 h-6 rounded-full bg-surface-chip text-ink flex items-center justify-center shrink-0">
+              <Sparkles size={12} className="text-ink-icon-strong" />
             </div>
 
             {/* Message card */}
@@ -124,7 +124,7 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
                   : <Markdown>{item.citations?.length ? resolveCitations(item.content, item.citations) : item.content}</Markdown>}
               </div>
               {item.streaming && (
-                <span className="inline-block w-0.5 h-[1em] bg-indigo-400 animate-pulse ml-0.5 align-middle rounded-full" />
+                <span className="inline-block w-0.5 h-[1em] bg-accent-400 animate-pulse ml-0.5 align-middle rounded-full" />
               )}
               {item.route && (
                 <RouteBadge route={item.route} busy={busy}

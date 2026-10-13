@@ -58,12 +58,12 @@ const components: any = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   code: ({ inline, className, children, ...props }: any) =>
     inline ? (
-      <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[13px] font-mono text-indigo-600 dark:text-indigo-300" {...props}>{children}</code>
+      <code className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-[13px] font-mono text-accent-600 dark:text-accent-300" {...props}>{children}</code>
     ) : (
       <code className={className} {...props}>{children}</code>
     ),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  pre: ({ children }: any) => <pre className="my-3 p-3 rounded-lg bg-slate-900 text-slate-100 text-[13px] overflow-x-auto">{children}</pre>,
+  pre: ({ children }: any) => <pre className="my-3 p-3 rounded-lg bg-gray-900 text-gray-100 text-[13px] overflow-x-auto">{children}</pre>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   table: ({ children }: any) => <table className="my-3 border-collapse text-sm w-full">{children}</table>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -71,10 +71,10 @@ const components: any = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   td: ({ children }: any) => <td className="border border-gray-300 dark:border-gray-700 px-2 py-1">{children}</td>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  blockquote: ({ children }: any) => <blockquote className="my-2 border-l-2 border-indigo-300 pl-3 italic text-gray-600 dark:text-gray-400">{children}</blockquote>,
+  blockquote: ({ children }: any) => <blockquote className="my-2 border-l-2 border-accent-300 pl-3 italic text-gray-600 dark:text-gray-400">{children}</blockquote>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   a: ({ href, children }: any) => (
-    <a href={href} className="text-indigo-600 dark:text-indigo-400 hover:underline">{children}</a>
+    <a href={href} className="text-accent-600 dark:text-accent-400 hover:underline">{children}</a>
   ),
 };
 

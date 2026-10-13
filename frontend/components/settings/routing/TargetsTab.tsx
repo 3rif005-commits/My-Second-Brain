@@ -51,7 +51,7 @@ export function TargetsTab({ policy, onChange, targets, help }: Props) {
               </span>
               <span className="flex-1 min-w-[10rem] text-[12px] text-gray-500 dark:text-gray-400">{help[slot]}</span>
               <button type="button" onClick={() => void ping(slot)}
-                className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-[12px] text-gray-500 hover:text-indigo-600
+                className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-[12px] text-gray-500 hover:text-accent-600
                   hover:bg-gray-50 dark:hover:bg-white/5" title="Send a tiny real request through this role">
                 <Zap size={12} /> Test
               </button>
@@ -89,7 +89,7 @@ export function TargetsTab({ policy, onChange, targets, help }: Props) {
         );
       })}
       <p className="text-[12px] text-gray-400">
-        API keys live in <a href="/brain/settings/ai-providers" className="text-indigo-600 hover:underline dark:text-indigo-400">AI providers</a>.
+        API keys live in <a href="/brain/settings/ai-providers" className="text-accent-600 hover:underline dark:text-accent-400">AI providers</a>.
       </p>
     </div>
   );

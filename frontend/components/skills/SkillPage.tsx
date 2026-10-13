@@ -59,7 +59,7 @@ export function SkillPage({
               title={`Open the AI panel with /${skill.name}`}
               className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[12.5px] text-gray-600
                 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors">
-              <Sparkles size={13} className="text-indigo-500" /> Try it
+              <Sparkles size={13} className="text-accent-500" /> Try it
             </button>
           )}
           <SkillMenu skill={skill} onAction={onAction} />
@@ -123,7 +123,7 @@ export function SkillPage({
               </button>
               <button type="button" onClick={onSave} disabled={saving || !dirty || !draft.description.trim()}
                 title="Save (⌘S)"
-                className="h-8 px-4 rounded-lg text-[13px] font-medium bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40">
+                className="h-8 px-4 rounded-lg text-[13px] font-medium bg-accent-600 text-white hover:bg-accent-500 disabled:opacity-40">
                 {saving ? "Saving…" : "Save"} <span className="ml-1 text-[11px] opacity-70">⌘S</span>
               </button>
             </div>

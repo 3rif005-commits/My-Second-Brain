@@ -149,7 +149,7 @@ const WEEKDAYS: { value: number; label: string }[] = [
 const fieldClass =
   "text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100";
 const toggleBtnClass = (active: boolean) =>
-  `text-[11px] px-2 py-0.5 rounded ${active ? "bg-indigo-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"}`;
+  `text-[11px] px-2 py-0.5 rounded ${active ? "bg-accent-600 text-white" : "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"}`;
 
 /** Toggles between a property's own cell editor (literal) and a
  * `FormulaEditor` (formula) — task-41-brief.md's reference facts: every
@@ -898,7 +898,7 @@ export function AutomationEditor({ automation, properties, dataSourceId, onUpdat
           onClick={handleAddTrigger}
           disabled={hasScheduleTrigger}
           title={hasScheduleTrigger ? "A scheduled trigger can't be combined with other triggers" : undefined}
-          className="text-xs px-2.5 py-1 rounded bg-indigo-600 text-white disabled:opacity-40"
+          className="text-xs px-2.5 py-1 rounded bg-accent-600 text-white disabled:opacity-40"
         >
           {triggers.length === 0 ? "+ Add trigger" : "+ Add another trigger"}
         </button>
@@ -956,7 +956,7 @@ export function AutomationEditor({ automation, properties, dataSourceId, onUpdat
             </div>
           ))}
         </div>
-        <button type="button" onClick={handleAddAction} className="text-xs px-2.5 py-1 rounded bg-indigo-600 text-white">
+        <button type="button" onClick={handleAddAction} className="text-xs px-2.5 py-1 rounded bg-accent-600 text-white">
           + Add action
         </button>
       </section>

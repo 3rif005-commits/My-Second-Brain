@@ -17,6 +17,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
       <input
         ref={ref}
         type="checkbox"
+        data-kit
         checked={checked}
         disabled={disabled}
         aria-label={label}

@@ -41,7 +41,7 @@ export default function BackgroundJobsSettings() {
         <div>
           <h1 className="text-[26px] font-semibold leading-8 text-ink">Background jobs</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Jobs you queue with Run later. What ran is on the <Link href="/brain/activity" className="text-indigo-600 hover:underline">Activity</Link> page.
+            Jobs you queue with Run later. What ran is on the <Link href="/brain/activity" className="text-accent-600 hover:underline">Activity</Link> page.
           </p>
         </div>
 

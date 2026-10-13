@@ -9,7 +9,7 @@ interface Props {
 export function InteractiveFrame({ title = "Interactive", html, height = 300 }: Props) {
   return (
     <div className="my-4 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold">
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-accent-600 text-white text-xs font-semibold">
         <span>⚡</span><span>{title}</span>
       </div>
       <iframe

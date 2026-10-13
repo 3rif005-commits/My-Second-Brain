@@ -110,8 +110,8 @@ export function NewSkillDialog({ open, taken, start, onCancel, onCreate }: {
                   {items.map((t) => (
                     <button key={t.id} type="button" onClick={() => pick(t)} data-testid={`template-${t.id}`}
                       className="text-left p-3 rounded-xl border border-gray-200 dark:border-gray-800
-                        hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:bg-indigo-50/40
-                        dark:hover:bg-indigo-500/5 transition-colors">
+                        hover:border-accent-300 dark:hover:border-accent-500/50 hover:bg-accent-50/40
+                        dark:hover:bg-accent-500/5 transition-colors">
                       <span className="block text-[22px] leading-none mb-2">{t.icon}</span>
                       <span className="block text-[13px] font-medium text-gray-900 dark:text-gray-100">{t.title}</span>
                       <span className="block text-[11.5px] leading-snug text-gray-500 dark:text-gray-400 mt-0.5">{t.blurb}</span>
@@ -139,7 +139,7 @@ export function NewSkillDialog({ open, taken, start, onCancel, onCreate }: {
               <input value={name} aria-label="Command"
                 onChange={(e) => { setName(e.target.value.toLowerCase()); setNameTouched(true); }}
                 className="flex-1 font-mono bg-gray-50 dark:bg-white/5 rounded-md px-2 h-7 outline-none
-                  border border-transparent focus:border-indigo-300 text-gray-800 dark:text-gray-100" />
+                  border border-transparent focus:border-accent-300 text-gray-800 dark:text-gray-100" />
             </div>
             <div className="flex items-center gap-2 text-[12.5px]">
               <span className="text-gray-500 w-24 shrink-0">Runs in</span>
@@ -153,7 +153,7 @@ export function NewSkillDialog({ open, taken, start, onCancel, onCreate }: {
                 onChange={(e) => setDraft({ ...draft, description: e.target.value })}
                 placeholder="Write likely exam questions, with model answers, from the note's sources."
                 className="w-full rounded-lg px-3 py-2 bg-gray-50 dark:bg-white/5 outline-none resize-none
-                  border border-transparent focus:border-indigo-300 text-gray-800 dark:text-gray-100" />
+                  border border-transparent focus:border-accent-300 text-gray-800 dark:text-gray-100" />
             </div>
             {(name && problem) && <p className="text-[12px] text-amber-600">{problem}</p>}
             {error && <p className="text-[12px] text-red-500">{error}</p>}
@@ -163,7 +163,7 @@ export function NewSkillDialog({ open, taken, start, onCancel, onCreate }: {
                 Cancel
               </button>
               <button type="button" onClick={create} disabled={busy || !!problem || descriptionMissing}
-                className="h-8 px-4 rounded-lg text-[13px] font-medium bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40">
+                className="h-8 px-4 rounded-lg text-[13px] font-medium bg-accent-600 text-white hover:bg-accent-500 disabled:opacity-40">
                 {busy ? "Creating…" : "Create skill"}
               </button>
             </div>

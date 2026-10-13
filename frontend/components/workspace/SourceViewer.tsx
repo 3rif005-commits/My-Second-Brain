@@ -46,7 +46,7 @@ function Spinner({ tone = "indigo" }: { tone?: "indigo" | "gray" }) {
   return (
     <span
       className={`w-6 h-6 rounded-full border-2 border-t-transparent animate-spin ${
-        tone === "indigo" ? "border-indigo-400" : "border-gray-300 dark:border-gray-600"
+        tone === "indigo" ? "border-accent-400" : "border-gray-300 dark:border-gray-600"
       }`}
     />
   );

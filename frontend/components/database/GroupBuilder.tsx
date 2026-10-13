@@ -334,7 +334,7 @@ function GroupStageTwo({ properties, groupBy, groups, onSetGroupBy, onSelectProp
           aria-checked={groupBy.hide_empty_groups ?? false}
           aria-label="Hide empty groups"
           onClick={() => patchGroupBy({ hide_empty_groups: !groupBy.hide_empty_groups })}
-          className={`h-3.5 w-6 rounded-full ${groupBy.hide_empty_groups ? "bg-brand" : "bg-menu-divider"}`}
+          className={`h-3.5 w-6 rounded-full ${groupBy.hide_empty_groups ? "bg-accent" : "bg-menu-divider"}`}
         />
       </div>
       <div role="separator" className="my-1 h-px bg-menu-divider" />

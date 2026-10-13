@@ -382,9 +382,9 @@ export function NotePane({
                   className="group shrink-0 inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full
                     text-[11px] font-medium tabular-nums text-gray-600 dark:text-gray-300
                     bg-gray-100/80 dark:bg-white/[0.06] ring-1 ring-transparent
-                    hover:ring-indigo-400/40 hover:text-indigo-600 dark:hover:text-indigo-300
+                    hover:ring-accent-400/40 hover:text-accent-600 dark:hover:text-accent-300
                     hover:-translate-y-px transition-all duration-150
-                    focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400"
                 >
                   <span
                     className="w-1.5 h-1.5 rounded-full shrink-0 transition-transform duration-150 group-hover:scale-125"
@@ -401,9 +401,9 @@ export function NotePane({
               ? "Following the source: the note scrolls as the source plays"
               : "Not following the source"}
             className={`shrink-0 inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-full text-[11px]
-              font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
+              font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 ${
               syncOn
-                ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 ring-1 ring-indigo-500/25"
+                ? "bg-accent-500/10 text-accent-600 dark:text-accent-300 ring-1 ring-accent-500/25"
                 : "text-gray-400 ring-1 ring-gray-200 dark:ring-white/10 hover:text-gray-600 dark:hover:text-gray-300"
             }`}
           >

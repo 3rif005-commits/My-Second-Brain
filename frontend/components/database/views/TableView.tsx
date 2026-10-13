@@ -1416,6 +1416,15 @@ export function TableView({
               </td>
             </tr>
           )}
+          {/* Notion's empty database: no message, just blank rows under the header
+            * so the table reads as a table (menus-overlays.md §10). */}
+          {rows.length === 0 &&
+            Array.from({ length: 4 }, (_, i) => (
+              <tr key={`placeholder-${i}`} aria-hidden>
+                {editable && <td />}
+                <td colSpan={Math.max(columnCount - (editable ? 1 : 0), 1)} className="h-[37px] border-b border-line" />
+              </tr>
+            ))}
         </tbody>
         {footerRow()}
       </table>

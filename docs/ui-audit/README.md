@@ -1,6 +1,7 @@
 # UI audit and redesign spec: My Second Brain → Notion look
 
-**Status: draft for approval.** Nothing in the app has been changed yet.
+**Status: built.** The decisions in §5 were approved with the recommended options, and
+all seven phases of §4.8 are done (see §6 for the result, what changed and what is left).
 
 - **What it compares:** the app on `feat/ai-harness` against the measured Notion reference in
   [`docs/notion-reference/`](../notion-reference/README.md) (tokens, 331-item checklist, 280 screenshots).
@@ -298,3 +299,46 @@ Each phase is one PR on top of `feat/ai-harness`, with before and after compare 
    to Notion's muted block colors? *Recommendation: yes. The meaning stays and the look gets calmer.*
 6. **Fixture data for real testing:** to run the parity test against a real database (not canned data),
    add `DATABASE_URL` (the Supabase pooler string) to this cloud environment's secrets.
+
+## 6. Result (after the build)
+
+**Decisions taken (§5):** the 2026 sidebar; Settings as a modal (URLs kept as deep
+links); the logo and name only in the workspace switcher, indigo kept only as an
+accent choice; ⌘K opens quick find and ⌘J the AI panel; the ingest colours mapped to
+Notion's muted block palette. (`DATABASE_URL` is still not set in the cloud
+environment, so the database screens were again checked against the fixture.)
+
+| Phase | Commit | What changed |
+|---|---|---|
+| 1 Tokens | `df64f91` | `app/tokens.css` (measured light/dark tokens, accent presets, contrast, density); gray/slate → Notion's warm scale, indigo/violet/brand → the accent; system font; theme + preferences layer with no flash; Ctrl/⌘+Shift+L |
+| 2 Kit | `abe8447` | `components/ui`: Button/IconButton, Input, Toggle, Checkbox, Select, Tag, Tabs, Tooltip, Modal, ConfirmDialog, PromptDialog, Settings rows, EmptyState/Skeleton, DatePicker; Notion toast |
+| 3 Shell | `6a1bfd4` | Sidebar (warm, resizable, Ctrl+\\, workspace menu, pill nav, sections, 30px rows, floating New page); top bar + page ⋯ menu (fonts, Small text, Full width); quick find on ⌘K; Home |
+| 4 Database | `6d4844a` | Header, pill tabs + "N more…", toolbar, table metrics, pills on the option palette, blank empty cells, long dates + date picker, OPEN chip, gutter, New page row, selection bar, grouped tables; board/gallery/list/calendar/timeline/chart; row peek; layout options moved into View settings |
+| 5 Page | `d9d9c4f` | BlockNote theme on the tokens, Notion block metrics, calm callouts and heading colours, page font/Small text in the editor |
+| 6 Settings | `269d585` | The Settings modal with grouped left nav and search; My account; **Preferences** (the customization layer, every option wired) |
+| 7 Finish | this commit | Remaining screens (login/signup, workspace, AI panel) on the tokens; all off-palette and hard-coded colours removed; native controls drawn in the kit style; empty-database placeholder rows; parity check; after/compare images |
+
+**Verification**
+- **Tests:** the full Vitest suite passes (1,275 tests; new tests for the kit). Tests
+  whose expectations described the old look were updated to the Notion behaviour.
+- **Parity:** `scripts/parity.mjs` reads computed styles from the running app in light
+  and dark and compares them with the measured Notion values —
+  [`parity-report.md`](parity-report.md): **62 of 62 checks pass**.
+- **Design guard** (`frontend/lib/design/designGuard.test.ts`): off-palette colours
+  **549 → 0**, hard-coded colours **9 → 0**, native dialogs **1 → 0**.
+- **Screens:** `after/` holds every screen re-captured in light and dark;
+  `compare-after/` shows **Notion | before | after** side by side.
+
+**Known deviations and follow-ups (honest list)**
+1. **Native dropdowns and checkboxes:** 75 `<select>` and 22 checkboxes remain inside
+   the larger editors (automations, button actions, chart and filter builders, routing
+   rules…). They are drawn in the kit's style by a global rule, so they look the same,
+   but their open menus are still the browser's. The guard stops the count growing;
+   converting them to `components/ui/Select` is the next step (their tests drive the
+   native control today).
+2. **Calendar "+N more":** cells still cap at three events with "+N more"; Notion grows
+   the cell instead.
+3. **Quick find preview pane** is not built (the dialog is 755px instead of 1006px).
+4. **Board/Gallery card size and Timeline's table panel** keep this app's own options.
+5. **Per-page font / Small text / Full width** are stored per browser, not per page in
+   the database.

@@ -82,11 +82,11 @@ export function PlanRow({ item, checked, onToggle, onResolve, onRelease, onStopM
 
   return (
     <div ref={focusRef} tabIndex={0} role="group" aria-label={item.title} onKeyDown={onKeyDown}
-      className="rounded-lg border border-[color:var(--menu-divider)] p-3 space-y-2 outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+      className="rounded-lg border border-[color:var(--menu-divider)] p-3 space-y-2 outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
       data-testid="notion-item" data-state={item.state} data-kind={item.kind}>
       <div className="flex items-start gap-2.5">
         {sendable ? (
-          <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Send ${item.title}`} className="mt-1 h-4 w-4 accent-indigo-600" />
+          <input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Send ${item.title}`} className="mt-1 h-4 w-4 accent-accent-600" />
         ) : (
           <span className="w-4 shrink-0" aria-hidden />
         )}
@@ -137,7 +137,7 @@ export function PlanRow({ item, checked, onToggle, onResolve, onRelease, onStopM
         <div className="space-y-2.5 pt-2 border-t border-[color:var(--menu-divider)]" data-testid="needs-you">
           {item.needs.reason === "edited_in_notion" ? (
             <>
-              <p className="flex items-start gap-1.5 text-[13px] text-violet-700 dark:text-violet-300">
+              <p className="flex items-start gap-1.5 text-[13px] text-accent-700 dark:text-accent-300">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 <span>Edited in Notion{item.needs.edited_at ? ` (${new Date(item.needs.edited_at).toLocaleString()})` : ""}
                   {item.needs.foreign_blocks ? `, ${item.needs.foreign_blocks} block(s) added there` : ""}. Nothing is overwritten unless you say so.</span>
@@ -163,7 +163,7 @@ export function PlanRow({ item, checked, onToggle, onResolve, onRelease, onStopM
             </>
           ) : (
             <>
-              <p className="flex items-start gap-1.5 text-[13px] text-violet-700 dark:text-violet-300">
+              <p className="flex items-start gap-1.5 text-[13px] text-accent-700 dark:text-accent-300">
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 <span>This page is no longer reachable in Notion (deleted or unshared).</span>
               </p>

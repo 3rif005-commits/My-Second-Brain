@@ -14,7 +14,7 @@ const LEVELS: { value: Sensitivity; label: string; desc: string; icon: typeof Lo
 
 const STYLE: Record<Sensitivity, string> = {
   open: "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300",
-  personal: "bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-200",
+  personal: "bg-accent-50 dark:bg-accent-950/30 border-accent-200 dark:border-accent-800 text-accent-700 dark:text-accent-200",
   private: "bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200",
 };
 
@@ -89,13 +89,13 @@ export function PrivacyLevel({ noteId, sensitivity, localOnly }: Props) {
                   <span className="block text-[13px] font-medium text-gray-800 dark:text-gray-100">{l.label}</span>
                   <span className="block text-[11.5px] text-gray-500 dark:text-gray-400">{l.desc}</span>
                 </span>
-                {value === l.value && <Check size={13} className="mt-0.5 text-indigo-500" />}
+                {value === l.value && <Check size={13} className="mt-0.5 text-accent-500" />}
               </button>
             );
           })}
           <a href="/brain/settings/routing?tab=privacy"
-            className="block border-t border-gray-100 px-3 py-1.5 text-[11.5px] text-indigo-600 hover:underline
-              dark:border-gray-700 dark:text-indigo-400">
+            className="block border-t border-gray-100 px-3 py-1.5 text-[11.5px] text-accent-600 hover:underline
+              dark:border-gray-700 dark:text-accent-400">
             Which providers are trusted?
           </a>
         </div>

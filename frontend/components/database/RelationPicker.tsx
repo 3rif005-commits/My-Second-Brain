@@ -132,7 +132,7 @@ export function RelationPicker({ targetDataSourceId, selected, onCommit, onCance
         <button
           type="button"
           onClick={() => onCommit(draftSelected)}
-          className="text-xs px-2 py-1 rounded bg-indigo-600 text-white"
+          className="text-xs px-2 py-1 rounded bg-accent-600 text-white"
         >
           Done
         </button>

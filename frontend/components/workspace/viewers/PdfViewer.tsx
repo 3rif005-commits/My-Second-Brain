@@ -31,10 +31,10 @@ interface PdfViewerProps {
 
 const ELEMENT_COLORS: Record<string, string> = {
   image: "border-emerald-400/70 hover:bg-emerald-400/10",
-  table: "border-sky-400/70 hover:bg-sky-400/10",
+  table: "border-accent-400/70 hover:bg-accent-400/10",
   formula: "border-purple-400/70 hover:bg-purple-400/10",
   heading: "border-amber-400/50 hover:bg-amber-400/10",
-  text: "border-transparent hover:border-indigo-300/60 hover:bg-indigo-300/5",
+  text: "border-transparent hover:border-accent-300/60 hover:bg-accent-300/5",
 };
 
 export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewerProps) {
@@ -277,7 +277,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
         className="ws-glass-dark absolute bottom-4 right-4 z-20 inline-flex items-center gap-1.5 h-9 px-3.5
           rounded-full text-white text-[12px] font-medium transition-all duration-150
           hover:bg-black/80 active:scale-[0.97]
-          focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70"
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400/70"
         onClick={() => onAction({
           type: "checkpoint", anchorType: "page", value: currentPage.current,
         })}

@@ -731,18 +731,18 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
       }}
     >
       {dragOver && (
-        <div className="absolute inset-2 z-30 rounded-2xl border-2 border-dashed border-indigo-400 bg-indigo-50/80
-          dark:bg-indigo-950/60 flex flex-col items-center justify-center gap-2 pointer-events-none">
-          <FilePlus2 size={26} className="text-indigo-500" />
-          <p className="text-sm font-medium text-indigo-700 dark:text-indigo-200">Drop files or links to attach</p>
-          <p className="text-xs text-indigo-500/80">then ask, or type /study-guide</p>
+        <div className="absolute inset-2 z-30 rounded-2xl border-2 border-dashed border-accent-400 bg-accent-50/80
+          dark:bg-accent-950/60 flex flex-col items-center justify-center gap-2 pointer-events-none">
+          <FilePlus2 size={26} className="text-accent-500" />
+          <p className="text-sm font-medium text-accent-700 dark:text-accent-200">Drop files or links to attach</p>
+          <p className="text-xs text-accent-500/80">then ask, or type /study-guide</p>
         </div>
       )}
       {/* History drawer — slides in from the left */}
       <div
         className={[
           "absolute inset-0 z-10 flex flex-col",
-          "bg-[#eeeefc] dark:bg-[#0f0f1a]",
+          "bg-surface-chip dark:bg-surface-chip",
           "transition-transform duration-200 ease-in-out",
           historyOpen ? "translate-x-0" : "-translate-x-full",
         ].join(" ")}
@@ -775,7 +775,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
           <button
             onClick={() => resetThread(null)}
             aria-label="New thread"
-            className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-accent-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
           >
             <SquarePen size={15} />
           </button>
@@ -813,8 +813,8 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
         )}
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-4 shadow-lg">
-              <Sparkles size={28} className="text-white" aria-hidden />
+            <div className="w-14 h-14 rounded-card bg-surface-chip text-ink flex items-center justify-center mb-4">
+              <Sparkles size={28} className="text-ink-icon-strong" aria-hidden />
             </div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-1.5">
               What do you want to know?
@@ -873,7 +873,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                 <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11.5px]">
                   <span className="text-emerald-600">Added to the note</span>
                   {it.inserted === pageNoteId && (
-                    <button onClick={() => void undoAnswer(it)} className="text-indigo-600 hover:underline">Undo</button>
+                    <button onClick={() => void undoAnswer(it)} className="text-accent-600 hover:underline">Undo</button>
                   )}
                   {it.undoNote && <span className="text-gray-500">{it.undoNote}</span>}
                 </div>
@@ -881,7 +881,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
               return (
                 <button
                   onClick={() => void insertAnswer(it, to)}
-                  className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] text-gray-400 hover:text-indigo-500"
+                  className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] text-gray-400 hover:text-accent-500"
                 >
                   <FileText size={11} /> {pageNoteId ? "Insert into this note" : "Put in note"}
                 </button>
@@ -909,7 +909,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
               <button key={j.skill} type="button" role="option" aria-selected={i === menuIndex}
                 onMouseDown={(e) => { e.preventDefault(); completeJob(j.skill); }}
                 className={`w-full text-left px-3 py-2 ${i === menuIndex
-                  ? "bg-indigo-50 dark:bg-indigo-950/40" : "hover:bg-gray-50 dark:hover:bg-white/5"}`}>
+                  ? "bg-accent-50 dark:bg-accent-950/40" : "hover:bg-gray-50 dark:hover:bg-white/5"}`}>
                 <span className="text-[13px] font-medium text-gray-800 dark:text-gray-100">/{j.skill}</span>
                 <span className="block text-[11.5px] text-gray-500 dark:text-gray-400 line-clamp-1">{j.runnable ?? j.description}</span>
               </button>
@@ -922,7 +922,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             <button type="button"
               onMouseDown={(e) => { e.preventDefault(); router.push("/brain/settings/skills"); }}
               className="w-full flex items-center gap-1.5 px-3 h-8 text-left text-[12px] text-gray-500
-                hover:text-indigo-600 hover:bg-gray-50 dark:hover:bg-white/5 border-t border-gray-100 dark:border-gray-700">
+                hover:text-accent-600 hover:bg-gray-50 dark:hover:bg-white/5 border-t border-gray-100 dark:border-gray-700">
               <Settings2 size={12} /> Manage skills
             </button>
           </div>
@@ -934,7 +934,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                 className="inline-flex items-center gap-1 max-w-full h-7 pl-2 pr-1 rounded-lg text-[12px]
                   bg-white dark:bg-gray-800 ring-1 ring-gray-200 dark:ring-gray-700 text-gray-700 dark:text-gray-200">
                 {a.kind === "file"
-                  ? <FileText size={12} className="text-indigo-500 shrink-0" />
+                  ? <FileText size={12} className="text-accent-500 shrink-0" />
                   : <Link2 size={12} className="text-emerald-500 shrink-0" />}
                 <span className="truncate max-w-[180px]">{attachmentName(a)}</span>
                 <button type="button" aria-label={`Remove ${attachmentName(a)}`}
@@ -961,10 +961,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
               placeholder="https://… a website or a YouTube video"
               aria-label="Link to add"
               className="flex-1 min-w-0 h-8 px-2.5 text-[12.5px] rounded-lg bg-white dark:bg-gray-800 ring-1
-                ring-gray-200 dark:ring-gray-700 outline-none focus:ring-indigo-400"
+                ring-gray-200 dark:ring-gray-700 outline-none focus:ring-accent-400"
             />
             <button type="button" onClick={submitLinkDraft}
-              className="h-8 px-3 rounded-lg text-[12px] font-medium bg-indigo-600 text-white hover:bg-indigo-500">
+              className="h-8 px-3 rounded-lg text-[12px] font-medium bg-accent-600 text-white hover:bg-accent-500">
               Add
             </button>
             <button type="button" onClick={() => setLinkDraft(null)} aria-label="Cancel link"
@@ -994,7 +994,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
               aria-label="Attach"
               aria-expanded={attachMenuOpen}
               title="Attach files or a link"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-accent-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
             >
               <Paperclip size={15} />
             </button>
@@ -1006,7 +1006,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                   <button type="button" role="menuitem"
                     onClick={() => { setAttachMenuOpen(false); fileInputRef.current?.click(); }}
                     className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5">
-                    <Upload size={14} className="text-indigo-500" />
+                    <Upload size={14} className="text-accent-500" />
                     <span>
                       <span className="block text-[13px] text-gray-800 dark:text-gray-100">Upload files</span>
                       <span className="block text-[11px] text-gray-400">PDF, Markdown, text, video</span>
@@ -1056,8 +1056,8 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
               aria-haspopup="menu" aria-expanded={modeMenuOpen}
               className={`inline-flex items-center gap-1 h-7 px-2 rounded-lg text-[11.5px] font-medium transition-colors ${
                 modeMenuOpen
-                  ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-500"
-                  : "text-gray-500 hover:text-indigo-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  ? "bg-accent-50 dark:bg-accent-950/40 text-accent-500"
+                  : "text-gray-500 hover:text-accent-500 hover:bg-gray-100 dark:hover:bg-gray-700"
               }`}
             >
               {mode === "local" ? <Lock size={12} /> : mode === "auto" ? <Route size={12} /> : <Cloud size={12} />}
@@ -1076,26 +1076,26 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                     onClick={() => { setMode(opt.value); setModeMenuOpen(false); }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${
                       mode === opt.value
-                        ? "bg-indigo-50 dark:bg-indigo-950/40"
+                        ? "bg-accent-50 dark:bg-accent-950/40"
                         : "hover:bg-gray-50 dark:hover:bg-gray-750"
                     }`}
                   >
-                    <span className={mode === opt.value ? "text-indigo-500" : "text-gray-400"}>
+                    <span className={mode === opt.value ? "text-accent-500" : "text-gray-400"}>
                       {opt.icon}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-medium ${mode === opt.value ? "text-indigo-600 dark:text-indigo-400" : "text-gray-700 dark:text-gray-200"}`}>
+                      <div className={`text-sm font-medium ${mode === opt.value ? "text-accent-600 dark:text-accent-400" : "text-gray-700 dark:text-gray-200"}`}>
                         {opt.label}
                       </div>
                       <div className="text-xs text-gray-400 dark:text-gray-500">{opt.desc}</div>
                     </div>
-                    {mode === opt.value && <Check size={13} className="shrink-0 text-indigo-500" />}
+                    {mode === opt.value && <Check size={13} className="shrink-0 text-accent-500" />}
                   </button>
                 ))}
                 <button type="button"
                   onClick={() => { setModeMenuOpen(false); router.push("/brain/settings/routing"); }}
                   className="w-full flex items-center gap-1.5 px-3 h-8 text-left text-[12px] text-gray-500
-                    hover:text-indigo-600 hover:bg-gray-50 dark:hover:bg-white/5 border-t border-gray-100 dark:border-gray-700">
+                    hover:text-accent-600 hover:bg-gray-50 dark:hover:bg-white/5 border-t border-gray-100 dark:border-gray-700">
                   <Settings2 size={12} /> Routing settings
                 </button>
               </div>
@@ -1139,7 +1139,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             aria-label="Send"
             className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
               (input.trim() || attachments.length) && !loading
-                ? "bg-indigo-600 text-white hover:bg-indigo-500 shadow-sm"
+                ? "bg-accent-600 text-white hover:bg-accent-500 shadow-sm"
                 : "bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed"
             }`}
           >

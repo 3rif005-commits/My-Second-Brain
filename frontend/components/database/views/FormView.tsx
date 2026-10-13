@@ -744,7 +744,7 @@ export function FormView({ viewId, properties, config, onConfigChange, onSetQues
               <button
                 type="button"
                 aria-label="Add question"
-                className="h-8 w-8 flex items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100"
+                className="h-8 w-8 flex items-center justify-center rounded-full bg-accent-50 dark:bg-accent-900/30 text-accent-600 dark:text-accent-400 hover:bg-accent-100"
               >
                 <Plus size={16} />
               </button>
@@ -840,7 +840,7 @@ export function FormView({ viewId, properties, config, onConfigChange, onSetQues
           <button
             type="button"
             onClick={copyFormLink}
-            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded bg-indigo-600 text-white"
+            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded bg-accent-600 text-white"
           >
             {linkCopied ? <Check size={13} /> : <LinkIcon size={13} />}
             {linkCopied ? "Copied!" : "Copy link"}

@@ -54,7 +54,7 @@ export function SourceTrigger({ noteId }: { noteId: string }) {
           onChange={(e) => void choose(e.target.value)}
           className="min-w-0 flex-1 bg-transparent text-gray-600 dark:text-gray-300 text-[11px]
             rounded-md px-1 py-0.5 -ml-1 hover:bg-gray-100 dark:hover:bg-white/10
-            disabled:opacity-50 focus:outline-none focus-visible:ring-1 focus-visible:ring-indigo-400"
+            disabled:opacity-50 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent-400"
         >
           <option value={SUGGEST}>Suggest (don&apos;t run)</option>
           {runnable.map((o) => (
@@ -68,7 +68,7 @@ export function SourceTrigger({ noteId }: { noteId: string }) {
         <p className="mt-0.5 pl-[17px] text-[11px] text-gray-400 dark:text-gray-500">
           New sources → {active.title} (background){" · "}
           <button onClick={() => void choose(SUGGEST)} disabled={saving}
-            className="text-indigo-500 hover:underline disabled:opacity-50">
+            className="text-accent-500 hover:underline disabled:opacity-50">
             Turn off
           </button>
         </p>

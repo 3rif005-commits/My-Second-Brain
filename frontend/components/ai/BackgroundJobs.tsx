@@ -114,10 +114,10 @@ function WaitingCard({ job, focused, onChanged }: {
   return (
     <div data-testid="background-job-card" data-status={job.status}
       className={`rounded-2xl ring-1 bg-white dark:bg-gray-800/60 px-3 py-2 space-y-1.5 ${
-        focused ? "ring-indigo-400" : "ring-gray-200/80 dark:ring-white/10"}`}>
+        focused ? "ring-accent-400" : "ring-gray-200/80 dark:ring-white/10"}`}>
       <div className="flex items-center gap-2">
         {running
-          ? <Loader2 size={13} className="text-indigo-500 shrink-0 animate-spin" />
+          ? <Loader2 size={13} className="text-accent-500 shrink-0 animate-spin" />
           : <Clock size={13} className={`shrink-0 ${trouble ? "text-amber-500" : "text-gray-400"}`} />}
         <span className="text-[12.5px] font-semibold text-gray-800 dark:text-gray-100 truncate">
           {jobTitle(job.skill)}
@@ -136,7 +136,7 @@ function WaitingCard({ job, focused, onChanged }: {
         )}
         {job.status === "needs_you" && (
           <button onClick={() => void act(() => acceptPrice(job.id))} disabled={busy}
-            className={`${chip} font-medium bg-indigo-600 text-white hover:bg-indigo-500`}>
+            className={`${chip} font-medium bg-accent-600 text-white hover:bg-accent-500`}>
             <Play size={12} /> {acceptLabel(job)}
           </button>
         )}
@@ -221,7 +221,7 @@ function ReadyCard({ job, noteId, title, focused, pageNoteId, inWorkspace, onApp
   const label = `Background · ready ${agoText(job.finished_at)}`
     + (job.ran_late ? " · ran late, the app was closed" : "");
   return (
-    <div ref={ref} className={focused ? "rounded-2xl ring-2 ring-indigo-300" : ""} data-testid="background-ready">
+    <div ref={ref} className={focused ? "rounded-2xl ring-2 ring-accent-300" : ""} data-testid="background-ready">
       <PanelJobCard
         job={shown} pageNoteId={pageNoteId} inWorkspace={inWorkspace} busy={busy} badge={label}
         warning={stale?.message}

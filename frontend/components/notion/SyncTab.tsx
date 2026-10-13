@@ -10,7 +10,7 @@ import { announceNotionChange, notionApi, type NoteMirror, type Rule, type Scope
 export function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   return (
     <button role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)}
-      className={`relative shrink-0 w-[30px] h-[18px] rounded-full transition-colors disabled:opacity-50 ${on ? "bg-indigo-600" : "bg-black/15 dark:bg-white/20"}`}>
+      className={`relative shrink-0 w-[30px] h-[18px] rounded-full transition-colors disabled:opacity-50 ${on ? "bg-accent-600" : "bg-black/15 dark:bg-white/20"}`}>
       <span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-transform ${on ? "translate-x-3" : ""}`} />
     </button>
   );

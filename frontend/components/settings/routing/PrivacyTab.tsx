@@ -71,7 +71,7 @@ export function PrivacyTab({ policy, onChange, targets }: Props) {
                 <button type="button" role="switch" aria-checked={trusted} aria-label={`Trust ${p.label}`}
                   onClick={() => toggleTrust(p.key)}
                   className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${
-                    trusted ? "bg-indigo-500" : "bg-gray-300 dark:bg-gray-600"}`}>
+                    trusted ? "bg-accent-500" : "bg-gray-300 dark:bg-gray-600"}`}>
                   <span className={`inline-block h-4 w-4 translate-y-0.5 rounded-full bg-white shadow transition-transform ${
                     trusted ? "translate-x-[18px]" : "translate-x-0.5"}`} />
                 </button>
@@ -89,9 +89,9 @@ export function PrivacyTab({ policy, onChange, targets }: Props) {
           {WHEN.map((w) => (
             <label key={w.value} className={`flex items-start gap-2.5 rounded-xl border p-2.5 cursor-pointer ${
               policy.privacy.when_private_needed === w.value
-                ? "border-indigo-300 bg-indigo-50/50 dark:border-indigo-800 dark:bg-indigo-950/20"
+                ? "border-accent-300 bg-accent-50/50 dark:border-accent-800 dark:bg-accent-950/20"
                 : "border-gray-200 dark:border-gray-700"}`}>
-              <input type="radio" name="when-private" className="mt-1 accent-indigo-600"
+              <input type="radio" name="when-private" className="mt-1 accent-accent-600"
                 checked={policy.privacy.when_private_needed === w.value}
                 onChange={() => setPrivacy({ when_private_needed: w.value })} />
               <span>

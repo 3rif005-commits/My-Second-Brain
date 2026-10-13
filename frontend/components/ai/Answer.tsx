@@ -19,14 +19,14 @@ export function Answer({ content, citations, colorIndex, onCitation }: {
     a: ({ href, children }: any) => {
       const m = /^#cite-(\d+)$/.exec(href ?? "");
       const c = m ? byN.get(Number(m[1])) : undefined;
-      if (!c) return <a href={href} className="text-indigo-600 dark:text-indigo-400 hover:underline">{children}</a>;
+      if (!c) return <a href={href} className="text-accent-600 dark:text-accent-400 hover:underline">{children}</a>;
       const idx = colorIndex.get(c.resource_id) ?? 0;
       return (
         <button type="button" onClick={() => onCitation(c)}
           title={`${c.title} — ${anchorLabel(c.anchor_type, c.anchor_start)}\n${c.snippet ?? ""}`}
           className="inline-flex items-center gap-1 mx-0.5 px-1.5 h-[18px] rounded-md align-baseline
             text-[10.5px] font-semibold bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300
-            hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors not-prose">
+            hover:bg-accent-100 dark:hover:bg-accent-500/20 transition-colors not-prose">
           <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sourceColor(idx) }} />
           {c.n}
         </button>

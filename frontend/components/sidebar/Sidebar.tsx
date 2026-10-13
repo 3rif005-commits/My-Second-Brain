@@ -98,6 +98,7 @@ function Section({
         <button
           onClick={onToggle}
           aria-expanded={open}
+          data-section-header
           className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs font-medium leading-4 text-ink-tertiary group-hover/section:text-ink-sidebar"
         >
           <span className="truncate">{label}</span>

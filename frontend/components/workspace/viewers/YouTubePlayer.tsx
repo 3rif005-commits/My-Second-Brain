@@ -164,7 +164,7 @@ export function YouTubePlayer({ resource, onPosition, onAction, seekRef }: YouTu
     <div
       ref={stageRef}
       tabIndex={-1}
-      className="relative flex-1 min-h-0 bg-[#08090d] outline-none"
+      className="relative flex-1 min-h-0 bg-black outline-none"
     >
       <div ref={hostRef} className="w-full h-full" />
       <CaptureDock

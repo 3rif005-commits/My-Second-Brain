@@ -120,7 +120,7 @@ export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, badge, warnin
     <div className="rounded-2xl ring-1 ring-gray-200/80 dark:ring-white/10 bg-white dark:bg-gray-800/60 overflow-hidden shadow-sm"
       data-testid="panel-job-card">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-white/5">
-        <Sparkles size={13} className="text-indigo-500 shrink-0" />
+        <Sparkles size={13} className="text-accent-500 shrink-0" />
         <span className="text-[12.5px] font-semibold text-gray-800 dark:text-gray-100 truncate">{job.title}</span>
         {job.focus && <span className="text-[11px] text-gray-400 truncate">· {job.focus}</span>}
         <span className="ml-auto text-[11px] text-gray-400 shrink-0">
@@ -175,7 +175,7 @@ export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, badge, warnin
             <div className="flex flex-wrap items-center gap-1.5">
               <button onClick={() => onApply(job.noteId)}
                 title={onItsNote ? "Add it to the note that is open" : `Write it into "${job.noteTitle}" and open it`}
-                className={`${chip} font-medium bg-indigo-600 text-white hover:bg-indigo-500`}>
+                className={`${chip} font-medium bg-accent-600 text-white hover:bg-accent-500`}>
                 <FileText size={12} /> {onItsNote ? "Insert into this note" : "Put in note"}
               </button>
               {elsewhere && (
@@ -200,7 +200,7 @@ export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, badge, warnin
                 <button onClick={() => onOpen(`/brain/${job.applied!.noteId}`)} className={quiet}>Open</button>
               )}
               {pageNoteId === job.applied.noteId && (
-                <button onClick={onUndo} className={`${chip} text-indigo-600 hover:bg-indigo-500/10`}>
+                <button onClick={onUndo} className={`${chip} text-accent-600 hover:bg-accent-500/10`}>
                   <Undo2 size={12} /> Undo
                 </button>
               )}
@@ -212,7 +212,7 @@ export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, badge, warnin
           {job.undoNote && <p className="text-[11.5px] text-gray-500">{job.undoNote}</p>}
 
           {!inWorkspace && <button onClick={() => onOpen(`/brain/workspace/${job.noteId}`)}
-            className="inline-flex items-center gap-1 text-[11.5px] text-gray-400 hover:text-indigo-500">
+            className="inline-flex items-center gap-1 text-[11.5px] text-gray-400 hover:text-accent-500">
             <Layers size={11} /> Open in workspace — the note beside its sources
           </button>}
         </div>
@@ -235,7 +235,7 @@ export function UploadCard({ files, title }: { files: UploadFile[]; title: strin
           <li key={i} className="flex items-center gap-2 text-[12px]">
             {f.status === "ready" ? <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
               : f.status === "failed" ? <AlertCircle size={13} className="text-amber-500 shrink-0" />
-              : <Loader2 size={13} className="animate-spin text-indigo-500 shrink-0" />}
+              : <Loader2 size={13} className="animate-spin text-accent-500 shrink-0" />}
             <span className="truncate text-gray-700 dark:text-gray-200">{f.name}</span>
             <span className="ml-auto shrink-0 text-[11px] text-gray-400">
               {f.status === "uploading" ? "uploading…" : f.status === "processing" ? "reading…"

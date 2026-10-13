@@ -106,7 +106,7 @@ function NotionSettings() {
                 <strong>Create an internal connection in Notion.</strong>
                 <p className="text-gray-500 dark:text-gray-400">
                   Open{" "}
-                  <a className="text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1"
+                  <a className="text-accent-600 dark:text-accent-400 hover:underline inline-flex items-center gap-1"
                     href="https://www.notion.so/profile/integrations" target="_blank" rel="noreferrer">
                     notion.so/profile/integrations <ExternalLink size={11} />
                   </a>
@@ -182,7 +182,7 @@ function NotionSettings() {
                 )}
               {status.root && (
                 <a href={status.root.url} target="_blank" rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-[13px] text-indigo-600 dark:text-indigo-400 hover:underline">
+                  className="inline-flex items-center gap-1 text-[13px] text-accent-600 dark:text-accent-400 hover:underline">
                   Open “{status.root.title ?? "destination"}” in Notion <ExternalLink size={12} />
                 </a>
               )}

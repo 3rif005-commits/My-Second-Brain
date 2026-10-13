@@ -68,7 +68,7 @@ export function ActivityPage() {
           {data && (
             <p className="ml-auto text-[13px] text-gray-500 dark:text-gray-400" data-testid="month-line">
               {monthLine(data.month_spent_usd, data.monthly_cap_usd, data.saved_usd)}
-              {" · "}<Link href="/brain/settings/background-jobs" className="text-indigo-600 hover:underline">Change limit</Link>
+              {" · "}<Link href="/brain/settings/background-jobs" className="text-accent-600 hover:underline">Change limit</Link>
             </p>
           )}
         </div>
@@ -89,7 +89,7 @@ export function ActivityPage() {
                     <Link href="/brain/settings/background-jobs" className={`${chip} ring-1 ring-gray-200 dark:ring-white/10 text-gray-700 dark:text-gray-200`}>Change limit</Link>
                   )}
                   {j.status === "needs_you" && (
-                    <button className={`${chip} font-medium bg-indigo-600 text-white hover:bg-indigo-500`} disabled={busy === j.id}
+                    <button className={`${chip} font-medium bg-accent-600 text-white hover:bg-accent-500`} disabled={busy === j.id}
                       onClick={() => void act(j.id, () => acceptPrice(j.id))}><Play size={12} /> {acceptLabel(j)}</button>
                   )}
                   {j.note_id && j.status !== "needs_you" && (
@@ -114,7 +114,7 @@ export function ActivityPage() {
                   </p>
                   <span className="ml-auto flex gap-1.5">
                     {j.note_id && <Link href={`/brain/workspace/${j.note_id}?job=${j.id}`}
-                      className={`${chip} font-medium bg-indigo-600 text-white hover:bg-indigo-500`}>Open</Link>}
+                      className={`${chip} font-medium bg-accent-600 text-white hover:bg-accent-500`}>Open</Link>}
                     <button className={quiet} disabled={busy === j.id} onClick={() => void act(j.id, () => discardJob(j.id))}><X size={12} /> Discard</button>
                   </span>
                 </div>
@@ -127,7 +127,7 @@ export function ActivityPage() {
           <Section title={`In progress (${inProgress.length})`}>
             {inProgress.map((j) => (
               <div key={j.id} className="flex flex-wrap items-center gap-2 text-sm text-gray-700 dark:text-gray-200" data-testid="in-progress">
-                {j.status === "submitted" ? <Loader2 size={13} className="animate-spin text-indigo-500" /> : <Clock size={13} className="text-gray-400" />}
+                {j.status === "submitted" ? <Loader2 size={13} className="animate-spin text-accent-500" /> : <Clock size={13} className="text-gray-400" />}
                 <span><b>{jobTitle(j.skill)}</b> · {noteName(j)} · {stateLine(j)}</span>
                 <span className="ml-auto flex gap-1.5">
                   {j.status === "queued" && <button className={quiet} disabled={busy === j.id} onClick={() => void act(j.id, () => runJobNow(j.id))}><Play size={12} /> Run now</button>}

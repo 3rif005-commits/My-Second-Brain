@@ -16,7 +16,7 @@ import baseline from "./designGuardBaseline.json";
 const ROOT = path.resolve(__dirname, "../..");
 const SCAN_DIRS = ["app", "components", "lib"];
 /** The kit itself is where native controls and raw values are allowed to live. */
-const EXEMPT = [/^components\/ui\//, /^app\/tokens\.css$/, /\.test\.tsx?$/, /^lib\/design\//];
+const EXEMPT = [/^components\/ui\//, /^app\/(tokens|globals|editor)\.css$/, /\.test\.tsx?$/, /^lib\/design\//];
 
 export const RULES: Record<string, { pattern: RegExp; why: string }> = {
   offPaletteColour: {

@@ -50,7 +50,7 @@ export function IconPicker({ icon, fallback, onChange, size = "lg" }: {
             {ICONS.map((e) => (
               <button key={e} type="button" onClick={() => { onChange(e); setOpen(false); }}
                 className={`text-xl p-1 rounded-md leading-none hover:bg-gray-100 dark:hover:bg-white/10 ${e === icon
-                  ? "bg-indigo-50 dark:bg-indigo-500/20 ring-1 ring-indigo-300" : ""}`}>
+                  ? "bg-accent-50 dark:bg-accent-500/20 ring-1 ring-accent-300" : ""}`}>
                 {e}
               </button>
             ))}

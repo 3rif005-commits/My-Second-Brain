@@ -113,9 +113,9 @@ export const CsvImport = forwardRef<CsvImportHandle, CsvImportProps>(function Cs
       {uploading && (
         <div
           role="status"
-          className="fixed bottom-5 left-5 z-50 flex items-center gap-2.5 rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-[13px] text-slate-200 shadow-2xl shadow-black/50"
+          className="fixed bottom-5 left-5 z-50 flex items-center gap-2.5 rounded-lg border border-white/10 bg-gray-800 px-3 py-2 text-[13px] text-gray-200 shadow-2xl shadow-black/50"
         >
-          <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-indigo-400 border-t-transparent" />
+          <span className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-accent-400 border-t-transparent" />
           Importing CSV…
         </div>
       )}
@@ -126,16 +126,16 @@ export const CsvImport = forwardRef<CsvImportHandle, CsvImportProps>(function Cs
           aria-label="CSV import summary"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] p-4"
         >
-          <div className="bg-slate-900 border border-white/10 rounded-xl p-4 w-full max-w-sm max-h-[70vh] overflow-y-auto shadow-2xl shadow-black/60">
+          <div className="bg-gray-900 border border-white/10 rounded-xl p-4 w-full max-w-sm max-h-[70vh] overflow-y-auto shadow-2xl shadow-black/60">
             <h2 className="text-sm font-semibold text-white mb-1">
               Imported {report.row_count} row{report.row_count === 1 ? "" : "s"}
             </h2>
-            <p className="text-xs text-slate-500 mb-3">Here&apos;s what each column became:</p>
+            <p className="text-xs text-gray-500 mb-3">Here&apos;s what each column became:</p>
             <ul className="space-y-1.5 mb-4">
               {report.columns.map((col) => (
                 <li key={col.header} className="text-xs flex items-center justify-between gap-2">
-                  <span className="truncate text-slate-300">{col.header}</span>
-                  <span className="text-slate-500 shrink-0">
+                  <span className="truncate text-gray-300">{col.header}</span>
+                  <span className="text-gray-500 shrink-0">
                     {col.inferred_type} &middot; {col.non_empty_count} filled, {col.empty_count} empty
                   </span>
                 </li>
@@ -143,7 +143,7 @@ export const CsvImport = forwardRef<CsvImportHandle, CsvImportProps>(function Cs
             </ul>
             <button
               onClick={handleOpenDatabase}
-              className="w-full px-3 py-1.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+              className="w-full px-3 py-1.5 text-sm font-semibold bg-accent-600 hover:bg-accent-500 text-white rounded-lg transition-colors"
             >
               Open database
             </button>

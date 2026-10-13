@@ -61,9 +61,9 @@ export function ConnectInline({ status, onChange }: Props) {
           <form onSubmit={connect} className="space-y-2">
             <input id="notion-token" type="password" autoComplete="off" spellCheck={false} value={token} onChange={(e) => setToken(e.target.value)}
               placeholder="Paste your integration token" aria-label="Notion token"
-              className="w-full h-9 px-3 rounded-lg border border-[color:var(--menu-divider)] bg-transparent text-[13px] font-mono outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25" />
+              className="w-full h-9 px-3 rounded-lg border border-[color:var(--menu-divider)] bg-transparent text-[13px] font-mono outline-none focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25" />
             <button type="submit" disabled={busy || token.trim().length < 8}
-              className="w-full h-9 rounded-lg text-[13px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 grid place-items-center">
+              className="w-full h-9 rounded-lg text-[13px] font-medium text-white bg-accent-600 hover:bg-accent-700 disabled:opacity-50 grid place-items-center">
               {busy ? <Loader2 size={14} className="animate-spin" /> : "Connect"}
             </button>
           </form>

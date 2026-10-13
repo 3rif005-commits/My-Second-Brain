@@ -44,7 +44,7 @@ export function usePreferences() {
   return useContext(PreferencesContext);
 }
 
-// Lightweight toast — replaces window.alert() for error/status messages.
+// Lightweight toast — replaces the browser's blocking alert for error/status messages.
 // Native alert() blocks the tab (including browser automation), so any
 // non-blocking notification goes through here instead.
 type ToastVariant = "error" | "info";

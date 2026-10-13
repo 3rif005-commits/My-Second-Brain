@@ -37,7 +37,7 @@ function MathBlockView({ block, editor }: { block: any; editor: any }) {
 
   if (editing) {
     return (
-      <div className="w-full my-1 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/20 p-2">
+      <div className="w-full my-1 rounded-lg border border-accent-200 dark:border-accent-800 bg-accent-50/50 dark:bg-accent-900/20 p-2">
         <textarea
           autoFocus
           className="w-full bg-transparent font-mono text-sm outline-none resize-y min-h-[48px] text-gray-800 dark:text-gray-200"
@@ -57,7 +57,7 @@ function MathBlockView({ block, editor }: { block: any; editor: any }) {
             <MathRenderer latex={draft} />
           </div>
           <button
-            className="text-xs px-2 py-1 rounded bg-indigo-500 text-white hover:bg-indigo-600 shrink-0"
+            className="text-xs px-2 py-1 rounded bg-accent-500 text-white hover:bg-accent-600 shrink-0"
             onClick={() => {
               editor.updateBlock(block, { props: { latex: draft } });
               setEditing(false);

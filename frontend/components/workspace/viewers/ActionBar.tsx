@@ -32,7 +32,7 @@ export function ActionButton({
       title={title}
       className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full whitespace-nowrap font-medium
         transition-all duration-150 active:scale-[0.97]
-        focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400/70 ${
         primary
           ? "ws-accent"
           : "text-white/70 hover:text-white hover:bg-white/10"

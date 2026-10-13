@@ -51,7 +51,7 @@ export function BacklinksPanel({ noteId }: BacklinksPanelProps) {
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group"
               >
                 <span className="text-base leading-none shrink-0">{note.icon || "📄"}</span>
-                <span className="truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                <span className="truncate group-hover:text-accent-600 dark:group-hover:text-accent-400 transition-colors">
                   {note.title || "Untitled"}
                 </span>
               </Link>

@@ -119,7 +119,7 @@ function RoutingSettings() {
             <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => pick(t.id)}
               className={`h-9 px-3 -mb-px border-b-2 text-[13px] whitespace-nowrap transition-colors ${
                 tab === t.id
-                  ? "border-indigo-500 text-gray-900 dark:text-gray-100 font-medium"
+                  ? "border-accent-500 text-gray-900 dark:text-gray-100 font-medium"
                   : "border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"}`}>
               {t.label}
             </button>
@@ -176,7 +176,7 @@ function RoutingSettings() {
                 <div className="absolute bottom-full right-0 mb-2 w-72 max-h-72 overflow-y-auto rounded-xl border
                   border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl text-[12.5px]">
                   <button onClick={() => void restore(null)}
-                    className="w-full flex items-center gap-1.5 px-3 py-2 text-left text-indigo-600 dark:text-indigo-400
+                    className="w-full flex items-center gap-1.5 px-3 py-2 text-left text-accent-600 dark:text-accent-400
                       hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-gray-700">
                     <RotateCcw size={12} /> Restore the default policy
                   </button>
@@ -186,7 +186,7 @@ function RoutingSettings() {
                       <span className="font-medium text-gray-700 dark:text-gray-200">v{v.version}</span>
                       <span className="flex-1 truncate text-gray-500">{v.note || "—"}</span>
                       {i === 0 ? <span className="text-[11px] text-gray-400">active</span> : (
-                        <button onClick={() => void restore(v.version)} className="text-indigo-600 hover:underline dark:text-indigo-400">
+                        <button onClick={() => void restore(v.version)} className="text-accent-600 hover:underline dark:text-accent-400">
                           Restore
                         </button>
                       )}

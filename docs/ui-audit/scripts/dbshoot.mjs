@@ -1,7 +1,7 @@
 // Render the app's real database UI against mocked /api/db/* data (the cloud box has no
 // DATABASE_URL), then screenshot every view and key interaction in light and dark.
 // Usage: node dbshoot.mjs <outDir>
-import { chromium } from "/home/user/My-Second-Brain/frontend/node_modules/playwright/index.mjs";
+import { chromium } from "../../../frontend/node_modules/playwright/index.mjs";
 import fs from "fs";
 
 const out = process.argv[2];
@@ -104,7 +104,8 @@ async function mock(page) {
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 for (const theme of ["light", "dark"]) {
   const ctx = await browser.newContext({ viewport: { width: 1300, height: 649 }, storageState: `${S}/auth.json` });
-  await ctx.addInitScript((t) => localStorage.setItem("sb-theme", t), theme);
+  await ctx.addInitScript((t) => localStorage.setItem("sb-prefs", JSON.stringify({ theme: t })), theme);
+  await ctx.addInitScript(() => { const st = document.createElement("style"); st.textContent = "nextjs-portal{display:none!important}"; document.addEventListener("DOMContentLoaded", () => document.head.appendChild(st)); });
   const page = await ctx.newPage();
   await mock(page);
   const shot = async (name, opts = {}) => { await page.waitForTimeout(700); await page.screenshot({ path: `${out}/${name}-${theme}.png`, ...opts }); console.log("ok", name, theme); };

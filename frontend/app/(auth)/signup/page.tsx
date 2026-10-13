@@ -32,30 +32,30 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-surface px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <Logo size={48} className="mx-auto mb-3 rounded-xl shadow-sm" />
-          <h1 className="text-2xl font-semibold text-gray-900">My Second Brain</h1>
-          <p className="mt-1 text-sm text-gray-500">Create your knowledge OS</p>
+          <h1 className="text-2xl font-semibold text-ink">My Second Brain</h1>
+          <p className="mt-1 text-sm text-ink-secondary">Create your knowledge OS</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-xs text-ink-secondary">
               Full name
             </label>
             <input
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+              className="h-9 w-full rounded-md bg-surface-field px-2.5 text-[15px] text-ink shadow-[inset_0_0_0_1px_var(--c-border-strong)] outline-none placeholder:text-ink-placeholder focus:shadow-input"
               placeholder="Ada Lovelace"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-xs text-ink-secondary">
               Email
             </label>
             <input
@@ -63,13 +63,13 @@ export default function SignupPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+              className="h-9 w-full rounded-md bg-surface-field px-2.5 text-[15px] text-ink shadow-[inset_0_0_0_1px_var(--c-border-strong)] outline-none placeholder:text-ink-placeholder focus:shadow-input"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-xs text-ink-secondary">
               Password
             </label>
             <input
@@ -78,13 +78,13 @@ export default function SignupPage() {
               minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+              className="h-9 w-full rounded-md bg-surface-field px-2.5 text-[15px] text-ink shadow-[inset_0_0_0_1px_var(--c-border-strong)] outline-none placeholder:text-ink-placeholder focus:shadow-input"
               placeholder="Min. 8 characters"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+            <p className="rounded-md bg-surface-danger-soft px-3 py-2 text-sm text-ink-danger">
               {error}
             </p>
           )}
@@ -92,15 +92,15 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2 px-4 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="h-9 w-full rounded-md bg-accent px-4 text-sm font-medium text-ink-on-accent transition-colors duration-instant hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             {loading ? "Creating account…" : "Create account"}
           </button>
         </form>
 
-        <p className="mt-4 text-center text-sm text-gray-500">
+        <p className="mt-4 text-center text-sm text-ink-secondary">
           Already have an account?{" "}
-          <Link href="/login" className="text-brand font-medium hover:underline">
+          <Link href="/login" className="text-accent font-medium hover:underline">
             Sign in
           </Link>
         </p>

@@ -63,7 +63,7 @@ export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspac
         className={[
           "fixed inset-y-0 right-0 z-40 flex flex-col",
           // Distinct background: light lavender in light mode, deep blue-black in dark
-          "bg-[#eeeefc] dark:bg-[#0f0f1a]",
+          "bg-surface-chip dark:bg-surface-chip",
           "transition-[transform,visibility] duration-200 ease-in-out",
           // Invisible once slid away: still mounted, but out of reach of Tab
           // and of screen readers.
@@ -79,17 +79,17 @@ export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspac
           className="absolute left-0 inset-y-0 w-3 cursor-col-resize hidden md:flex items-center justify-center z-10 group"
         >
           {/* The actual visible line */}
-          <div className="w-px h-full bg-indigo-200/60 dark:bg-indigo-900/40 group-hover:bg-indigo-400 dark:group-hover:bg-indigo-500 transition-colors duration-150" />
+          <div className="w-px h-full bg-accent-200/60 dark:bg-accent-900/40 group-hover:bg-accent-400 dark:group-hover:bg-accent-500 transition-colors duration-150" />
           {/* Drag grip dots — appear on hover */}
           <div className="absolute flex flex-col gap-[3px] opacity-0 group-hover:opacity-100 transition-opacity duration-150">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="w-[3px] h-[3px] rounded-full bg-indigo-400 dark:bg-indigo-500" />
+              <div key={i} className="w-[3px] h-[3px] rounded-full bg-accent-400 dark:bg-accent-500" />
             ))}
           </div>
         </div>
 
         {/* Indigo gradient accent at the top */}
-        <div className="h-[3px] w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-400 shrink-0" />
+        <div className="h-px w-full bg-line shrink-0" />
 
         {/* Chat — stays mounted while closed, so a running job, its cards and
             the conversation survive closing and reopening the panel. */}

@@ -197,7 +197,7 @@ function NewScheduleForm({ notes, onCancel, onCreated }: {
       {error && <p className="text-[12px] text-red-600">{error}</p>}
       <div className="flex gap-1.5 pt-0.5">
         <button onClick={() => void save()} disabled={!canSave || saving}
-          className="h-8 px-3.5 rounded-full bg-indigo-600 text-white text-[12.5px] font-medium hover:bg-indigo-500 disabled:opacity-40">
+          className="h-8 px-3.5 rounded-full bg-accent-600 text-white text-[12.5px] font-medium hover:bg-accent-500 disabled:opacity-40">
           Save
         </button>
         <button onClick={onCancel} className={chip}><X size={12} /> Cancel</button>

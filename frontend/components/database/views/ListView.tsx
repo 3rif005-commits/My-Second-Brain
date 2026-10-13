@@ -156,7 +156,7 @@ export function ListView({
             onBlur={(e) => handleRowBlur(e, row.id)}
             // Notion's list row: 30px at a 32px pitch, no dividers, radius-6 hover tint.
             className={`group my-px flex h-[30px] items-center gap-2 rounded-md px-1.5 transition-colors duration-instant hover:bg-surface-hover ${
-              selectedRowId === row.id ? "bg-indigo-50/70 dark:bg-indigo-950/40" : ""
+              selectedRowId === row.id ? "bg-accent-50/70 dark:bg-accent-950/40" : ""
             }`}
           >
             {editable && (

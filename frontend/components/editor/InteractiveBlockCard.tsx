@@ -80,13 +80,13 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   return (
     <div className="mt-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 no-print">
       {/* Title bar */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white">
+      <div className="flex items-center gap-2 px-3 py-2 bg-accent-600 text-white">
         <span className="text-base">⚡</span>
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onBlur={() => onUpdate(index, { title, html: code })}
-          className="flex-1 bg-transparent text-sm font-semibold outline-none placeholder-indigo-300 min-w-0"
+          className="flex-1 bg-transparent text-sm font-semibold outline-none placeholder-accent-300 min-w-0"
           placeholder="Block title"
         />
         {/* Mode tabs */}
@@ -97,8 +97,8 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
               onClick={() => { setMode(m); setError(""); }}
               className={`text-xs px-2 py-0.5 rounded-md font-medium transition-colors ${
                 mode === m
-                  ? "bg-white text-indigo-700"
-                  : "text-indigo-200 hover:text-white hover:bg-indigo-500"
+                  ? "bg-white text-accent-700"
+                  : "text-accent-200 hover:text-white hover:bg-accent-500"
               }`}
             >
               {m === "preview" ? "Preview" : m === "edit" ? "Code" : "AI"}
@@ -106,7 +106,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
           ))}
           <button
             onClick={() => onRemove(index)}
-            className="ml-1 text-indigo-300 hover:text-white text-xs px-1"
+            className="ml-1 text-accent-300 hover:text-white text-xs px-1"
             title="Remove block"
           >
             ✕
@@ -119,7 +119,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
         <iframe
           srcDoc={code}
           sandbox="allow-scripts"
-          className="w-full border-none block bg-slate-50 dark:bg-gray-900"
+          className="w-full border-none block bg-gray-50 dark:bg-gray-900"
           style={{ height: 300 }}
         />
       )}
@@ -144,7 +144,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
             </button>
             <button
               onClick={save}
-              className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors"
+              className="text-xs px-3 py-1.5 rounded-lg bg-accent-600 hover:bg-accent-500 text-white font-medium transition-colors"
             >
               Apply
             </button>
@@ -162,7 +162,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             rows={3}
-            className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none"
+            className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-accent-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none"
             placeholder="e.g. A bar chart comparing bubble sort vs merge sort complexity, or a Newton's law simulator with sliders…"
           />
           {error && <p className="text-xs text-red-500">{error}</p>}
@@ -176,7 +176,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
             <button
               onClick={generate}
               disabled={generating || !prompt.trim()}
-              className="text-xs px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium transition-colors flex items-center gap-1.5"
+              className="text-xs px-4 py-1.5 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white font-medium transition-colors flex items-center gap-1.5"
             >
               {generating ? "Generating…" : "Generate"}
             </button>

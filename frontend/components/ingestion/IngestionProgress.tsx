@@ -121,7 +121,7 @@ export function IngestionProgress({ step, errorDetail, model }: IngestionProgres
             <div key={key} className="flex items-center gap-2">
               <div className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
                 done   ? "bg-green-100 text-green-700" :
-                active ? "bg-indigo-100 text-indigo-700 animate-pulse" :
+                active ? "bg-accent-100 text-accent-700 animate-pulse" :
                          "bg-gray-100 text-gray-400"
               }`}>
                 {done ? "✓" : active ? "●" : "○"} {label}

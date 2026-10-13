@@ -58,11 +58,11 @@ function StatusNote({ saving, saved, synthesizing, job, startedAt }: {
     const elapsed = formatElapsed(startedAt ? now - Date.parse(startedAt) : null);
     const label = job && job !== "study-guide" ? `${jobTitle(job)}…` : "Writing the note…";
     return (
-      <span className="flex items-center gap-1 shrink-0 text-indigo-500 dark:text-indigo-400">
+      <span className="flex items-center gap-1 shrink-0 text-accent-500 dark:text-accent-400">
         <span className="text-gray-300 dark:text-gray-700">·</span>
         <Sparkles size={10} className="animate-pulse" />
         <span className="ws-shimmer font-medium">{label}</span>
-        {elapsed && <span className="tabular-nums text-indigo-400/80">{elapsed}</span>}
+        {elapsed && <span className="tabular-nums text-accent-400/80">{elapsed}</span>}
       </span>
     );
   }
@@ -91,9 +91,9 @@ function DropOverlay({ show }: { show: boolean }) {
   if (!show) return null;
   return (
     <div className="ws-rise pointer-events-none absolute inset-0 z-50 flex items-center justify-center
-      bg-indigo-500/[0.06] backdrop-blur-[2px] p-6">
+      bg-accent-500/[0.06] backdrop-blur-[2px] p-6">
       <div className="ws-glass flex flex-col items-center gap-1.5 px-10 py-8 rounded-3xl
-        !border-2 !border-dashed !border-indigo-400/70">
+        !border-2 !border-dashed !border-accent-400/70">
         <span className="ws-accent w-12 h-12 rounded-2xl flex items-center justify-center mb-1">
           <Upload size={20} />
         </span>
@@ -482,7 +482,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       <div className="ws-canvas relative h-full" {...dragProps}>
         {noteId ? (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-sm text-gray-400">
-            <span className="w-5 h-5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
+            <span className="w-5 h-5 rounded-full border-2 border-accent-400 border-t-transparent animate-spin" />
             Opening your session…
           </div>
         ) : (
@@ -502,7 +502,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
           title="Start a new session"
           className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl text-gray-400
             hover:text-gray-800 dark:hover:text-gray-100 hover:bg-black/5 dark:hover:bg-white/5
-            transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+            transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400"
         >
           <ArrowLeft size={16} />
         </button>
@@ -516,7 +516,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
               onBlur={saveTitle}
               onKeyDown={(e) => { if (e.key === "Enter") saveTitle(); }}
               className="w-full text-[15px] font-semibold tracking-tight bg-transparent outline-none
-                text-gray-900 dark:text-gray-50 border-b-2 border-indigo-500 pb-px"
+                text-gray-900 dark:text-gray-50 border-b-2 border-accent-500 pb-px"
             />
           ) : (
             <button
@@ -539,7 +539,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
                 {sources.slice(0, 5).map((s) => (
                   <span
                     key={s.id}
-                    className="w-2 h-2 rounded-full ring-2 ring-[#f3f4f6] dark:ring-[#0a0c12]"
+                    className="w-2 h-2 rounded-full ring-2 ring-surface dark:ring-surface"
                     style={{ backgroundColor: sourceColor(s.order_index) }}
                   />
                 ))}
@@ -605,7 +605,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
               title="Drag to resize"
             >
               <span className="w-[3px] h-8 rounded-full bg-gray-300/0 dark:bg-white/0
-                group-hover/split:bg-indigo-400 dark:group-hover/split:bg-indigo-500 transition-colors" />
+                group-hover/split:bg-accent-400 dark:group-hover/split:bg-accent-500 transition-colors" />
             </div>
           </>
         ) : (

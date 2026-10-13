@@ -75,7 +75,7 @@ export function WebsiteViewer({ resource, onPosition, onAction, seekRef }: Websi
             title={resource.source_url}
             className="inline-flex max-w-full items-center gap-1.5 mb-5 px-2.5 py-1 rounded-full
               bg-gray-100 dark:bg-gray-800/70 text-[11px] text-gray-500 dark:text-gray-400
-              hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors"
+              hover:text-accent-600 dark:hover:text-accent-300 transition-colors"
           >
             <ExternalLink size={11} className="shrink-0" />
             <span className="truncate">{resource.source_url}</span>
@@ -85,7 +85,7 @@ export function WebsiteViewer({ resource, onPosition, onAction, seekRef }: Websi
           <div
             key={el.id}
             ref={(node) => { sectionRefs.current[el.order_index] = node; }}
-            className="group rounded-md px-2 -mx-2 py-1 cursor-pointer hover:bg-indigo-50/60 dark:hover:bg-indigo-900/20 transition-colors"
+            className="group rounded-md px-2 -mx-2 py-1 cursor-pointer hover:bg-accent-50/60 dark:hover:bg-accent-900/20 transition-colors"
             onClick={(e) => sectionClick(e, el)}
           >
             {el.element_type === "image" ? (

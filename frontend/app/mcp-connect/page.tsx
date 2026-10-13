@@ -45,7 +45,7 @@ function Connect() {
           <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50">Sign in to continue</h1>
           <p className="mt-1 text-sm text-gray-500">An app is asking to use your Second Brain. Sign in first, then decide.</p>
           <a href={`/login?next=${encodeURIComponent(next)}`}
-            className="mt-5 inline-flex h-10 items-center px-5 rounded-full bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500">
+            className="mt-5 inline-flex h-10 items-center px-5 rounded-full bg-accent-600 text-white text-sm font-semibold hover:bg-accent-500">
             Sign in
           </a>
         </>
@@ -64,13 +64,13 @@ function Connect() {
           </h1>
           <p className="mt-1 text-xs text-gray-400">It will return to {ask.redirect_host}</p>
           <ul className="mt-5 space-y-3 text-sm text-gray-700 dark:text-gray-200">
-            <li className="flex gap-2.5"><BookOpen size={16} className="mt-0.5 shrink-0 text-indigo-500" />Search and read your notes</li>
-            <li className="flex gap-2.5"><FilePlus size={16} className="mt-0.5 shrink-0 text-indigo-500" />Create new notes when you ask it to</li>
+            <li className="flex gap-2.5"><BookOpen size={16} className="mt-0.5 shrink-0 text-accent-500" />Search and read your notes</li>
+            <li className="flex gap-2.5"><FilePlus size={16} className="mt-0.5 shrink-0 text-accent-500" />Create new notes when you ask it to</li>
             <li className="flex gap-2.5"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-emerald-500" />Changing or deleting a note waits for your approval (Settings → Connected apps)</li>
           </ul>
           <div className="mt-6 flex gap-2">
             <button onClick={() => answer(true)} disabled={state === "busy"}
-              className="h-10 px-5 rounded-full bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-500 disabled:opacity-50">
+              className="h-10 px-5 rounded-full bg-accent-600 text-white text-sm font-semibold hover:bg-accent-500 disabled:opacity-50">
               Allow
             </button>
             <button onClick={() => answer(false)} disabled={state === "busy"}

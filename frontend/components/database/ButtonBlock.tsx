@@ -149,7 +149,7 @@ export function ButtonBlockView({ block, editor }: { block: AnyBlock; editor: An
           type="button"
           disabled={pending}
           onClick={click}
-          className="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+          className="text-sm px-3 py-1.5 rounded-lg bg-accent-600 text-white disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
         >
           <span aria-hidden>{block.props.icon}</span>
           {label}

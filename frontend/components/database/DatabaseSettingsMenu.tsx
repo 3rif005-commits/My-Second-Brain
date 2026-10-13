@@ -207,7 +207,7 @@ export function DatabaseSettingsMenu({
                 type="button"
                 onClick={enableSubItems}
                 disabled={enablingSubItems}
-                className="text-xs px-2 py-1 rounded bg-indigo-600 text-white disabled:opacity-40"
+                className="text-xs px-2 py-1 rounded bg-accent-600 text-white disabled:opacity-40"
               >
                 Turn on sub-items
               </button>
@@ -236,7 +236,7 @@ export function DatabaseSettingsMenu({
                 type="button"
                 onClick={enableDependencies}
                 disabled={enablingDependencies}
-                className="text-xs px-2 py-1 rounded bg-indigo-600 text-white disabled:opacity-40"
+                className="text-xs px-2 py-1 rounded bg-accent-600 text-white disabled:opacity-40"
               >
                 Turn on dependencies
               </button>
@@ -306,7 +306,7 @@ export function DatabaseSettingsMenu({
                 setTemplatesOpen(true);
                 setOpen(false);
               }}
-              className="text-xs px-2 py-1 rounded bg-indigo-600 text-white"
+              className="text-xs px-2 py-1 rounded bg-accent-600 text-white"
             >
               Manage templates
             </button>
@@ -320,7 +320,7 @@ export function DatabaseSettingsMenu({
                 setAutomationsOpen(true);
                 setOpen(false);
               }}
-              className="text-xs px-2 py-1 rounded bg-indigo-600 text-white"
+              className="text-xs px-2 py-1 rounded bg-accent-600 text-white"
             >
               Manage automations
             </button>
@@ -332,7 +332,7 @@ export function DatabaseSettingsMenu({
               type="button"
               onClick={exportCsv}
               disabled={!activeView || exporting}
-              className="text-xs px-2 py-1 rounded bg-indigo-600 text-white disabled:opacity-40"
+              className="text-xs px-2 py-1 rounded bg-accent-600 text-white disabled:opacity-40"
             >
               {exporting ? "Exporting…" : "Export CSV"}
             </button>

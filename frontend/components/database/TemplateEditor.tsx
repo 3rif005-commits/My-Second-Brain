@@ -351,7 +351,7 @@ export function TemplateEditor({ template, properties, onUpdateTemplate }: Templ
               type="button"
               onClick={handleSaveSchedule}
               disabled={savingSchedule}
-              className="text-xs px-2.5 py-1 rounded bg-indigo-600 text-white disabled:opacity-40"
+              className="text-xs px-2.5 py-1 rounded bg-accent-600 text-white disabled:opacity-40"
             >
               Save schedule
             </button>

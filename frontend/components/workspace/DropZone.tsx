@@ -36,7 +36,7 @@ export function DropZone({ onAddFiles, onAddUrl, busy }: DropZoneProps) {
             <PlaySquare size={20} />
           </span>
           <span className="w-14 h-14 rounded-2xl ws-panel flex items-center justify-center
-            text-indigo-500 z-10 shadow-lg">
+            text-accent-500 z-10 shadow-lg">
             <FileText size={22} />
           </span>
           <span className="w-12 h-12 rounded-2xl ws-panel flex items-center justify-center
@@ -61,7 +61,7 @@ export function DropZone({ onAddFiles, onAddUrl, busy }: DropZoneProps) {
             disabled={busy}
             className="ws-accent inline-flex items-center gap-2 h-10 px-5 rounded-full text-[13px] font-semibold
               transition-all duration-150 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100
-              focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2"
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 focus-visible:ring-offset-2"
           >
             {busy
               ? <span className="w-4 h-4 rounded-full border-2 border-white/60 border-t-transparent animate-spin" />
@@ -75,7 +75,7 @@ export function DropZone({ onAddFiles, onAddUrl, busy }: DropZoneProps) {
               text-gray-700 dark:text-gray-200 bg-white/70 dark:bg-white/[0.06]
               ring-1 ring-gray-200/80 dark:ring-white/10 hover:bg-white dark:hover:bg-white/10
               transition-all duration-150 active:scale-[0.98] disabled:opacity-50
-              focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400"
           >
             <Link2 size={16} /> Paste a link
           </button>
@@ -97,9 +97,9 @@ export function DropZone({ onAddFiles, onAddUrl, busy }: DropZoneProps) {
                 key={r.note_id}
                 onClick={() => router.push(`/brain/workspace/${r.note_id}`)}
                 className="group ws-panel flex items-center gap-2.5 h-12 px-3 rounded-2xl text-left
-                  hover:-translate-y-px hover:border-indigo-300/70 dark:hover:border-indigo-500/40
+                  hover:-translate-y-px hover:border-accent-300/70 dark:hover:border-accent-500/40
                   transition-all duration-150
-                  focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400"
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[12.5px] font-medium text-gray-800 dark:text-gray-100">
@@ -111,7 +111,7 @@ export function DropZone({ onAddFiles, onAddUrl, busy }: DropZoneProps) {
                 </span>
                 <ArrowRight
                   size={14}
-                  className="shrink-0 text-gray-300 dark:text-gray-600 group-hover:text-indigo-500
+                  className="shrink-0 text-gray-300 dark:text-gray-600 group-hover:text-accent-500
                     group-hover:translate-x-0.5 transition-all"
                 />
               </button>

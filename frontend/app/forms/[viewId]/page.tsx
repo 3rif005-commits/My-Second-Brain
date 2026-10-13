@@ -89,7 +89,7 @@ export default async function FormPage({ params }: Props) {
 
       <footer className="mt-12 py-6 border-t border-gray-100 text-center text-xs text-gray-400">
         Powered by{" "}
-        <a href="/" className="text-indigo-500 hover:underline">
+        <a href="/" className="text-accent-500 hover:underline">
           My Second Brain
         </a>
       </footer>

@@ -96,7 +96,7 @@ function QuestionInput({
   onChange: (v: PropertyValue) => void;
 }) {
   const inputClass =
-    "w-full px-3 py-2 rounded-lg border border-gray-300 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
+    "w-full px-3 py-2 rounded-lg border border-gray-300 text-sm outline-none focus:border-accent-500 focus:ring-1 focus:ring-accent-500";
 
   // Switches on `property.type` (a plain string from db_properties, not
   // part of the PropertyValue union) rather than `value.type`: PropertyValue's
@@ -211,7 +211,7 @@ function QuestionInput({
         <input
           type="checkbox"
           id={id}
-          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+          className="h-4 w-4 rounded border-gray-300 text-accent-600 focus:ring-accent-500"
           checked={v.checkbox}
           onChange={(e) => onChange({ type: "checkbox", checkbox: e.target.checked })}
         />

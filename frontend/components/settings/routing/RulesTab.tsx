@@ -83,7 +83,7 @@ export function RulesTab({ policy, onChange, kinds }: Props) {
               <span className="flex-1" />
               <label className="inline-flex items-center gap-1.5 text-[12px] text-gray-500">
                 <input type="checkbox" checked={r.enabled} onChange={(e) => patch(i, { enabled: e.target.checked })}
-                  className="accent-indigo-600" /> On
+                  className="accent-accent-600" /> On
               </label>
               <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move rule ${i + 1} up`}
                 className="p-1 rounded text-gray-400 hover:text-gray-700 disabled:opacity-30"><ArrowUp size={14} /></button>
@@ -99,7 +99,7 @@ export function RulesTab({ policy, onChange, kinds }: Props) {
       </ol>
       <button type="button" onClick={add}
         className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-dashed border-gray-300
-          dark:border-gray-600 text-[13px] text-gray-600 dark:text-gray-300 hover:border-indigo-400 hover:text-indigo-600">
+          dark:border-gray-600 text-[13px] text-gray-600 dark:text-gray-300 hover:border-accent-400 hover:text-accent-600">
         <Plus size={13} /> Add rule
       </button>
 

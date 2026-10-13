@@ -15,15 +15,15 @@ const COLOR: Record<Exclude<MirrorCode, "private" | "deleted">, string> = {
   synced: "border border-emerald-500 bg-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
   changed: "bg-amber-400",
   failed: "bg-rose-500",
-  needs_you: "bg-violet-500",
-  paused: "bg-slate-400",
+  needs_you: "bg-accent-500",
+  paused: "bg-gray-400",
 };
 
 export function NotionDot({ state, className = "" }: { state: MirrorCode | null | undefined; className?: string }) {
   if (!state || state === "deleted") return null;
   if (state === "private") {
     return <span role="img" aria-label={MIRROR_WORD.private} title={MIRROR_WORD.private} data-notion-dot={state}
-      className={`shrink-0 text-slate-500 ${className}`}><Lock size={10} /></span>;
+      className={`shrink-0 text-gray-500 ${className}`}><Lock size={10} /></span>;
   }
   return <span role="img" aria-label={MIRROR_WORD[state]} title={MIRROR_WORD[state]} data-notion-dot={state}
     className={`shrink-0 inline-block h-1.5 w-1.5 rounded-full ${COLOR[state]} ${className}`} />;

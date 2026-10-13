@@ -13,7 +13,7 @@ const LABEL: Record<string, string> = {
 };
 const TONE: Record<string, string> = {
   synced: "text-emerald-700 dark:text-emerald-300", changed: "text-amber-700 dark:text-amber-300",
-  failed: "text-rose-700 dark:text-rose-300", needs_you: "text-violet-700 dark:text-violet-300",
+  failed: "text-rose-700 dark:text-rose-300", needs_you: "text-accent-700 dark:text-accent-300",
   private: "text-gray-500", paused: "text-gray-500", none: "text-gray-400",
 };
 
@@ -42,7 +42,7 @@ export function NotionChip({ noteId }: { noteId: string }) {
       </button>
       {url && (
         <a href={url} target="_blank" rel="noreferrer" aria-label="Open in Notion" title="Open in Notion"
-          className="text-gray-400 hover:text-indigo-500"><ExternalLink size={12} /></a>
+          className="text-gray-400 hover:text-accent-500"><ExternalLink size={12} /></a>
       )}
     </span>
   );

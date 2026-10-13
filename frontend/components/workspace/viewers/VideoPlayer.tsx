@@ -87,7 +87,7 @@ export function VideoPlayer({ resource, onPosition, onAction, seekRef }: VideoPl
     <div
       ref={stageRef}
       tabIndex={-1}
-      className="relative flex-1 min-h-0 flex items-center justify-center bg-[#08090d] outline-none"
+      className="relative flex-1 min-h-0 flex items-center justify-center bg-black outline-none"
     >
       <video
         ref={videoRef}

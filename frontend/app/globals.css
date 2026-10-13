@@ -369,67 +369,53 @@ body {
    set of elevations and timings.
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* Recessed canvas the panels float on. */
+/* Workspace surfaces, on the Notion tokens: a flat page background, panels like
+ * Notion cards, frosted overlays like quick find, and the accent for primary
+ * actions (no gradients — Notion's buttons are flat). */
 .ws-canvas {
-  background:
-    radial-gradient(120% 90% at 50% -20%, rgba(99, 102, 241, 0.07), transparent 60%),
-    #f3f4f6;
+  background: var(--c-bg-sidebar);
 }
 .dark .ws-canvas {
-  background:
-    radial-gradient(120% 90% at 50% -20%, rgba(99, 102, 241, 0.13), transparent 60%),
-    #0a0c12;
+  background: var(--c-bg);
 }
 
 /* A raised content surface. */
 .ws-panel {
-  background: #ffffff;
-  border: 1px solid rgba(17, 24, 39, 0.07);
-  box-shadow:
-    0 1px 2px rgba(16, 24, 40, 0.04),
-    0 12px 32px -20px rgba(16, 24, 40, 0.35);
+  background: var(--c-bg);
+  border: 0;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 .dark .ws-panel {
-  background: #11141c;
-  border-color: rgba(255, 255, 255, 0.07);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.4),
-    0 16px 40px -24px rgba(0, 0, 0, 0.9);
+  background: var(--c-bg-panel);
 }
 
 /* Frosted overlay — floating docks, action popovers, menus. */
 .ws-glass {
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(17, 24, 39, 0.08);
-  box-shadow: 0 8px 32px -8px rgba(16, 24, 40, 0.25);
-}
-.dark .ws-glass {
-  background: rgba(20, 23, 31, 0.82);
-  border-color: rgba(255, 255, 255, 0.09);
-  box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.7);
+  background: var(--c-bg-search);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 0;
+  box-shadow: var(--shadow-menu);
 }
 
 /* Frosted overlay that always reads dark — used over media. */
 .ws-glass-dark {
-  background: rgba(16, 18, 25, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 10px 40px -12px rgba(0, 0, 0, 0.8);
+  background: rgba(32, 32, 32, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 0;
+  box-shadow: rgb(56, 56, 54) 0 0 0 1px, rgba(25, 25, 25, 0.2) 0 14px 28px -6px;
 }
 
-/* The one accent gradient. Primary actions only — never decoration. */
+/* Primary actions: the flat accent, like every other primary button. */
 .ws-accent {
-  background-image: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  color: #fff;
-  box-shadow:
-    0 1px 2px rgba(79, 70, 229, 0.4),
-    0 8px 20px -8px rgba(99, 102, 241, 0.7);
+  background: var(--c-accent);
+  color: var(--c-text-on-accent);
+  box-shadow: none;
 }
 .ws-accent:hover:not(:disabled) {
-  background-image: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  background: var(--c-accent-hover);
 }
 
 /* Horizontal strips that scroll but must not show a bar. */
@@ -573,4 +559,55 @@ body {
 .settings-content input:focus,
 .settings-content textarea:focus {
   box-shadow: var(--ring-input);
+}
+
+/* Native controls that have not moved to components/ui yet are drawn in Notion's
+ * style, so every dropdown and checkbox in the app looks the same. The design
+ * guard (lib/design) keeps their number from growing. */
+select:not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6.5L8 10l3.5-3.5' fill='none' stroke='rgb(142,139,134)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  background-size: 14px;
+  padding-right: 24px !important;
+  border-radius: var(--radius-md);
+  color: var(--c-text);
+  cursor: pointer;
+}
+select:not([multiple]) option {
+  background: var(--c-bg-elevated);
+  color: var(--c-text);
+}
+input[type="checkbox"]:not([data-kit]):not([role="switch"]) {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--c-border-checkbox);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background 0.2s ease-out;
+}
+input[type="checkbox"]:not([data-kit]):not([role="switch"]):hover {
+  background-color: var(--c-bg-hover);
+}
+input[type="checkbox"]:not([data-kit]):not([role="switch"]):checked {
+  border-color: var(--c-accent);
+  background: var(--c-accent)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3 7.5l2.5 2.5L11 4.5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+}
+input[type="checkbox"]:not([data-kit]):disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+input[type="radio"],
+input[type="range"] {
+  accent-color: var(--c-accent);
 }

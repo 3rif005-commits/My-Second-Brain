@@ -118,8 +118,8 @@ export function RouteBadge({ route, onRerun, busy }: BadgeProps) {
                 {["local", "fast", "strong"].filter((s) => s !== route.slot).map((s) => (
                   <button key={s} type="button" disabled={busy}
                     onClick={() => { setOpen(false); onRerun(s); }}
-                    className="rounded-md border border-gray-200 px-2 py-0.5 text-gray-700 hover:border-indigo-300
-                      hover:text-indigo-600 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">
+                    className="rounded-md border border-gray-200 px-2 py-0.5 text-gray-700 hover:border-accent-300
+                      hover:text-accent-600 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200">
                     {slotLabel(s)}
                   </button>
                 ))}
@@ -127,7 +127,7 @@ export function RouteBadge({ route, onRerun, busy }: BadgeProps) {
             </div>
           )}
           <RuleFromAnswer current={route.slot} />
-          <a href="/brain/settings/routing" className="mt-2 block text-indigo-600 hover:underline dark:text-indigo-400">
+          <a href="/brain/settings/routing" className="mt-2 block text-accent-600 hover:underline dark:text-accent-400">
             Routing settings
           </a>
         </div>

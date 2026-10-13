@@ -37,8 +37,8 @@ describe("Connected apps — the ?change= deep link", () => {
     const card = document.getElementById("change-ch2");
     expect(card).toBeTruthy();
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
-    expect(card?.className).toContain("ring-indigo-400");
-    expect(document.getElementById("change-ch1")?.className).not.toContain("ring-indigo-400");
+    expect(card?.className).toContain("ring-accent-400");
+    expect(document.getElementById("change-ch1")?.className).not.toContain("ring-accent-400");
   });
 
   it("does nothing when nothing matches the id, or no id is given", async () => {
@@ -50,6 +50,6 @@ describe("Connected apps — the ?change= deep link", () => {
     render(<ConnectedAppsPage />);
     await screen.findAllByTestId("pending-change");
     expect(scrollIntoView).not.toHaveBeenCalled();
-    expect(document.getElementById("change-ch1")?.className).not.toContain("ring-indigo-400");
+    expect(document.getElementById("change-ch1")?.className).not.toContain("ring-accent-400");
   });
 });

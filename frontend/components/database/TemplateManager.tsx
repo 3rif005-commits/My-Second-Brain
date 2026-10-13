@@ -158,7 +158,7 @@ export function TemplateManager({
                             {t.name}
                           </span>
                           {t.is_default && (
-                            <span className="text-[10px] font-medium uppercase tracking-wide text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/40 px-1.5 py-0.5 rounded">
+                            <span className="text-[10px] font-medium uppercase tracking-wide text-accent-600 dark:text-accent-400 bg-accent-50 dark:bg-accent-900/40 px-1.5 py-0.5 rounded">
                               Default
                             </span>
                           )}

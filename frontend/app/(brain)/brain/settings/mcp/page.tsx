@@ -118,7 +118,7 @@ export default function McpSettingsPage() {
               key={t}
               onClick={() => setTab(t)}
               className={`pb-2 text-sm font-medium border-b-2 transition-colors capitalize ${
-                tab === t ? "border-indigo-500 text-indigo-600" : "border-transparent text-gray-400 hover:text-gray-700"
+                tab === t ? "border-accent-500 text-accent-600" : "border-transparent text-gray-400 hover:text-gray-700"
               }`}
             >
               {t === "audit" ? "Audit Log" : "Servers"}
@@ -162,7 +162,7 @@ export default function McpSettingsPage() {
                       {/* Enable toggle */}
                       <button
                         onClick={() => toggleServer(s.id, !s.enabled)}
-                        className={`p-1.5 transition-colors ${s.enabled ? "text-indigo-500" : "text-gray-300"}`}
+                        className={`p-1.5 transition-colors ${s.enabled ? "text-accent-500" : "text-gray-300"}`}
                       >
                         {s.enabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
                       </button>
@@ -246,7 +246,7 @@ export default function McpSettingsPage() {
                   <button
                     onClick={addServer}
                     disabled={saving || !form.name.trim()}
-                    className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors"
+                    className="px-4 py-2 text-sm bg-accent-600 text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors"
                   >
                     {saving ? "Adding…" : "Add server"}
                   </button>
@@ -255,7 +255,7 @@ export default function McpSettingsPage() {
             ) : (
               <button
                 onClick={() => setShowAdd(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-accent-600 hover:bg-accent-50 rounded-lg transition-colors"
               >
                 <Plus size={14} />
                 Add MCP server

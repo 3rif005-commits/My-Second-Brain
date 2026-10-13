@@ -410,7 +410,7 @@ export function ViewSettingsSidebar({
                       <button
                         type="button"
                         onClick={() => setAutomationsOpen(true)}
-                        className="rounded bg-brand px-2 py-1 text-white"
+                        className="rounded bg-accent px-2 py-1 text-white"
                       >
                         Manage automations
                       </button>

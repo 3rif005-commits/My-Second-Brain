@@ -1,6 +1,6 @@
 // Screenshot every main screen of the app in light and dark.
 // Usage: node shoot.mjs <outDir>
-import { chromium } from "/home/user/My-Second-Brain/frontend/node_modules/playwright/index.mjs";
+import { chromium } from "../../../frontend/node_modules/playwright/index.mjs";
 import fs from "fs";
 
 const out = process.argv[2];
@@ -8,6 +8,7 @@ fs.mkdirSync(out, { recursive: true });
 const BASE = "http://localhost:3000";
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 const ctx = await browser.newContext({ viewport: { width: 1300, height: 649 } });
+await ctx.addInitScript(() => { const st = document.createElement("style"); st.textContent = "nextjs-portal{display:none!important}"; document.addEventListener("DOMContentLoaded", () => document.head.appendChild(st)); });
 const page = await ctx.newPage();
 
 await page.goto(`${BASE}/login`);
@@ -42,7 +43,7 @@ const routes = [
 ].filter(([, r]) => r);
 
 for (const theme of ["light", "dark"]) {
-  await page.evaluate((t) => localStorage.setItem("sb-theme", t), theme);
+  await page.evaluate((t) => localStorage.setItem("sb-prefs", JSON.stringify({ theme: t })), theme);
   for (const [name, route] of routes) {
     try {
       await page.goto(BASE + route, { waitUntil: "domcontentloaded", timeout: 120_000 });
@@ -56,5 +57,5 @@ for (const theme of ["light", "dark"]) {
     }
   }
 }
-await ctx.storageState({ path: (process.env.AUDIT_TMP ?? "/tmp/ui-audit") + "/auth.json" });
+await ctx.storageState({ path: "/tmp/ui-audit/auth.json" });
 await browser.close();

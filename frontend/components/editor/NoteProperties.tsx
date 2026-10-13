@@ -115,12 +115,12 @@ export function NoteProperties({ note }: Props) {
               {topics.map((t) => (
                 <span
                   key={t}
-                  className="flex items-center gap-1 text-xs px-2 py-0.5 bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400 rounded-full"
+                  className="flex items-center gap-1 text-xs px-2 py-0.5 bg-accent-50 text-accent-600 dark:bg-accent-900/40 dark:text-accent-400 rounded-full"
                 >
                   {t}
                   <button
                     onClick={() => removeTopic(t)}
-                    className="hover:text-indigo-900 dark:hover:text-indigo-200 leading-none"
+                    className="hover:text-accent-900 dark:hover:text-accent-200 leading-none"
                     aria-label={`Remove ${t}`}
                   >
                     <X size={10} />
@@ -138,7 +138,7 @@ export function NoteProperties({ note }: Props) {
                     setShowInput(false);
                   }}
                   placeholder="Add topic…"
-                  className="text-xs px-2 py-0.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-full outline-none w-24 focus:border-indigo-300 dark:focus:border-indigo-500"
+                  className="text-xs px-2 py-0.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-full outline-none w-24 focus:border-accent-300 dark:focus:border-accent-500"
                 />
               ) : (
                 <button

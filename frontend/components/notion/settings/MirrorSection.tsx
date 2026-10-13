@@ -44,7 +44,7 @@ export function MirrorSection() {
         <li className="rounded-full border px-3 py-1 border-gray-200 dark:border-white/10">{c.synced} in sync</li>
         <li className="rounded-full border px-3 py-1 border-amber-300 dark:border-amber-500/40">{c.changed} changed</li>
         <li className="rounded-full border px-3 py-1 border-rose-300 dark:border-rose-500/40">{c.failed} failing</li>
-        <li className="rounded-full border px-3 py-1 border-violet-300 dark:border-violet-500/40">{c.needs_you} need you</li>
+        <li className="rounded-full border px-3 py-1 border-accent-300 dark:border-accent-500/40">{c.needs_you} need you</li>
         <li className="rounded-full border px-3 py-1 border-gray-200 dark:border-white/10">{c.private} private (not sent)</li>
       </ul>
       <div className="flex flex-wrap gap-2">
@@ -62,7 +62,7 @@ export function MirrorSection() {
                 <div className="text-[12px] text-gray-500">{s.help}</div>
               </div>
               <button role="switch" aria-checked={!!inc?.[s.key]} aria-label={s.label} disabled={!inc} onClick={() => flip(s.key)}
-                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 ${inc?.[s.key] ? "bg-indigo-500" : "bg-gray-300 dark:bg-gray-600"}`}>
+                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-500 ${inc?.[s.key] ? "bg-accent-500" : "bg-gray-300 dark:bg-gray-600"}`}>
                 <span className={`inline-block h-4 w-4 translate-y-0.5 rounded-full bg-white shadow transition-transform ${inc?.[s.key] ? "translate-x-[18px]" : "translate-x-0.5"}`} />
               </button>
             </li>

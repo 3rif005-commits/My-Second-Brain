@@ -420,7 +420,7 @@ function AddWidgetPicker({
         <button
           type="button"
           aria-label={ariaLabel}
-          className="flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-indigo-600 text-white"
+          className="flex items-center gap-1 text-[11px] px-2 py-1 rounded bg-accent-600 text-white"
         >
           <Plus size={12} /> Add widget
         </button>

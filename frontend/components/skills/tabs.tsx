@@ -78,7 +78,7 @@ function InstructionsTab({ draft, set }: TabCtx) {
           className="w-full resize-none rounded-xl px-4 py-3 font-mono text-[12.5px] leading-relaxed
             bg-gray-50/80 dark:bg-white/[0.03] border border-gray-200/80 dark:border-white/10
             text-gray-800 dark:text-gray-100 placeholder:text-gray-400 outline-none
-            focus:border-indigo-300 dark:focus:border-indigo-500/50 focus:bg-white dark:focus:bg-white/[0.05]
+            focus:border-accent-300 dark:focus:border-accent-500/50 focus:bg-white dark:focus:bg-white/[0.05]
             transition-colors"
         />
       ) : (
@@ -149,7 +149,7 @@ function FilesTab({ skill, reportDirty, onSkillChanged }: TabCtx) {
           aria-label={`File ${active}`} disabled={saved === null}
           className="flex-1 min-h-[420px] w-full resize-y rounded-xl px-4 py-3 font-mono text-[12.5px] leading-relaxed
             bg-gray-50/80 dark:bg-white/[0.03] border border-gray-200/80 dark:border-white/10 outline-none
-            focus:border-indigo-300 text-gray-800 dark:text-gray-100 disabled:opacity-50" />
+            focus:border-accent-300 text-gray-800 dark:text-gray-100 disabled:opacity-50" />
         <div className="flex items-center justify-end gap-2">
           {error && <span className="text-[12px] text-red-500 mr-auto">{error}</span>}
           {dirty && (
@@ -159,7 +159,7 @@ function FilesTab({ skill, reportDirty, onSkillChanged }: TabCtx) {
             </button>
           )}
           <button type="button" onClick={save} disabled={!dirty || busy}
-            className="h-8 px-3.5 rounded-lg text-[12.5px] font-medium bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40">
+            className="h-8 px-3.5 rounded-lg text-[12.5px] font-medium bg-accent-600 text-white hover:bg-accent-500 disabled:opacity-40">
             {busy ? "Saving…" : "Save file"}
           </button>
         </div>

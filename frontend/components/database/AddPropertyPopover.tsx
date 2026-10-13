@@ -379,7 +379,7 @@ export function AddPropertyPopover({
             type="button"
             disabled={submitting || !canSubmit(configuring)}
             onClick={() => submitConfigured(configuring)}
-            className="mt-2 w-full rounded bg-brand px-2 py-1 text-white disabled:opacity-40"
+            className="mt-2 w-full rounded bg-accent px-2 py-1 text-white disabled:opacity-40"
           >
             Add property
           </button>

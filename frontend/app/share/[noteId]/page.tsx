@@ -39,7 +39,7 @@ export default async function SharePage({ params }: Props) {
         <div className="flex-1" />
         <a
           href="/signup"
-          className="text-xs font-medium text-indigo-600 hover:text-indigo-700 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-50 transition-colors"
+          className="text-xs font-medium text-accent-600 hover:text-accent-700 px-3 py-1.5 rounded-lg border border-accent-200 hover:bg-accent-50 transition-colors"
         >
           Create your own →
         </a>
@@ -59,7 +59,7 @@ export default async function SharePage({ params }: Props) {
             {(note.topics as string[]).map((t) => (
               <span
                 key={t}
-                className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium"
+                className="text-xs px-2 py-0.5 rounded-full bg-accent-50 text-accent-700 font-medium"
               >
                 {t}
               </span>
@@ -73,7 +73,7 @@ export default async function SharePage({ params }: Props) {
 
       <footer className="mt-12 py-6 border-t border-gray-100 text-center text-xs text-gray-400">
         Shared via{" "}
-        <a href="/" className="text-indigo-500 hover:underline">
+        <a href="/" className="text-accent-500 hover:underline">
           My Second Brain
         </a>{" "}
         — your AI-powered knowledge OS

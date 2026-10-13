@@ -80,10 +80,10 @@ export default function ConnectedAppsPage() {
             <div key={c.id} id={`change-${c.id}`} data-testid="pending-change"
               className={`rounded-xl ring-1 p-4 transition-shadow ${
                 c.id === highlightId
-                  ? "ring-2 ring-indigo-400 shadow-[0_0_0_4px_rgba(99,102,241,0.15)]"
+                  ? "ring-2 ring-accent-400 shadow-[0_0_0_4px_rgba(99,102,241,0.15)]"
                   : "ring-gray-200 dark:ring-white/10"}`}>
               <div className="flex items-center gap-2 text-sm">
-                {c.action === "delete" ? <Trash2 size={15} className="text-red-500" /> : <PencilLine size={15} className="text-indigo-500" />}
+                {c.action === "delete" ? <Trash2 size={15} className="text-red-500" /> : <PencilLine size={15} className="text-accent-500" />}
                 <span className="font-medium text-gray-900 dark:text-gray-100">
                   {c.app} wants to {c.action === "delete" ? "move to the Trash" : "change"} “{c.note_title}”
                 </span>
@@ -100,7 +100,7 @@ export default function ConnectedAppsPage() {
                     <p className="text-[11px] uppercase text-gray-400 mb-1">
                       After{c.new_title ? ` — title “${c.new_title}”` : ""}
                     </p>
-                    <pre className="whitespace-pre-wrap text-[12px] leading-relaxed max-h-56 overflow-auto rounded-lg bg-indigo-50/60 dark:bg-indigo-500/10 p-2 text-gray-800 dark:text-gray-200">{c.new_text || "(empty)"}</pre>
+                    <pre className="whitespace-pre-wrap text-[12px] leading-relaxed max-h-56 overflow-auto rounded-lg bg-accent-50/60 dark:bg-accent-500/10 p-2 text-gray-800 dark:text-gray-200">{c.new_text || "(empty)"}</pre>
                   </div>
                 </div>
               )}
@@ -116,7 +116,7 @@ export default function ConnectedAppsPage() {
                   className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full ring-1 ring-gray-200 dark:ring-white/10 text-[12.5px] text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50">
                   <X size={13} /> Reject
                 </button>
-                <a href={`/brain/${c.note_id}`} className="ml-auto self-center text-[12px] text-indigo-600 hover:underline">Open the note</a>
+                <a href={`/brain/${c.note_id}`} className="ml-auto self-center text-[12px] text-accent-600 hover:underline">Open the note</a>
               </div>
             </div>
           ))}
