@@ -3,7 +3,24 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useNotion } from "@/context/NotionContext";
-import { Search, X } from "lucide-react";
+import { CornerDownLeft, FileText, Search, Send, X } from "lucide-react";
+import { useNotes } from "@/lib/hooks/useNotes";
+import { cx } from "@/components/ui/cx";
+
+/** Matched terms in blue, weight 500, no background (shell.md §3). */
+function Highlight({ text, query }: { text: string; query: string }) {
+  const q = query.trim();
+  if (!q) return <>{text}</>;
+  const i = text.toLowerCase().indexOf(q.toLowerCase());
+  if (i < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, i)}
+      <span className="font-medium text-accent">{text.slice(i, i + q.length)}</span>
+      {text.slice(i + q.length)}
+    </>
+  );
+}
 
 interface SearchResult {
   id: string;
@@ -28,6 +45,12 @@ export function SearchModal({ open, onClose }: Props) {
   const router = useRouter();
   const pathname = usePathname() ?? "";
   const notion = useNotion();
+  const { notes } = useNotes();
+  // With no query, quick find lists recently visited pages (Notion's "Recent").
+  const recent = notes
+    .filter((n) => n.last_viewed_at)
+    .sort((a, b) => new Date(b.last_viewed_at!).getTime() - new Date(a.last_viewed_at!).getTime())
+    .slice(0, 8);
 
   useEffect(() => {
     if (open) {
@@ -79,13 +102,15 @@ export function SearchModal({ open, onClose }: Props) {
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setSelectedIndex((i) => Math.min(i + 1, commands.length + results.length - 1));
+      const count = query.trim() ? commands.length + results.length : recent.length;
+      setSelectedIndex((i) => Math.min(i + 1, count - 1));
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIndex((i) => Math.max(i - 1, 0));
     }
     if (e.key === "Enter") {
+      if (!query.trim()) { if (recent[selectedIndex]) navigate(recent[selectedIndex].id); return; }
       if (selectedIndex < commands.length) { commands[selectedIndex].run(); onClose(); }
       else if (results[selectedIndex - commands.length]) navigate(results[selectedIndex - commands.length].id);
     }
@@ -93,89 +118,105 @@ export function SearchModal({ open, onClose }: Props) {
 
   if (!open) return null;
 
+  const row = (selected: boolean) =>
+    cx(
+      "flex w-full items-center gap-2 rounded-xl px-2 text-left transition-colors duration-instant",
+      selected ? "bg-surface-active" : "hover:bg-surface-active",
+    );
+
+  // Notion's quick find: a frosted card at 9vh, centred over the whole window, no
+  // dimmed backdrop, radius 20px (shell.md §3). The preview pane is not built.
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] px-4 bg-black/50 backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[9vh]" onMouseDown={onClose}>
       <div
-        className="w-full max-w-lg bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label="Search"
+        className="flex max-h-[min(640px,80vh)] w-full max-w-[755px] flex-col overflow-hidden rounded-[20px] bg-surface-search shadow-modal backdrop-blur-[40px]"
+        onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Input row */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-          <Search size={17} className="text-gray-400 shrink-0" />
+        <div className="m-3 flex items-center gap-2">
+          <Search size={20} className="shrink-0 text-ink-icon" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search notes…"
-            className="flex-1 text-sm outline-none placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-gray-100 bg-transparent"
+            placeholder="Search or jump to a page…"
+            aria-label="Search"
+            className="flex-1 bg-transparent text-base leading-6 text-ink outline-none placeholder:text-ink-placeholder"
           />
           {query && (
             <button
               onClick={() => setQuery("")}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              aria-label="Clear search"
+              className="flex size-6 items-center justify-center rounded-full text-ink-icon hover:bg-surface-active"
             >
-              <X size={15} />
+              <X size={14} />
             </button>
           )}
-          <kbd className="hidden sm:inline-flex text-[10px] font-mono bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 px-1.5 py-0.5 rounded">
-            ESC
-          </kbd>
         </div>
 
-        {/* Results */}
-        {query.trim() ? (
-          <div className="max-h-80 overflow-y-auto">
-            {commands.map((c, i) => (
-              <button key={c.id} onClick={() => { c.run(); onClose(); }}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-gray-900 dark:text-gray-100 ${
-                  i === selectedIndex ? "bg-indigo-50 dark:bg-indigo-900/30" : "hover:bg-gray-50 dark:hover:bg-gray-700/50"}`}>
-                <span aria-hidden>⇪</span>{c.label}
-              </button>
-            ))}
-            {loading && (
-              <div className="px-4 py-8 text-center text-sm text-gray-400">
-                Searching…
-              </div>
-            )}
-            {!loading && results.length === 0 && commands.length === 0 && (
-              <div className="px-4 py-8 text-center text-sm text-gray-400">
-                No notes found for &ldquo;{query}&rdquo;
-              </div>
-            )}
-            {!loading &&
-              results.map((note, i) => (
-                <button
-                  key={note.id}
-                  onClick={() => navigate(note.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${
-                    i + commands.length === selectedIndex
-                      ? "bg-indigo-50 dark:bg-indigo-900/30"
-                      : "hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                  }`}
-                >
-                  <span className="text-base leading-none shrink-0">{note.icon || "📄"}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                      {note.title || "Untitled"}
-                    </p>
-                    {note.topics?.length > 0 && (
-                      <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">
-                        {note.topics.slice(0, 3).join(" · ")}
-                      </p>
-                    )}
-                  </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+          {query.trim() ? (
+            <>
+              {commands.length > 0 && (
+                <div className="mx-2 mb-2 mt-1.5 text-xs font-medium text-ink-secondary">Commands</div>
+              )}
+              {commands.map((c, i) => (
+                <button key={c.id} onClick={() => { c.run(); onClose(); }} className={cx(row(i === selectedIndex), "h-9 text-sm font-medium text-ink")}>
+                  <Send size={18} className="shrink-0 text-ink-icon" />
+                  <span className="flex-1">{c.label}</span>
+                  {i === selectedIndex && <CornerDownLeft size={14} className="text-ink-icon" />}
                 </button>
               ))}
-          </div>
-        ) : (
-          <div className="px-4 py-3 text-xs text-gray-400 dark:text-gray-500">
-            Type to search across all your notes
-          </div>
-        )}
+              {(results.length > 0 || loading) && (
+                <div className="mx-2 mb-2 mt-1.5 text-xs font-medium text-ink-secondary">Pages</div>
+              )}
+              {loading && results.length === 0 && <div className="px-2 py-6 text-center text-sm text-ink-tertiary">Searching…</div>}
+              {!loading && results.length === 0 && commands.length === 0 && (
+                <div className="px-2 py-8 text-center text-sm text-ink-tertiary">No results</div>
+              )}
+              {results.map((note, i) => {
+                const selected = i + commands.length === selectedIndex;
+                return (
+                  <button key={note.id} onClick={() => navigate(note.id)} className={cx(row(selected), "min-h-[55px] py-2")}>
+                    <span className="flex size-5 shrink-0 items-center justify-center text-[16px] leading-none text-ink-icon">
+                      {note.icon || <FileText size={18} strokeWidth={1.75} />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-ink-sidebar">
+                        <Highlight text={note.title || "Untitled"} query={query} />
+                      </span>
+                      {note.topics?.length > 0 && (
+                        <span className="mt-0.5 block truncate text-xs leading-[16.8px] text-ink-tertiary">
+                          {note.topics.slice(0, 3).join(" · ")}
+                        </span>
+                      )}
+                    </span>
+                    {selected && <CornerDownLeft size={14} className="shrink-0 text-ink-icon" />}
+                  </button>
+                );
+              })}
+            </>
+          ) : recent.length > 0 ? (
+            <>
+              <div className="mx-2 mb-2 mt-1.5 text-xs font-medium text-ink-secondary">Recent</div>
+              {recent.map((note, i) => (
+                <button key={note.id} onClick={() => navigate(note.id)} className={cx(row(i === selectedIndex), "h-9")}>
+                  <span className="flex size-5 shrink-0 items-center justify-center text-[16px] leading-none text-ink-icon">
+                    {note.icon || <FileText size={18} strokeWidth={1.75} />}
+                  </span>
+                  <span className="truncate text-sm font-medium text-ink-sidebar">{note.title || "Untitled"}</span>
+                  <span className="flex-1" />
+                  {i === selectedIndex && <CornerDownLeft size={14} className="shrink-0 text-ink-icon" />}
+                </button>
+              ))}
+            </>
+          ) : (
+            <div className="px-2 py-3 text-sm text-ink-tertiary">Type to search across all your notes</div>
+          )}
+        </div>
       </div>
     </div>
   );

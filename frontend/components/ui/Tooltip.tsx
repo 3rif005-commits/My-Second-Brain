@@ -24,6 +24,8 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
 
 export function Tooltip({ content, shortcut, side = "bottom", align = "center", children }: TooltipProps) {
   return (
+    // Its own provider, so a Tooltip works anywhere (tests, portals) without app setup.
+    <RadixTooltip.Provider delayDuration={500} skipDelayDuration={300}>
     <RadixTooltip.Root>
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
       <RadixTooltip.Portal>
@@ -39,5 +41,6 @@ export function Tooltip({ content, shortcut, side = "bottom", align = "center", 
         </RadixTooltip.Content>
       </RadixTooltip.Portal>
     </RadixTooltip.Root>
+    </RadixTooltip.Provider>
   );
 }

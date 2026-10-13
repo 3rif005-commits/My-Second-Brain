@@ -12,6 +12,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/providers", () => ({
   useTheme: () => ({ resolvedTheme: "dark", setTheme: vi.fn() }),
   useToast: () => ({ showToast: vi.fn() }),
+  usePreferences: () => ({ preferences: { theme: "dark" }, updatePreferences: vi.fn() }),
 }));
 
 vi.mock("@/lib/supabase/client", () => ({
@@ -88,7 +89,7 @@ describe("Sidebar — Databases section", () => {
     render(<Sidebar />);
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     // The rest of the nav is still there.
-    expect(screen.getByText("Workspace")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Workspace" })).toBeInTheDocument();
     expect(screen.getByText("No databases yet")).toBeInTheDocument();
   });
 

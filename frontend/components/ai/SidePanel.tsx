@@ -114,11 +114,10 @@ export function SidePanelToggleButton({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       aria-label="Open AI panel"
-      title="Ask AI (⌘K)"
-      className="no-print fixed bottom-5 right-5 z-30 flex items-center justify-center w-11 h-11 rounded-full
-        bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-indigo-500
-        shadow-lg shadow-indigo-500/10 hover:shadow-xl hover:scale-105 active:scale-95
-        transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+      title="Ask AI (⌘J)"
+      className="no-print fixed bottom-4 right-4 z-30 flex size-10 items-center justify-center rounded-full
+        bg-surface-elevated text-ink shadow-float hover:bg-surface-sidebar active:scale-95
+        transition-[background,transform] duration-instant"
     >
       <Bot size={20} />
     </button>

@@ -99,56 +99,53 @@ export function NotificationsBell() {
 
   return (
     <div ref={containerRef} className="relative">
+      {/* Notion's Inbox: a 32px round icon button in the sidebar nav row, with a
+          red unread badge at the icon's top-right (shell.md §1). */}
       <button
         type="button"
         aria-label="Notifications"
+        title="Inbox"
         onClick={() => setOpen((o) => !o)}
-        className="group w-full flex items-center gap-2.5 px-2 py-[5px] rounded-md text-[13px] font-medium text-slate-400 hover:text-slate-100 hover:bg-white/[0.055] transition-colors"
+        className={`relative flex size-8 items-center justify-center rounded-full text-ink-icon transition-colors duration-fast hover:bg-surface-active ${open ? "bg-surface-active" : ""}`}
       >
-        <span className="relative">
-          <Bell size={15} strokeWidth={2} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-          {unreadCount > 0 && (
-            <span
-              aria-label={`${unreadCount} unread notifications`}
-              className="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-[3px] rounded-full bg-red-500 text-white text-[9px] leading-[14px] text-center font-semibold"
-            >
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </span>
-          )}
-        </span>
-        <span className="flex-1 text-left truncate">Notifications</span>
+        <Bell size={20} strokeWidth={1.75} />
+        {unreadCount > 0 && (
+          <span
+            aria-label={`${unreadCount} unread notifications`}
+            className="absolute right-0.5 top-0.5 h-3 min-w-3 rounded-full bg-ink-danger px-[3px] text-center text-[9px] font-semibold leading-3 text-white"
+          >
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
       </button>
 
       {open && (
         <div
           role="dialog"
           aria-label="Notifications"
-          className="absolute left-0 top-full mt-1 w-80 max-h-96 overflow-y-auto z-50 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-2xl text-xs"
+          className="absolute left-0 top-full z-50 mt-1 max-h-96 w-80 overflow-y-auto rounded-menu bg-menu-bg p-1 text-sm shadow-menu"
         >
+          <div className="px-2 pb-1 pt-1.5 text-xs font-medium text-ink-secondary">Inbox</div>
           {notifications.length === 0 ? (
-            <p className="p-3 text-gray-400 dark:text-gray-500">No notifications yet.</p>
+            <p className="px-2 py-3 text-ink-tertiary">No notifications yet.</p>
           ) : (
-            <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+            <ul>
               {notifications.map((n) => (
-                <li
-                  key={n.id}
-                  className={`p-2.5 ${n.read_at === null ? "bg-indigo-50/60 dark:bg-indigo-900/20" : ""}`}
-                >
-                  <p className="text-gray-800 dark:text-gray-100">{n.message}</p>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-gray-400 dark:text-gray-500">{timeAgo(n.created_at)}</span>
+                <li key={n.id} className="rounded-md px-2 py-2 hover:bg-surface-hover">
+                  <div className="flex items-start gap-2">
+                    {n.read_at === null && <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent" />}
+                    <p className="flex-1 text-ink">{n.message}</p>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between text-xs">
+                    <span className="text-ink-tertiary">{timeAgo(n.created_at)}</span>
                     <div className="flex items-center gap-2">
                       {n.link && (
-                        <a href={n.link} className="text-indigo-500 hover:text-indigo-600">
+                        <a href={n.link} className="text-accent hover:underline">
                           Open
                         </a>
                       )}
                       {n.read_at === null && (
-                        <button
-                          type="button"
-                          onClick={() => markRead(n.id)}
-                          className="text-indigo-500 hover:text-indigo-600"
-                        >
+                        <button type="button" onClick={() => markRead(n.id)} className="text-accent hover:underline">
                           Mark read
                         </button>
                       )}

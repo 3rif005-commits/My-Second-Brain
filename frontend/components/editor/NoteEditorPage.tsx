@@ -1,12 +1,16 @@
 "use client";
 
 import React, { Component, useState, useCallback, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Link, Check, Layers, Send } from "lucide-react";
+import { Link, Layers, Send, Star, FileDown, Printer, Trash2, Globe } from "lucide-react";
 import type { Note } from "@/lib/types/database";
-import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { TopBar, TopBarButton } from "@/components/shell/TopBar";
+import { PageMenu } from "@/components/shell/PageMenu";
+import { usePageStyle } from "@/lib/pageStyle";
+import { useToast } from "@/app/providers";
+import { cx } from "@/components/ui/cx";
 import { wsApi } from "@/lib/workspace";
 import { getPlainText } from "@/lib/blockText";
 import {
@@ -32,7 +36,7 @@ const EMOJIS = [
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const BlockEditor = dynamic(
   () => import("./BlockEditor").then((m) => m.BlockEditor),
-  { ssr: false, loading: () => <div className="h-64 animate-pulse bg-gray-50 dark:bg-gray-800 rounded-lg" /> }
+  { ssr: false, loading: () => <div className="h-64 animate-pulse rounded-md bg-surface-field" /> }
 ) as React.ForwardRefExoticComponent<
   React.ComponentProps<typeof import("./BlockEditor").BlockEditor> &
     React.RefAttributes<BlockEditorHandle>
@@ -84,6 +88,10 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
   const [ingestHtml, setIngestHtml] = useState<string | undefined>();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [favorited, setFavorited] = useState(note.is_favorited ?? false);
+  const { style: pageStyle, update: updatePageStyle } = usePageStyle(note.id);
+  const { showToast } = useToast();
+  const lastPlainRef = useRef<string>(note.content_text ?? "");
   const notion = useNotion();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -255,6 +263,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
 
   const handleSaveContent = useCallback(
     async (blocks: AnyBlock[], plainText: string) => {
+      lastPlainRef.current = plainText;
       setSaving(true);
       const res = await fetch(`/api/notes/${note.id}`, {
         method: "PATCH",
@@ -305,6 +314,22 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
     setTimeout(() => setLinkCopied(false), 2000);
   }
 
+  async function toggleFavorite() {
+    const next = !favorited;
+    setFavorited(next);
+    await fetch(`/api/notes/${note.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ is_favorited: next }),
+    });
+    window.dispatchEvent(new Event("notes-changed"));
+  }
+
+  async function copyPageLink() {
+    await navigator.clipboard.writeText(`${window.location.origin}/brain/${note.id}`);
+    showToast("Copied page link to clipboard", "info");
+  }
+
   function handleExportMarkdown() {
     setShowMenu(false);
     editorRef.current?.exportMarkdown(title || "note");
@@ -315,176 +340,94 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
     window.print();
   }
 
+  const words = (lastPlainRef.current || "").trim().split(/\s+/).filter(Boolean).length;
+
   return (
     <>
-      <div className="print-scroll flex flex-col h-full bg-white dark:bg-gray-900 transition-colors">
-        {/* Toolbar */}
-        <div className="no-print flex items-center justify-between px-5 py-2.5 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
-          {/* Left: back (mobile) + save status */}
-          <div className="flex items-center gap-3">
-            <button
-              className="md:hidden p-1 rounded-md text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              onClick={() => router.push("/brain")}
-              aria-label="Back to notes"
+      <div className="print-scroll flex h-full flex-col bg-surface">
+        <TopBar
+          crumbs={[
+            ...(collectionName ? [{ label: collectionName }] : []),
+            { label: title || "Untitled", icon: icon },
+          ]}
+          meta={saving ? "Saving…" : ingestHtml && !lastSaved ? "Applying…" : undefined}
+        >
+          <NotionChip noteId={note.id} />
+          {sourceCount > 0 && (
+            <TopBarButton
+              text
+              label={`Open this note beside its ${sourceCount} source${sourceCount === 1 ? "" : "s"}`}
+              onClick={() => router.push(`/brain/workspace/${note.id}`)}
             >
-              ←
-            </button>
-            <span className="text-xs text-gray-400">
-              {saving
-                ? "Saving…"
-                : lastSaved
-                ? `Saved ${lastSaved.toLocaleTimeString()}`
-                : ingestHtml
-                ? "Applying…"
-                : ""}
-            </span>
-            <NotionChip noteId={note.id} />
-            {sourceCount > 0 && (
-              <button
-                onClick={() => router.push(`/brain/workspace/${note.id}`)}
-                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                title={`Open this note beside its ${sourceCount} source${sourceCount === 1 ? "" : "s"}`}
-              >
-                <Layers size={12} />
-                Open in workspace
-              </button>
+              <Layers size={16} className="text-ink-icon" /> Open in workspace
+            </TopBarButton>
+          )}
+          <TopBarButton text label="Share" onClick={() => { void togglePublic().then(() => showToast(isPublic ? "Public link turned off" : "Anyone with the link can view this page", "info")); }}>
+            {isPublic ? <Globe size={14} className="text-accent" /> : null}
+            Share
+          </TopBarButton>
+          <TopBarButton label="Copy link" onClick={copyPageLink}>
+            <Link />
+          </TopBarButton>
+          <TopBarButton label={favorited ? "Remove from Favorites" : "Add to Favorites"} onClick={toggleFavorite} active={favorited}>
+            <Star fill={favorited ? "currentColor" : "none"} />
+          </TopBarButton>
+          <PageMenu
+            label="Note options"
+            style={pageStyle}
+            onStyleChange={updatePageStyle}
+            sections={[
+              [
+                { label: "Copy link", icon: <Link />, hint: "Ctrl+Alt+L", onSelect: copyPageLink },
+                ...(isPublic ? [{ label: linkCopied ? "Copied!" : "Copy public link", icon: <Globe />, onSelect: copyShareLink }] : []),
+                { label: isPublic ? "Stop sharing publicly" : "Share publicly", icon: <Globe />, onSelect: togglePublic },
+                { label: "Move to Trash", icon: <Trash2 />, danger: true, onSelect: () => setShowDeleteModal(true) },
+              ],
+              [
+                { label: "Export as Markdown", icon: <FileDown />, onSelect: handleExportMarkdown },
+                { label: "Export as PDF", icon: <Printer />, onSelect: handleExportPdf },
+                { label: "Send to Notion…", icon: <Send />, onSelect: () => notion.open({ note_ids: [note.id] }) },
+              ],
+            ]}
+            meta={[
+              `${words} word${words === 1 ? "" : "s"}`,
+              lastSaved ? `Last saved ${lastSaved.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : `Last edited ${new Date(note.updated_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`,
+            ]}
+          />
+        </TopBar>
+
+        {/* Scrollable content. The page column is Notion's 720px (or full width with a
+            96px gutter); font, Small text and Full width come from the page ⋯ menu. */}
+        <div className="print-scroll min-h-0 flex-1 overflow-y-auto bg-surface">
+          <div
+            data-page-font={pageStyle.font}
+            data-small-text={pageStyle.smallText}
+            className={cx(
+              "notion-page print-content mx-auto w-full pb-[30vh] pt-20",
+              pageStyle.fullWidth ? "px-[96px]" : "max-w-[calc(720px+2*96px)] px-6 sm:px-[96px]",
             )}
-          </div>
-
-          {/* Right: options menu */}
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setShowMenu((v) => !v)}
-              aria-label="Note options"
-              aria-expanded={showMenu}
-              aria-haspopup="menu"
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-base font-bold tracking-widest leading-none"
-            >
-              ···
-            </button>
-            {showMenu && (
-              <div
-                role="menu"
-                className="absolute right-0 top-full mt-1.5 w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-50 py-1 overflow-hidden"
-              >
-                {/* Export section */}
-                <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-                  Export
-                </div>
-                <button
-                  role="menuitem"
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                  onClick={handleExportMarkdown}
-                >
-                  Export as Markdown
-                </button>
-                <button
-                  role="menuitem"
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                  onClick={handleExportPdf}
-                >
-                  Export as PDF
-                </button>
-
-                <button
-                  role="menuitem"
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
-                  onClick={() => { setShowMenu(false); notion.open({ note_ids: [note.id] }); }}
-                >
-                  <Send size={13} /> Send to Notion…
-                </button>
-
-                {/* Divider */}
-                <div className="my-1 border-t border-gray-100 dark:border-gray-700" />
-
-                {/* Share section */}
-                <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-                  Share
-                </div>
-                <div className="px-3 py-2 flex items-center justify-between">
-                  <span className="text-sm text-gray-700 dark:text-gray-200">Public link</span>
-                  <button
-                    onClick={togglePublic}
-                    aria-pressed={isPublic}
-                    className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${
-                      isPublic ? "bg-indigo-500" : "bg-gray-300 dark:bg-gray-600"
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 translate-y-0.5 rounded-full bg-white shadow transition-transform ${
-                        isPublic ? "translate-x-[18px]" : "translate-x-0.5"
-                      }`}
-                    />
-                  </button>
-                </div>
-                {isPublic && (
-                  <button
-                    role="menuitem"
-                    className="w-full text-left px-3 py-2 text-sm text-indigo-600 dark:text-indigo-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
-                    onClick={copyShareLink}
-                  >
-                    {linkCopied ? <Check size={13} /> : <Link size={13} />}
-                    {linkCopied ? "Copied!" : "Copy link"}
-                  </button>
-                )}
-
-                {/* Divider */}
-                <div className="my-1 border-t border-gray-100 dark:border-gray-700" />
-
-                {/* Danger zone */}
-                <button
-                  role="menuitem"
-                  className="w-full text-left px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                  onClick={() => {
-                    setShowMenu(false);
-                    setShowDeleteModal(true);
-                  }}
-                >
-                  Delete note
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Scrollable content */}
-        <div className="print-scroll flex-1 overflow-y-auto min-h-0 bg-white dark:bg-gray-900">
-          <div className="print-content max-w-3xl mx-auto px-6 py-8">
-            {/* Breadcrumb */}
-            <div className="no-print flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 mb-4 flex-wrap">
-              <span>My Brain</span>
-              {collectionName && (
-                <>
-                  <ChevronRight size={11} className="text-gray-300 shrink-0" />
-                  <span>{collectionName}</span>
-                </>
-              )}
-              <ChevronRight size={11} className="text-gray-300 shrink-0" />
-              <span className="text-gray-600 dark:text-gray-300 font-medium truncate max-w-[200px]">
-                {title || "Untitled"}
-              </span>
-            </div>
-
-            {/* Page icon */}
-            <div ref={emojiRef} className="relative inline-block mb-3">
+          >
+            {/* Page icon: 78px, Notion's emoji size */}
+            <div ref={emojiRef} className="relative mb-1 inline-block">
               <button
                 onClick={() => setShowEmojiPicker((v) => !v)}
                 title="Change icon"
-                className="text-4xl leading-none p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="flex size-[78px] items-center justify-center rounded-md text-[70px] leading-none transition-colors duration-instant hover:bg-surface-hover"
               >
                 {icon}
               </button>
 
               {showEmojiPicker && (
-                <div className="no-print absolute left-0 top-full mt-1 z-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-2 w-72">
-                  <div className="grid grid-cols-10 gap-0.5 max-h-48 overflow-y-auto">
+                <div className="no-print absolute left-0 top-full z-40 mt-1 w-[408px] max-w-[90vw] rounded-menu bg-menu-bg p-2 shadow-menu">
+                  <div className="grid max-h-60 grid-cols-11 overflow-y-auto">
                     {EMOJIS.map((e) => (
                       <button
                         key={e}
                         onClick={() => selectEmoji(e)}
-                        className={`text-xl p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors leading-none ${
-                          e === icon ? "bg-indigo-50 dark:bg-indigo-900/40 ring-1 ring-indigo-300" : ""
-                        }`}
+                        className={cx(
+                          "flex size-8 items-center justify-center rounded text-2xl leading-none transition-colors duration-instant hover:bg-surface-hover",
+                          e === icon && "bg-surface-active",
+                        )}
                       >
                         {e}
                       </button>
@@ -494,17 +437,17 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
               )}
             </div>
 
-            {/* Editable title */}
+            {/* Editable title: 40px/700 (checklist #80) */}
             <label htmlFor="note-title" className="sr-only">
               Note title
             </label>
             <input
               id="note-title"
-              className="w-full text-3xl font-bold text-gray-900 dark:text-gray-100 bg-transparent border-none outline-none mb-6 placeholder-gray-300 dark:placeholder-gray-600 caret-gray-900 dark:caret-gray-100"
+              className="notion-page-title mb-2 w-full border-none bg-transparent px-0.5 text-[40px] font-bold leading-[48px] text-ink caret-current outline-none placeholder:text-ink-placeholder"
               value={title}
               onChange={handleTitleChange}
               onBlur={handleTitleBlur}
-              placeholder="Untitled"
+              placeholder="New page"
             />
 
             {/* Properties panel */}
@@ -537,44 +480,14 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
         </div>
       </div>
 
-      {/* Delete confirmation modal */}
-      {showDeleteModal &&
-        createPortal(
-          <div
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] px-4"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-modal-title"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setShowDeleteModal(false);
-            }}
-          >
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-sm">
-              <h2
-                id="delete-modal-title"
-                className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2"
-              >
-                Move to Trash?
-              </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
-                This note will be moved to Trash. You can restore it from the sidebar.
-              </p>
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowDeleteModal(false)}
-                >
-                  Cancel
-                </Button>
-                <Button variant="danger" size="sm" onClick={confirmDelete}>
-                  Move to Trash
-                </Button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      <ConfirmDialog
+        open={showDeleteModal}
+        title="Move this page to Trash?"
+        description="You can restore it from Trash in the sidebar."
+        confirmLabel="Move to Trash"
+        onConfirm={confirmDelete}
+        onCancel={() => setShowDeleteModal(false)}
+      />
     </>
   );
 }

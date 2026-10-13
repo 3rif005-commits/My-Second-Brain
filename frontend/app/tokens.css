@@ -65,6 +65,7 @@
   --c-bg-weekend: rgb(249, 248, 247);
   --c-bg-accent-chip: rgba(0, 124, 215, 0.094);
   --c-bg-danger-soft: rgba(223, 22, 0, 0.094);
+  --c-bg-search: rgba(255, 255, 255, 0.9);
 
   /* lines */
   --c-border: rgba(42, 28, 0, 0.07);
@@ -179,6 +180,7 @@
   --c-bg-weekend: rgb(32, 32, 32);
   --c-bg-accent-chip: rgba(67, 155, 255, 0.24);
   --c-bg-danger-soft: rgba(255, 104, 92, 0.24);
+  --c-bg-search: rgba(32, 32, 32, 0.9);
 
   --c-border: rgba(255, 255, 243, 0.082);
   --c-border-strong: rgba(255, 255, 235, 0.1);

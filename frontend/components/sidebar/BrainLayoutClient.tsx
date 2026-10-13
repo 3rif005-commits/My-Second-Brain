@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import { Menu, PanelLeftOpen } from "lucide-react";
+import { Menu } from "lucide-react";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { Sidebar } from "./Sidebar";
 import { Logo } from "@/components/brand/Logo";
 import { SearchModal } from "@/components/search/SearchModal";
@@ -17,6 +18,14 @@ import type { IngestSource } from "@/components/ingestion/IngestDropzone";
 const AI_PANEL_DEFAULT_WIDTH = 360;
 const AI_PANEL_MIN_WIDTH = 280;
 const AI_PANEL_MAX_WIDTH = 600;
+// Notion's sidebar: 270px by default, resizable by dragging its right edge.
+const SIDEBAR_DEFAULT_WIDTH = 270;
+const SIDEBAR_MIN_WIDTH = 220;
+const SIDEBAR_MAX_WIDTH = 480;
+
+function applySidebarWidth(px: number) {
+  document.documentElement.style.setProperty("--sidebar-width", `${px}px`);
+}
 
 export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState<boolean | null>(null);
@@ -29,7 +38,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   const [ingestSource, setIngestSource] = useState<IngestSource | null>(null);
   // One AI for the whole app (user decision, 2026-09-24): this layout mounts
   // the only AI panel. Every page — the workspace included — uses it; a
-  // workspace note binds it to itself (AIPanelContext). ⌘K opens and focuses
+  // workspace note binds it to itself (AIPanelContext). ⌘J opens and focuses
   // it everywhere. The workspace owns file drops (they become sources), so
   // the app-wide drop-to-import steps aside there.
   const pathname = usePathname() ?? "";
@@ -43,6 +52,8 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const stored = localStorage.getItem("sidebar-open");
     setOpen(stored !== null ? stored === "true" : window.innerWidth >= 768);
+    const sidebarWidth = parseInt(localStorage.getItem("sidebar-width") ?? "");
+    if (sidebarWidth >= SIDEBAR_MIN_WIDTH && sidebarWidth <= SIDEBAR_MAX_WIDTH) applySidebarWidth(sidebarWidth);
 
     const aiStored = localStorage.getItem("ai-panel-open");
     let aiInitial = aiStored !== null ? aiStored === "true" : false;
@@ -76,16 +87,22 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.key === "k") {
+      // ⌘J: the AI panel. A toggle: open (cursor in the input), or close if it is
+      // open. Closing only hides it, so the conversation is there when it opens again.
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "j") {
         e.preventDefault();
-        // A toggle: open (cursor in the input), or close if it is open. Closing
-        // only hides it, so the conversation is there when it opens again.
         if (aiOpenRef.current) closeAi();
         else focusAi();
       }
-      if (mod && e.key === "p") {
+      // ⌘K (Notion's quick find), and ⌘P kept for existing muscle memory.
+      if (mod && !e.shiftKey && (e.key.toLowerCase() === "k" || e.key.toLowerCase() === "p")) {
         e.preventDefault();
         setSearchOpen((v) => !v);
+      }
+      // Ctrl/⌘+\ folds the sidebar, as in Notion.
+      if (mod && e.key === "\\") {
+        e.preventDefault();
+        toggleRef.current();
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -118,6 +135,29 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
       localStorage.setItem("sidebar-open", String(next));
       return next;
     });
+  }
+  const toggleRef = useRef(toggle);
+  toggleRef.current = toggle;
+
+  // Drag the sidebar's right edge to resize it (12px hit area, shell.md §1).
+  function startResize(e: React.PointerEvent) {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue("--sidebar-width")) || SIDEBAR_DEFAULT_WIDTH;
+    let width = startWidth;
+    function onMove(ev: PointerEvent) {
+      width = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, startWidth + ev.clientX - startX));
+      applySidebarWidth(width);
+    }
+    function onUp() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.cursor = "";
+      localStorage.setItem("sidebar-width", String(width));
+    }
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   }
 
   function toggleAi() {
@@ -170,12 +210,12 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     <AIThreadProvider>
     <NotionProvider>
     <AIPanelControlsContext.Provider value={controls}>
-      <div className="print-layout flex h-screen overflow-hidden bg-white dark:bg-gray-900">
+      <div className="print-layout flex h-screen overflow-hidden bg-surface">
 
         {/* Mobile backdrop for notes sidebar */}
         {isOpen && (
           <div
-            className="no-print fixed inset-0 z-20 bg-black/40 md:hidden"
+            className="no-print fixed inset-0 z-20 bg-surface-backdrop md:hidden"
             onClick={toggle}
           />
         )}
@@ -183,27 +223,39 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
         {/* Notes sidebar */}
         <div
           className={[
-            "no-print transition-all duration-200 ease-in-out flex-shrink-0",
+            "no-print transition-[width,transform] duration-200 ease-in-out flex-shrink-0",
             "fixed inset-y-0 left-0 z-30",
             "md:relative md:inset-auto md:z-auto",
             isOpen
-              ? "translate-x-0 md:w-[260px]"
+              ? "translate-x-0 md:w-[var(--sidebar-width)]"
               : "-translate-x-full md:translate-x-0 md:w-0",
           ].join(" ")}
           style={{ overflow: isOpen ? "visible" : "hidden" }}
         >
           <Sidebar onToggle={toggle} onSearchOpen={() => setSearchOpen(true)} />
+          {isOpen && (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize sidebar"
+              onPointerDown={startResize}
+              onDoubleClick={() => { applySidebarWidth(SIDEBAR_DEFAULT_WIDTH); localStorage.removeItem("sidebar-width"); }}
+              className="absolute inset-y-0 -right-1.5 z-10 hidden w-3 cursor-col-resize md:block after:absolute after:inset-y-0 after:left-1/2 after:w-px after:bg-transparent hover:after:bg-line-strong"
+            />
+          )}
         </div>
 
         {/* Desktop: floating reopen button for notes sidebar */}
         {!isOpen && (
-          <button
-            onClick={toggle}
-            aria-label="Open sidebar"
-            className="no-print hidden md:flex fixed top-3 left-3 z-10 items-center justify-center w-8 h-8 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm transition-colors"
-          >
-            <PanelLeftOpen size={16} />
-          </button>
+          <Tooltip content="Lock sidebar open" shortcut="Ctrl+\" side="right" align="start">
+            <button
+              onClick={toggle}
+              aria-label="Open sidebar"
+              className="no-print fixed left-3 top-2.5 z-40 hidden size-6 items-center justify-center rounded-md text-ink-icon transition-colors hover:bg-surface-active md:flex"
+            >
+              <Menu size={18} />
+            </button>
+          </Tooltip>
         )}
 
         {/* Main area — shifts right on desktop when AI panel is open */}
@@ -216,16 +268,16 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
           }}
         >
           {/* Mobile-only top bar */}
-          <div className="no-print md:hidden flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shrink-0">
+          <div className="no-print flex h-11 shrink-0 items-center gap-2 bg-surface px-3 md:hidden">
             <button
               onClick={toggle}
               aria-label="Open menu"
-              className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="flex size-7 items-center justify-center rounded-md text-ink-icon transition-colors hover:bg-surface-active"
             >
               <Menu size={20} />
             </button>
-            <Logo size={20} className="rounded-[5px] shrink-0" />
-            <span className="font-semibold text-gray-900 dark:text-gray-100 text-sm">My Second Brain</span>
+            <Logo size={20} className="shrink-0 rounded" />
+            <span className="text-sm font-medium text-ink">My Second Brain</span>
           </div>
 
           {children}

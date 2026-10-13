@@ -71,6 +71,7 @@ const config: Config = {
           backdrop: "var(--c-bg-backdrop)",
           weekend: "var(--c-bg-weekend)",
           "danger-soft": "var(--c-bg-danger-soft)",
+          search: "var(--c-bg-search)",
         },
         ink: {
           DEFAULT: "var(--c-text)",

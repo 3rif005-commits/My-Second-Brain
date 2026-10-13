@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Trash2, Star, GripVertical } from "lucide-react";
+import { Trash2, Star, FileText } from "lucide-react";
+import { cx } from "@/components/ui/cx";
 import {
   DndContext,
   DragEndEvent,
@@ -78,77 +79,70 @@ function NoteItem({
     <div
       ref={setNodeRef}
       style={isDragOverlay ? undefined : style}
+      {...attributes}
+      {...listeners}
       onContextMenu={(e) => { e.preventDefault(); setMenu({ kind: "note", id: note.id, title: note.title || "Untitled", x: e.clientX, y: e.clientY }); }}
       onClickCapture={(e) => {
         if (notion.connected && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.stopPropagation(); notion.toggleSelect("note", note.id); }
       }}
-      className={`group flex items-center justify-between px-1 py-1 rounded-md text-sm cursor-pointer transition-colors ${
-        selected
-          ? "bg-indigo-500/25 text-white ring-1 ring-indigo-400/60"
-          : active
-          ? "bg-white/10 text-white font-medium"
-          : "text-slate-400 hover:text-slate-100 hover:bg-white/5"
-      } ${isDragOverlay ? "bg-slate-700/80 shadow-lg" : ""}`}
+      // Notion's page row: 30px, radius 6px, 14px/400 warm grey text that turns
+      // primary on hover or when current; actions appear at the right on hover.
+      // The whole row drags (5px activation distance keeps clicks clicks).
+      className={cx(
+        "group flex h-[var(--sidebar-row-height)] cursor-pointer items-center rounded-md pr-1 text-sm transition-colors duration-instant",
+        selected ? "bg-surface-selected text-ink" : active ? "bg-surface-active text-ink" : "text-ink-sidebar hover:bg-surface-active hover:text-ink",
+        isDragOverlay && "bg-surface-elevated shadow-float",
+      )}
     >
-      {/* Drag handle */}
-      <button
-        {...attributes}
-        {...listeners}
-        className="shrink-0 p-1 text-slate-700 hover:text-slate-400 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity touch-none"
-        aria-label="Drag to reorder"
-        tabIndex={-1}
-      >
-        <GripVertical size={11} />
-      </button>
-
-      <Link
-        href={`/brain/${note.id}`}
-        className="flex-1 flex items-center gap-1.5 truncate min-w-0 px-1"
-      >
-        <span className="shrink-0 text-sm leading-none">{note.icon || "📄"}</span>
+      <Link href={`/brain/${note.id}`} className="flex h-full min-w-0 flex-1 items-center gap-2 truncate pl-2" tabIndex={0}>
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-[3.5px] text-[14px] leading-none text-ink-icon">
+          {note.icon ? note.icon : <FileText size={18} strokeWidth={1.75} />}
+        </span>
         <span className="truncate">{note.title || "Untitled"}</span>
         <NotionDot state={notion.stateOf("note", note.id)} />
       </Link>
       {menu && <RowMenu target={menu} onClose={() => setMenu(null)} />}
 
       {confirming ? (
-        <div className="flex items-center gap-1 ml-1 shrink-0">
+        <div className="ml-1 flex shrink-0 items-center gap-1">
           <button
             onClick={(e) => {
               e.preventDefault();
               onDeleteNote(note.id);
               setConfirmingId(null);
             }}
-            className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors font-medium"
+            className="h-5 rounded px-1.5 text-xs font-medium text-ink-danger hover:bg-surface-danger-soft"
           >
-            Del
+            Delete
           </button>
           <button
             onClick={(e) => {
               e.preventDefault();
               setConfirmingId(null);
             }}
-            className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 hover:bg-slate-600 transition-colors"
+            aria-label="Cancel delete"
+            className="flex size-5 items-center justify-center rounded text-ink-icon hover:bg-surface-active"
           >
             ✕
           </button>
         </div>
       ) : (
-        <div className="flex items-center gap-0.5 ml-1 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+        <div className="ml-1 flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
           {onToggleFavorite && (
             <button
               onClick={(e) => {
                 e.preventDefault();
                 onToggleFavorite(note.id);
               }}
-              className={`p-0.5 rounded transition-colors ${
-                note.is_favorited
-                  ? "text-amber-400 opacity-100"
-                  : "text-slate-600 hover:text-amber-400"
-              }`}
+              onPointerDown={(e) => e.stopPropagation()}
+              className={cx(
+                "flex size-5 items-center justify-center rounded transition-colors hover:bg-surface-active",
+                note.is_favorited ? "text-ink-icon-strong" : "text-ink-icon",
+              )}
               aria-label={note.is_favorited ? "Unstar" : "Star"}
+              title={note.is_favorited ? "Remove from Favorites" : "Add to Favorites"}
             >
-              <Star size={11} fill={note.is_favorited ? "currentColor" : "none"} />
+              <Star size={14} fill={note.is_favorited ? "currentColor" : "none"} />
             </button>
           )}
           <button
@@ -156,10 +150,12 @@ function NoteItem({
               e.preventDefault();
               setConfirmingId(note.id);
             }}
-            className="p-0.5 rounded text-slate-600 hover:text-red-400 transition-colors"
+            onPointerDown={(e) => e.stopPropagation()}
+            className="flex size-5 items-center justify-center rounded text-ink-icon transition-colors hover:bg-surface-active hover:text-ink-danger"
             aria-label={`Delete "${note.title || "Untitled"}"`}
+            title="Move to Trash"
           >
-            <Trash2 size={11} />
+            <Trash2 size={14} />
           </button>
         </div>
       )}
@@ -209,7 +205,7 @@ export function NoteTree({
   }
 
   return (
-    <div className="space-y-0.5">
+    <div className="flex flex-col gap-px">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -250,13 +246,13 @@ export function NoteTree({
         <div key={col.id}>
           <div
             onContextMenu={(e) => { e.preventDefault(); setColMenu({ kind: "collection", id: col.id, title: col.name, x: e.clientX, y: e.clientY }); }}
-            className="group flex items-center gap-1.5 px-3 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-widest mt-3">
+            className="group mt-2 flex h-[30px] items-center gap-2 rounded-md px-2 text-sm text-ink-sidebar hover:bg-surface-active">
             {col.icon && <span>{col.icon}</span>}
             <span className="truncate flex-1">{col.name}</span>
             <NotionDot state={notion.stateOf("collection", col.id)} />
           </div>
           {byCollection(col.id).map((note) => (
-            <div key={note.id} className="pl-3">
+            <div key={note.id} className="pl-2">
               <NoteItem
                 note={note}
                 onDeleteNote={onDeleteNote}
@@ -267,7 +263,7 @@ export function NoteTree({
             </div>
           ))}
           {byCollection(col.id).length === 0 && (
-            <p className="pl-6 text-xs text-slate-600 py-1">Empty</p>
+            <p className="flex h-[30px] items-center pl-9 text-sm text-ink-tertiary">No pages inside</p>
           )}
         </div>
       ))}

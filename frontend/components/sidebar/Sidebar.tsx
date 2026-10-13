@@ -5,23 +5,29 @@ import { useRouter, usePathname } from "next/navigation";
 import {
   Plus,
   LogOut,
-  PanelLeftClose,
+  ChevronsLeft,
   Trash2,
   RotateCcw,
   ChevronRight,
   Search,
-  Star,
-  Clock,
-  Sun,
-  Moon,
+  Home,
   LayoutGrid,
-  DatabaseIcon,
   FileUp,
   Table2,
   Settings,
+  SquarePen,
+  FileText,
+  Monitor,
+  Sun,
+  Moon,
+  Check,
   Activity as ActivityIcon,
 } from "lucide-react";
-import { useTheme, useToast } from "@/app/providers";
+import { Popover } from "@/components/ui/primitives/Popover";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { cx } from "@/components/ui/cx";
+import { usePreferences, useToast } from "@/app/providers";
 import { createClient } from "@/lib/supabase/client";
 import { useNotes } from "@/lib/hooks/useNotes";
 import { useCollections } from "@/lib/hooks/useCollections";
@@ -36,81 +42,103 @@ import { useJobBadge } from "@/components/activity/useJobBadge";
 import { CsvImport, type CsvImportHandle } from "./CsvImport";
 import { Logo } from "@/components/brand/Logo";
 
-/** A top-level row in the nav (Search, Notifications, Workspace, …). Notion keeps
- * these visually quieter than page titles: 13px, medium weight, a soft hover wash
- * rather than a filled pill, and an accent tint only for the current page. */
-function NavItem({
+/** One round icon button in the nav pill row. The current page's button grows into
+ * a labelled pill (Notion's 2026 sidebar, shell.md §1). */
+function NavPill({
   label,
   icon: Icon,
   active,
   onClick,
-  trailing,
+  badge,
 }: {
   label: string;
   icon: React.ElementType;
   active?: boolean;
   onClick: () => void;
-  trailing?: React.ReactNode;
+  badge?: React.ReactNode;
 }) {
   return (
-    <button
-      onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      className={`group w-full flex items-center gap-2.5 px-2 py-[5px] rounded-md text-[13px] font-medium transition-colors ${
-        active
-          ? "bg-white/[0.08] text-white"
-          : "text-slate-400 hover:text-slate-100 hover:bg-white/[0.055]"
-      }`}
-    >
-      <Icon
-        size={15}
-        strokeWidth={2}
-        className={active ? "text-indigo-400 shrink-0" : "text-slate-500 group-hover:text-slate-300 shrink-0 transition-colors"}
-      />
-      <span className="flex-1 text-left truncate">{label}</span>
-      {trailing}
-    </button>
+    <Tooltip content={label}>
+      <button
+        onClick={onClick}
+        aria-label={label}
+        aria-current={active ? "page" : undefined}
+        className={cx(
+          "relative flex h-8 shrink-0 items-center rounded-full transition-[background,padding] duration-200 ease-out",
+          active ? "gap-1.5 bg-surface-active pl-2 pr-3 text-ink" : "w-8 justify-center text-ink-icon hover:bg-surface-active",
+        )}
+      >
+        <Icon size={20} strokeWidth={1.75} className={active ? "text-ink-icon-strong" : undefined} />
+        {active && <span className="text-sm font-medium">{label}</span>}
+        {badge}
+      </button>
+    </Tooltip>
   );
 }
 
-/** A collapsible sidebar section. The chevron sits where the icon does in Notion —
- * left of the label, rotating in place — and any action button only fades in on
- * hover so the resting sidebar stays quiet. */
+/** A sidebar section ("Favorites", "Databases", "Notes"): 12px/500 grey, sentence
+ * case. On hover it darkens, shows a chevron that folds the section, and reveals its
+ * action buttons (shell.md §1). */
 function Section({
   label,
-  icon: Icon,
   open,
   onToggle,
   action,
   children,
 }: {
   label: string;
-  icon?: React.ElementType;
   open: boolean;
   onToggle: () => void;
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <div className="mb-2">
-      <div className="group/section flex items-center gap-1 pl-2 pr-1 h-[26px] rounded-md hover:bg-white/[0.03] transition-colors">
+    <div className="mb-3">
+      <div className="group/section flex h-[30px] items-center gap-1 rounded-md px-2 transition-colors duration-instant hover:bg-surface-active">
         <button
           onClick={onToggle}
           aria-expanded={open}
-          className="flex items-center gap-1.5 flex-1 min-w-0 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500 hover:text-slate-300 transition-colors"
+          className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs font-medium leading-4 text-ink-tertiary group-hover/section:text-ink-sidebar"
         >
-          <ChevronRight
-            size={11}
-            strokeWidth={2.5}
-            className={`shrink-0 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
-          />
-          {Icon && <Icon size={10} className="shrink-0 opacity-70" />}
           <span className="truncate">{label}</span>
+          <ChevronRight
+            size={12}
+            strokeWidth={2.25}
+            className={cx("shrink-0 opacity-0 transition-transform duration-200 ease-out group-hover/section:opacity-100", open && "rotate-90")}
+          />
         </button>
         {action}
       </div>
-      {open && <div className="mt-0.5 space-y-px">{children}</div>}
+      {open && <div className="flex flex-col gap-px">{children}</div>}
     </div>
+  );
+}
+
+/** The row-hover buttons ("+", "⋯", star…): 20×20, radius 4px, 16px icons. */
+export function RowAction({ label, onClick, children, className }: { label: string; onClick: (e: React.MouseEvent) => void; children: React.ReactNode; className?: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClick(e);
+      }}
+      className={cx("flex size-5 shrink-0 items-center justify-center rounded text-ink-icon transition-colors duration-fast hover:bg-surface-active", className)}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** The icon in a page row: the page's emoji, or Notion's grey page glyph. */
+export function RowIcon({ emoji, fallback: Fallback = FileText }: { emoji?: string | null; fallback?: React.ElementType }) {
+  return (
+    <span className="flex size-5 shrink-0 items-center justify-center rounded-[3.5px] text-[14px] leading-none text-ink-icon">
+      {emoji ? emoji : <Fallback size={18} strokeWidth={1.75} />}
+    </span>
   );
 }
 
@@ -118,13 +146,15 @@ function Section({
  *  several to send together. The dot says what the Notion mirror knows about it. */
 function PageRow({
   emoji,
+  fallbackIcon,
   title,
   active,
   onClick,
   kind = "note",
   id,
 }: {
-  emoji: string;
+  emoji?: string | null;
+  fallbackIcon?: React.ElementType;
   title: string;
   active?: boolean;
   onClick: () => void;
@@ -149,16 +179,13 @@ function PageRow({
         }}
         aria-current={active ? "page" : undefined}
         aria-pressed={selected || undefined}
-        className={`group w-full flex items-center gap-2 pl-[26px] pr-2 py-[3px] rounded-md text-[13px] transition-colors text-left ${
-          selected
-            ? "bg-indigo-500/25 text-white ring-1 ring-indigo-400/60"
-            : active
-            ? "bg-white/[0.08] text-white font-medium"
-            : "text-slate-400 hover:text-slate-100 hover:bg-white/[0.055]"
-        }`}
+        className={cx(
+          "group flex h-[var(--sidebar-row-height)] w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors duration-instant",
+          selected ? "bg-surface-selected text-ink" : active ? "bg-surface-active text-ink" : "text-ink-sidebar hover:bg-surface-active hover:text-ink",
+        )}
       >
-        <span className="shrink-0 text-[13px] leading-none">{emoji}</span>
-        <span className="truncate flex-1">{title}</span>
+        <RowIcon emoji={emoji} fallback={fallbackIcon} />
+        <span className="flex-1 truncate">{title}</span>
         <NotionDot state={state} />
       </button>
       {menu && <RowMenu target={menu} onClose={() => setMenu(null)} />}
@@ -171,10 +198,70 @@ function NotionSelectionBar() {
   const notion = useNotion();
   if (notion.selection.size === 0) return null;
   return (
-    <div role="region" aria-label="Selection" className="mx-2 mb-2 flex items-center gap-2 rounded-lg border border-indigo-400/40 bg-indigo-500/15 px-3 py-2 text-[12px] text-slate-100 shrink-0">
-      <span className="flex-1">{notion.selection.size} selected</span>
-      <button onClick={notion.sendSelection} className="rounded-md bg-indigo-600 px-2 py-1 font-medium hover:bg-indigo-500">Send to Notion</button>
-      <button onClick={notion.clearSelection} aria-label="Clear selection" className="px-1 text-slate-300 hover:text-white">✕</button>
+    <div role="region" aria-label="Selection" className="mx-2 mb-2 flex shrink-0 items-center gap-2 rounded-card bg-surface-elevated px-3 py-2 text-xs text-ink shadow-float">
+      <span className="flex-1 text-accent">{notion.selection.size} selected</span>
+      <button onClick={notion.sendSelection} className="h-6 rounded-md bg-accent px-2 font-medium text-ink-on-accent hover:bg-accent-hover">Send to Notion</button>
+      <button onClick={notion.clearSelection} aria-label="Clear selection" className="flex size-6 items-center justify-center rounded-md text-ink-icon hover:bg-surface-hover">✕</button>
+    </div>
+  );
+}
+
+/** The workspace row at the top: logo + name, a pill on hover, opening the account
+ * menu (Settings, theme, sign out). The « collapse button appears on hover. */
+function WorkspaceSwitcher({ onToggle, onSignOut }: { onToggle?: () => void; onSignOut: () => void }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const { preferences, updatePreferences } = usePreferences();
+  const themes = [
+    { value: "system", label: "Use system setting", icon: Monitor },
+    { value: "light", label: "Light", icon: Sun },
+    { value: "dark", label: "Dark", icon: Moon },
+  ] as const;
+  const row = "flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-ink hover:bg-surface-hover";
+  return (
+    <div className="group/switcher mx-2 mt-1.5 flex h-8 shrink-0 items-center rounded-full transition-colors duration-instant hover:bg-surface-active">
+      <Popover
+        open={open}
+        onOpenChange={setOpen}
+        width={260}
+        label="Workspace menu"
+        trigger={
+          <button className="flex min-w-0 flex-1 items-center gap-2 rounded-full py-1 pl-2 pr-1 text-left" aria-label="Workspace menu">
+            <Logo size={22} className="shrink-0 rounded" />
+            <span className="truncate text-sm font-medium leading-5 text-ink">My Second Brain</span>
+          </button>
+        }
+      >
+        <div className="p-1">
+          <button className={row} onClick={() => { setOpen(false); router.push("/brain/settings"); }}>
+            <Settings size={18} className="text-ink-icon-strong" /> Settings
+          </button>
+          <div className="mx-2 my-1 h-px bg-line" />
+          <div className="px-2 pb-1 pt-1.5 text-xs font-medium text-ink-secondary">Theme</div>
+          {themes.map((t) => (
+            <button key={t.value} className={row} onClick={() => updatePreferences({ theme: t.value })}>
+              <t.icon size={18} className="text-ink-icon-strong" />
+              <span className="flex-1">{t.label}</span>
+              {preferences.theme === t.value && <Check size={16} />}
+            </button>
+          ))}
+          <div className="mx-2 my-1 h-px bg-line" />
+          <button className={row} title="Sign out" onClick={() => { setOpen(false); onSignOut(); }}>
+            <LogOut size={18} className="text-ink-icon-strong" /> Sign out
+          </button>
+        </div>
+      </Popover>
+      {onToggle && (
+        <Tooltip content="Close sidebar" shortcut="Ctrl+\">
+          <button
+            onClick={onToggle}
+            aria-label="Collapse sidebar"
+            className="mr-1 flex size-6 shrink-0 items-center justify-center rounded-full text-ink-icon opacity-0 transition-opacity duration-200 hover:bg-surface-active focus-visible:opacity-100 group-hover/switcher:opacity-100 [aside:hover_&]:opacity-100"
+          >
+            <ChevronsLeft size={18} />
+          </button>
+        </Tooltip>
+      )}
     </div>
   );
 }
@@ -189,10 +276,7 @@ export function Sidebar({
   const router = useRouter();
   const pathname = usePathname();
   const jobsWaiting = useJobBadge();
-  const { resolvedTheme, setTheme } = useTheme();
   const { showToast } = useToast();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
   const { notes, loading: notesLoading, createNote, deleteNote, toggleFavorite, reorderNotes } = useNotes();
   const { collections, loading: colsLoading } = useCollections();
   const { trashedNotes, restoreNote, permanentDelete } = useTrash();
@@ -316,92 +400,57 @@ export function Sidebar({
 
   return (
     <aside
-      className="flex flex-col h-screen bg-[#0d1220] border-r border-white/[0.06]"
-      style={{ width: "var(--sidebar-width, 260px)" }}
+      className="relative flex h-screen flex-col bg-surface-sidebar text-ink shadow-[inset_-1px_0_0_0_var(--c-border-sidebar-edge)]"
+      style={{ width: "var(--sidebar-width)" }}
     >
-      {/* Brand — a Notion-style workspace row: the whole thing is a hover target,
-          and the collapse control only appears once you are pointing at it. */}
-      <div className="px-2 pt-2.5 pb-1.5 shrink-0">
-        <div className="group flex items-center gap-2 px-1.5 py-1.5 rounded-md hover:bg-white/[0.055] transition-colors">
-          <Logo size={22} className="shrink-0 rounded-[6px] shadow-sm" />
-          <span className="font-semibold text-slate-100 text-[13px] tracking-tight flex-1 truncate">
-            My Second Brain
-          </span>
-          {onToggle && (
-            <button
-              onClick={onToggle}
-              aria-label="Collapse sidebar"
-              className="p-1 rounded text-slate-500 hover:text-slate-200 hover:bg-white/10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all"
-            >
-              <PanelLeftClose size={15} />
-            </button>
-          )}
-        </div>
-      </div>
+      <WorkspaceSwitcher onToggle={onToggle} onSignOut={() => setConfirmSignOut(true)} />
 
-      {/* Quick actions — Search first, the way Notion opens its sidebar. */}
-      <nav aria-label="Main navigation" className="px-2 space-y-px shrink-0">
-        <NavItem
-          label="Search"
-          icon={Search}
-          onClick={() => onSearchOpen?.()}
-          trailing={
-            <kbd className="text-[10px] font-mono bg-white/[0.07] text-slate-500 px-1.5 py-px rounded border border-white/[0.05]">
-              ⌘P
-            </kbd>
-          }
-        />
-        {/* Milestone 12 (task-41): notifications inbox — a top-level entry,
-         * NOT scoped to any one database (task-41-brief.md decision 5). */}
-        <NotificationsBell />
-        <NavItem
+      {/* Nav pill row: the current page is a labelled pill, the rest are round icon
+          buttons; Search sits at the right (shell.md §1). */}
+      <nav aria-label="Main navigation" className="mx-2 mt-3.5 flex h-8 shrink-0 items-center gap-0.5">
+        <NavPill label="Home" icon={Home} active={pathname === "/brain"} onClick={() => navigate("/brain")} />
+        <NavPill
           label="Workspace"
           icon={LayoutGrid}
           active={pathname?.startsWith("/brain/workspace") ?? false}
           onClick={() => navigate("/brain/workspace")}
         />
-        <NavItem
+        <NavPill
           label="Activity"
           icon={ActivityIcon}
           active={pathname?.startsWith("/brain/activity") ?? false}
           onClick={() => navigate("/brain/activity")}
-          trailing={jobsWaiting > 0 ? (
+          badge={jobsWaiting > 0 ? (
             <span data-testid="activity-badge" aria-label={`${jobsWaiting} waiting`}
-              className="min-w-[16px] h-4 px-1 rounded-full bg-indigo-500 text-white text-[10px] font-semibold flex items-center justify-center">
+              className="absolute right-0.5 top-0.5 h-3 min-w-3 rounded-full bg-accent px-[3px] text-center text-[9px] font-semibold leading-3 text-ink-on-accent">
               {jobsWaiting > 9 ? "9+" : jobsWaiting}
             </span>
           ) : undefined}
         />
-        <NavItem
-          label="Settings"
-          icon={Settings}
-          active={pathname?.startsWith("/brain/settings") ?? false}
-          onClick={() => navigate("/brain/settings")}
-        />
+        {/* Milestone 12 (task-41): notifications inbox — a top-level entry,
+         * NOT scoped to any one database (task-41-brief.md decision 5). */}
+        <NotificationsBell />
+        <div className="flex-1" />
+        <Tooltip content="Search" shortcut="Ctrl+K">
+          <button
+            onClick={() => onSearchOpen?.()}
+            aria-label="Search"
+            className="flex size-8 shrink-0 items-center justify-center rounded-full text-ink-icon transition-colors duration-fast hover:bg-surface-active"
+          >
+            <Search size={20} strokeWidth={1.75} />
+          </button>
+        </Tooltip>
       </nav>
 
-      {/* Primary CTA */}
-      <div className="px-2 pt-2 pb-1 shrink-0">
-        <button
-          onClick={handleNewNote}
-          className="w-full flex items-center justify-center gap-2 px-3 py-[7px] text-[13px] font-semibold bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-600 text-white rounded-md shadow-sm shadow-indigo-950/40 transition-colors"
-        >
-          <Plus size={14} strokeWidth={2.75} />
-          New Note
-        </button>
-      </div>
-
-      <div className="mx-3 my-2 border-t border-white/[0.06] shrink-0" />
-
-      {/* Scrollable area: Starred + Recent + Databases + Notes */}
-      <div className="flex-1 overflow-y-auto px-2 pb-3 min-h-0">
+      {/* Scrollable area: Favorites + Recent + Databases + Notes */}
+      <div className="mt-2 min-h-0 flex-1 overflow-y-auto px-2 pb-24 pt-1.5">
 
         {favoritedNotes.length > 0 && (
-          <Section label="Starred" icon={Star} open={starredOpen} onToggle={() => setStarredOpen((v) => !v)}>
+          <Section label="Favorites" open={starredOpen} onToggle={() => setStarredOpen((v) => !v)}>
             {favoritedNotes.map((note) => (
               <PageRow
                 key={note.id}
-                emoji={note.icon || "📄"}
+                emoji={note.icon}
                 title={note.title || "Untitled"}
                 active={pathname === `/brain/${note.id}`}
                 onClick={() => navigate(`/brain/${note.id}`)}
@@ -412,11 +461,11 @@ export function Sidebar({
         )}
 
         {recentNotes.length > 0 && (
-          <Section label="Recent" icon={Clock} open={recentOpen} onToggle={() => setRecentOpen((v) => !v)}>
+          <Section label="Recent" open={recentOpen} onToggle={() => setRecentOpen((v) => !v)}>
             {recentNotes.map((note) => (
               <PageRow
                 key={note.id}
-                emoji={note.icon || "📄"}
+                emoji={note.icon}
                 title={note.title || "Untitled"}
                 active={pathname === `/brain/${note.id}`}
                 onClick={() => navigate(`/brain/${note.id}`)}
@@ -431,7 +480,6 @@ export function Sidebar({
             the only create affordance for databases (blank or from CSV). */}
         <Section
           label="Databases"
-          icon={DatabaseIcon}
           open={databasesOpen}
           onToggle={() => setDatabasesOpen((v) => !v)}
           action={
@@ -444,27 +492,25 @@ export function Sidebar({
                 aria-label="New database"
                 aria-haspopup="menu"
                 aria-expanded={createMenuOpen}
-                className={`p-0.5 rounded text-slate-500 hover:text-slate-100 hover:bg-white/10 transition-all ${
-                  createMenuOpen ? "opacity-100 text-slate-100" : "opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100"
-                }`}
+                className={cx(
+                  "flex size-5 items-center justify-center rounded text-ink-icon transition-opacity hover:bg-surface-active",
+                  createMenuOpen ? "opacity-100" : "opacity-0 focus-visible:opacity-100 group-hover/section:opacity-100",
+                )}
               >
-                <Plus size={14} strokeWidth={2.5} />
+                <Plus size={16} />
               </button>
 
               {createMenuOpen && (
-                <div
-                  role="menu"
-                  className="absolute right-0 top-full mt-1 z-50 w-52 rounded-lg border border-white/10 bg-slate-800 shadow-2xl shadow-black/50 p-1"
-                >
+                <div role="menu" className="absolute right-0 top-full z-50 mt-1 w-60 rounded-menu bg-menu-bg p-1 shadow-menu">
                   <button
                     role="menuitem"
                     onClick={handleNewDatabase}
-                    className="w-full flex items-start gap-2.5 px-2 py-1.5 rounded-md text-left text-slate-300 hover:bg-white/[0.07] hover:text-white transition-colors"
+                    className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-surface-hover"
                   >
-                    <Table2 size={15} className="mt-px shrink-0 text-slate-500" />
+                    <Table2 size={18} className="mt-px shrink-0 text-ink-icon-strong" />
                     <span className="min-w-0">
-                      <span className="block text-[13px] font-medium">Blank database</span>
-                      <span className="block text-[11px] text-slate-500">Start from an empty table</span>
+                      <span className="block text-sm text-ink">Blank database</span>
+                      <span className="block text-xs text-ink-secondary">Start from an empty table</span>
                     </span>
                   </button>
                   <button
@@ -473,12 +519,12 @@ export function Sidebar({
                       setCreateMenuOpen(false);
                       csvRef.current?.openPicker();
                     }}
-                    className="w-full flex items-start gap-2.5 px-2 py-1.5 rounded-md text-left text-slate-300 hover:bg-white/[0.07] hover:text-white transition-colors"
+                    className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-surface-hover"
                   >
-                    <FileUp size={15} className="mt-px shrink-0 text-slate-500" />
+                    <FileUp size={18} className="mt-px shrink-0 text-ink-icon-strong" />
                     <span className="min-w-0">
-                      <span className="block text-[13px] font-medium">Import CSV</span>
-                      <span className="block text-[11px] text-slate-500">Build one from a spreadsheet</span>
+                      <span className="block text-sm text-ink">Import CSV</span>
+                      <span className="block text-xs text-ink-secondary">Build one from a spreadsheet</span>
                     </span>
                   </button>
                 </div>
@@ -487,12 +533,13 @@ export function Sidebar({
           }
         >
           {databases.length === 0 ? (
-            <p className="pl-[26px] pr-2 py-[3px] text-[12px] text-slate-600 italic">No databases yet</p>
+            <p className="flex h-[30px] items-center px-2 text-sm text-ink-tertiary">No databases yet</p>
           ) : (
             databases.map((db) => (
               <PageRow
                 key={db.id}
-                emoji={db.icon || "🗄️"}
+                emoji={db.icon}
+                fallbackIcon={Table2}
                 title={db.title || "Untitled Database"}
                 active={pathname === `/brain/db/${db.id}`}
                 onClick={() => navigate(`/brain/db/${db.id}`)}
@@ -512,16 +559,16 @@ export function Sidebar({
             <button
               onClick={handleNewNote}
               aria-label="New note"
-              className="shrink-0 p-0.5 rounded text-slate-500 hover:text-slate-100 hover:bg-white/10 opacity-0 group-hover/section:opacity-100 focus-visible:opacity-100 transition-all"
+              className="flex size-5 shrink-0 items-center justify-center rounded text-ink-icon opacity-0 transition-opacity hover:bg-surface-active focus-visible:opacity-100 group-hover/section:opacity-100"
             >
-              <Plus size={14} strokeWidth={2.5} />
+              <Plus size={16} />
             </button>
           }
         >
           {notesLoading || colsLoading ? (
-            <div className="space-y-1 px-2 pt-1">
+            <div className="flex flex-col gap-1 px-2 pt-1">
               {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-6 rounded-md bg-white/[0.04] animate-pulse" />
+                <div key={i} className="h-6 animate-pulse rounded-md bg-surface-chip" />
               ))}
             </div>
           ) : (
@@ -533,99 +580,95 @@ export function Sidebar({
               onReorder={reorderNotes}
             />
           )}
+          <button
+            onClick={handleNewNote}
+            className="flex h-[30px] w-full items-center gap-2 rounded-md px-2 text-sm text-ink-tertiary transition-colors duration-instant hover:bg-surface-active"
+          >
+            <span className="flex size-5 items-center justify-center"><Plus size={16} className="text-ink-icon-subtle" /></span>
+            Add new
+          </button>
         </Section>
+
+        {/* Bottom rows: Settings and Trash (shell.md §1). */}
+        <div className="flex flex-col gap-px">
+          <button
+            onClick={() => navigate("/brain/settings")}
+            aria-current={pathname?.startsWith("/brain/settings") ? "page" : undefined}
+            className={cx(
+              "flex h-[30px] w-full items-center gap-2 rounded-md px-2 text-sm transition-colors duration-instant hover:bg-surface-active",
+              pathname?.startsWith("/brain/settings") ? "bg-surface-active text-ink" : "text-ink-sidebar",
+            )}
+          >
+            <Settings size={20} strokeWidth={1.75} className="shrink-0 text-ink-icon" />
+            Settings
+          </button>
+          {trashedNotes.length > 0 && (
+            <>
+              <button
+                onClick={() => setTrashOpen((v) => !v)}
+                aria-expanded={trashOpen}
+                className="flex h-[30px] w-full items-center gap-2 rounded-md px-2 text-sm text-ink-sidebar transition-colors duration-instant hover:bg-surface-active"
+              >
+                <Trash2 size={20} strokeWidth={1.75} className="shrink-0 text-ink-icon" />
+                <span className="flex-1 text-left">Trash</span>
+                <span className="text-xs tabular-nums text-ink-tertiary">{trashedNotes.length}</span>
+                <ChevronRight size={12} className={cx("shrink-0 text-ink-icon transition-transform duration-200 ease-out", trashOpen && "rotate-90")} />
+              </button>
+              {trashOpen && (
+                <div className="flex max-h-48 flex-col gap-px overflow-y-auto">
+                  {trashedNotes.map((note) => (
+                    <div
+                      key={note.id}
+                      className="group flex h-[30px] items-center gap-1 rounded-md pl-9 pr-1.5 text-sm text-ink-secondary hover:bg-surface-active"
+                    >
+                      <span className="min-w-0 flex-1 truncate">{note.title || "Untitled"}</span>
+                      <button
+                        onClick={() => restoreNote(note.id)}
+                        title="Restore"
+                        aria-label={`Restore ${note.title || "Untitled"}`}
+                        className="flex size-5 shrink-0 items-center justify-center rounded text-ink-icon opacity-0 hover:bg-surface-active focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <RotateCcw size={14} />
+                      </button>
+                      <button
+                        onClick={() => permanentDelete(note.id)}
+                        title="Delete forever"
+                        aria-label={`Delete ${note.title || "Untitled"} forever`}
+                        className="flex size-5 shrink-0 items-center justify-center rounded text-ink-icon opacity-0 hover:bg-surface-active hover:text-ink-danger focus-visible:opacity-100 group-hover:opacity-100"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <NotionSelectionBar />
 
-      {/* Trash */}
-      {trashedNotes.length > 0 && (
-        <div className="px-2 pb-1.5 shrink-0 border-t border-white/[0.06] pt-1.5">
+      {/* Floating "New page" button at the bottom, no strip behind it (shell.md §1). */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-4 flex px-4">
+        <Tooltip content="New page" side="top">
           <button
-            onClick={() => setTrashOpen((v) => !v)}
-            aria-expanded={trashOpen}
-            className="w-full flex items-center gap-2 px-2 py-1.5 text-[12px] text-slate-500 hover:text-slate-300 rounded-md hover:bg-white/[0.055] transition-colors"
+            onClick={handleNewNote}
+            aria-label="New page"
+            className="pointer-events-auto flex size-10 items-center justify-center rounded-full bg-surface-elevated text-ink shadow-float transition-[background,transform] duration-instant hover:bg-surface-sidebar active:scale-95"
           >
-            <Trash2 size={13} className="shrink-0" />
-            <span className="flex-1 text-left">Trash</span>
-            <span className="text-[10px] tabular-nums text-slate-600">{trashedNotes.length}</span>
-            <ChevronRight
-              size={11}
-              className={`shrink-0 transition-transform duration-150 ${trashOpen ? "rotate-90" : ""}`}
-            />
+            <SquarePen size={18} strokeWidth={1.75} />
           </button>
-
-          {trashOpen && (
-            <div className="mt-0.5 space-y-px max-h-48 overflow-y-auto">
-              {trashedNotes.map((note) => (
-                <div
-                  key={note.id}
-                  className="flex items-center gap-1 pl-[26px] pr-1.5 py-1 rounded-md text-[12px] text-slate-500 hover:bg-white/[0.055] group"
-                >
-                  <span className="flex-1 truncate min-w-0">{note.title || "Untitled"}</span>
-                  <button
-                    onClick={() => restoreNote(note.id)}
-                    title="Restore"
-                    aria-label={`Restore ${note.title || "Untitled"}`}
-                    className="shrink-0 p-0.5 rounded text-slate-600 hover:text-indigo-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all"
-                  >
-                    <RotateCcw size={11} />
-                  </button>
-                  <button
-                    onClick={() => permanentDelete(note.id)}
-                    title="Delete forever"
-                    aria-label={`Delete ${note.title || "Untitled"} forever`}
-                    className="shrink-0 p-0.5 rounded text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all"
-                  >
-                    <Trash2 size={11} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Account row */}
-      <div className="px-2 py-2 border-t border-white/[0.06] shrink-0">
-        {confirmSignOut ? (
-          <div className="flex items-center gap-1.5 px-2 py-1">
-            <span className="text-[12px] text-slate-400 flex-1">Sign out?</span>
-            <button
-              onClick={handleSignOut}
-              className="text-[12px] px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors font-medium"
-            >
-              Yes
-            </button>
-            <button
-              onClick={() => setConfirmSignOut(false)}
-              className="text-[12px] px-2 py-0.5 rounded-md bg-white/[0.07] text-slate-400 hover:bg-white/[0.12] transition-colors"
-            >
-              No
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setConfirmSignOut(true)}
-              className="flex-1 flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] text-slate-500 hover:text-slate-200 hover:bg-white/[0.055] transition-colors"
-            >
-              <LogOut size={14} className="shrink-0" />
-              Sign out
-            </button>
-            {mounted && (
-              <button
-                onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-                aria-label="Toggle theme"
-                title={resolvedTheme === "dark" ? "Switch to light" : "Switch to dark"}
-                className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.055] transition-colors shrink-0"
-              >
-                {resolvedTheme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-              </button>
-            )}
-          </div>
-        )}
+        </Tooltip>
       </div>
+
+      <ConfirmDialog
+        open={confirmSignOut}
+        title="Sign out of My Second Brain?"
+        confirmLabel="Sign out"
+        onConfirm={handleSignOut}
+        onCancel={() => setConfirmSignOut(false)}
+      />
 
       {/* Headless: owns the file picker, the upload and the import report. Mounted here,
           not inside the "+" menu, so its report survives that menu closing. */}

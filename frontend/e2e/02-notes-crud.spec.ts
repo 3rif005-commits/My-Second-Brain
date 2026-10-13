@@ -23,13 +23,13 @@ test.describe("note CRUD", () => {
     await page.goto("/brain");
     // Use exact/role selectors to avoid matching text in the welcome paragraph
     await expect(page.getByText("My Second Brain", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "+ New Note" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "New Note" })).toBeVisible();
   });
 
   test("create new note — editor opens", async ({ page }) => {
     await page.goto("/brain");
-    await page.waitForSelector("text=+ New Note");
-    await page.click("text=+ New Note");
+    await page.waitForSelector("text=New Note");
+    await page.click("text=New Note");
 
     // Should navigate to /brain/<uuid>
     await page.waitForURL(/\/brain\/[0-9a-f-]{36}/, { timeout: 10000 });
@@ -42,7 +42,7 @@ test.describe("note CRUD", () => {
   test("type content → auto-saves → content persists after reload", async ({ page }) => {
     // Create a new note
     await page.goto("/brain");
-    await page.click("text=+ New Note");
+    await page.click("text=New Note");
     await page.waitForURL(/\/brain\/[0-9a-f-]{36}/, { timeout: 10000 });
     const noteUrl = page.url();
 
@@ -66,7 +66,7 @@ test.describe("note CRUD", () => {
 
   test("edit title → saved on blur → persists after reload", async ({ page }) => {
     await page.goto("/brain");
-    await page.click("text=+ New Note");
+    await page.click("text=New Note");
     await page.waitForURL(/\/brain\/[0-9a-f-]{36}/, { timeout: 10000 });
     const noteUrl = page.url();
 
@@ -87,7 +87,7 @@ test.describe("note CRUD", () => {
   test("delete note from editor — removed from sidebar", async ({ page }) => {
     // Create note
     await page.goto("/brain");
-    await page.click("text=+ New Note");
+    await page.click("text=New Note");
     await page.waitForURL(/\/brain\/[0-9a-f-]{36}/, { timeout: 10000 });
 
     const uniqueTitle = `Delete Me ${Date.now()}`;
@@ -111,7 +111,7 @@ test.describe("note CRUD", () => {
   test("sidebar delete button removes note", async ({ page }) => {
     // Create note
     await page.goto("/brain");
-    await page.click("text=+ New Note");
+    await page.click("text=New Note");
     await page.waitForURL(/\/brain\/[0-9a-f-]{36}/, { timeout: 10000 });
 
     const uniqueTitle = `Sidebar Delete ${Date.now()}`;
