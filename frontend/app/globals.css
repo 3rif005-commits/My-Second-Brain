@@ -1,22 +1,23 @@
 /* @import must come before all other rules */
 @import "@blocknote/mantine/style.css";
 @import "@blocknote/xl-ai/style.css";
+@import "./tokens.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #0f0f0f;
-  --sidebar-width: 260px;
-  --sidebar-bg: #f9fafb;
-  --sidebar-border: #e5e7eb;
+  /* Legacy names, kept as aliases of the Notion tokens (app/tokens.css). */
+  --background: var(--c-bg);
+  --foreground: var(--c-text);
+  --sidebar-bg: var(--c-bg-sidebar);
+  --sidebar-border: var(--c-border-sidebar-edge);
+  color-scheme: light;
 }
 
 .dark {
-  --background: #111827;
-  --foreground: #f9fafb;
+  color-scheme: dark;
 }
 
 /* ---------------------------------------------------------------------------
@@ -355,31 +356,41 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbar — thin and subtle */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+/* Scrollbars: the native OS bar, tinted (checklist #13). No custom ::-webkit thumb. */
+* {
+  scrollbar-color: var(--c-scrollbar) transparent;
 }
 
-/* Remove browser default outlines — components handle their own focus styles */
+/* Keyboard focus: one ring everywhere, keyboard only, never on mouse click
+ * (checklist #14-16). Inputs draw their own inset ring (--ring-input). */
 :focus-visible {
   outline: none;
+}
+:where(button, a, [role="button"], [role="menuitem"], [role="tab"], [role="option"], summary):focus-visible {
+  box-shadow: var(--ring-focus);
+  border-radius: var(--radius-md);
+}
+
+::selection {
+  background: rgba(35, 131, 226, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reduce-motion="system"] *,
+  [data-reduce-motion="on"] * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+[data-reduce-motion="on"] * {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

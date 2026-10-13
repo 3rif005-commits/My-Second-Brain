@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import { Providers } from "./providers";
+import { PREFS_BOOT_SCRIPT } from "@/lib/preferences";
 import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "My Second Brain",
@@ -22,9 +20,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
-        <meta name="theme-color" content="#6366f1" />
+        {/* Applies stored theme/accent/density before first paint (lib/preferences.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: PREFS_BOOT_SCRIPT }} />
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#191919" media="(prefers-color-scheme: dark)" />
         <meta name="mobile-web-app-capable" content="yes" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>

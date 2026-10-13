@@ -1,0 +1,253 @@
+/* ---------------------------------------------------------------------------
+ * Design tokens: the Notion look.
+ *
+ * Every value is MEASURED from live Notion (getComputedStyle, 2026-10-12/13), not
+ * eyeballed. Source of truth: docs/notion-reference/tokens.json; acceptance
+ * criteria: docs/notion-reference/checklist.md. Odd alphas such as 0.051 are real.
+ *
+ * Components use the semantic Tailwind names (tailwind.config.ts) that point here:
+ * surface-*, ink-*, line-*, accent, opt-*, blk-*. Raw palette classes are guarded by
+ * lib/design/colorGuard.test.ts.
+ *
+ * Customization (Settings → Preferences) only flips attributes on <html>:
+ *   class="dark"               theme
+ *   data-accent="<preset>"     accent colour (accent tokens only, never greys or tags)
+ *   data-contrast="high"       stronger secondary text and lines
+ *   data-density="compact"     tighter table rows, sidebar rows and menus
+ *   data-font / data-small-text / data-full-width   default page typography
+ * so one preference changes the whole app at once.
+ * ------------------------------------------------------------------------- */
+
+:root {
+  /* type */
+  --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI",
+    Helvetica, "Apple Color Emoji", "Noto Sans Arabic", "Noto Sans Hebrew", Arial, sans-serif,
+    "Segoe UI Emoji", "Segoe UI Symbol";
+  --font-serif: Lyon-Text, Georgia, ui-serif, serif;
+  --font-mono: iawriter-mono, Nitti, Menlo, Courier, monospace;
+  --font-code: SFMono-Regular, Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace;
+
+  /* text */
+  --c-text: rgb(44, 44, 43);
+  --c-text-secondary: rgb(125, 122, 117);
+  --c-text-tertiary: rgb(161, 158, 153);
+  --c-text-sidebar: rgb(95, 94, 89);
+  --c-text-placeholder: rgba(21, 14, 0, 0.286);
+  --c-text-disabled: rgb(188, 186, 182);
+  --c-text-on-accent: rgb(255, 255, 255);
+  --c-text-danger: rgb(229, 100, 88);
+
+  /* icons */
+  --c-icon: rgb(142, 139, 134);
+  --c-icon-strong: rgb(56, 56, 54);
+  --c-icon-subtle: rgb(173, 169, 163);
+
+  /* surfaces */
+  --c-bg: rgb(255, 255, 255);
+  --c-bg-sidebar: rgb(249, 248, 247);
+  --c-bg-elevated: rgb(255, 255, 255);
+  --c-bg-panel: rgb(255, 255, 255);
+  --c-bg-hover: rgba(33, 27, 23, 0.051);
+  --c-bg-active: rgba(33, 27, 23, 0.05);
+  --c-bg-selected: rgba(35, 131, 226, 0.14);
+  --c-bg-cell-selected: rgba(35, 131, 226, 0.07);
+  --c-bg-field: rgba(66, 35, 3, 0.03);
+  --c-bg-editor-band: rgba(242, 241, 238, 0.6);
+  --c-bg-callout: rgb(249, 248, 247);
+  --c-bg-code: rgba(66, 35, 3, 0.03);
+  --c-bg-inline-code: rgba(33, 27, 23, 0.05);
+  --c-bg-table-header: rgb(247, 246, 243);
+  --c-bg-chip: rgba(42, 28, 0, 0.07);
+  --c-bg-tooltip: rgb(44, 44, 43);
+  --c-bg-backdrop: rgba(15, 15, 15, 0.6);
+  --c-bg-weekend: rgb(249, 248, 247);
+  --c-bg-accent-chip: rgba(0, 124, 215, 0.094);
+  --c-bg-danger-soft: rgba(223, 22, 0, 0.094);
+
+  /* lines */
+  --c-border: rgba(42, 28, 0, 0.07);
+  --c-border-strong: rgba(28, 19, 1, 0.11);
+  --c-border-opaque: rgb(230, 229, 227);
+  --c-border-sidebar-edge: rgb(240, 239, 237);
+  --c-border-checkbox: rgba(27, 21, 0, 0.19);
+
+  /* accent (a preset swaps the scale; see [data-accent] below) */
+  --c-accent: rgb(var(--accent-600));
+  --c-accent-hover: rgb(var(--accent-700));
+  --c-focus: rgb(35, 131, 226);
+  --c-toggle-off: rgba(135, 131, 120, 0.3);
+  --c-scrollbar: rgb(211, 209, 203);
+
+  /* shadows (light and dark differ in GEOMETRY, not only colour) */
+  --shadow-menu: rgba(25, 25, 25, 0.05) 0 20px 24px 0, rgba(25, 25, 25, 0.027) 0 5px 8px 0,
+    rgba(42, 28, 0, 0.07) 0 0 0 1px;
+  --shadow-float: rgba(25, 25, 25, 0.027) 0 8px 12px 0, rgba(25, 25, 25, 0.027) 0 2px 6px 0,
+    rgba(42, 28, 0, 0.07) 0 0 0 1px;
+  --shadow-card: rgba(25, 25, 25, 0.027) 0 4px 12px 0, rgba(25, 25, 25, 0.02) 0 1px 2px 0,
+    rgba(42, 28, 0, 0.07) 0 0 0 1px;
+  --shadow-chip: rgba(0, 0, 0, 0.04) 0 2px 4px 0, rgba(42, 28, 0, 0.07) 0 0 0 1px;
+  --shadow-modal: rgba(25, 25, 25, 0.24) 0 24px 48px 0, rgba(25, 25, 25, 0.14) 0 4px 12px 0,
+    rgba(42, 28, 0, 0.07) 0 0 0 1px;
+  --shadow-tooltip: rgba(0, 0, 0, 0.08) 0 4px 12px -2px, rgba(255, 255, 255, 0.05) 0 0 0 1px inset;
+  --ring-focus: rgb(248, 248, 247) 0 0 0 2px, rgb(35, 131, 226) 0 0 0 4px, rgba(255, 255, 255, 0.25) 0 0 0 6px;
+  --ring-input: rgb(35, 131, 226) 0 0 0 1px inset, rgb(35, 131, 226) 0 0 0 1px;
+
+  /* database option pills: translucent tint + DARK text in light */
+  --opt-default-bg: rgba(42, 28, 0, 0.07);   --opt-default-text: rgb(44, 44, 43);
+  --opt-gray-bg: rgba(28, 19, 1, 0.11);      --opt-gray-text: rgb(73, 72, 70);
+  --opt-brown-bg: rgba(127, 51, 0, 0.157);   --opt-brown-text: rgb(88, 68, 55);
+  --opt-orange-bg: rgba(196, 88, 0, 0.204);  --opt-orange-text: rgb(106, 66, 34);
+  --opt-yellow-bg: rgba(209, 156, 0, 0.282); --opt-yellow-text: rgb(101, 81, 33);
+  --opt-green-bg: rgba(0, 96, 38, 0.157);    --opt-green-text: rgb(42, 83, 60);
+  --opt-blue-bg: rgba(0, 118, 217, 0.204);   --opt-blue-text: rgb(38, 74, 114);
+  --opt-purple-bg: rgba(92, 0, 163, 0.14);   --opt-purple-text: rgb(85, 59, 105);
+  --opt-pink-bg: rgba(183, 0, 78, 0.153);    --opt-pink-text: rgb(104, 53, 78);
+  --opt-red-bg: rgba(206, 24, 0, 0.165);     --opt-red-text: rgb(109, 53, 49);
+  /* status dots: the same in both themes (orange..red were not measured; block text colours stand in) */
+  --opt-default-dot: rgb(142, 139, 134);
+  --opt-gray-dot: rgb(142, 139, 134);
+  --opt-brown-dot: rgb(182, 137, 101);
+  --opt-orange-dot: rgb(210, 123, 45);
+  --opt-yellow-dot: rgb(203, 148, 52);
+  --opt-green-dot: rgb(70, 161, 113);
+  --opt-blue-dot: rgb(39, 131, 222);
+  --opt-purple-dot: rgb(154, 107, 180);
+  --opt-pink-dot: rgb(193, 76, 138);
+  --opt-red-dot: rgb(207, 81, 72);
+
+  /* page block colours: text is identical in both themes, backgrounds differ */
+  --blk-default-text: var(--c-text);  --blk-default-bg: transparent;
+  --blk-gray-text: rgb(125, 122, 117);  --blk-gray-bg: rgb(240, 239, 237);
+  --blk-brown-text: rgb(159, 118, 90);  --blk-brown-bg: rgb(245, 237, 233);
+  --blk-orange-text: rgb(210, 123, 45); --blk-orange-bg: rgb(251, 235, 222);
+  --blk-yellow-text: rgb(203, 148, 52); --blk-yellow-bg: rgb(249, 243, 220);
+  --blk-green-text: rgb(80, 148, 110);  --blk-green-bg: rgb(232, 241, 236);
+  --blk-blue-text: rgb(56, 125, 201);   --blk-blue-bg: rgb(229, 242, 252);
+  --blk-purple-text: rgb(154, 107, 180); --blk-purple-bg: rgb(243, 235, 249);
+  --blk-pink-text: rgb(193, 76, 138);   --blk-pink-bg: rgb(250, 233, 241);
+  --blk-red-text: rgb(207, 81, 72);     --blk-red-bg: rgb(252, 233, 231);
+
+  /* geometry */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-card: 10px;
+  --radius-modal: 12px;
+  --sidebar-width: 270px;
+  --topbar-height: 44px;
+  --page-column: 720px;
+  --page-gutter: 96px;
+  --row-height: 36px;          /* table row content height; 37px with its 1px border */
+  --sidebar-row-height: 30px;
+  --menu-row-h: 28px;
+
+  /* motion */
+  --dur-instant: 0.02s;
+  --dur-fast: 0.1s;
+  --dur-popover: 200ms;
+  --dur-panel: 0.2s;
+}
+
+.dark {
+  --c-text: rgb(240, 239, 237);
+  --c-text-secondary: rgb(173, 169, 163);
+  --c-text-tertiary: rgb(125, 122, 117);
+  --c-text-sidebar: rgb(188, 186, 182);
+  --c-text-placeholder: rgba(255, 252, 235, 0.306);
+  --c-text-disabled: rgb(95, 94, 89);
+
+  --c-icon: rgb(173, 169, 163);
+  --c-icon-strong: rgb(230, 229, 227);
+  --c-icon-subtle: rgb(125, 122, 117);
+
+  --c-bg: rgb(25, 25, 25);
+  --c-bg-sidebar: rgb(32, 32, 32);
+  --c-bg-elevated: rgb(37, 37, 37);
+  --c-bg-panel: rgb(32, 32, 32);
+  --c-bg-hover: rgba(255, 255, 255, 0.055);
+  --c-bg-active: rgba(255, 255, 255, 0.055);
+  --c-bg-field: rgba(252, 252, 252, 0.03);
+  --c-bg-editor-band: rgba(255, 255, 255, 0.03);
+  --c-bg-callout: rgb(56, 56, 54);
+  --c-bg-code: rgba(252, 252, 252, 0.03);
+  --c-bg-inline-code: rgba(255, 255, 255, 0.055);
+  --c-bg-table-header: rgba(255, 255, 255, 0.03);
+  --c-bg-chip: rgba(255, 255, 243, 0.082);
+  --c-bg-backdrop: rgba(15, 15, 15, 0.8);
+  --c-bg-weekend: rgb(32, 32, 32);
+  --c-bg-accent-chip: rgba(67, 155, 255, 0.24);
+
+  --c-border: rgba(255, 255, 243, 0.082);
+  --c-border-strong: rgba(255, 255, 235, 0.1);
+  --c-border-opaque: rgb(56, 56, 54);
+  --c-border-sidebar-edge: rgb(44, 44, 43);
+  --c-border-checkbox: rgba(255, 252, 235, 0.306);
+
+  /* in dark the primary hover gets LIGHTER, not darker */
+  --c-accent-hover: rgb(var(--accent-500));
+  --c-toggle-off: rgba(202, 204, 206, 0.3);
+  --c-scrollbar: rgba(255, 255, 255, 0.2);
+
+  --shadow-menu: rgb(56, 56, 54) 0 0 0 1px, rgba(25, 25, 25, 0.2) 0 14px 28px -6px,
+    rgba(25, 25, 25, 0.118) 0 2px 4px -1px;
+  --shadow-float: rgb(56, 56, 54) 0 0 0 1px, rgba(25, 25, 25, 0.08) 0 4px 12px -2px;
+  --shadow-card: rgba(25, 25, 25, 0.08) 0 2px 4px 0, rgba(255, 255, 243, 0.082) 0 0 0 1px;
+  --shadow-chip: rgb(56, 56, 54) 0 0 0 1px, rgba(25, 25, 25, 0.08) 0 2px 4px;
+  --shadow-modal: rgb(56, 56, 54) 0 0 0 1px, rgba(25, 25, 25, 0.64) 0 24px 48px 0,
+    rgba(25, 25, 25, 0.56) 0 4px 12px 0;
+  --ring-focus: rgb(25, 25, 25) 0 0 0 2px, rgb(35, 131, 226) 0 0 0 4px, rgb(25, 25, 25) 0 0 0 6px;
+
+  /* option pills: strong tint + PALE text in dark */
+  --opt-default-bg: rgba(255, 255, 243, 0.082); --opt-default-text: rgb(240, 239, 237);
+  --opt-gray-bg: rgba(255, 252, 235, 0.306);    --opt-gray-text: rgb(240, 239, 237);
+  --opt-brown-bg: rgba(255, 184, 132, 0.365);   --opt-brown-text: rgb(245, 237, 233);
+  --opt-orange-bg: rgba(255, 143, 71, 0.482);   --opt-orange-text: rgb(251, 235, 222);
+  --opt-yellow-bg: rgba(255, 188, 53, 0.46);    --opt-yellow-text: rgb(249, 243, 220);
+  --opt-green-bg: rgba(113, 255, 175, 0.337);   --opt-green-text: rgb(232, 241, 236);
+  --opt-blue-bg: rgba(81, 166, 255, 0.494);     --opt-blue-text: rgb(229, 242, 252);
+  --opt-purple-bg: rgba(208, 147, 255, 0.427);  --opt-purple-text: rgb(243, 235, 249);
+  --opt-pink-bg: rgba(255, 133, 192, 0.427);    --opt-pink-text: rgb(250, 233, 241);
+  --opt-red-bg: rgba(255, 116, 105, 0.525);     --opt-red-text: rgb(252, 233, 231);
+
+  --blk-gray-bg: rgb(56, 56, 54);
+  --blk-brown-bg: rgb(69, 54, 45);
+  --blk-orange-bg: rgb(83, 54, 31);
+  --blk-yellow-bg: rgb(80, 68, 37);
+  --blk-green-bg: rgb(38, 61, 48);
+  --blk-blue-bg: rgb(35, 56, 80);
+  --blk-purple-bg: rgb(60, 45, 71);
+  --blk-pink-bg: rgb(78, 43, 60);
+  --blk-red-bg: rgb(80, 44, 41);
+}
+
+/* High contrast: secondary text and lines one step stronger. */
+[data-contrast="high"] {
+  --c-text-secondary: rgb(95, 94, 89);
+  --c-text-tertiary: rgb(125, 122, 117);
+  --c-border: rgba(42, 28, 0, 0.14);
+  --c-border-strong: rgba(28, 19, 1, 0.2);
+}
+.dark[data-contrast="high"] {
+  --c-text-secondary: rgb(211, 209, 203);
+  --c-text-tertiary: rgb(173, 169, 163);
+  --c-border: rgba(255, 255, 243, 0.16);
+  --c-border-strong: rgba(255, 255, 235, 0.2);
+}
+
+/* Compact density. */
+[data-density="compact"] {
+  --row-height: 30px;
+  --sidebar-row-height: 26px;
+  --menu-row-h: 26px;
+}
+
+/* Accent presets: an 11-step scale derived from one base (step 600). Blue is
+ * Notion's own and the default; its 700 is Notion's measured hover rgb(31,118,204). */
+:root,
+[data-accent="blue"] { --accent-50: 240 246 253; --accent-100: 223 236 250; --accent-200: 190 218 245; --accent-300: 147 193 239; --accent-400: 104 168 232; --accent-500: 61 144 225; --accent-600: 39 131 222; --accent-700: 31 118 204; --accent-800: 27 89 151; --accent-900: 20 68 115; --accent-950: 14 47 80; }
+[data-accent="indigo"] { --accent-50: 244 244 254; --accent-100: 232 232 253; --accent-200: 208 209 251; --accent-300: 177 179 248; --accent-400: 146 148 245; --accent-500: 119 122 243; --accent-600: 99 102 241; --accent-700: 85 88 207; --accent-800: 67 69 164; --accent-900: 51 53 125; --accent-950: 36 37 87; }
+[data-accent="purple"] { --accent-50: 247 244 249; --accent-100: 238 232 243; --accent-200: 222 209 231; --accent-300: 200 178 216; --accent-400: 177 147 200; --accent-500: 158 121 186; --accent-600: 144 101 176; --accent-700: 124 87 151; --accent-800: 98 69 120; --accent-900: 75 53 92; --accent-950: 52 36 63; }
+[data-accent="green"] { --accent-50: 242 246 244; --accent-100: 227 236 231; --accent-200: 199 218 208; --accent-300: 162 193 176; --accent-400: 124 168 144; --accent-500: 92 147 118; --accent-600: 68 131 97; --accent-700: 58 113 83; --accent-800: 46 89 66; --accent-900: 35 68 50; --accent-950: 24 47 35; }
+[data-accent="orange"] { --accent-50: 252 245 238; --accent-100: 249 234 219; --accent-200: 244 213 182; --accent-300: 236 185 134; --accent-400: 228 157 86; --accent-500: 222 133 44; --accent-600: 217 115 13; --accent-700: 187 99 11; --accent-800: 148 78 9; --accent-900: 113 60 7; --accent-950: 78 41 5; }
+[data-accent="pink"] { --accent-50: 251 242 247; --accent-100: 246 228 237; --accent-200: 236 201 220; --accent-300: 224 166 197; --accent-400: 212 130 173; --accent-500: 201 99 153; --accent-600: 193 76 138; --accent-700: 166 65 119; --accent-800: 131 52 94; --accent-900: 100 40 72; --accent-950: 69 27 50; }
+[data-accent="gray"] { --accent-50: 244 244 243; --accent-100: 231 231 230; --accent-200: 207 207 206; --accent-300: 176 175 173; --accent-400: 144 142 140; --accent-500: 117 115 111; --accent-600: 96 94 90; --accent-700: 83 81 77; --accent-800: 65 64 61; --accent-900: 50 49 47; --accent-950: 35 34 32; }

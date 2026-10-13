@@ -2,10 +2,21 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  DEFAULT_PREFERENCES,
+  applyPreferences,
+  loadPreferences,
+  resolveTheme,
+  savePreferences,
+  type Preferences,
+  type ThemeChoice,
+} from "@/lib/preferences";
 
 interface ThemeCtx {
-  resolvedTheme: string;
-  setTheme: (t: string) => void;
+  /** The theme actually shown: "light" or "dark" ("system" already resolved). */
+  resolvedTheme: "light" | "dark";
+  /** Light, dark, or follow the OS. */
+  setTheme: (t: ThemeChoice) => void;
 }
 
 const ThemeContext = createContext<ThemeCtx>({
@@ -15,6 +26,21 @@ const ThemeContext = createContext<ThemeCtx>({
 
 export function useTheme() {
   return useContext(ThemeContext);
+}
+
+interface PreferencesCtx {
+  preferences: Preferences;
+  updatePreferences: (patch: Partial<Preferences>) => void;
+}
+
+const PreferencesContext = createContext<PreferencesCtx>({
+  preferences: DEFAULT_PREFERENCES,
+  updatePreferences: () => {},
+});
+
+/** Settings → Preferences, and anything that reads a user default (date format, peek mode…). */
+export function usePreferences() {
+  return useContext(PreferencesContext);
 }
 
 // Lightweight toast — replaces window.alert() for error/status messages.
@@ -58,22 +84,54 @@ function ToastStack({ toasts, onDismiss }: { toasts: ToastItem[]; onDismiss: (id
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState("light");
+  const [preferences, setPreferences] = useState<Preferences>(DEFAULT_PREFERENCES);
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const toastId = useRef(0);
 
-  // Read persisted preference after mount (avoids SSR mismatch)
+  // Read the stored preferences after mount (avoids an SSR mismatch). The inline
+  // boot script in layout.tsx has already painted them, so nothing flashes.
   useEffect(() => {
-    const stored = localStorage.getItem("sb-theme") ?? "light";
-    setThemeState(stored);
-    document.documentElement.classList.toggle("dark", stored === "dark");
+    const stored = loadPreferences();
+    setPreferences(stored);
+    setResolvedTheme(resolveTheme(stored.theme));
   }, []);
 
-  function setTheme(next: string) {
-    setThemeState(next);
-    localStorage.setItem("sb-theme", next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-  }
+  const updatePreferences = useCallback((patch: Partial<Preferences>) => {
+    setPreferences((prev) => {
+      const next = { ...prev, ...patch };
+      savePreferences(next);
+      applyPreferences(next);
+      setResolvedTheme(resolveTheme(next.theme));
+      return next;
+    });
+  }, []);
+
+  const setTheme = useCallback((next: ThemeChoice) => updatePreferences({ theme: next }), [updatePreferences]);
+
+  // "Use system setting" follows the OS live.
+  useEffect(() => {
+    if (preferences.theme !== "system" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => {
+      applyPreferences(preferences);
+      setResolvedTheme(resolveTheme("system"));
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [preferences]);
+
+  // Ctrl/Cmd+Shift+L toggles light and dark, as in Notion (checklist #17).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        setTheme(resolvedTheme === "dark" ? "light" : "dark");
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [resolvedTheme, setTheme]);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -86,11 +144,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [dismissToast]);
 
   return (
-    <ThemeContext.Provider value={{ resolvedTheme: theme, setTheme }}>
-      <ToastContext.Provider value={{ showToast }}>
-        {children}
-        <ToastStack toasts={toasts} onDismiss={dismissToast} />
-      </ToastContext.Provider>
+    <ThemeContext.Provider value={{ resolvedTheme, setTheme }}>
+      <PreferencesContext.Provider value={{ preferences, updatePreferences }}>
+        <ToastContext.Provider value={{ showToast }}>
+          {children}
+          <ToastStack toasts={toasts} onDismiss={dismissToast} />
+        </ToastContext.Provider>
+      </PreferencesContext.Provider>
     </ThemeContext.Provider>
   );
 }
