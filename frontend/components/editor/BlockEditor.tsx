@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, useMemo } from "react";
 import { useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems, useBlockNoteEditor, useExtension } from "@blocknote/react";
 import type { DefaultReactSuggestionItem } from "@blocknote/react";
-import { BlockNoteView, darkDefaultTheme } from "@blocknote/mantine";
+import { BlockNoteView } from "@blocknote/mantine";
 import { AIExtension, AIMenuController } from "@blocknote/xl-ai";
 // @ts-ignore — ClientSideTransport + fetchViaProxy + getAISlashMenuItems exist in runtime bundle but omitted from index.d.ts
 import { ClientSideTransport, fetchViaProxy, getAISlashMenuItems } from "@blocknote/xl-ai";
@@ -119,35 +119,27 @@ function withContiguousGroups<T extends { group?: string }>(items: T[]): T[] {
   return [...byGroup.values()].flat();
 }
 
-// Custom dark theme: editor background matches app's gray-900 (#111827)
-// so the editor blends seamlessly instead of showing BlockNote's #1F1F1F
-const appDarkTheme = {
-  ...darkDefaultTheme,
+// The editor theme points at the Notion tokens (app/tokens.css), so the same object
+// is right in light and dark: the CSS variables switch, not the theme. Text and
+// highlight colours are Notion's BLOCK palette (blocks.md §3).
+const BLOCK_HUES = ["gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"] as const;
+const notionTheme = {
   colors: {
-    ...darkDefaultTheme.colors,
-    editor: {
-      background: "#111827", // Tailwind gray-900 — matches dark:bg-gray-900
-      text: "#e5e7eb",       // Tailwind gray-200
-    },
-    menu: {
-      background: "#1f2937", // gray-800 — slightly lighter for dropdowns/menus
-      text: "#e5e7eb",
-    },
-    tooltip: {
-      background: "#1f2937",
-      text: "#e5e7eb",
-    },
-    hovered: {
-      background: "#374151", // gray-700
-      text: "#f9fafb",
-    },
-    selected: {
-      background: "#4b5563", // gray-600
-      text: "#f9fafb",
-    },
-    border: "#374151",       // gray-700
-    sideMenu: "#6b7280",     // gray-500
+    editor: { background: "var(--c-bg)", text: "var(--c-text)" },
+    menu: { background: "var(--c-bg-elevated)", text: "var(--c-text)" },
+    tooltip: { background: "var(--c-bg-tooltip)", text: "var(--c-text-on-tooltip)" },
+    hovered: { background: "var(--c-bg-hover)", text: "var(--c-text)" },
+    selected: { background: "var(--c-bg-selected)", text: "var(--c-text)" },
+    disabled: { background: "var(--c-bg-field)", text: "var(--c-text-disabled)" },
+    shadow: "var(--c-border)",
+    border: "var(--c-border)",
+    sideMenu: "var(--c-icon-subtle)",
+    highlights: Object.fromEntries(
+      BLOCK_HUES.map((h) => [h, { text: `var(--blk-${h}-text)`, background: `var(--blk-${h}-bg)` }]),
+    ) as Record<(typeof BLOCK_HUES)[number], { text: string; background: string }>,
   },
+  borderRadius: 6,
+  fontFamily: "var(--font-ui)",
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -569,11 +561,12 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     }, [ingestHtml]);
 
     return (
-      <div className="prose max-w-none">
+      <div className="notion-editor max-w-none">
         <NoteIdContext.Provider value={_noteId}>
         <BlockNoteView
           editor={editor}
-          theme={resolvedTheme === "dark" ? appDarkTheme : "light"}
+          theme={notionTheme}
+          data-color-scheme={resolvedTheme}
           // Disable the built-in slash menu — we render our own custom
           // SuggestionMenuController below. Without this, both menus are active
           // and a mouse-click on our menu's item fails to apply the conversion.

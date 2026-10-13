@@ -2,6 +2,7 @@
 @import "@blocknote/mantine/style.css";
 @import "@blocknote/xl-ai/style.css";
 @import "./tokens.css";
+@import "./editor.css";
 
 @tailwind base;
 @tailwind components;
@@ -130,10 +131,10 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
   column-gap: 0.6rem;
-  padding: 0.6rem 0.85rem;
-  margin: 0.25rem 0;
-  border: 1px solid;
-  border-radius: 0.5rem;
+  padding: 12px 12px 12px 12px;
+  margin: 4px 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-card);
 }
 
 /* The icon sits in column one, on the body's first line. */
@@ -161,68 +162,35 @@
   grid-template-columns: auto;
 }
 
-/* One rule pair per callout type (CALLOUT_PALETTE in customBlocks.tsx). */
+/* One rule per callout type (CALLOUT_PALETTE in customBlocks.tsx), on Notion's
+ * BLOCK palette: a muted fill, no visible border, so a page of AI-ingested
+ * callouts reads calm rather than saturated (docs/ui-audit decision 5). */
 .bn-block:has(> .react-renderer.node-callout > .bn-block-content:not([data-callout-type])) {
-  background-color: #f9fafb; border-color: #d1d5db; /* NOTE — gray */
+  background-color: var(--c-bg-callout); border-color: transparent;
 }
-.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content:not([data-callout-type])) {
-  background-color: rgba(31, 41, 55, 0.4); border-color: #4b5563;
-}
-
 .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="OVERVIEW"]) {
-  background-color: #eff6ff; border-color: #93c5fd; /* blue */
+  background-color: var(--blk-blue-bg); border-color: transparent;
 }
-.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="OVERVIEW"]) {
-  background-color: rgba(30, 58, 138, 0.2); border-color: #1d4ed8;
-}
-
 .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="TIP"]) {
-  background-color: #f0fdf4; border-color: #86efac; /* green */
+  background-color: var(--blk-green-bg); border-color: transparent;
 }
-.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="TIP"]) {
-  background-color: rgba(20, 83, 45, 0.2); border-color: #15803d;
-}
-
 .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="IMPORTANT"]) {
-  background-color: #fefce8; border-color: #fde047; /* yellow */
+  background-color: var(--blk-yellow-bg); border-color: transparent;
 }
-.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="IMPORTANT"]) {
-  background-color: rgba(113, 63, 18, 0.2); border-color: #a16207;
-}
-
 .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="WARNING"]) {
-  background-color: #fff7ed; border-color: #fdba74; /* orange */
+  background-color: var(--blk-orange-bg); border-color: transparent;
 }
-.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="WARNING"]) {
-  background-color: rgba(124, 45, 18, 0.2); border-color: #c2410c;
-}
-
 .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="CAUTION"]) {
-  background-color: #fef2f2; border-color: #fca5a5; /* red */
+  background-color: var(--blk-red-bg); border-color: transparent;
 }
-.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="CAUTION"]) {
-  background-color: rgba(127, 29, 29, 0.2); border-color: #b91c1c;
-}
-
 .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="FORMULA"]) {
-  background-color: #faf5ff; border-color: #d8b4fe; /* purple */
+  background-color: var(--blk-purple-bg); border-color: transparent;
 }
-.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="FORMULA"]) {
-  background-color: rgba(88, 28, 135, 0.2); border-color: #7e22ce;
-}
-
 .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="ANALOGY"]) {
-  background-color: #f5efe8; border-color: #c9a876; /* brown */
+  background-color: var(--blk-brown-bg); border-color: transparent;
 }
-.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="ANALOGY"]) {
-  background-color: rgba(58, 47, 34, 0.4); border-color: #7a6142;
-}
-
 .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="EXAM"]) {
-  background-color: #fdf2f8; border-color: #f9a8d4; /* pink */
-}
-.dark .bn-block:has(> .react-renderer.node-callout > .bn-block-content[data-callout-type="EXAM"]) {
-  background-color: rgba(131, 24, 67, 0.2); border-color: #be185d;
+  background-color: var(--blk-pink-bg); border-color: transparent;
 }
 
 /* A quote whose whole body is nested underneath it — Notion's `> ##### Overview`

@@ -1,0 +1,237 @@
+/* ---------------------------------------------------------------------------
+ * Notion block styling for the BlockNote editor.
+ *
+ * Measured spec: docs/notion-reference/surfaces/blocks.md (and checklist §F).
+ * BlockNote's defaults (54px inline padding, 3px block padding, 3em/2em/1.3em
+ * bold headings, a black code block, a grey quote) are replaced by Notion's
+ * metrics; colours come from the tokens so light and dark both follow.
+ * Scoped to .notion-editor (BlockEditor's wrapper) so other BlockNote surfaces,
+ * such as the AI panel, are untouched.
+ * ------------------------------------------------------------------------- */
+
+/* Text sits on the page column: no BlockNote inline padding. The side menu
+ * (+ and ⋮⋮) hangs in the 96px gutter instead. */
+.notion-editor .bn-editor {
+  padding-inline: 0;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--c-text);
+  background: transparent;
+}
+.notion-editor .bn-container,
+.notion-editor .bn-editor {
+  background: transparent;
+}
+
+/* Spacing model: blocks touch; each paragraph's wrapper pads 6px top and bottom
+ * and the editable leaf pads 2px, so a one-line paragraph is 40px. */
+.notion-editor .bn-block-outer {
+  line-height: 24px;
+}
+.notion-editor .bn-block-content {
+  padding: 8px 2px;
+}
+
+/* Headings: 30/24/20px, weight 600, extra space above (blocks.md §1). */
+.notion-editor .bn-block-content[data-content-type="heading"] {
+  font-weight: 600;
+  letter-spacing: normal;
+}
+.notion-editor .bn-block-content[data-content-type="heading"][data-level="1"] {
+  font-size: 30px;
+  line-height: 39px;
+  padding: 32px 2px 8px;
+}
+.notion-editor .bn-block-content[data-content-type="heading"][data-level="2"] {
+  font-size: 24px;
+  line-height: 31.2px;
+  padding: 28px 2px 8px;
+}
+.notion-editor .bn-block-content[data-content-type="heading"][data-level="3"] {
+  font-size: 20px;
+  line-height: 26px;
+  padding: 24px 2px 8px;
+}
+.notion-editor .bn-block-content[data-content-type="heading"] h1,
+.notion-editor .bn-block-content[data-content-type="heading"] h2,
+.notion-editor .bn-block-content[data-content-type="heading"] h3 {
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  margin: 0;
+}
+
+/* List items: 30px pitch (1px wrapper + 2px leaf). Nested children indent 32px. */
+.notion-editor .bn-block-content[data-content-type="bulletListItem"],
+.notion-editor .bn-block-content[data-content-type="numberedListItem"],
+.notion-editor .bn-block-content[data-content-type="checkListItem"],
+.notion-editor .bn-block-content[data-content-type="toggleListItem"] {
+  padding: 3px 2px;
+}
+.notion-editor .bn-block-group .bn-block-group {
+  margin-left: 26px;
+}
+
+/* To-do: 16px box, radius 1.5px, 1px strong border; checked = accent fill with
+ * a white tick; checked text at 0.7 opacity with a line-through. */
+.notion-editor .bn-block-content[data-content-type="checkListItem"] > div > input {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 4px 8px 0 4px;
+  border: 1px solid var(--c-icon-strong);
+  border-radius: 1.5px;
+  background: transparent;
+  transition: background 0.2s ease-out;
+}
+.notion-editor .bn-block-content[data-content-type="checkListItem"] > div > input:checked {
+  border-color: var(--c-accent);
+  background: var(--c-accent)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3 7.5l2.5 2.5L11 4.5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 14px no-repeat;
+}
+.notion-editor .bn-block-content[data-content-type="checkListItem"][data-checked="true"] .bn-inline-content {
+  opacity: 0.7;
+  text-decoration-color: color-mix(in srgb, var(--c-text) 50%, transparent);
+}
+
+/* Quote: 3px left rule in the text colour, 14px inset, body-size text. */
+.notion-editor blockquote,
+.notion-editor .bn-block-content[data-content-type="quote"] {
+  color: var(--c-text);
+  border-left: 3px solid currentColor;
+  padding: 0 14px;
+  margin: 4px 0;
+  font-size: 16px;
+}
+
+/* Code: warm faint fill, radius 10px, 24px 22px padding, 13.6px mono text. */
+.notion-editor .bn-block-content[data-content-type="codeBlock"] {
+  color: var(--c-text);
+  background: var(--c-bg-code);
+  border-radius: var(--radius-card);
+  margin: 4px 0;
+}
+.notion-editor .bn-block-content[data-content-type="codeBlock"] > pre {
+  padding: 24px 22px;
+  font-family: var(--font-code);
+  font-size: 13.6px;
+  line-height: 20.4px;
+}
+.notion-editor .bn-block-content[data-content-type="codeBlock"] > div > select {
+  color: var(--c-text-secondary);
+}
+
+/* Inline styles: code is red on a soft chip, bold is 600, links are the text
+ * colour with a faint underline (not blue). */
+.notion-editor .bn-inline-content code {
+  font-family: var(--font-code);
+  font-size: 85%;
+  color: var(--blk-red-text);
+  background: var(--c-bg-inline-code);
+  border-radius: var(--radius-sm);
+  padding: 0.2em 0.4em;
+}
+.notion-editor .bn-inline-content strong,
+.notion-editor .bn-inline-content b {
+  font-weight: 600;
+}
+.notion-editor .bn-inline-content a {
+  color: inherit;
+  opacity: 0.7;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--c-text) 40%, transparent);
+  text-decoration-thickness: 0.8px;
+  text-underline-offset: 2px;
+}
+
+/* Divider: a 1px strong line in a 13px block. */
+.notion-editor hr,
+.notion-editor .bn-block-content[data-content-type="divider"] hr {
+  border: 0;
+  border-top: 1px solid var(--c-border-strong);
+  margin: 6px 0;
+}
+
+/* Tables inside pages: opaque 1px cells, a warm header band. */
+.notion-editor .bn-block-content[data-content-type="table"] td,
+.notion-editor .bn-block-content[data-content-type="table"] th {
+  border: 1px solid var(--c-border-opaque);
+  padding: 7px 9px;
+  font-size: 14px;
+  line-height: 20px;
+}
+.notion-editor .bn-block-content[data-content-type="table"] th {
+  background: var(--c-bg-table-header);
+  font-weight: 500;
+}
+
+/* Images: radius 10px. */
+.notion-editor .bn-block-content[data-content-type="image"] img {
+  border-radius: var(--radius-card);
+}
+
+/* Empty-block placeholder in the placeholder colour (checklist #126). */
+.notion-editor .bn-inline-content:has(> .ProseMirror-trailingBreak:only-child)::before,
+.notion-editor [data-is-empty-and-focused] .bn-inline-content::before {
+  color: var(--c-text-placeholder);
+  -webkit-text-fill-color: var(--c-text-placeholder);
+}
+
+/* Side menu (+ and ⋮⋮): Notion's subtle grey handles. */
+.bn-side-menu .mantine-UnstyledButton-root,
+.bn-side-menu button {
+  color: var(--c-icon-subtle);
+}
+
+/* Menus BlockNote draws (slash menu, toolbar, link popovers): Notion's menu card. */
+.bn-mantine .bn-suggestion-menu,
+.bn-mantine .bn-toolbar,
+.bn-mantine .mantine-Menu-dropdown,
+.bn-mantine .mantine-Popover-dropdown {
+  border: 0 !important;
+  border-radius: var(--radius-card) !important;
+  box-shadow: var(--shadow-menu) !important;
+  background: var(--c-bg-elevated) !important;
+}
+.bn-mantine .bn-suggestion-menu-item {
+  min-height: 32px;
+  border-radius: var(--radius-md);
+}
+.bn-mantine .bn-suggestion-menu-item[aria-selected="true"],
+.bn-mantine .bn-suggestion-menu-item:hover {
+  background: var(--c-bg-hover) !important;
+}
+.bn-mantine .bn-suggestion-menu-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--c-text-secondary);
+}
+
+/* Page typography preferences (the page ⋯ menu): Serif, Mono and Small text. */
+.notion-page[data-page-font="serif"] .bn-editor,
+.notion-page[data-page-font="serif"] .notion-page-title {
+  font-family: var(--font-serif);
+}
+.notion-page[data-page-font="serif"] .bn-editor {
+  font-size: 17px;
+  line-height: 27.2px;
+}
+.notion-page[data-page-font="mono"] .bn-editor,
+.notion-page[data-page-font="mono"] .notion-page-title {
+  font-family: var(--font-mono);
+}
+.notion-page[data-page-font="mono"] .bn-editor {
+  font-size: 15px;
+}
+.notion-page[data-small-text="true"] .bn-editor {
+  font-size: 14px;
+  line-height: 21px;
+}
+.notion-page[data-small-text="true"] .notion-page-title {
+  font-size: 32px;
+  line-height: 38.4px;
+}
+.notion-page[data-small-text="true"] .bn-block-content[data-content-type="heading"][data-level="1"] {
+  font-size: 26.25px;
+}
