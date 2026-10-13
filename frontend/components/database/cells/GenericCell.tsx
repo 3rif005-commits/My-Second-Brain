@@ -1,3 +1,5 @@
+import { currentPreferences } from "@/lib/preferences";
+import { formatDate, toISODate } from "@/lib/formatDate";
 import type { UnknownValue } from "@/lib/database/types";
 
 // Fallback for any property `type` string without a dedicated cell
@@ -14,7 +16,12 @@ function formatInner(value: UnknownValue): string {
     // readably than the raw string when it parses as one.
     if (/^\d{4}-\d{2}-\d{2}/.test(inner)) {
       const d = new Date(inner);
-      if (!Number.isNaN(d.getTime())) return d.toLocaleString();
+      if (!Number.isNaN(d.getTime())) {
+        // "October 12, 2026 6:31 PM", in the user's date and time format.
+        const prefs = currentPreferences();
+        const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: prefs.timeFormat === "12h" });
+        return `${formatDate(toISODate(d), prefs.dateFormat)} ${time}`;
+      }
     }
     return inner;
   }

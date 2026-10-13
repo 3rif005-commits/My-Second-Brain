@@ -83,9 +83,9 @@ function NotionSettings() {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto">
-      <div className="max-w-2xl mx-auto px-6 py-8 space-y-8 text-[14px] text-gray-800 dark:text-gray-200">
+      <div className="w-full space-y-8 text-[14px] text-gray-800 dark:text-gray-200">
         <header>
-          <h1 className="text-lg font-semibold">Notion</h1>
+          <h1 className="text-[26px] font-semibold leading-8 text-ink">Notion</h1>
           <p className="text-gray-500 dark:text-gray-400 mt-1">
             Send notes to Notion as a one-way mirror. Second Brain stays the source of truth; nothing is read back.
           </p>
@@ -151,7 +151,7 @@ function NotionSettings() {
 
             <section aria-label="Destination" className="space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="font-semibold">Where to send</h2>
+                <h2 className="mb-4 border-b border-line pb-3 text-base font-medium text-ink">Where to send</h2>
                 <Button variant="ghost" size="sm" onClick={refreshPages}><RefreshCw size={13} /> Refresh</Button>
               </div>
               <p className="text-gray-500 dark:text-gray-400 text-[13px]">

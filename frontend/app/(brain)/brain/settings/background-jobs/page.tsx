@@ -37,16 +37,16 @@ export default function BackgroundJobsSettings() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-8" data-testid="background-settings">
+      <div className="w-full space-y-8" data-testid="background-settings">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-50">Background jobs</h1>
+          <h1 className="text-[26px] font-semibold leading-8 text-ink">Background jobs</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Jobs you queue with Run later. What ran is on the <Link href="/brain/activity" className="text-indigo-600 hover:underline">Activity</Link> page.
           </p>
         </div>
 
         <section>
-          <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Monthly limit</h2>
+          <h2 className="mb-4 border-b border-line pb-3 text-base font-medium text-ink">Monthly limit</h2>
           <p className="text-sm text-gray-600 dark:text-gray-300 max-w-xl">
             Background jobs are not started once your AI use this calendar month would pass this amount.
             It counts everything the AI cost you, not only background jobs. Jobs you run yourself are never blocked by it.
@@ -58,7 +58,7 @@ export default function BackgroundJobsSettings() {
               onKeyDown={(e) => { if (e.key === "Enter" && dirty) void save(); }}
               className="w-28 h-9 rounded-lg px-3 text-sm bg-transparent ring-1 ring-gray-200 dark:ring-white/10 text-gray-900 dark:text-gray-100" />
             <button onClick={() => void save()} disabled={!dirty || saving}
-              className="h-9 px-4 rounded-full bg-indigo-600 text-white text-[12.5px] font-medium hover:bg-indigo-500 disabled:opacity-40">
+              className="h-9 px-4 rounded-md bg-accent text-ink-on-accent text-[12.5px] font-medium hover:bg-accent-hover disabled:opacity-40">
               Save
             </button>
           </div>

@@ -15,6 +15,7 @@
 // enum, not dropped here. Adding one means editing `NumberFormat` in
 // backend/services/db/properties/scalar.py, then this list, then CURRENCY_CODES.
 
+import { numberLocale } from "@/lib/preferences";
 import type { CSSProperties } from "react";
 
 export interface NumberConfig {
@@ -142,29 +143,29 @@ export function formatNumber(
     // Notion's Percent shows the STORED number with a % sign — 42 renders as
     // "42%", not "4200%". So `style: "percent"` (which multiplies by 100) is
     // the wrong primitive here; format the bare number and append the sign.
-    return `${new Intl.NumberFormat(undefined, { useGrouping: false, ...digits }).format(value)}%`;
+    return `${new Intl.NumberFormat(numberLocale(), { useGrouping: false, ...digits }).format(value)}%`;
   }
 
   const currency = CURRENCY_CODES[format];
   if (currency) {
     try {
-      return new Intl.NumberFormat(undefined, { style: "currency", currency, ...digits }).format(
+      return new Intl.NumberFormat(numberLocale(), { style: "currency", currency, ...digits }).format(
         value
       );
     } catch {
       // An engine without a given currency's data throws rather than degrading.
       // Falling back to a grouped plain number beats rendering nothing.
-      return new Intl.NumberFormat(undefined, digits).format(value);
+      return new Intl.NumberFormat(numberLocale(), digits).format(value);
     }
   }
 
   if (format === "number_with_commas") {
-    return new Intl.NumberFormat(undefined, { useGrouping: true, ...digits }).format(value);
+    return new Intl.NumberFormat(numberLocale(), { useGrouping: true, ...digits }).format(value);
   }
 
   // "number" — plain, ungrouped. 1234567 stays 1234567, which is the whole
   // difference between it and "Number with separators".
-  return new Intl.NumberFormat(undefined, { useGrouping: false, ...digits }).format(value);
+  return new Intl.NumberFormat(numberLocale(), { useGrouping: false, ...digits }).format(value);
 }
 
 /** Bar/ring fill as a 0..1 fraction, or null when `Show as` is plain Number or

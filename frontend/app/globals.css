@@ -546,3 +546,31 @@ body {
   display: block;
   text-align: right;
 }
+
+/* Settings pages (the modal's content column): native fields and descriptions in
+ * Notion's settings style until each control moves to components/ui. */
+.settings-content h1 + p {
+  margin-top: 8px;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--c-text-secondary);
+}
+.settings-content select,
+.settings-content input[type="text"],
+.settings-content input[type="url"],
+.settings-content input[type="password"],
+.settings-content input[type="number"],
+.settings-content input:not([type]),
+.settings-content textarea {
+  border-radius: var(--radius-md);
+  background: var(--c-bg-field);
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--c-border-strong);
+  color: var(--c-text);
+  outline: none;
+}
+.settings-content select:focus,
+.settings-content input:focus,
+.settings-content textarea:focus {
+  box-shadow: var(--ring-input);
+}

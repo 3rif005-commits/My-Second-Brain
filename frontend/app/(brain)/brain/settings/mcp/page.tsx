@@ -103,9 +103,9 @@ export default function McpSettingsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-2xl mx-auto px-6 py-8">
+      <div className="w-full">
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-lg font-semibold text-gray-900">MCP Servers</h1>
+          <h1 className="text-[26px] font-semibold leading-8 text-ink">MCP Servers</h1>
         </div>
         <p className="text-xs text-gray-400 mb-6">
           Connect external MCP servers to give the AI access to web search, calendars, and other tools.
@@ -187,7 +187,7 @@ export default function McpSettingsPage() {
                     <input
                       value={form.name}
                       onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:shadow-input"
                       placeholder="websearch"
                     />
                   </div>
@@ -196,7 +196,7 @@ export default function McpSettingsPage() {
                     <select
                       value={form.transport}
                       onChange={(e) => setForm((f) => ({ ...f, transport: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:shadow-input"
                     >
                       <option value="http">HTTP/SSE</option>
                       <option value="stdio">stdio</option>
@@ -209,7 +209,7 @@ export default function McpSettingsPage() {
                     <input
                       value={form.command}
                       onChange={(e) => setForm((f) => ({ ...f, command: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 font-mono"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:shadow-input font-mono"
                       placeholder="node /path/to/server.js"
                     />
                   </div>
@@ -219,7 +219,7 @@ export default function McpSettingsPage() {
                     <input
                       value={form.url}
                       onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:shadow-input"
                       placeholder="http://localhost:3001"
                     />
                   </div>
@@ -229,7 +229,7 @@ export default function McpSettingsPage() {
                   <select
                     value={form.trust_level}
                     onChange={(e) => setForm((f) => ({ ...f, trust_level: e.target.value as "read_only" | "full" }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:shadow-input"
                   >
                     <option value="read_only">Read-only</option>
                     <option value="full">Full access</option>
@@ -246,7 +246,7 @@ export default function McpSettingsPage() {
                   <button
                     onClick={addServer}
                     disabled={saving || !form.name.trim()}
-                    className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                    className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors"
                   >
                     {saving ? "Adding…" : "Add server"}
                   </button>

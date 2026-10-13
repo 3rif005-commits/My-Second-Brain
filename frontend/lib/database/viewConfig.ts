@@ -19,6 +19,7 @@
 // surfaces (M1's header menu, M3's settings sidebar, M11's drag-resize) and
 // read by all of them, so an absent or malformed key must degrade to the
 // default rather than throw.
+import { currentPreferences } from "@/lib/preferences";
 import type { PropertyResponse, ViewResponse } from "./types";
 
 /** `view.sorts`' element shape — a top-level field, not part of `config`,
@@ -95,7 +96,9 @@ export function patchWrapped(
 /** Column separator lines, view-wide. Defaults to TRUE — Notion ships every
  * fresh table with vertical lines on. */
 export function getShowVerticalLines(config: Record<string, unknown>): boolean {
-  return config.show_vertical_lines !== false;
+  // Unset → the user's default (Settings → Preferences → Databases).
+  if (typeof config.show_vertical_lines === "boolean") return config.show_vertical_lines;
+  return currentPreferences().tableVerticalLines;
 }
 
 export function patchShowVerticalLines(config: Record<string, unknown>, shown: boolean): Record<string, unknown> {
@@ -108,7 +111,8 @@ export function patchShowVerticalLines(config: Record<string, unknown>, shown: b
  * `show_page_icon`, matching how Filter/Sort are reachable from both the
  * toolbar and this sidebar. Defaults to TRUE. */
 export function getShowPageIcon(config: Record<string, unknown>): boolean {
-  return config.show_page_icon !== false;
+  if (typeof config.show_page_icon === "boolean") return config.show_page_icon;
+  return currentPreferences().tablePageIcons;
 }
 
 export function patchShowPageIcon(config: Record<string, unknown>, shown: boolean): Record<string, unknown> {
@@ -122,7 +126,8 @@ export type OpenPagesInMode = "side" | "center" | "full";
  * (Notion's own copy, view-options-panel.md §C). */
 export function getOpenPagesInMode(config: Record<string, unknown>): OpenPagesInMode {
   const raw = config.open_pages_in;
-  return raw === "center" || raw === "full" ? raw : "side";
+  if (raw === "side" || raw === "center" || raw === "full") return raw;
+  return currentPreferences().openPagesIn;
 }
 
 export function patchOpenPagesInMode(config: Record<string, unknown>, mode: OpenPagesInMode): Record<string, unknown> {

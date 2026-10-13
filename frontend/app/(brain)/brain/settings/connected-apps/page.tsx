@@ -59,9 +59,9 @@ export default function ConnectedAppsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-8 space-y-8" data-testid="connected-apps">
+    <div className="w-full space-y-8" data-testid="connected-apps">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-50">Connected apps</h1>
+        <h1 className="text-[26px] font-semibold leading-8 text-ink">Connected apps</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           Apps you allowed to use your Second Brain. They can search, read and create notes;
           editing or deleting a note waits here for your approval.
@@ -71,7 +71,7 @@ export default function ConnectedAppsPage() {
       </div>
 
       <section>
-        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gray-400 mb-2">
+        <h2 className="mb-4 border-b border-line pb-3 text-base font-medium text-ink">
           Waiting for your approval {pending.length > 0 && `(${pending.length})`}
         </h2>
         {pending.length === 0 && <p className="text-sm text-gray-500">Nothing is waiting.</p>}
@@ -109,7 +109,7 @@ export default function ConnectedAppsPage() {
               )}
               <div className="mt-3 flex gap-2">
                 <button onClick={() => decide(c.id, true)} disabled={busy === c.id}
-                  className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full bg-indigo-600 text-white text-[12.5px] font-medium hover:bg-indigo-500 disabled:opacity-50">
+                  className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md bg-accent text-ink-on-accent text-[12.5px] font-medium hover:bg-accent-hover disabled:opacity-50">
                   <Check size={13} /> Approve
                 </button>
                 <button onClick={() => decide(c.id, false)} disabled={busy === c.id}
@@ -124,7 +124,7 @@ export default function ConnectedAppsPage() {
       </section>
 
       <section>
-        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Apps</h2>
+        <h2 className="mb-4 border-b border-line pb-3 text-base font-medium text-ink">Apps</h2>
         {apps.length === 0 && <p className="text-sm text-gray-500">No app is connected.</p>}
         <ul className="divide-y divide-gray-100 dark:divide-white/5">
           {apps.map((a) => (

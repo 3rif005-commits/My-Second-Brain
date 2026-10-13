@@ -4,6 +4,11 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { LAST_PAGE_KEY, rememberLastPage, rememberSettingsReturn } from "@/lib/settingsReturn";
+import { useRouter } from "next/navigation";
+import { usePreferences } from "@/app/providers";
+import { createClient } from "@/lib/supabase/client";
+import { PREFS_KEY, loadPreferences, type Preferences } from "@/lib/preferences";
 import { Sidebar } from "./Sidebar";
 import { Logo } from "@/components/brand/Logo";
 import { SearchModal } from "@/components/search/SearchModal";
@@ -43,6 +48,46 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   // the app-wide drop-to-import steps aside there.
   const pathname = usePathname() ?? "";
   const inWorkspace = pathname.startsWith("/brain/workspace");
+  // Preferences follow the account: on a device with none saved yet, adopt the
+  // copy stored in the user's metadata (Settings → Preferences writes it).
+  const { updatePreferences } = usePreferences();
+  useEffect(() => {
+    let hasLocal = false;
+    try {
+      hasLocal = !!localStorage.getItem(PREFS_KEY);
+    } catch {
+      // ignore
+    }
+    if (hasLocal) return;
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        const remote = data.user?.user_metadata?.preferences as Partial<Preferences> | undefined;
+        if (remote && typeof remote === "object") updatePreferences(remote);
+      })
+      .catch(() => {});
+  }, [updatePreferences]);
+
+  // "Open on start" (Settings → Preferences): the first time this tab lands on
+  // Home, go to the last visited page instead when that is the user's choice.
+  const router = useRouter();
+  useEffect(() => {
+    rememberLastPage(pathname);
+    // Read storage directly: this runs before the provider has loaded preferences.
+    if (pathname !== "/brain" || loadPreferences().startPage !== "last") return;
+    try {
+      if (sessionStorage.getItem("sb-started")) return;
+      sessionStorage.setItem("sb-started", "1");
+      const last = localStorage.getItem(LAST_PAGE_KEY);
+      if (last) router.replace(last);
+    } catch {
+      // ignore
+    }
+  }, [pathname, router]);
+
+  useEffect(() => {
+    rememberSettingsReturn(pathname + (typeof window !== "undefined" ? window.location.search : ""));
+  }, [pathname]);
   const inWorkspaceRef = useRef(inWorkspace);
   inWorkspaceRef.current = inWorkspace;
   const [workspaceBinding, setWorkspaceBinding] = useState<Omit<WorkspaceBinding, "focusNonce"> | null>(null);

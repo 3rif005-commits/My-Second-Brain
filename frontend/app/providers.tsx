@@ -95,6 +95,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // boot script in layout.tsx has already painted them, so nothing flashes.
   useEffect(() => {
     const stored = loadPreferences();
+    applyPreferences(stored);
     setPreferences(stored);
     setResolvedTheme(resolveTheme(stored.theme));
   }, []);

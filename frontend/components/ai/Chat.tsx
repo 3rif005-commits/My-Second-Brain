@@ -10,6 +10,7 @@
 // One conversation follows the user across pages.
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { usePreferences } from "@/app/providers";
 import {
   Send, History, SquarePen, X, Smartphone, Cloud, Check, Sparkles, Route, Lock, Zap, Brain, Eye, BookOpen,
   Paperclip, FileText, FilePlus2, Link2, Upload, Settings2, ChevronDown, Clock,
@@ -76,6 +77,7 @@ const MODEL_OPTIONS: { value: Mode; label: string; desc: string; icon: React.Rea
 ];
 
 export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, workspace, focusNonce, prefill }: ChatProps = {}) {
+  const { enterForNewLine } = usePreferences().preferences;
   const [items, setItems] = useState<StreamItem[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -695,7 +697,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
         return;
       }
     }
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Settings → Preferences → "Use Enter to add a new line": then Enter is a
+    // newline and Cmd/Ctrl+Enter sends.
+    const sends = enterForNewLine ? e.key === "Enter" && (e.metaKey || e.ctrlKey) : e.key === "Enter" && !e.shiftKey;
+    if (sends) {
       e.preventDefault();
       send();
     }

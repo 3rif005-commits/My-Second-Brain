@@ -6,6 +6,11 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { SettingsPage, SettingsRow, SettingsSection } from "@/components/ui/Settings";
+import { Button, IconButton } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/Select";
+import { Toggle } from "@/components/ui/Toggle";
 
 interface ProviderRow {
   id: string;
@@ -97,113 +102,116 @@ export default function AiProvidersPage() {
     load();
   }
 
+  const info = PROVIDER_INFO[form.provider];
+
+  // Notion's settings layout: a section of provider rows (name, capabilities and
+  // key hint on the left; an enable toggle and remove on the right), then an
+  // "Add provider" form laid out as setting rows.
   return (
-    <div className="h-full overflow-y-auto bg-white dark:bg-gray-900">
-      <div className="max-w-2xl mx-auto px-6 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">AI Providers</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-6">
-          Workspace AI (summaries, formula → LaTeX, video understanding, grounded chat)
-          picks the best configured provider per job and falls back to the local model.
-        </p>
-
-        {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
-
-        <div className="space-y-2 mb-5">
+    <div>
+      <SettingsPage
+        title="AI providers"
+        description="Workspace AI (summaries, formula → LaTeX, video understanding, grounded chat) picks the best configured provider per job and falls back to the local model."
+        actions={!showForm ? <Button icon={<Plus />} onClick={() => setShowForm(true)}>Add provider</Button> : undefined}
+      >
+        <SettingsSection title="Providers">
+          {error && <p className="text-sm text-ink-danger">{error}</p>}
           {rows?.map((row) => (
-            <div key={row.id}
-              className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700">
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-gray-800 dark:text-gray-100">
+            <SettingsRow
+              key={row.id}
+              label={
+                <span className="flex items-center gap-2">
                   {row.label}
-                  <span className="ml-2 text-xs text-gray-400">{row.api_key_hint}</span>
-                </div>
-                <div className="text-xs text-gray-400">
-                  {PROVIDER_INFO[row.provider]?.caps}
-                  {row.chat_model ? ` · ${row.chat_model}` : ""}
-                </div>
-              </div>
-              <button
-                onClick={() => toggle(row)}
-                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${
-                  row.enabled ? "bg-indigo-500" : "bg-gray-300 dark:bg-gray-600"}`}
-              >
-                <span className={`inline-block h-4 w-4 translate-y-0.5 rounded-full bg-white shadow transition-transform ${
-                  row.enabled ? "translate-x-[18px]" : "translate-x-0.5"}`} />
-              </button>
-              <button onClick={() => setPendingDelete(row)} className="text-gray-300 hover:text-red-400">
-                <Trash2 size={15} />
-              </button>
-            </div>
+                  <span className="rounded bg-surface-chip px-1 py-0.5 font-mono text-[11px] font-medium text-ink-icon">{row.api_key_hint}</span>
+                </span>
+              }
+              help={`${PROVIDER_INFO[row.provider]?.caps ?? ""}${row.chat_model ? ` · ${row.chat_model}` : ""}`}
+            >
+              <Toggle checked={row.enabled} onChange={() => toggle(row)} label={`Enable ${row.label}`} />
+              <IconButton label={`Remove ${row.label}`} size={28} onClick={() => setPendingDelete(row)}>
+                <Trash2 />
+              </IconButton>
+            </SettingsRow>
           ))}
           {rows !== null && rows.length === 0 && (
-            <p className="text-sm text-gray-400 py-4">
+            <p className="text-sm text-ink-secondary">
               No providers configured — server .env keys and the local Gemma model are used.
             </p>
           )}
-        </div>
+          {rows === null && !error && <p className="text-sm text-ink-tertiary">Loading…</p>}
+        </SettingsSection>
 
-        {showForm ? (
-          <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-800 space-y-3">
-            <select
-              className="w-full text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-3 py-2 text-gray-800 dark:text-gray-200"
-              value={form.provider}
-              onChange={(e) => setForm({ ...form, provider: e.target.value })}
-            >
-              {Object.entries(PROVIDER_INFO).map(([k, v]) => (
-                <option key={k} value={k}>{v.name}</option>
-              ))}
-            </select>
-            <input
-              className="w-full text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-3 py-2 text-gray-800 dark:text-gray-200"
-              placeholder="API key"
-              type="password"
-              value={form.api_key}
-              onChange={(e) => setForm({ ...form, api_key: e.target.value })}
-            />
-            {form.provider === "openai_compatible" && (
-              <input
-                className="w-full text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-3 py-2 text-gray-800 dark:text-gray-200"
-                placeholder="Base URL, e.g. https://openrouter.ai/api/v1"
-                value={form.base_url}
-                onChange={(e) => setForm({ ...form, base_url: e.target.value })}
+        {showForm && (
+          <SettingsSection title="Add a provider">
+            <SettingsRow label="Provider" help={info?.caps}>
+              <Select
+                label="Provider"
+                value={form.provider}
+                onChange={(provider) => setForm({ ...form, provider })}
+                options={Object.entries(PROVIDER_INFO).map(([k, v]) => ({ value: k, label: v.name }))}
               />
+            </SettingsRow>
+            <SettingsRow
+              stacked
+              label="API key"
+              htmlFor="provider-key"
+              help={
+                info?.keyUrl ? (
+                  <>
+                    Get a key at{" "}
+                    <a className="underline" href={info.keyUrl} target="_blank" rel="noreferrer">
+                      {info.keyUrl.replace(/^https?:\/\//, "")}
+                    </a>
+                    . It is encrypted before it is stored.
+                  </>
+                ) : (
+                  "It is encrypted before it is stored."
+                )
+              }
+            >
+              <Input
+                id="provider-key"
+                inputSize="lg"
+                className="max-w-[400px]"
+                type="password"
+                placeholder="API key"
+                value={form.api_key}
+                onChange={(e) => setForm({ ...form, api_key: e.target.value })}
+              />
+            </SettingsRow>
+            {form.provider === "openai_compatible" && (
+              <SettingsRow stacked label="Base URL" htmlFor="provider-url">
+                <Input
+                  id="provider-url"
+                  inputSize="lg"
+                  className="max-w-[400px]"
+                  placeholder="https://openrouter.ai/api/v1"
+                  value={form.base_url}
+                  onChange={(e) => setForm({ ...form, base_url: e.target.value })}
+                />
+              </SettingsRow>
             )}
-            <input
-              className="w-full text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-3 py-2 text-gray-800 dark:text-gray-200"
-              placeholder="Model override (optional)"
-              value={form.chat_model}
-              onChange={(e) => setForm({ ...form, chat_model: e.target.value })}
-            />
-            {PROVIDER_INFO[form.provider]?.keyUrl && (
-              <p className="text-xs text-gray-400">
-                Get a key: <a className="text-indigo-500 hover:underline" href={PROVIDER_INFO[form.provider].keyUrl} target="_blank" rel="noreferrer">{PROVIDER_INFO[form.provider].keyUrl}</a>
-              </p>
-            )}
+            <SettingsRow stacked label="Model override" help="Optional. Leave empty to use the provider's default." htmlFor="provider-model">
+              <Input
+                id="provider-model"
+                inputSize="lg"
+                className="max-w-[400px]"
+                placeholder="e.g. claude-sonnet-5-5"
+                value={form.chat_model}
+                onChange={(e) => setForm({ ...form, chat_model: e.target.value })}
+              />
+            </SettingsRow>
             <div className="flex gap-2">
-              <button
-                onClick={add}
-                disabled={!form.api_key.trim()}
-                className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm disabled:opacity-40 hover:bg-indigo-700"
-              >
+              <Button onClick={add} disabled={!form.api_key.trim()}>
                 Add provider
-              </button>
-              <button
-                onClick={() => setShowForm(false)}
-                className="px-3 py-1.5 rounded-lg text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
-              >
+              </Button>
+              <Button variant="secondary" onClick={() => setShowForm(false)}>
                 Cancel
-              </button>
+              </Button>
             </div>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-          >
-            <Plus size={15} /> Add provider
-          </button>
+          </SettingsSection>
         )}
-      </div>
+      </SettingsPage>
 
       <ConfirmDialog
         open={pendingDelete !== null}

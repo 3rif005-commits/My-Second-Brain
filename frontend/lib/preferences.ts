@@ -89,8 +89,22 @@ export function resolveTheme(choice: ThemeChoice): "light" | "dark" {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+let current: Preferences = DEFAULT_PREFERENCES;
+
+/** The preferences in effect, for plain functions that can't use the React hook
+ * (view-config defaults, number formatting…). Updated by applyPreferences. */
+export function currentPreferences(): Preferences {
+  return current;
+}
+
+/** BCP-47 locale for the "Number format" preference (undefined = the viewer's own). */
+export function numberLocale(): string | undefined {
+  return current.numberFormat === "en" ? "en-US" : current.numberFormat === "de" ? "de-DE" : undefined;
+}
+
 /** Write the visual preferences onto <html>. Kept in sync with PREFS_BOOT_SCRIPT. */
 export function applyPreferences(prefs: Preferences, root: HTMLElement = document.documentElement): void {
+  current = prefs;
   root.classList.toggle("dark", resolveTheme(prefs.theme) === "dark");
   root.dataset.accent = prefs.accent;
   root.dataset.contrast = prefs.highContrast ? "high" : "standard";

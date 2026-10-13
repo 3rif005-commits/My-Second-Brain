@@ -106,8 +106,8 @@ function RoutingSettings() {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-white dark:bg-gray-900">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Routing</h1>
+      <div className="w-full">
+        <h1 className="text-[26px] font-semibold leading-8 text-ink">Routing</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Every chat question goes through a switchboard first: your rules, then the brain, pick
           where it runs, and private notes never leave this device unless you say so.
@@ -152,7 +152,7 @@ function RoutingSettings() {
           <div className="sticky bottom-0 mt-8 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-white/95 dark:bg-gray-900/95
             backdrop-blur border-t border-gray-100 dark:border-gray-800 flex flex-wrap items-center gap-2">
             <button onClick={() => void save()} disabled={!dirty || saving}
-              className="h-8 px-3.5 rounded-lg bg-indigo-600 text-white text-[13px] font-medium hover:bg-indigo-700
+              className="h-8 px-3.5 rounded-md bg-accent text-ink-on-accent text-[13px] font-medium hover:bg-accent-hover
                 disabled:opacity-40">
               {saving ? "Saving…" : "Save"}
             </button>
