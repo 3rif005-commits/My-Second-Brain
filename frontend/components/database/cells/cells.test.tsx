@@ -321,8 +321,9 @@ describe("DateCell", () => {
     expect(screen.queryByLabelText("Date")).not.toBeInTheDocument();
     // Formatted via toLocaleDateString, not the raw ISO string.
     expect(screen.queryByText("2026-08-08")).not.toBeInTheDocument();
-    expect(screen.getByText(new Date("2026-08-08").toLocaleDateString(undefined, {
-      year: "numeric", month: "short", day: "numeric",
+    // Notion's long form by default ("August 8, 2026").
+    expect(screen.getByText(new Date(2026, 7, 8).toLocaleDateString(undefined, {
+      year: "numeric", month: "long", day: "numeric",
     }))).toBeInTheDocument();
   });
 
@@ -337,6 +338,7 @@ describe("DateCell", () => {
       />
     );
 
+    // A single click opens the date picker; typing a date and blurring commits it.
     await user.click(screen.getByRole("button"));
     const input = screen.getByLabelText("Date");
     await user.clear(input);

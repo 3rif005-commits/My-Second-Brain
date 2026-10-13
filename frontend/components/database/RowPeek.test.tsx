@@ -215,7 +215,7 @@ describe("RowPeek", () => {
     // RTL's own `container` — queried from `document` for that reason.
     // PROPERTIES' table order is Kind (position 1) then Done (position 2);
     // alphabetically "Done" sorts before "Kind".
-    const labels = Array.from(document.querySelectorAll(".grid.grid-cols-\\[120px_1fr\\] > span"))
+    const labels = Array.from(document.querySelectorAll(".grid.grid-cols-\\[160px_1fr\\] > span"))
       .map((el) => el.textContent?.trim())
       .filter(Boolean);
     expect(labels).toEqual(["Done", "Kind"]);

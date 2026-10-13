@@ -18,6 +18,7 @@ import {
   List,
   Rss,
   Table2,
+  Plus,
 } from "lucide-react";
 import { useToast } from "@/app/providers";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -105,22 +106,35 @@ export const ADD_VIEW_TYPES = [
   { type: "form", label: "Form", icon: <ClipboardList size={17} /> },
 ] as const;
 
+/** The icon Notion shows before a view's name in its tab, by layout. */
+const VIEW_TYPE_ICONS: Record<string, React.ElementType> = {
+  table: Table2,
+  board: Kanban,
+  gallery: GalleryHorizontal,
+  list: List,
+  chart: BarChart3,
+  dashboard: LayoutDashboard,
+  timeline: GanttChartSquare,
+  feed: Rss,
+  calendar: Calendar,
+  form: ClipboardList,
+};
+
 function AddViewGrid({ onPick }: { onPick: (type: string) => void }) {
   return (
     <div className="py-1">
-      <div className="px-2.5 pt-1 pb-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+      <div className="px-2.5 pb-2 pt-1 text-xs font-medium text-ink-secondary">
         Add a new view
       </div>
-      <div className="grid grid-cols-4 gap-1.5 px-2 pb-2">
+      <div className="grid grid-cols-4 gap-1 px-2 pb-2">
         {ADD_VIEW_TYPES.map((card) => (
           <button
             key={card.type}
             type="button"
             onClick={() => onPick(card.type)}
-            className={`flex flex-col items-center gap-1 rounded-md border px-2 py-2.5 text-[11px] hover:bg-menu-hover ${
-              card.type === "table"
-                ? "border-brand/40 text-brand"
-                : "border-transparent text-gray-600 dark:text-gray-300"
+            // Table is the default: Notion draws it in blue with a 2px ring.
+            className={`flex h-[62px] flex-col items-center justify-center gap-1 rounded-md text-xs hover:bg-surface-hover ${
+              card.type === "table" ? "text-accent shadow-[inset_0_0_0_2px_var(--c-accent)]" : "text-ink [&>svg]:text-ink-icon-strong"
             }`}
           >
             {card.icon}
@@ -234,6 +248,16 @@ export function ViewTabs({
   // pre-creation step, reached only after its own card is clicked, not
   // gating any other type's immediate creation.
   const [addViewOpen, setAddViewOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  // Notion shows the first tabs and folds the rest into "N more…" (database-table.md
+  // §1). The active view always stays visible.
+  const MAX_TABS = 5;
+  let visibleViews = views.slice(0, MAX_TABS);
+  if (views.length > MAX_TABS && !visibleViews.some((v) => v.id === activeViewId)) {
+    const active = views.find((v) => v.id === activeViewId);
+    if (active) visibleViews = [...visibleViews.slice(0, MAX_TABS - 1), active];
+  }
+  const hiddenViews = views.filter((v) => !visibleViews.includes(v));
   const [addViewStep, setAddViewStep] = useState<"grid" | "chart">("grid");
   const [chartDraft, setChartDraft] = useState<ChartDraftConfig>(DEFAULT_CHART_DRAFT);
 
@@ -281,13 +305,16 @@ export function ViewTabs({
   }
 
   return (
-    <div className="flex items-center gap-1 mt-2.5 flex-wrap">
-      {views.map((view) => {
+    // Notion's views bar (database-table.md §1): 40px, pill tabs (32px, radius 20px,
+    // 14px/500, a 20px layout icon), no underline and no border below.
+    <div className="flex h-10 min-w-0 items-center gap-px">
+      <div className="flex min-w-0 flex-1 items-center gap-px overflow-x-auto [scrollbar-width:none]">
+      {visibleViews.map((view) => {
         const isActive = view.id === activeViewId;
-        const tabClassName = `text-xs font-medium px-2.5 py-1 rounded-md ${
+        const tabClassName = `inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-[20px] px-3 text-sm font-medium leading-[16.8px] transition-colors duration-fast ${
           isActive
-            ? "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-            : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            ? "bg-surface-active text-ink"
+            : "text-ink-secondary hover:bg-surface-hover"
         }`;
 
         if (renamingViewId === view.id) {
@@ -304,7 +331,7 @@ export function ViewTabs({
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                 if (e.key === "Escape") setRenamingViewId(null);
               }}
-              className="text-xs font-medium px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+              className="h-8 rounded-[20px] bg-surface-field px-3 text-sm font-medium text-ink shadow-input outline-none"
             />
           );
         }
@@ -314,7 +341,15 @@ export function ViewTabs({
         const label = viewTabLabel(view);
         const tabBody = (
           <>
-            {displayAs !== "text_only" && view.icon && <span className="mr-1">{view.icon}</span>}
+            {displayAs !== "text_only" &&
+              (view.icon ? (
+                <span className="mr-1.5 text-base leading-none">{view.icon}</span>
+              ) : (
+                (() => {
+                  const Icon = VIEW_TYPE_ICONS[view.type] ?? Table2;
+                  return <Icon size={18} strokeWidth={1.75} className="mr-1.5 shrink-0" aria-hidden />;
+                })()
+              ))}
             {displayAs !== "icon_only" && label}
           </>
         );
@@ -381,6 +416,43 @@ export function ViewTabs({
         );
       })}
 
+      {hiddenViews.length > 0 && (
+        <Popover
+          open={moreOpen}
+          onOpenChange={setMoreOpen}
+          width={290}
+          label="More views"
+          trigger={
+            <button
+              type="button"
+              className="inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-[20px] px-2.5 text-sm text-ink-secondary transition-colors duration-fast hover:bg-surface-hover"
+            >
+              {hiddenViews.length} more…
+            </button>
+          }
+        >
+          <div className="p-1">
+            {hiddenViews.map((v) => {
+              const Icon = VIEW_TYPE_ICONS[v.type] ?? Table2;
+              return (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    onSelect(v.id);
+                  }}
+                  className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-ink hover:bg-surface-hover"
+                >
+                  {v.icon ? <span className="w-5 text-center">{v.icon}</span> : <Icon size={18} strokeWidth={1.75} className="text-ink-icon-strong" />}
+                  <span className="truncate">{viewTabLabel(v)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Popover>
+      )}
+
       <Popover
         open={addViewOpen}
         onOpenChange={(open) => (open ? setAddViewOpen(true) : closeAddView())}
@@ -394,9 +466,10 @@ export function ViewTabs({
           <button
             type="button"
             aria-label="Add a new view"
-            className="text-xs font-medium px-2.5 py-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            title="Add a new view"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-ink-icon transition-colors duration-fast hover:bg-surface-hover"
           >
-            +
+            <Plus size={16} />
           </button>
         }
       >
@@ -404,21 +477,21 @@ export function ViewTabs({
           <AddViewGrid onPick={handlePickViewType} />
         ) : (
           <div className="p-2.5 flex flex-col gap-1.5">
-            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Configure chart</div>
+            <div className="mb-1 text-xs font-medium text-ink-secondary">Configure chart</div>
             <ChartCreateFields properties={properties} value={chartDraft} onChange={setChartDraft} />
             <div className="flex items-center gap-1.5 mt-1">
               <button
                 type="button"
                 disabled={!isChartConfigComplete(chartDraft)}
                 onClick={handleCreateChart}
-                className="text-xs px-2 py-1 rounded bg-indigo-600 text-white disabled:opacity-40"
+                className="h-7 rounded-md bg-accent px-2 text-sm font-medium text-ink-on-accent hover:bg-accent-hover disabled:opacity-40"
               >
                 Create
               </button>
               <button
                 type="button"
                 onClick={() => setAddViewStep("grid")}
-                className="text-xs px-1.5 py-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                className="h-7 rounded-md px-2 text-sm text-ink-secondary hover:bg-surface-hover"
               >
                 Back
               </button>
@@ -426,6 +499,7 @@ export function ViewTabs({
           </div>
         )}
       </Popover>
+      </div>
       {trailing}
 
       <ConfirmDialog

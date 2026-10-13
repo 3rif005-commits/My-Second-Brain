@@ -198,8 +198,9 @@ describe("TableView", () => {
       const { container } = render(
         <TableView properties={PROPERTIES} rows={ROWS} editable={false} onCellChange={vi.fn()} />
       );
-      const headerCell = container.querySelector("th");
-      expect(headerCell?.className).toContain("border-r");
+      // Grid lines are the BODY cells' right borders; Notion's header row has none.
+      const bodyCell = container.querySelector("tbody td");
+      expect(bodyCell?.className).toContain("border-r");
     });
 
     it("show_page_icon: false hides the title cell's page icon", () => {
@@ -722,7 +723,7 @@ describe("TableView", () => {
       expect(screen.queryByText(/no rows yet/i)).not.toBeInTheDocument();
       expect(screen.getByRole("columnheader", { name: "Title" })).toBeInTheDocument();
       expect(screen.getByLabelText(/add property/i)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "+ New" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "New page" })).toBeInTheDocument();
     });
   });
 
@@ -766,9 +767,9 @@ describe("TableView", () => {
       );
 
       expect(screen.queryByRole("columnheader")).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "+ New" })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Edit filters" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "+ New page" })).toBeInTheDocument();
+      // Exactly one "New page": the empty-state button, not the table's own row.
+      expect(screen.getAllByRole("button", { name: "New page" })).toHaveLength(1);
     });
 
     it("a structurally-present but EMPTY filter (no conditions) does not trigger this state", () => {
@@ -844,7 +845,7 @@ describe("TableView", () => {
         />
       );
 
-      await user.click(screen.getByRole("button", { name: "+ New page" }));
+      await user.click(screen.getByRole("button", { name: "New page" }));
 
       await waitFor(() =>
         expect(fetchMock).toHaveBeenCalledWith(
@@ -874,12 +875,12 @@ describe("TableView", () => {
           refetch={vi.fn()}
         />
       );
-      expect(screen.getByRole("button", { name: "+ New" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "New page" })).toBeInTheDocument();
     });
 
     it("is hidden when editable=false", () => {
       render(<TableView properties={PROPERTIES} rows={ROWS} editable={false} onCellChange={vi.fn()} />);
-      expect(screen.queryByRole("button", { name: "+ New" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "New page" })).not.toBeInTheDocument();
     });
 
     it("clicking it POSTs to the rows endpoint with no body, then refetches rows specifically", async () => {
@@ -912,7 +913,7 @@ describe("TableView", () => {
         />
       );
 
-      await user.click(screen.getByRole("button", { name: "+ New" }));
+      await user.click(screen.getByRole("button", { name: "New page" }));
 
       await waitFor(() => expect(refetchRows).toHaveBeenCalled());
       expect(refetch).not.toHaveBeenCalled();
@@ -1353,7 +1354,7 @@ describe("TableView", () => {
           dataSourceName="Tasks"
         />
       );
-      expect(screen.getByRole("button", { name: "+ New" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "New page" })).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Choose a template" }));
 
       expect(screen.getByText("Templates for Tasks")).toBeInTheDocument();
@@ -1539,7 +1540,7 @@ describe("TableView", () => {
         />
       );
 
-      await user.click(screen.getByRole("button", { name: "+ New" }));
+      await user.click(screen.getByRole("button", { name: "New page" }));
 
       await waitFor(() => expect(refetchRows).toHaveBeenCalled());
       expect(fetchMock).toHaveBeenCalledWith(
@@ -1568,7 +1569,7 @@ describe("TableView", () => {
       );
       expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "+ New" }));
+      await user.click(screen.getByRole("button", { name: "New page" }));
       await waitFor(() => expect(refetchRows).toHaveBeenCalled());
 
       // Mimics DatabaseShell: refetchRows resolving re-renders TableView
@@ -1761,7 +1762,7 @@ describe("TableView — M6 grouped rendering", () => {
       />
     );
 
-    const addButtons = screen.getAllByRole("button", { name: "+ New page" });
+    const addButtons = screen.getAllByRole("button", { name: "New page" });
     fireEvent.click(addButtons[0]);
     await flushPromises();
 

@@ -304,10 +304,11 @@ function readArrowsBy(config: Record<string, unknown>): boolean {
 
 // ── Layout constants ────────────────────────────────────────────────────
 
-const ROW_HEIGHT = 32;
-const BAR_HEIGHT = 20;
+// Notion: 36px rows, 34px bars (database-other-views.md, Timeline).
+const ROW_HEIGHT = 36;
+const BAR_HEIGHT = 30;
 const MARKER_SIZE = 10;
-const TITLE_COL_WIDTH = 200;
+const TITLE_COL_WIDTH = 240;
 const MIN_TRACK_WIDTH = 480;
 const TRACK_END_PADDING = 80;
 
@@ -401,16 +402,20 @@ function TimelineBar({
       onMouseDown={startBodyInteraction}
       style={{
         position: "absolute",
-        top: rowIndex * ROW_HEIGHT + (ROW_HEIGHT - (geometry.isPoint ? MARKER_SIZE : BAR_HEIGHT)) / 2,
+        top: rowIndex * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2,
         left: geometry.left,
-        width: geometry.isPoint ? MARKER_SIZE : geometry.width,
-        height: geometry.isPoint ? MARKER_SIZE : BAR_HEIGHT,
+        // A single date is a one-day bar in Notion, not a dot.
+        width: geometry.isPoint ? Math.max(pixelsPerDay(zoomLevel), MARKER_SIZE * 2.4) : geometry.width,
+        height: BAR_HEIGHT,
       }}
       title={title}
-      className={`${geometry.isPoint ? "rounded-full" : "rounded"} bg-indigo-400/80 dark:bg-indigo-600/70 ${
+      // Notion's timeline bar: a white card with the chip shadow, radius 6px, and the
+      // title in 14px/500 overflowing to the right. A one-day item is a short bar.
+      className={`group/bar flex items-center rounded-md bg-surface-elevated shadow-chip hover:bg-surface-hover ${
         editable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
       }`}
     >
+      <span className="pointer-events-none absolute left-2 whitespace-nowrap text-sm font-medium text-ink">{title}</span>
       {editable && !geometry.isPoint && (
         <>
           <div
@@ -608,14 +613,14 @@ export function TimelineView({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="px-3 py-2 flex items-center gap-3 flex-wrap border-b border-gray-100 dark:border-gray-800 shrink-0 text-xs text-gray-500 dark:text-gray-400">
+      <div className="flex h-10 shrink-0 flex-wrap items-center gap-3 px-6 text-sm text-ink-secondary sm:px-[96px]">
         <label className="flex items-center gap-1.5">
           Zoom
           <select
             aria-label="Zoom level"
             value={zoomLevel}
             onChange={(e) => handleZoomChange(e.target.value)}
-            className="px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+            className="h-6 rounded-md bg-transparent px-1 text-sm text-ink-secondary outline-none hover:bg-surface-hover"
           >
             {ZOOM_LEVELS.map((z) => (
               <option key={z} value={z}>
@@ -628,7 +633,7 @@ export function TimelineView({
           type="button"
           aria-label="Today"
           onClick={handleToday}
-          className="px-2 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+          className="h-6 rounded-md px-2 text-sm text-ink hover:bg-surface-hover"
         >
           Today
         </button>
@@ -646,7 +651,7 @@ export function TimelineView({
           Dependency arrows
         </label>
         {!dependencyForward && (
-          <span className="text-[10px] text-gray-400 dark:text-gray-500">
+          <span className="text-xs text-ink-tertiary">
             Turn on dependencies in Database settings first
           </span>
         )}
@@ -654,7 +659,7 @@ export function TimelineView({
           <span
             role="status"
             data-testid="timeline-dependency-date-mismatch-warning"
-            className="basis-full text-[10px] text-amber-600 dark:text-amber-400"
+            className="basis-full text-xs text-blk-orange-text"
           >
             Dependency shifting uses a different date property (
             {dependencyDateProperty?.name ?? dependencyDatePropertyKey}) than this Timeline.
@@ -666,7 +671,7 @@ export function TimelineView({
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="flex">
           <div
-            className="shrink-0 border-r border-gray-100 dark:border-gray-800"
+            className="shrink-0 border-r border-line pl-3"
             style={{ width: TITLE_COL_WIDTH }}
           >
             {events.map((event) => {
@@ -676,11 +681,11 @@ export function TimelineView({
                 <div
                   key={event.rowId}
                   style={{ height: ROW_HEIGHT }}
-                  className="flex items-center gap-1 px-2 text-xs"
+                  className="flex items-center gap-1.5 border-b border-line pr-2 text-sm font-medium text-ink"
                 >
                   <OpenNoteButton
                     noteId={event.rowId}
-                    className="!p-0.5 shrink-0 scale-75"
+                    className="shrink-0 opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100"
                     onOpen={toggleRow}
                     isOpen={peekRowId === event.rowId}
                   />
@@ -690,7 +695,7 @@ export function TimelineView({
                         onCellChange(event.rowId, titleProp.key, value)
                       )
                     ) : (
-                      <span className="text-gray-400">Untitled</span>
+                      <span className="text-ink-tertiary">Untitled</span>
                     )}
                   </span>
                 </div>
@@ -708,7 +713,7 @@ export function TimelineView({
               <div
                 data-testid="timeline-today-marker"
                 style={{ position: "absolute", left: todayX, top: 0, bottom: 0, width: 1 }}
-                className="bg-red-400/60"
+                className="bg-ink-danger"
               />
               {dependencyPairs.length > 0 && (
                 <svg
@@ -726,7 +731,7 @@ export function TimelineView({
                       refY="3"
                       orient="auto"
                     >
-                      <path d="M0,0 L6,3 L0,6 Z" className="fill-indigo-400" />
+                      <path d="M0,0 L6,3 L0,6 Z" className="fill-ink-icon" />
                     </marker>
                   </defs>
                   {dependencyPairs.map(({ blockerId, blockedId }) => {
@@ -746,7 +751,7 @@ export function TimelineView({
                         x2={endpoints.x2}
                         y2={endpoints.y2}
                         markerEnd="url(#timeline-arrowhead)"
-                        className="stroke-indigo-400"
+                        className="stroke-ink-icon"
                         strokeWidth={1.5}
                       />
                     );

@@ -15,6 +15,7 @@
 // (view.config has no such field, unlike sorts/filter/group_by). So the
 // handle here is a plain button carrying only the click gesture — opening
 // the menu and selecting — not a dnd-kit `useSortable` handle.
+import { Checkbox } from "@/components/ui/Checkbox";
 import { GripVertical, Plus } from "lucide-react";
 import { HoverAffordance } from "@/components/ui/primitives";
 import { RowMenuTrigger } from "./RowMenuTrigger";
@@ -53,9 +54,9 @@ export function RowGutter({
           aria-label="Add a row below"
           title="Add a row"
           onClick={onAddRow}
-          className="flex h-5 w-5 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+          className="flex size-6 items-center justify-center rounded text-ink-icon-subtle hover:bg-surface-hover"
         >
-          <Plus size={12} />
+          <Plus size={18} />
         </button>
 
         <RowMenuTrigger
@@ -68,9 +69,9 @@ export function RowGutter({
               aria-label="Row options"
               aria-haspopup="menu"
               onClick={() => onToggleSelected(rowId)}
-              className="flex h-5 w-5 cursor-grab items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              className="flex h-6 w-[18px] cursor-grab items-center justify-center rounded text-ink-icon-subtle hover:bg-surface-hover"
             >
-              <GripVertical size={12} />
+              <GripVertical size={16} />
             </button>
           }
         />
@@ -82,22 +83,10 @@ export function RowGutter({
         * selection. */}
       {showCheckbox &&
         (selected ? (
-          <input
-            type="checkbox"
-            aria-label="Select row"
-            checked
-            onChange={() => onToggleSelected(rowId)}
-            className="h-3.5 w-3.5"
-          />
+          <Checkbox label="Select row" checked onChange={() => onToggleSelected(rowId)} className="mx-1" />
         ) : (
           <HoverAffordance>
-            <input
-              type="checkbox"
-              aria-label="Select row"
-              checked={false}
-              onChange={() => onToggleSelected(rowId)}
-              className="h-3.5 w-3.5"
-            />
+            <Checkbox label="Select row" checked={false} onChange={() => onToggleSelected(rowId)} className="mx-1 opacity-70 hover:opacity-100" />
           </HoverAffordance>
         ))}
     </div>

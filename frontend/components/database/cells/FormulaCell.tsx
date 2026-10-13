@@ -60,7 +60,7 @@ export function FormulaCell({
   if (computed?.type === "unsupported") {
     return (
       <span
-        className="italic text-gray-400 dark:text-gray-500 cursor-help"
+        className="italic text-ink-tertiary cursor-help"
         title={LIMITS_TOOLTIP}
       >
         Too complex to calculate
@@ -80,7 +80,7 @@ export function FormulaCell({
   if (computed === undefined && property.type === "formula" && property.is_volatile) {
     return (
       <span
-        className="italic text-gray-400 dark:text-gray-500 cursor-help"
+        className="italic text-ink-tertiary cursor-help"
         title={VOLATILE_TOOLTIP}
       >
         Live formula
@@ -90,8 +90,8 @@ export function FormulaCell({
 
   const text = computed ? formatComputed(computed) : null;
   return (
-    <span className="truncate text-gray-500 dark:text-gray-400">
-      {text ?? <span className="text-gray-400">—</span>}
+    <span className="truncate text-ink-secondary">
+      {text ?? <span className="db-empty-cell">—</span>}
     </span>
   );
 }

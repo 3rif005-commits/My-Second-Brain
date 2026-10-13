@@ -51,12 +51,13 @@ export function TextLikeCell({
       rel={kind === "url" ? "noreferrer" : undefined}
       // The link must not also open the editor.
       onClick={(e) => e.stopPropagation()}
-      className="truncate text-indigo-500 underline-offset-2 hover:underline"
+      // Notion underlines links with a 1px gradient line, in the text colour (not blue).
+      className="truncate bg-[linear-gradient(to_right,var(--c-border-strong),var(--c-border-strong))] bg-[length:100%_1px] bg-bottom bg-no-repeat text-ink"
     >
       {current}
     </a>
   ) : (
-    <span className="text-gray-400">—</span>
+    <span className="db-empty-cell">—</span>
   );
 
   if (!editable) return <span className="truncate">{link}</span>;
@@ -88,7 +89,7 @@ export function TextLikeCell({
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setEditing(false);
         }}
-        className="w-full px-1 -mx-1 rounded border border-indigo-300 dark:border-indigo-500 bg-white dark:bg-gray-900 text-sm outline-none"
+        className="w-full px-1 -mx-1 rounded-md bg-surface-elevated shadow-menu text-sm outline-none"
       />
     );
   }
@@ -103,7 +104,7 @@ export function TextLikeCell({
           setDraft(current);
           setEditing(true);
         }}
-        className="shrink-0 rounded px-1 text-gray-400 opacity-0 hover:bg-gray-50 group-hover/cell:opacity-100 dark:hover:bg-gray-800"
+        className="shrink-0 rounded px-1 text-ink-icon opacity-0 hover:bg-surface-hover group-hover/cell:opacity-100"
       >
         ✎
       </button>

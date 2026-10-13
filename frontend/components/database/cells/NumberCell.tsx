@@ -52,7 +52,7 @@ function ShowAs({ value, config }: { value: number | null | undefined; config: N
       <span
         role="img"
         aria-label={`${percent} percent`}
-        className="h-1 min-w-8 flex-1 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+        className="h-1 min-w-8 flex-1 overflow-hidden rounded-full bg-surface-chip"
       >
         <span
           className={`block h-full rounded-full ${barColorClass(config.bar_color)}`}
@@ -72,7 +72,7 @@ export function NumberCell({ value, editable, onChange, config }: NumberCellProp
   const empty = value?.number === null || value?.number === undefined;
 
   const display = empty ? (
-    <span className="text-gray-400">—</span>
+    <span className="db-empty-cell">—</span>
   ) : config && (showAs === "bar" || showAs === "ring") ? (
     <ShowAs value={value?.number} config={config} />
   ) : (
@@ -80,7 +80,7 @@ export function NumberCell({ value, editable, onChange, config }: NumberCellProp
   );
 
   if (!editable) {
-    return <span className="tabular-nums text-gray-700 dark:text-gray-300">{display}</span>;
+    return <span className="db-number tabular-nums text-ink">{display}</span>;
   }
 
   if (editing) {
@@ -103,7 +103,7 @@ export function NumberCell({ value, editable, onChange, config }: NumberCellProp
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setEditing(false);
         }}
-        className="w-full px-1 -mx-1 rounded border border-indigo-300 dark:border-indigo-500 bg-white dark:bg-gray-900 text-sm outline-none tabular-nums"
+        className="db-number w-full px-1 -mx-1 rounded-md bg-surface-elevated shadow-menu text-sm outline-none tabular-nums"
       />
     );
   }
@@ -118,7 +118,7 @@ export function NumberCell({ value, editable, onChange, config }: NumberCellProp
         setDraft(value?.number?.toString() ?? "");
         setEditing(true);
       }}
-      className="w-full text-left tabular-nums text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+      className="db-number w-full text-left tabular-nums text-ink rounded px-1 -mx-1"
     >
       {display}
     </button>

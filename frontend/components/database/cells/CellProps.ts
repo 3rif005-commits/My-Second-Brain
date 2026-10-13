@@ -19,15 +19,9 @@ export interface CellProps<V> {
 // milestone doesn't guarantee `property.config` carries per-option colors)
 // still look visually distinct and are deterministic between renders of
 // the same label.
-const PILL_PALETTE = [
-  "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
-  "bg-amber-50 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400",
-  "bg-blue-50 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400",
-  "bg-green-50 text-green-600 dark:bg-green-900/40 dark:text-green-400",
-  "bg-purple-50 text-purple-600 dark:bg-purple-900/40 dark:text-purple-400",
-  "bg-pink-50 text-pink-600 dark:bg-pink-900/40 dark:text-pink-400",
-  "bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400",
-];
+const PILL_PALETTE = ["gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"].map(
+  (c) => `bg-opt-${c}-bg text-opt-${c}-text`,
+);
 
 export function pillStyleFor(label: string): string {
   let hash = 0;
@@ -38,18 +32,27 @@ export function pillStyleFor(label: string): string {
 // Notion's 10 option colors. These are what the `Edit property` panel's
 // `Colors` list writes onto an option, so they have to be what the cell reads
 // back — otherwise the colour picker is a control with no visible effect.
+// Measured palette (app/tokens.css --opt-*): a translucent tint with dark text in
+// light, a strong tint with pale text in dark. Class names are spelled out so
+// Tailwind's scanner sees them.
 const OPTION_PILL_CLASSES: Record<string, string> = {
-  default: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
-  gray: "bg-gray-200 text-gray-700 dark:bg-gray-600 dark:text-gray-200",
-  brown: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  orange: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
-  yellow: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300",
-  green: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
-  blue: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-  purple: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
-  pink: "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
-  red: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
+  default: "bg-opt-default-bg text-opt-default-text",
+  gray: "bg-opt-gray-bg text-opt-gray-text",
+  brown: "bg-opt-brown-bg text-opt-brown-text",
+  orange: "bg-opt-orange-bg text-opt-orange-text",
+  yellow: "bg-opt-yellow-bg text-opt-yellow-text",
+  green: "bg-opt-green-bg text-opt-green-text",
+  blue: "bg-opt-blue-bg text-opt-blue-text",
+  purple: "bg-opt-purple-bg text-opt-purple-text",
+  pink: "bg-opt-pink-bg text-opt-pink-text",
+  red: "bg-opt-red-bg text-opt-red-text",
 };
+
+/** Notion's select pill shape: 20px tall, radius 4px, padding 0 6px, 14px text. */
+export const PILL_SHAPE = "inline-flex h-5 max-w-full items-center whitespace-nowrap rounded px-1.5 text-sm leading-5";
+/** Status pills are rounder, with a leading 8px dot. */
+export const STATUS_PILL_SHAPE =
+  "inline-flex h-5 max-w-full items-center gap-[5px] whitespace-nowrap rounded-[10px] pl-[7px] pr-[9px] text-sm leading-5";
 
 export interface ConfiguredOption {
   id: string;
@@ -75,4 +78,15 @@ export function pillStyleForOption(
   const match = options?.find((o) => o.name === label);
   if (!match) return pillStyleFor(label);
   return OPTION_PILL_CLASSES[match.color ?? "default"] ?? OPTION_PILL_CLASSES.default;
+}
+
+/** The option colour name ("blue", "default"…) for a value — its configured colour,
+ * or a stable hashed one for free-text values (see pillStyleForOption). */
+export function optionColorFor(label: string, options: ConfiguredOption[] | undefined): string {
+  const match = options?.find((o) => o.name === label);
+  if (match) return match.color ?? "default";
+  const hues = ["gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"];
+  let hash = 0;
+  for (let i = 0; i < label.length; i++) hash = (hash * 31 + label.charCodeAt(i)) | 0;
+  return hues[Math.abs(hash) % hues.length];
 }

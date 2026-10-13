@@ -64,14 +64,14 @@ export function RelationCell({ property, editable, links, onEnsureLoaded, onLink
   return (
     <div className="relative flex flex-wrap items-center gap-1">
       {links === undefined ? (
-        <span className="text-gray-400 text-xs">…</span>
+        <span className="text-xs text-ink-tertiary">…</span>
       ) : links.length === 0 ? (
-        <span className="text-gray-400">—</span>
+        <span className="db-empty-cell">—</span>
       ) : (
         links.map((row) => (
           <span
             key={row.id}
-            className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+            className="inline-flex items-center gap-1 text-sm font-medium text-ink bg-[linear-gradient(to_right,var(--c-border-strong),var(--c-border-strong))] bg-[length:100%_1px] bg-bottom bg-no-repeat"
           >
             {row.title}
             {editable && (
@@ -79,7 +79,7 @@ export function RelationCell({ property, editable, links, onEnsureLoaded, onLink
                 type="button"
                 aria-label={`Remove ${row.title}`}
                 onClick={() => removeLink(row.id)}
-                className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-100"
+                className="text-ink-icon hover:text-ink"
               >
                 ×
               </button>
@@ -92,7 +92,7 @@ export function RelationCell({ property, editable, links, onEnsureLoaded, onLink
           type="button"
           aria-label="Link a row"
           onClick={() => setPickerOpen(true)}
-          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xs px-1"
+          className="rounded px-1 text-xs text-ink-icon hover:bg-surface-hover"
         >
           +
         </button>

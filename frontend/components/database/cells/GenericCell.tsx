@@ -22,11 +22,11 @@ function formatInner(value: UnknownValue): string {
 }
 
 export function GenericCell({ value }: { value: UnknownValue | undefined }) {
-  if (!value) return <span className="text-gray-400">—</span>;
+  if (!value) return <span className="db-empty-cell">—</span>;
   const text = formatInner(value);
   return (
-    <span className="truncate text-gray-500 dark:text-gray-400">
-      {text || <span className="text-gray-400">—</span>}
+    <span className="truncate text-ink-secondary">
+      {text || <span className="db-empty-cell">—</span>}
     </span>
   );
 }

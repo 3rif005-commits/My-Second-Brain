@@ -19,6 +19,7 @@
 // What IS built: a database can be renamed, iconed and described for the
 // first time ever (Phase 0b's B2 had nowhere to be called from before this).
 import { useState } from "react";
+import { AlignLeft, Smile } from "lucide-react";
 import { useToast } from "@/app/providers";
 import { HoverAffordance, IconPicker, Popover, randomEmoji } from "@/components/ui/primitives";
 import type { DatabaseResponse, DataSourceResponse } from "@/lib/database/types";
@@ -49,9 +50,13 @@ export interface DatabaseHeaderProps {
    * alongside DatabasePageMenu in the same right-aligned slot, same
    * `trailing` pattern ViewTabs.tsx already uses for its own toolbar. */
   trailing?: React.ReactNode;
+  /** "inline" (default) draws the page ⋯ menu and `trailing` beside the title;
+   * "none" leaves them to the caller — DatabaseShell puts them in its top bar,
+   * where Notion has them. */
+  menus?: "inline" | "none";
 }
 
-export function DatabaseHeader({ database, dataSource, editable, onUpdate, onDelete, trailing }: DatabaseHeaderProps) {
+export function DatabaseHeader({ database, dataSource, editable, onUpdate, onDelete, trailing, menus = "inline" }: DatabaseHeaderProps) {
   const { showToast } = useToast();
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [titleDraft, setTitleDraft] = useState(database.title);
@@ -115,6 +120,9 @@ export function DatabaseHeader({ database, dataSource, editable, onUpdate, onDel
   // when true, showing two pickers at once; a single shared JSX value
   // placed at one of two possible spots avoids that outright rather than
   // needing to coordinate two Radix roots.
+  const quiet =
+    "inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-sm text-ink-tertiary transition-colors duration-instant hover:bg-surface-hover";
+
   const iconPopover = (
     <Popover
       open={iconPickerOpen}
@@ -122,12 +130,16 @@ export function DatabaseHeader({ database, dataSource, editable, onUpdate, onDel
       label="Database icon"
       trigger={
         database.icon ? (
-          <button type="button" aria-label="Change icon" className="text-lg leading-none">
+          <button
+            type="button"
+            aria-label="Change icon"
+            className="flex size-[46px] shrink-0 items-center justify-center rounded-md text-[38px] leading-none transition-colors duration-instant hover:bg-surface-hover"
+          >
             {database.icon}
           </button>
         ) : (
-          <button type="button" onClick={addIcon} className="hover:text-gray-600 dark:hover:text-gray-300">
-            Add icon
+          <button type="button" onClick={addIcon} className={quiet}>
+            <Smile size={14} /> Add icon
           </button>
         )
       }
@@ -136,29 +148,24 @@ export function DatabaseHeader({ database, dataSource, editable, onUpdate, onDel
     </Popover>
   );
 
+  // Notion's full-page database header (database-table.md §1): on hover a quiet
+  // "Add icon · Add description" bar above the title; the title is 32px/700.
   return (
     <div className="group">
       {canEditHeader && (
-        // Reserved space, opacity-toggled — must not shift the title below
-        // it when it appears (same rule as row-affordances.md's gutter).
-        // Only carries the icon trigger while there's NO icon yet — once
-        // one exists, the icon rendered beside the title (below) is itself
-        // the trigger to reopen the picker (database-header.md's own
-        // States table: "Icon set... hovering it reopens the picker").
-        <HoverAffordance className="mb-1 flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500">
+        // Reserved space, opacity-toggled — must not shift the title below it.
+        <HoverAffordance className="mb-1 flex items-center gap-0.5">
           {!database.icon && iconPopover}
-          <button
-            type="button"
-            onClick={() => setDescribing((d) => !d)}
-            className="hover:text-gray-600 dark:hover:text-gray-300"
-          >
+          <button type="button" onClick={() => setDescribing((d) => !d)} className={quiet}>
+            <AlignLeft size={14} />
             {describing || hasDescription ? "Hide description" : "Add description"}
           </button>
         </HoverAffordance>
       )}
 
       <div className="flex items-center gap-2">
-        {database.icon && (canEditHeader ? iconPopover : <span className="text-lg leading-none">{database.icon}</span>)}
+        {database.icon &&
+          (canEditHeader ? iconPopover : <span className="text-[38px] leading-none">{database.icon}</span>)}
 
         {canEditHeader ? (
           <input
@@ -171,19 +178,17 @@ export function DatabaseHeader({ database, dataSource, editable, onUpdate, onDel
               if (e.key === "Escape") setTitleDraft(database.title);
             }}
             placeholder="New database"
-            className="min-w-0 flex-1 rounded px-1 -mx-1 text-base font-semibold text-gray-900 outline-none hover:bg-gray-50 focus:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800 dark:focus:bg-gray-800"
+            className="min-w-0 flex-1 bg-transparent px-0.5 text-[32px] font-bold leading-[38.4px] text-ink outline-none placeholder:text-ink-placeholder"
           />
         ) : (
-          <h1 className="text-base font-semibold text-gray-900 dark:text-gray-100">{database.title}</h1>
+          <h1 className="px-0.5 text-[32px] font-bold leading-[38.4px] text-ink">{database.title}</h1>
         )}
 
         {dataSource.is_virtual && (
-          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
-            Read only
-          </span>
+          <span className="rounded bg-surface-chip px-1 py-0.5 text-[11px] font-medium text-ink-icon">Read only</span>
         )}
 
-        {(canEditHeader || trailing) && (
+        {menus === "inline" && (canEditHeader || trailing) && (
           <div className="ml-auto flex items-center gap-1">
             {canEditHeader && (
               <DatabasePageMenu
@@ -209,7 +214,7 @@ export function DatabaseHeader({ database, dataSource, editable, onUpdate, onDel
             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
           }}
           placeholder="Add a description…"
-          className="mt-1 w-full rounded px-1 -mx-1 text-sm text-gray-600 outline-none hover:bg-gray-50 focus:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 dark:focus:bg-gray-800"
+          className="mt-1 w-full bg-transparent px-0.5 text-sm text-ink-secondary outline-none placeholder:text-ink-placeholder"
         />
       )}
     </div>

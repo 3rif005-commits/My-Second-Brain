@@ -105,9 +105,10 @@ export function DatabasePageMenu({ databaseId, databaseTitle, isLocked, onToggle
             type="button"
             aria-label="Database options"
             aria-haspopup="menu"
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+            title="Database options"
+            className="flex size-7 items-center justify-center rounded-md text-ink-icon-strong transition-colors duration-instant hover:bg-surface-active data-[state=open]:bg-surface-active"
           >
-            <MoreHorizontal size={16} />
+            <MoreHorizontal size={22} strokeWidth={1.75} />
           </button>
         }
       >

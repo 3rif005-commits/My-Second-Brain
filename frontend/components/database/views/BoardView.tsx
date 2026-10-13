@@ -31,7 +31,10 @@ import { renderCellValue } from "../cells/renderCellValue";
 import { OpenNoteButton } from "../OpenNoteButton";
 import { RowMenuTrigger } from "../RowMenuTrigger";
 import { RowPeek } from "../RowPeek";
-import { CARD_LAYOUTS, CoverPlaceholder, extractFileUrl, readCardLayout, type CardLayout } from "./GalleryView";
+import { CARD_LAYOUTS, CoverPlaceholder, extractFileUrl, isEmptyCardValue, readCardLayout, type CardLayout } from "./GalleryView";
+import { Tag } from "@/components/ui/Tag";
+import { optionColorFor } from "../cells/CellProps";
+import { configuredOptions } from "@/lib/database/filterOperators";
 
 // M12 (2026-09-02) — Board's own dedicated per-view work, live-captured
 // against real Notion (`docs/ui-specs/board-view.md`). Two real gaps the
@@ -111,7 +114,7 @@ const NO_VALUE_KEY = "__no_value__";
 
 const COLUMN_DROPPABLE_PREFIX = "column:";
 
-interface BoardViewProps {
+export interface BoardViewProps {
   properties: PropertyResponse[];
   /** `null` while the query for a configured board hasn't resolved yet, or
    * when there's no `groupPropertyKey` at all (see the placeholder below). */
@@ -280,7 +283,8 @@ function BoardCard({
       style={style}
       {...attributes}
       {...listeners}
-      className={`group relative rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 mb-2 shadow-sm cursor-grab active:cursor-grabbing touch-none overflow-hidden ${
+      // Notion's board card: radius 10px, the card shadow, 8px apart (§J).
+      className={`group relative mb-2 shrink-0 cursor-grab touch-none overflow-hidden rounded-card bg-surface-elevated shadow-card transition-colors duration-instant hover:bg-surface-hover active:cursor-grabbing ${
         isDragging ? "opacity-40" : ""
       }`}
     >
@@ -299,7 +303,7 @@ function BoardCard({
                 type="button"
                 aria-label="Row options"
                 aria-haspopup="menu"
-                className="flex h-5 w-5 items-center justify-center rounded bg-white/80 dark:bg-gray-900/80 text-gray-500 hover:bg-white hover:text-gray-800 dark:hover:bg-gray-900 dark:hover:text-gray-100"
+                className="flex h-6 w-6 items-center justify-center rounded-md bg-surface-elevated text-ink-icon shadow-float hover:bg-surface-hover"
               >
                 <MoreHorizontal size={13} />
               </button>
@@ -322,19 +326,20 @@ function BoardCard({
         </div>
       )}
 
-      <div className="p-2">
+      <div className="px-2.5 pb-1.5 pt-2">
         {titleProp && (
-          <div className="text-sm font-medium mb-1 pr-5 text-gray-900 dark:text-gray-100">
+          <div className="mb-0.5 pr-5 text-[15px] font-medium leading-[22.5px] text-ink">
             {renderCellValue(titleProp, row.properties[titleProp.key], editable, (value) =>
               onCellChange(row.id, titleProp.key, value)
             )}
           </div>
         )}
         {cardLayout === "list" ? (
-          <div className="space-y-1">
-            {otherProps.map((p) => (
-              <div key={p.key} className="text-xs flex items-start gap-1">
-                <span className="text-gray-400 shrink-0">{p.name}:</span>
+          <div className="flex flex-col">
+            {otherProps.filter((p) => !isEmptyCardValue(row.properties[p.key])).map((p) => (
+              <div key={p.key} className="flex min-h-7 items-center text-xs leading-[18px] text-ink">
+                {/* Notion shows no property labels on cards; kept for screen readers. */}
+                <span className="sr-only">{p.name}:</span>
                 <span className="min-w-0 flex-1">
                   {renderCellValue(p, row.properties[p.key], editable, (value) => onCellChange(row.id, p.key, value))}
                 </span>
@@ -343,7 +348,7 @@ function BoardCard({
           </div>
         ) : (
           otherProps.length > 0 && (
-            <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+            <div className="truncate text-xs text-ink-secondary">
               {otherProps
                 .map((p) => {
                   const v = row.properties[p.key];
@@ -409,6 +414,8 @@ export function computeDragEndWrite(
 }
 
 function BoardColumn({
+  color,
+  statusPill,
   group,
   properties,
   otherProps,
@@ -434,19 +441,30 @@ function BoardColumn({
   cardPreview: string;
   cardSize: BoardCardSize;
   cardLayout: CardLayout;
+  /** The group's option colour; tints the column and its header (Notion's "Color columns"). */
+  color?: string;
+  statusPill?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `${COLUMN_DROPPABLE_PREFIX}${group.key}` });
+  const c = color ?? "default";
 
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col w-72 shrink-0 rounded-lg bg-gray-50 dark:bg-gray-900/50 p-2 ${
-        isOver ? "ring-2 ring-indigo-400" : ""
-      }`}
+      // Notion's board column: 276px, radius 10px, tinted with the group colour;
+      // a 40px header with the group's pill and its count in the same hue (§J).
+      className={`flex w-[276px] shrink-0 flex-col rounded-card px-2 pb-2 ${isOver ? "ring-2 ring-accent-focus/60" : ""}`}
+      style={{ background: `color-mix(in srgb, var(--opt-${c}-dot) 6%, transparent)` }}
     >
-      <div className="flex items-center gap-2 px-1 py-1 mb-1">
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{group.label}</span>
-        <span className="text-xs text-gray-400">{group.row_count}</span>
+      <div className="flex h-10 shrink-0 items-center gap-2 px-0.5">
+        {group.key === "__no_value__" ? (
+          <span className="text-sm font-medium text-ink-secondary">{group.label}</span>
+        ) : (
+          <Tag color={c} status={statusPill}>
+            {group.label}
+          </Tag>
+        )}
+        <span className="text-sm" style={{ color: `var(--opt-${c}-dot)` }}>{group.row_count}</span>
       </div>
 
       {group.subgroups ? (
@@ -457,7 +475,7 @@ function BoardColumn({
         // them").
         group.subgroups.map((sub) => (
           <div key={sub.key} className="mb-3">
-            <div className="text-[11px] uppercase tracking-wide text-gray-400 px-1 mb-1">
+            <div className="mb-1 px-1 text-xs font-medium text-ink-secondary">
               {sub.label} · {sub.row_count}
             </div>
             {sub.rows.map((row) => (
@@ -502,6 +520,87 @@ function BoardColumn({
         ))
       )}
     </div>
+  );
+}
+
+/** Board's own layout options (Card preview, Card size, Card layout, Hide empty
+ * groups). Notion keeps these in View settings › Layout, never above the board, so
+ * ViewSettingsSidebar renders this inside the Layout panel. */
+export type BoardLayoutOptionsProps = Pick<
+  BoardViewProps,
+  "properties" | "hideEmptyGroups" | "onToggleHideEmptyGroups" | "config" | "onConfigChange"
+> &
+  Partial<BoardViewProps>;
+
+export function BoardLayoutOptions({
+  properties,
+  hideEmptyGroups,
+  onToggleHideEmptyGroups,
+  config = {},
+  onConfigChange,
+}: BoardLayoutOptionsProps) {
+  const filesProperties = properties.filter((p) => p.type === "files");
+  const cardPreview = readBoardCardPreview(config, filesProperties);
+  const cardSize = readBoardCardSize(config);
+  const cardLayout = readCardLayout(config);
+  return (
+  <div className="flex flex-col gap-px">
+    <label className="flex min-h-menu-row w-full items-center justify-between gap-2 px-2 text-menu">
+      <input
+        type="checkbox"
+        checked={hideEmptyGroups}
+        onChange={(e) => onToggleHideEmptyGroups(e.target.checked)}
+      />
+      Hide empty groups
+    </label>
+    <label className="flex min-h-menu-row w-full items-center justify-between gap-2 px-2 text-menu">
+      Card preview
+      <select
+        aria-label="Card preview"
+        value={cardPreview}
+        onChange={(e) => onConfigChange?.({ card_preview: e.target.value })}
+        className="h-7 rounded-md border border-line-strong bg-transparent px-1.5 text-sm text-ink outline-none"
+      >
+        <option value="none">None</option>
+        <option value="cover">Page cover</option>
+        {filesProperties.map((p) => (
+          <option key={p.key} value={p.key}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+    </label>
+    <label className="flex min-h-menu-row w-full items-center justify-between gap-2 px-2 text-menu">
+      Card size
+      <select
+        aria-label="Card size"
+        value={cardSize}
+        onChange={(e) => onConfigChange?.({ card_size: e.target.value })}
+        className="h-7 rounded-md border border-line-strong bg-transparent px-1.5 text-sm text-ink outline-none"
+      >
+        {BOARD_CARD_SIZES.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
+      </select>
+    </label>
+    <label className="flex min-h-menu-row w-full items-center justify-between gap-2 px-2 text-menu">
+      Card layout
+      <select
+        aria-label="Card layout"
+        value={cardLayout}
+        onChange={(e) => onConfigChange?.({ card_layout: e.target.value })}
+        className="h-7 rounded-md border border-line-strong bg-transparent px-1.5 text-sm text-ink outline-none"
+      >
+        {CARD_LAYOUTS.map((l) => (
+          <option key={l} value={l}>
+            {l}
+          </option>
+        ))}
+      </select>
+    </label>
+  </div>
   );
 }
 
@@ -573,6 +672,7 @@ export function BoardView({
   const cardPreview = readBoardCardPreview(config, filesProperties);
   const cardSize = readBoardCardSize(config);
   const cardLayout = readCardLayout(config);
+  const groupProp = properties.find((p) => p.key === groupPropertyKey);
 
   // Board has no flat `rows` prop — `groups`/`subgroups` are the only place
   // a row lives, so the peek's own row lookup has to walk both levels.
@@ -584,74 +684,18 @@ export function BoardView({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="px-3 py-2 flex items-center gap-3 flex-wrap border-b border-gray-100 dark:border-gray-800 shrink-0 text-xs text-gray-500 dark:text-gray-400">
-        <label className="flex items-center gap-1.5">
-          <input
-            type="checkbox"
-            checked={hideEmptyGroups}
-            onChange={(e) => onToggleHideEmptyGroups(e.target.checked)}
-          />
-          Hide empty groups
-        </label>
-        <label className="flex items-center gap-1.5">
-          Card preview
-          <select
-            aria-label="Card preview"
-            value={cardPreview}
-            onChange={(e) => onConfigChange?.({ card_preview: e.target.value })}
-            className="px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-          >
-            <option value="none">None</option>
-            <option value="cover">Page cover</option>
-            {filesProperties.map((p) => (
-              <option key={p.key} value={p.key}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-1.5">
-          Card size
-          <select
-            aria-label="Card size"
-            value={cardSize}
-            onChange={(e) => onConfigChange?.({ card_size: e.target.value })}
-            className="px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-          >
-            {BOARD_CARD_SIZES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-1.5">
-          Card layout
-          <select
-            aria-label="Card layout"
-            value={cardLayout}
-            onChange={(e) => onConfigChange?.({ card_layout: e.target.value })}
-            className="px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-          >
-            {CARD_LAYOUTS.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
       {groups === null ? (
-        <div className="flex items-center justify-center flex-1 text-sm text-gray-400 dark:text-gray-500">
+        <div className="flex flex-1 items-center justify-center text-sm text-ink-tertiary">
           Loading…
         </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <div className="flex-1 min-h-0 overflow-auto flex gap-3 p-3">
+          <div className="flex min-h-0 flex-1 gap-3 overflow-auto pb-6 pt-1">
             {groups.map((group) => (
               <BoardColumn
                 key={group.key}
+                color={groupProp ? optionColorFor(group.label, configuredOptions(groupProp)) : undefined}
+                statusPill={groupProp?.type === "status"}
                 group={group}
                 properties={properties}
                 otherProps={otherProps}

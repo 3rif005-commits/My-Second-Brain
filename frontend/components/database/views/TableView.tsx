@@ -78,6 +78,7 @@ import { AddPropertyPopover } from "../AddPropertyPopover";
 import { QueryBar } from "../QueryBar";
 import { TemplateManager } from "../TemplateManager";
 import { MenuList, Popover } from "@/components/ui/primitives";
+import { Tag } from "@/components/ui/Tag";
 
 interface TableViewProps {
   properties: PropertyResponse[];
@@ -386,7 +387,8 @@ export function TableView({
   // half neither had before now.
   const showPageIcon = getShowPageIcon(config);
   const showVerticalLines = getShowVerticalLines(config);
-  const cellBorderClass = showVerticalLines ? "border-r border-gray-100 dark:border-gray-800" : "";
+  // Grid lines are the cells' own right/bottom borders, in the divider colour.
+  const cellBorderClass = showVerticalLines ? "border-r border-line" : "";
   const [rowSubmitting, setRowSubmitting] = useState(false);
   // Milestone 12 (task-40): the "+ New" split-button's dropdown open state,
   // and a separate submitting flag so picking a template disables/re-enables
@@ -565,6 +567,8 @@ export function TableView({
       orderedProperties.map((property) =>
         columnHelper.accessor((row) => row.properties[property.key], {
           id: property.key || property.id,
+          // Notion's defaults: the title column 280px, every other column 200px.
+          size: property.type === "title" ? 280 : 200,
           // Milestone 12 (task-42) decision 2: a button-typed column's
           // header becomes a clickable config-popover trigger; every other
           // type keeps the plain string header unchanged.
@@ -686,6 +690,9 @@ export function TableView({
     columnResizeMode: "onChange",
     initialState: { columnSizing: persistedWidths },
   });
+  // Notion's table is as wide as its columns (fixed layout), not stretched to the
+  // page; the 56px gutter and the trailing "+" column sit either side.
+  const tableWidth = table.getTotalSize() + (editable ? 56 + 56 : 0);
 
   // Keyed on a STRINGIFIED value, not `persistedWidths` itself: `config`
   // (`view?.config ?? {}`) is a fresh `{}` literal on every render when
@@ -901,7 +908,9 @@ export function TableView({
         <th
           key={header.id}
           style={{ width: header.getSize() }}
-          className={`relative text-left font-medium text-gray-500 dark:text-gray-400 px-3 py-2 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap ${cellBorderClass}`}
+          // Notion's header row: 36px, 14px/400 secondary text, one hairline below,
+          // no vertical lines; the whole cell takes the hover tint.
+          className="relative h-9 overflow-hidden whitespace-nowrap px-2 text-left text-sm font-normal text-ink-secondary shadow-[inset_0_-1px_0_0_var(--c-border)] transition-colors duration-instant hover:bg-surface-hover"
         >
           {flexRender(header.column.columnDef.header, header.getContext())}
           {/* M11 (table-drag-resize.md): the resize grip — "a blue
@@ -914,8 +923,8 @@ export function TableView({
           <div
             onMouseDown={header.getResizeHandler()}
             onTouchStart={header.getResizeHandler()}
-            className={`absolute right-0 top-0 h-full w-1 cursor-col-resize touch-none select-none ${
-              header.column.getIsResizing() ? "bg-blue-500" : "hover:bg-blue-400"
+            className={`absolute -right-0.5 top-0 z-[1] h-full w-[5px] cursor-col-resize touch-none select-none transition-colors duration-200 ease-out ${
+              header.column.getIsResizing() ? "bg-accent-focus/80" : "hover:bg-accent-focus/80"
             }`}
           />
         </th>
@@ -938,19 +947,19 @@ export function TableView({
     if (!hasAny) return null;
     return (
       <tfoot>
-        <tr className="border-t border-gray-200 dark:border-gray-700">
+        <tr className="h-[50px]">
           {editable && <td className="w-14" aria-hidden />}
           {orderedProperties.map((property) => {
             const aggregator = getCalculation(config, property.key);
             const value = aggregator ? aggregates[property.key] : undefined;
             return (
-              <td key={property.key} className={`px-3 py-1.5 text-right text-sm ${cellBorderClass}`}>
+              <td key={property.key} className="px-2 text-right text-sm">
                 {aggregator && value !== undefined && (
-                  <span>
-                    <span className="text-[10px] font-medium uppercase text-gray-400 dark:text-gray-500 mr-1.5">
+                  <span className="inline-flex items-baseline gap-1 rounded-md px-1.5 py-0.5 transition-colors duration-200 hover:bg-surface-hover">
+                    <span className="text-[10px] font-medium uppercase leading-[15px] tracking-[1px] text-ink-tertiary">
                       {calculationLabel(aggregator)}
                     </span>
-                    <span className="text-gray-700 dark:text-gray-300">{formatCalculationValue(aggregator, value)}</span>
+                    <span className="text-ink-secondary">{formatCalculationValue(aggregator, value)}</span>
                   </span>
                 )}
               </td>
@@ -972,7 +981,7 @@ export function TableView({
   // identical markup instead of drifting three ways.
   function gutterHeaderCell() {
     if (!editable) return null;
-    return <th key="gutter" className="w-14 border-b border-gray-200 dark:border-gray-700" aria-hidden />;
+    return <th key="gutter" className="w-14" aria-hidden />;
   }
   function gutterCell(rowId: string) {
     if (!editable) return null;
@@ -1003,15 +1012,15 @@ export function TableView({
       <tr
         key={tableRow.id}
         onClick={handleRowAltClick(tableRow.original.id)}
-        className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+        className="group"
       >
         {gutterCell(tableRow.original.id)}
         {tableRow.getVisibleCells().map((cell) => (
-          <td key={cell.id} style={{ width: cell.column.getSize() }} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
+          <td key={cell.id} style={{ width: cell.column.getSize() }} className={`h-[37px] overflow-hidden border-b border-line px-2 py-[7.5px] align-top text-sm leading-[21px] text-ink ${cellBorderClass}`}>
             {cell.column.id === titleProperty?.key ? (
               <div className="flex items-center gap-1">
-                {showPageIcon && <FileText size={12} className="shrink-0 text-gray-300 dark:text-gray-600" aria-hidden />}
-                <div className="flex-1 min-w-0">{flexRender(cell.column.columnDef.cell, cell.getContext())}</div>
+                {showPageIcon && <FileText size={18} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" aria-hidden />}
+                <div className="min-w-0 flex-1 font-medium">{flexRender(cell.column.columnDef.cell, cell.getContext())}</div>
                 <OpenNoteButton
                   noteId={tableRow.original.id}
                   isOpen={peekRowId === tableRow.original.id}
@@ -1024,7 +1033,7 @@ export function TableView({
             )}
           </td>
         ))}
-        {editable && <td className="px-3 py-1.5" />}
+        {editable && <td className="w-14 border-b border-line" />}
       </tr>
     );
   }
@@ -1041,23 +1050,25 @@ export function TableView({
         * captured-but-TBD in the spec — this ships the count + bulk trash +
         * deselect only, not a half-built version of the rest. */}
       {editable && selectedRowIds.size > 0 && (
-        <div className="flex items-center gap-3 px-3 py-1.5 bg-gray-900 dark:bg-gray-800 text-white text-xs">
-          <span>{selectedRowIds.size} selected</span>
+        // Notion's multi-select action bar: a floating 32px white pill with the
+        // float shadow, "N selected" in blue, then the actions (§5).
+        <div className="mb-1 ml-14 flex h-8 w-fit items-center overflow-hidden rounded-[5px] bg-surface-elevated text-sm shadow-float">
+          <span className="flex h-full items-center px-2.5 text-accent shadow-[1px_0_0_0_var(--c-border)]">{selectedRowIds.size} selected</span>
           <button
             type="button"
             aria-label="Move selected rows to Trash"
             onClick={trashSelectedRows}
-            className="flex items-center gap-1 text-gray-300 hover:text-white"
+            className="flex h-full items-center px-2 text-ink-icon shadow-[1px_0_0_0_var(--c-border)] hover:bg-surface-hover"
           >
-            <Trash2 size={14} />
+            <Trash2 size={16} />
           </button>
           <button
             type="button"
             aria-label="Clear selection"
             onClick={() => setSelectedRowIds(new Set())}
-            className="ml-auto text-gray-300 hover:text-white"
+            className="flex h-full w-[30px] items-center justify-center text-ink-icon hover:bg-surface-hover"
           >
-            <X size={14} />
+            <X size={16} />
           </button>
         </div>
       )}
@@ -1069,7 +1080,7 @@ export function TableView({
         // addresses an empty-due-to-filter GROUPED view (states.md's own
         // "An empty GROUP" is a separate, uncaptured TBD), so this only
         // replaces the plain flat table.
-        <div className="flex flex-1 items-center justify-center gap-2">
+        <div className="flex h-36 items-center justify-center gap-3">
           <Popover
             open={emptyFilterMenuOpen}
             onOpenChange={setEmptyFilterMenuOpen}
@@ -1078,7 +1089,7 @@ export function TableView({
             trigger={
               <button
                 type="button"
-                className="rounded border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                className="h-7 rounded-md border border-line-strong px-2 text-sm font-medium text-ink-icon hover:bg-surface-hover"
               >
                 Edit filters
               </button>
@@ -1097,9 +1108,9 @@ export function TableView({
             type="button"
             onClick={handleAddRow}
             disabled={rowSubmitting || !dataSourceId}
-            className="rounded bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-40"
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-line-strong px-2 text-sm font-medium text-ink-icon hover:bg-surface-hover disabled:opacity-40"
           >
-            + New page
+            <Plus size={16} /> New page
           </button>
         </div>
       ) : groups ? (
@@ -1111,32 +1122,36 @@ export function TableView({
             return visible.map((group) => {
               const collapsed = collapsedGroupKeys.has(group.key);
               return (
-                <div key={group.key} className="border-b border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-gray-900">
+                <div key={group.key} className="mb-3.5">
+                  <div className="group/grouphead flex h-[42px] items-center gap-1.5 pl-14">
                     <button
                       type="button"
                       aria-label={collapsed ? `Expand ${groupDisplayLabel(group, groupProperty)}` : `Collapse ${groupDisplayLabel(group, groupProperty)}`}
                       onClick={() => toggleGroupCollapsed(group.key)}
-                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                      className="flex size-6 items-center justify-center rounded text-ink-icon hover:bg-surface-hover"
                     >
-                      {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                      <ChevronDown size={16} className={`transition-transform duration-200 ease-out ${collapsed ? "-rotate-90" : ""}`} />
                     </button>
                     {group.key === "__no_value__" ? (
-                      <span className="text-xs font-medium text-gray-400 dark:text-gray-500">
+                      <span className="text-sm font-medium text-ink-secondary">
                         {groupDisplayLabel(group, groupProperty)}
                       </span>
                     ) : (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300 ${
-                          groupProperty ? pillStyleForOption(group.label, configuredOptions(groupProperty)) : "bg-gray-100 dark:bg-gray-800"
-                        }`}
+                      <Tag
+                        status={groupProperty?.type === "status"}
+                        color={
+                          groupProperty
+                            ? configuredOptions(groupProperty)?.find((o) => o.name === group.label || o.id === group.key)?.color
+                            : undefined
+                        }
                       >
                         {groupDisplayLabel(group, groupProperty)}
-                      </span>
+                      </Tag>
                     )}
+                    <span className="ml-1 text-sm text-ink-tertiary">{group.row_count}</span>
                   </div>
                   {!collapsed && (
-                    <table className="w-full border-collapse text-sm">
+                    <table className="db-table border-collapse text-sm [table-layout:fixed]" style={{ width: tableWidth }}>
                       <thead>
                         <tr>{headerCells()}</tr>
                       </thead>
@@ -1144,14 +1159,15 @@ export function TableView({
                         {group.rows.map((row) => dataRow(table.getRow(row.id)))}
                         {editable && (
                           <tr>
-                            <td colSpan={Math.max(columnCount, 1)} className="px-3 py-1.5">
+                            {editable && <td />}
+                            <td colSpan={Math.max(columnCount - 1, 1)} className="h-[37px] py-1">
                               <button
                                 type="button"
                                 onClick={() => handleAddRowToGroup(group)}
                                 disabled={addingRowToGroupKey === group.key}
-                                className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-40"
+                                className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-sm text-ink-tertiary hover:bg-surface-hover disabled:opacity-40"
                               >
-                                + New page
+                                <Plus size={16} className="text-ink-icon-subtle" /> New page
                               </button>
                             </td>
                           </tr>
@@ -1168,23 +1184,23 @@ export function TableView({
               type="button"
               onClick={handleAddGroupOption}
               disabled={addingGroupOption}
-              className="flex items-center gap-1 px-3 py-2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-40"
+              className="ml-14 flex h-7 items-center gap-1.5 rounded-md px-2 text-sm text-ink-tertiary hover:bg-surface-hover disabled:opacity-40"
             >
-              <Plus size={12} /> New group
+              <Plus size={16} /> New group
             </button>
           )}
         </div>
       ) : (
       <div className="overflow-auto flex-1 min-h-0">
-      <table className="w-full border-collapse text-sm">
-        <thead className="sticky top-0 z-10 bg-white dark:bg-gray-900">
+      <table className="db-table border-collapse text-sm [table-layout:fixed]" style={{ width: tableWidth }}>
+        <thead className="sticky top-0 z-10 bg-surface">
           <tr>
             {/* M11: now genuinely shared with the grouped table's own
               * per-group header row below — see `headerCells()`'s own
               * comment — rather than a byte-for-byte duplicate of it. */}
             {headerCells()}
             {editable && dataSourceId && (
-              <th className="text-left font-normal px-3 py-2 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap">
+              <th className="w-14 px-1 text-left font-normal shadow-[inset_0_-1px_0_0_var(--c-border)]">
                 {/* M2: the anchored creation popover. Replaced a
                   * trailing-column inline form that held five of this app's
                   * 40 native <select> elements. */}
@@ -1216,11 +1232,11 @@ export function TableView({
                   <tr
                     key={entryRow.id}
                     onClick={handleRowAltClick(entryRow.id)}
-                    className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                    className="group"
                   >
                     {gutterCell(entryRow.id)}
                     {tableRow.getVisibleCells().map((cell) => (
-                      <td key={cell.id} style={{ width: cell.column.getSize() }} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
+                      <td key={cell.id} style={{ width: cell.column.getSize() }} className={`h-[37px] overflow-hidden border-b border-line px-2 py-[7.5px] align-top text-sm leading-[21px] text-ink ${cellBorderClass}`}>
                         {cell.column.id === titleProperty?.key ? (
                           <div className="flex items-center gap-1" style={{ paddingLeft: depth * 16 }}>
                             {hasChildren ? (
@@ -1228,17 +1244,17 @@ export function TableView({
                                 type="button"
                                 aria-label={collapsedIds.has(entryRow.id) ? "Expand" : "Collapse"}
                                 onClick={() => toggleCollapsed(entryRow.id)}
-                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 w-3 shrink-0"
+                                className="flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-hover"
                               >
-                                {collapsedIds.has(entryRow.id) ? "▸" : "▾"}
+                                <ChevronDown size={14} className={`transition-transform duration-200 ease-out ${collapsedIds.has(entryRow.id) ? "-rotate-90" : ""}`} />
                               </button>
                             ) : (
-                              <span className="w-3 shrink-0" />
+                              <span className="w-5 shrink-0" />
                             )}
                             {showPageIcon && (
-                              <FileText size={12} className="shrink-0 text-gray-300 dark:text-gray-600" aria-hidden />
+                              <FileText size={18} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" aria-hidden />
                             )}
-                            <div className="flex-1 min-w-0">
+                            <div className="min-w-0 flex-1 font-medium">
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </div>
                             <OpenNoteButton
@@ -1253,7 +1269,7 @@ export function TableView({
                         )}
                       </td>
                     ))}
-                    {editable && <td className="px-3 py-1.5" />}
+                    {editable && <td className="w-14 border-b border-line" />}
                   </tr>
                 );
               })
@@ -1273,19 +1289,19 @@ export function TableView({
                   <tr
                     key={row.id}
                     onClick={handleRowAltClick(row.original.id)}
-                    className="group border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                    className="group"
                   >
                     {gutterCell(row.original.id)}
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} style={{ width: cell.column.getSize() }} className={`px-3 py-1.5 align-middle max-w-xs ${cellBorderClass}`}>
+                      <td key={cell.id} style={{ width: cell.column.getSize() }} className={`h-[37px] overflow-hidden border-b border-line px-2 py-[7.5px] align-top text-sm leading-[21px] text-ink ${cellBorderClass}`}>
                         {cell.column.id === titleProperty?.key ? (
                           <div className="flex items-center gap-1">
                             {showPageIcon && (
-                              <FileText size={12} className="shrink-0 text-gray-300 dark:text-gray-600" aria-hidden />
+                              <FileText size={18} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" aria-hidden />
                             )}
-                            <div className="flex-1 min-w-0">
+                            <div className="min-w-0 flex-1 font-medium">
                               {parentTitle && (
-                                <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                                <div className="truncate text-[10px] font-normal text-ink-tertiary">
                                   ↳ {parentTitle}
                                 </div>
                               )}
@@ -1303,21 +1319,23 @@ export function TableView({
                         )}
                       </td>
                     ))}
-                    {editable && <td className="px-3 py-1.5" />}
+                    {editable && <td className="w-14 border-b border-line" />}
                   </tr>
                 );
               })}
           {editable && (
             <tr>
-              <td colSpan={Math.max(columnCount, 1)} className="px-3 py-1.5">
+              {editable && <td />}
+              <td colSpan={Math.max(columnCount - 1, 1)} className="h-[37px] py-1">
+                {/* Notion's "+ New page" row: only the button takes the hover tint. */}
                 <div ref={templateMenuRef} className="relative inline-flex items-center">
                   <button
                     type="button"
                     onClick={handleAddRow}
                     disabled={rowSubmitting}
-                    className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-40"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-l-md pl-2 pr-1.5 text-sm text-ink-tertiary transition-colors duration-instant hover:bg-surface-hover disabled:opacity-40"
                   >
-                    + New
+                    <Plus size={16} className="text-ink-icon-subtle" /> New page
                   </button>
                   {/* M11 (new-row-button.md), user decision 2026-09-01: the
                    * chevron is now UNCONDITIONAL — Notion's own IA treats
@@ -1332,27 +1350,27 @@ export function TableView({
                     aria-haspopup="menu"
                     aria-expanded={templateMenuOpen}
                     onClick={() => setTemplateMenuOpen((o) => !o)}
-                    className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-1"
+                    className="flex h-7 items-center rounded-r-md px-1 text-ink-icon-subtle transition-colors duration-instant hover:bg-surface-hover"
                   >
-                    ▾
+                    <ChevronDown size={14} />
                   </button>
                   {templateMenuOpen && (
                     <div
                       role="menu"
                       aria-label="New row from template"
-                      className="absolute left-0 bottom-full z-20 mb-1 w-64 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg py-1"
+                      className="absolute bottom-full left-0 z-20 mb-1 w-[360px] rounded-menu bg-menu-bg p-1 shadow-menu"
                     >
-                      <div className="flex items-center justify-between gap-2 px-3 py-1.5">
-                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 truncate">
+                      <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+                        <span className="truncate text-sm font-medium text-ink-secondary">
                           Templates for {dataSourceName ?? "this database"}
                         </span>
                         <HelpCircle
                           size={13}
-                          className="shrink-0 text-gray-300 dark:text-gray-600"
+                          className="shrink-0 text-ink-icon-subtle"
                           aria-label="What are templates?"
                         />
                       </div>
-                      <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+                      <div className="mx-2 my-1 h-px bg-line" />
                       {nonDefaultTemplates.length > 0 ? (
                         // "How each is listed [with templates present] is
                         // TBD" (new-row-button.md) — unchanged from before
@@ -1365,20 +1383,20 @@ export function TableView({
                             role="menuitem"
                             disabled={instantiatingTemplateId === t.id}
                             onClick={() => handleInstantiateTemplate(t.id)}
-                            className="w-full flex items-center gap-1.5 text-left text-xs px-3 py-1.5 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 disabled:opacity-40"
+                            className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-ink hover:bg-surface-hover disabled:opacity-40"
                           >
                             {t.icon && <span className="leading-none">{t.icon}</span>}
                             {t.name}
                           </button>
                         ))
                       ) : (
-                        <div className="px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500">
+                        <div className="px-2 py-1.5 text-sm text-ink-tertiary">
                           Create a reusable page template for this database.
                         </div>
                       )}
                       {onCreateTemplate && onUpdateTemplate && onDeleteTemplate && (
                         <>
-                          <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
+                          <div className="mx-2 my-1 h-px bg-line" />
                           <button
                             type="button"
                             role="menuitem"
@@ -1386,9 +1404,9 @@ export function TableView({
                               setTemplateMenuOpen(false);
                               setTemplateManagerOpen(true);
                             }}
-                            className="w-full flex items-center gap-1.5 text-left text-xs px-3 py-1.5 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                            className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-ink hover:bg-surface-hover"
                           >
-                            <Plus size={12} /> New template
+                            <Plus size={16} className="text-ink-icon" /> New template
                           </button>
                         </>
                       )}

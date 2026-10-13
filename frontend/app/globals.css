@@ -553,3 +553,28 @@ body {
 /* Kit motion (components/ui). */
 @keyframes toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 @keyframes tooltip-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Database cells (components/database). Empty cells are blank in a table, as in
+ * Notion; in a page's properties block (.db-props) they read "Empty" in grey. The
+ * dash stays in the DOM as the click target and for tests. */
+.db-empty-cell {
+  display: inline-block;
+  min-height: 20px;
+  color: transparent;
+  user-select: none;
+}
+.db-props .db-empty-cell {
+  color: transparent;
+  position: relative;
+}
+.db-props .db-empty-cell::after {
+  content: "Empty";
+  position: absolute;
+  left: 0;
+  color: var(--c-text-tertiary);
+}
+/* Numbers are right-aligned in table cells, left-aligned elsewhere. */
+.db-table .db-number {
+  display: block;
+  text-align: right;
+}

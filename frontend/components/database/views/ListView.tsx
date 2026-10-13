@@ -136,7 +136,7 @@ export function ListView({
 
   if (rows.length === 0) {
     return (
-      <div className="flex items-center justify-center py-16 text-sm text-gray-400 dark:text-gray-500">
+      <div className="flex items-center justify-center py-16 text-sm text-ink-tertiary">
         No rows yet.
       </div>
     );
@@ -154,7 +154,8 @@ export function ListView({
             key={row.id}
             onClick={handleRowAltClick(row.id)}
             onBlur={(e) => handleRowBlur(e, row.id)}
-            className={`group flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 ${
+            // Notion's list row: 30px at a 32px pitch, no dividers, radius-6 hover tint.
+            className={`group my-px flex h-[30px] items-center gap-2 rounded-md px-1.5 transition-colors duration-instant hover:bg-surface-hover ${
               selectedRowId === row.id ? "bg-indigo-50/70 dark:bg-indigo-950/40" : ""
             }`}
           >
@@ -169,7 +170,7 @@ export function ListView({
                 showCheckbox={false}
               />
             )}
-            {showPageIcon && <FileText size={12} className="shrink-0 text-gray-300 dark:text-gray-600" aria-hidden />}
+            {showPageIcon && <FileText size={18} strokeWidth={1.5} className="shrink-0 text-ink-tertiary" aria-hidden />}
             {isEditing ? (
               <input
                 autoFocus
@@ -184,15 +185,15 @@ export function ListView({
                   }
                   if (e.key === "Escape") setEditingRowId(null);
                 }}
-                className="min-w-0 flex-1 rounded border border-indigo-300 dark:border-indigo-500 bg-white dark:bg-gray-900 px-1 -mx-1 text-sm font-medium text-gray-900 dark:text-gray-100 outline-none"
+                className="min-w-0 flex-1 rounded-md bg-surface-elevated px-1 -mx-1 text-sm font-medium text-ink shadow-menu outline-none"
               />
             ) : (
               <button
                 type="button"
                 onClick={() => openRow(row.id)}
-                className="min-w-0 truncate text-left text-sm font-medium text-gray-900 dark:text-gray-100 hover:underline"
+                className="min-w-0 truncate text-left text-sm font-medium text-ink"
               >
-                {titleValue || <span className="font-normal text-gray-400">Untitled</span>}
+                {titleValue || <span className="font-normal text-ink-tertiary">Untitled</span>}
               </button>
             )}
             {editable && (
@@ -208,8 +209,8 @@ export function ListView({
             {isEditing && otherProps.length > 0 && (
               <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-4">
                 {otherProps.map((p) => (
-                  <div key={p.key} className="flex items-center gap-1 text-xs">
-                    <span className="shrink-0 text-gray-400">{p.name}:</span>
+                  <div key={p.key} className="flex items-center gap-1 text-sm text-ink-secondary">
+                    <span className="sr-only">{p.name}:</span>
                     <span className="min-w-0">
                       {renderCellValue(p, row.properties[p.key], editable, (value) =>
                         onCellChange(row.id, p.key, value)
@@ -228,7 +229,7 @@ export function ListView({
           type="button"
           onClick={handleAddRow}
           disabled={rowSubmitting}
-          className="flex w-full items-center gap-1 px-3 py-2 text-left text-xs text-gray-400 hover:text-gray-600 disabled:opacity-40 dark:hover:text-gray-300"
+          className="flex h-[30px] w-full items-center gap-1.5 rounded-md px-1.5 text-left text-sm text-ink-tertiary hover:bg-surface-hover disabled:opacity-40"
         >
           <Plus size={12} /> New page
         </button>

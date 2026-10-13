@@ -40,7 +40,7 @@ export function ButtonCell({ property, noteId, editable }: ButtonCellProps) {
         type="button"
         disabled={!editable || pending}
         onClick={click}
-        className="text-xs px-2.5 py-1 rounded bg-indigo-600 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+        className="inline-flex h-6 items-center rounded-md border border-line-strong px-1.5 text-sm font-medium text-ink hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
       >
         {label}
       </button>

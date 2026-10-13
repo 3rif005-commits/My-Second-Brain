@@ -423,23 +423,27 @@ function CalendarDayCell({
       ref={setNodeRef}
       data-testid={`calendar-day-${day.dayKey}`}
       style={{ gridColumn: col + 1, gridRow: `1 / span ${MAX_EVENTS_PER_DAY + 2}` }}
-      className={`relative group/day border-r border-b border-gray-100 dark:border-gray-800 p-1 min-h-[80px] ${
-        day.inCurrentMonth ? "" : "opacity-40"
-      } ${isOver ? "ring-2 ring-indigo-400 ring-inset" : ""}`}
+      // Notion's calendar cell: opaque grid lines, 124px tall, weekends tinted, the
+      // day number right-aligned (today in a 24px red circle) (checklist #243-248).
+      className={`group/day relative min-h-[124px] border-b border-r border-line-opaque p-1 ${
+        [0, 6].includes(new Date(day.dayKey + "T00:00:00").getDay()) ? "bg-surface-weekend" : ""
+      } ${isOver ? "ring-2 ring-inset ring-accent-focus/60" : ""}`}
     >
-      <div
-        className={`text-[11px] leading-4 w-4 text-center ${
-          isToday ? "rounded-full bg-red-500 text-white" : "text-gray-400"
-        }`}
-      >
-        {dayNumber}
+      <div className="flex justify-end pr-[7px] pt-1">
+        <span
+          className={`flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-sm ${
+            isToday ? "bg-ink-danger text-white" : day.inCurrentMonth ? "text-ink-secondary" : "text-ink-tertiary"
+          }`}
+        >
+          {dayNumber === 1 ? new Date(day.dayKey + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" }) : dayNumber}
+        </span>
       </div>
       {editable && day.inCurrentMonth && isEmpty && (
         <button
           type="button"
           aria-label={`Add row on ${day.dayKey}`}
           onClick={onCreate}
-          className="absolute top-1 right-1 opacity-0 group-hover/day:opacity-100 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xs font-medium leading-none"
+          className="absolute left-1.5 top-1.5 flex size-6 items-center justify-center rounded-md text-ink-icon opacity-0 hover:bg-surface-hover group-hover/day:opacity-100"
         >
           +
         </button>
@@ -504,7 +508,8 @@ function CalendarEventBar({
         e.preventDefault();
         setMenuOpen(true);
       }}
-      className={`relative flex items-center mx-0.5 my-0.5 px-1 rounded text-[11px] overflow-hidden bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200 cursor-pointer ${
+      // Notion's event chip: a white 28px card with the chip shadow, 14px/600 title.
+      className={`relative mx-1.5 my-0.5 flex h-7 cursor-pointer items-center overflow-hidden rounded-md bg-surface-elevated px-1.5 text-sm font-semibold text-ink shadow-chip hover:bg-surface-hover ${
         editable ? "active:cursor-grabbing touch-none" : ""
       } ${isDragging ? "opacity-40" : ""}`}
     >
@@ -515,7 +520,7 @@ function CalendarEventBar({
         open={menuOpen}
         onOpenChange={setMenuOpen}
         trigger={
-          <span className="truncate min-w-0 flex-1">{titleValue || <span className="text-gray-400">Untitled</span>}</span>
+          <span className="min-w-0 flex-1 truncate">{titleValue || <span className="text-ink-tertiary">Untitled</span>}</span>
         }
       />
     </div>
@@ -560,6 +565,8 @@ function CalendarWeekRow({
         gridTemplateRows: `auto repeat(${MAX_EVENTS_PER_DAY}, auto) auto`,
       }}
     >
+      {/* Reserve the first grid row for the day numbers, so event chips start below them. */}
+      <div aria-hidden style={{ gridColumn: "1 / -1", gridRow: 1, height: 34 }} />
       {weekDays.map((day, col) => (
         <CalendarDayCell
           key={day.dayKey}
@@ -592,7 +599,7 @@ function CalendarWeekRow({
           <div
             key={`overflow-${weekStartDayKey}-${col}`}
             style={{ gridColumn: col + 1, gridRow: MAX_EVENTS_PER_DAY + 2 }}
-            className="text-[10px] text-gray-400 px-1 leading-tight"
+            className="px-2 text-xs leading-5 text-ink-tertiary"
           >
             +{count} more
           </div>
@@ -724,13 +731,13 @@ export function CalendarView({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="px-3 py-2 flex items-center gap-3 flex-wrap border-b border-gray-100 dark:border-gray-800 shrink-0 text-xs text-gray-500 dark:text-gray-400">
+      <div className="flex h-10 shrink-0 flex-wrap items-center gap-2 text-sm text-ink-secondary">
         <div className="flex items-center gap-1">
           <button
             type="button"
             aria-label="Previous"
             onClick={() => setAnchorDayKey((k) => shiftAnchor(k, viewRange, -1))}
-            className="px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="flex size-6 items-center justify-center rounded-md text-ink-icon hover:bg-surface-hover"
           >
             ‹
           </button>
@@ -738,7 +745,7 @@ export function CalendarView({
             type="button"
             aria-label="Today"
             onClick={() => setAnchorDayKey(toDayKey(new Date().toISOString()))}
-            className="px-2 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="h-6 rounded-md px-2 text-sm text-ink hover:bg-surface-hover"
           >
             Today
           </button>
@@ -746,21 +753,21 @@ export function CalendarView({
             type="button"
             aria-label="Next"
             onClick={() => setAnchorDayKey((k) => shiftAnchor(k, viewRange, 1))}
-            className="px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="flex size-6 items-center justify-center rounded-md text-ink-icon hover:bg-surface-hover"
           >
             ›
           </button>
         </div>
-        <span className="font-medium text-gray-700 dark:text-gray-300">
+        <span className="order-first mr-auto text-base font-semibold text-ink">
           {formatRangeLabel(anchorDayKey, viewRange)}
         </span>
-        <label className="flex items-center gap-1.5 ml-auto">
+        <label className="flex items-center gap-1.5">
           View
           <select
             aria-label="View range"
             value={viewRange}
             onChange={(e) => onConfigChange({ view_range: e.target.value })}
-            className="px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+            className="h-6 rounded-md bg-transparent px-1 text-sm text-ink-secondary outline-none hover:bg-surface-hover"
           >
             <option value="month">Month</option>
             <option value="week">Week</option>
@@ -780,18 +787,18 @@ export function CalendarView({
         * the grid — Sunday-first, absent from this view before this
         * session. */}
       <div
-        className="grid shrink-0 border-b border-gray-100 dark:border-gray-800 text-[11px] font-medium text-gray-400"
+        className="grid shrink-0 border-b border-line-opaque text-xs text-ink-tertiary"
         style={{ gridTemplateColumns: `repeat(${weekdayLabels.length}, 1fr)` }}
       >
         {weekdayLabels.map((label) => (
-          <div key={label} className="px-1 py-1 text-center">
+          <div key={label} className="px-1 py-1.5 text-center">
             {label}
           </div>
         ))}
       </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <div className="flex-1 min-h-0 overflow-auto flex flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto border-l border-line-opaque">
           {grid.map((weekDays) => (
             <CalendarWeekRow
               key={weekDays[0].dayKey}

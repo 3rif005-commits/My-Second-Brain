@@ -31,6 +31,9 @@ import { DatabaseHeader } from "./DatabaseHeader";
 import { ViewToolbar } from "./ViewToolbar";
 import { ViewSettingsSidebar } from "./ViewSettingsSidebar";
 import { DatabaseSettingsMenu } from "./DatabaseSettingsMenu";
+import { DatabasePageMenu } from "./DatabasePageMenu";
+import { TopBar } from "@/components/shell/TopBar";
+import { Table2 } from "lucide-react";
 
 interface DatabaseShellProps {
   databaseId: string;
@@ -691,52 +694,59 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     }
   }
 
+  const settingsMenu = editable ? (
+    <DatabaseSettingsMenu
+      dataSourceId={dataSourceId}
+      properties={properties}
+      activeView={activeView}
+      onPropertiesChanged={refetch}
+      onUpdateView={updateView}
+      templates={templates}
+      onCreateTemplate={createTemplate}
+      onUpdateTemplate={updateTemplate}
+      onDeleteTemplate={deleteTemplate}
+      automations={automations}
+      onCreateAutomation={createAutomation}
+      onUpdateAutomation={updateAutomation}
+      onDeleteAutomation={deleteAutomation}
+    />
+  ) : undefined;
+  const canEditHeader = editable && !dataSource.is_virtual;
+  // Board, gallery, calendar… sit in the 96px page gutter; the table starts 56px
+  // further left so its row gutter (+ ⋮⋮ ☐) lives in that margin, as in Notion.
+  const viewPadding =
+    activeView?.type === "table" ? "pl-10" : activeView?.type === "timeline" ? "" : "px-6 sm:px-[96px]";
+
+  // Notion's full-page database (database-table.md §1): the top bar, then the
+  // header at full width with a 96px gutter, the 40px views bar, then the view.
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900">
-      {/* Header */}
-      <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0">
+    <div className="flex h-full flex-col bg-surface">
+      <TopBar crumbs={[{ label: database.title || "Untitled", icon: database.icon || <Table2 size={16} className="text-ink-icon" /> }]}>
+        {canEditHeader && (
+          <DatabasePageMenu
+            databaseId={database.id}
+            databaseTitle={database.title}
+            isLocked={database.is_locked}
+            onToggleLocked={() => updateDatabase({ is_locked: !database.is_locked })}
+            onDelete={deleteDatabase}
+          />
+        )}
+        {settingsMenu}
+      </TopBar>
+      <div className="shrink-0 px-6 pt-10 sm:px-[96px]">
         <DatabaseHeader
-          // Review-checkpoint finding (M7-M11 pass): the SAME class of bug
-          // the M1-M3 checkpoint already fixed for `ViewNameHeader` —
-          // `titleDraft`/`descriptionDraft` are `useState` INITIAL values,
-          // never resynced from `database` on prop change. Sidebar.tsx
-          // navigates between databases client-side (`router.push`, no
-          // full reload), so switching from database A to B without this
-          // key left the input showing A's OLD title/description over B's
-          // real data — and blurring without editing would silently PATCH
-          // B's title to A's stale one, since `commitTitle`'s own
-          // `trimmed === database.title` guard was comparing against the
-          // WRONG database. `key`, not an effect, matching the proven fix.
+          // Review-checkpoint finding (M7-M11 pass): `titleDraft`/`descriptionDraft`
+          // are `useState` INITIAL values, never resynced from `database` on prop
+          // change, so switching databases client-side must remount the header.
           key={database.id}
           database={database}
           dataSource={dataSource}
           editable={editable}
           onUpdate={updateDatabase}
           onDelete={deleteDatabase}
-          // All Notes has no db_properties/db_views rows to configure at
-          // all (it's synthesized from COLUMN_BACKED, routers/databases.py)
-          // — hidden rather than shown-disabled, same "not merely disabled"
-          // rule the relation controls follow.
-          trailing={
-            editable ? (
-              <DatabaseSettingsMenu
-                dataSourceId={dataSourceId}
-                properties={properties}
-                activeView={activeView}
-                onPropertiesChanged={refetch}
-                onUpdateView={updateView}
-                templates={templates}
-                onCreateTemplate={createTemplate}
-                onUpdateTemplate={updateTemplate}
-                onDeleteTemplate={deleteTemplate}
-                automations={automations}
-                onCreateAutomation={createAutomation}
-                onUpdateAutomation={updateAutomation}
-                onDeleteAutomation={deleteAutomation}
-              />
-            ) : undefined
-          }
+          menus="none"
         />
+        <div className="h-2" />
 
         {/* view-tab-bar.md's own States table: "Read-only source (is_virtual):
          * All Notes has no db_views rows at all. Suppress the whole bar" —
@@ -782,7 +792,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
       </div>
 
       {/* Active view */}
-      <div className="flex-1 min-h-0">{renderActiveView()}</div>
+      <div className={`min-h-0 flex-1 ${viewPadding}`}>{renderActiveView()}</div>
 
       {editable && activeView && (
         <ViewSettingsSidebar

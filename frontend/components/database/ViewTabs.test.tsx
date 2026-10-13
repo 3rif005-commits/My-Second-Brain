@@ -106,8 +106,8 @@ describe("ViewTabs", () => {
 
     await user.click(screen.getByRole("button", { name: "Add a new view" }));
     const dialog = screen.getByRole("dialog", { name: "Add a new view" });
-    expect(within(dialog).getByRole("button", { name: "Table" }).className).toMatch(/border-brand/);
-    expect(within(dialog).getByRole("button", { name: "Board" }).className).not.toMatch(/border-brand/);
+    expect(within(dialog).getByRole("button", { name: "Table" }).className).toMatch(/text-accent/);
+    expect(within(dialog).getByRole("button", { name: "Board" }).className).not.toMatch(/text-accent/);
   });
 
   it("Map is not offered as a creatable view type (out of scope for the whole milestone)", async () => {

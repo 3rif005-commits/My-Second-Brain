@@ -10,8 +10,8 @@ export function TextCell({ value, editable, onChange }: CellProps<RichTextValue>
 
   if (!editable) {
     return (
-      <span className="truncate text-gray-700 dark:text-gray-300">
-        {value?.rich_text || <span className="text-gray-400">—</span>}
+      <span className="truncate text-ink">
+        {value?.rich_text || <span className="db-empty-cell">—</span>}
       </span>
     );
   }
@@ -32,7 +32,7 @@ export function TextCell({ value, editable, onChange }: CellProps<RichTextValue>
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setEditing(false);
         }}
-        className="w-full px-1 -mx-1 rounded border border-indigo-300 dark:border-indigo-500 bg-white dark:bg-gray-900 text-sm outline-none"
+        className="w-full px-1 -mx-1 rounded-md bg-surface-elevated shadow-menu text-sm outline-none"
       />
     );
   }
@@ -44,9 +44,9 @@ export function TextCell({ value, editable, onChange }: CellProps<RichTextValue>
         setDraft(value?.rich_text ?? "");
         setEditing(true);
       }}
-      className="w-full truncate text-left text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+      className="w-full truncate text-left text-ink rounded px-1 -mx-1"
     >
-      {value?.rich_text || <span className="text-gray-400">—</span>}
+      {value?.rich_text || <span className="db-empty-cell">—</span>}
     </button>
   );
 }

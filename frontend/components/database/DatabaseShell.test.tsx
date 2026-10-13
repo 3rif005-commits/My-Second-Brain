@@ -317,7 +317,8 @@ describe("DatabaseShell", () => {
     mockHook.rows = [{ id: "row-1", properties: { title: { type: "title", title: "Gallery row" } } }];
     render(<DatabaseShell databaseId="db-1" />);
     expect(screen.getByText("Gallery row")).toBeInTheDocument();
-    expect(screen.getByLabelText("Cover size")).toBeInTheDocument();
+    // Gallery's card options live in View settings › Layout now, not above the view.
+    expect(screen.queryByLabelText("Cover size")).not.toBeInTheDocument();
   });
 
   it("renders ListView for a list-typed active view", () => {
@@ -992,7 +993,7 @@ describe("DatabaseShell", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<DatabaseShell databaseId="db-1" />);
-    await user.click(screen.getByRole("button", { name: "+ New" }));
+    await user.click(screen.getByRole("button", { name: "New page" }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/db/data-sources/ds-1/rows",

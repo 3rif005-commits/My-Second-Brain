@@ -55,14 +55,17 @@ export function OpenNoteButton({ noteId, className = "", onOpen, isOpen }: OpenN
         e.stopPropagation();
         (onOpen ?? openNote)(noteId);
       }}
-      className={`inline-flex items-center gap-1 justify-center rounded p-1 bg-white/80 dark:bg-gray-900/80 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 hover:bg-white dark:hover:bg-gray-900 ${className}`}
+      // Notion's OPEN chip (database-table.md §4): white pill with the float shadow,
+      // a side-peek glyph and "OPEN" in 12px/500 uppercase grey.
+      className={`inline-flex h-6 items-center rounded-md bg-surface-elevated p-0.5 shadow-float ${className}`}
     >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-        <path d="M15 3h6v6" />
-        <path d="M10 14 21 3" />
-      </svg>
-      {labelled && <span className="text-[10px] font-medium uppercase">{isOpen ? "Close" : "Open"}</span>}
+      <span className="flex h-5 items-center gap-1.5 rounded px-1 text-ink-secondary transition-colors duration-instant hover:bg-surface-hover">
+        <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-ink-icon" aria-hidden>
+          <rect x="2.75" y="3.75" width="14.5" height="12.5" rx="2" />
+          <path d="M11 4v12" />
+        </svg>
+        {labelled && <span className="text-xs font-medium uppercase leading-[18px] tracking-[0.5px]">{isOpen ? "Close" : "Open"}</span>}
+      </span>
     </button>
   );
 }

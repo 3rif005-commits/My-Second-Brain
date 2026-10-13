@@ -702,9 +702,9 @@ describe("CalendarView", () => {
       />
     );
     const today = screen.getByTestId("calendar-day-2026-08-18");
-    expect(within(today).getByText("18")).toHaveClass("bg-red-500");
+    expect(within(today).getByText("18")).toHaveClass("bg-ink-danger");
     const other = screen.getByTestId("calendar-day-2026-08-17");
-    expect(within(other).getByText("17")).not.toHaveClass("bg-red-500");
+    expect(within(other).getByText("17")).not.toHaveClass("bg-ink-danger");
   });
 
   it("clicking Next then Today navigates and returns to the anchor day's week", () => {

@@ -117,6 +117,8 @@ export interface ViewLayoutPanelProps {
    * `ChartCreateFields` already does at creation time. Every other view type
    * ignores it. */
   properties?: PropertyResponse[];
+  /** Layout-specific options (Board/Gallery card settings), drawn under the toggles. */
+  extra?: React.ReactNode;
 }
 
 function ToggleRow({
@@ -139,13 +141,15 @@ function ToggleRow({
         role="switch"
         aria-checked={checked}
         aria-label={label}
-        className={`h-3.5 w-6 rounded-full ${checked ? "bg-brand" : "bg-menu-divider"}`}
-      />
+        className={`relative inline-flex h-[18px] w-[30px] shrink-0 items-center rounded-[44px] p-0.5 transition-colors duration-200 ${checked ? "bg-accent" : "bg-toggle-off"}`}
+      >
+        <span className={`size-3.5 rounded-full bg-white transition-transform duration-200 ease-out ${checked ? "translate-x-3" : ""}`} />
+      </span>
     </button>
   );
 }
 
-export function ViewLayoutPanel({ viewType, config, onPatchConfig, properties = [] }: ViewLayoutPanelProps) {
+export function ViewLayoutPanel({ viewType, config, onPatchConfig, properties = [], extra }: ViewLayoutPanelProps) {
   const [openPagesInOpen, setOpenPagesInOpen] = useState(false);
   const showVerticalLines = getShowVerticalLines(config);
   const showPageIcon = getShowPageIcon(config);
@@ -168,10 +172,12 @@ export function ViewLayoutPanel({ viewType, config, onPatchConfig, properties = 
               // elsewhere on this branch, rather than a click that silently
               // does nothing.
               title={selected ? undefined : "Changing the view type isn't supported yet"}
-              className={`flex flex-col items-center gap-1 rounded-md border px-2 py-2.5 text-[12px] ${
+              // Notion: 3×3 grid of 83×56 cards, radius 6px; the selected one has a
+              // 2px blue inset ring and blue content (checklist #288).
+              className={`flex h-14 flex-col items-center justify-center gap-1 rounded-md text-xs ${
                 selected
-                  ? "border-brand text-brand"
-                  : "cursor-not-allowed border-transparent text-menu-disabled"
+                  ? "text-accent shadow-[inset_0_0_0_2px_var(--c-accent)]"
+                  : "cursor-not-allowed text-menu-disabled shadow-[inset_0_0_0_1px_var(--c-border)]"
               }`}
             >
               {card.icon}
@@ -231,6 +237,8 @@ export function ViewLayoutPanel({ viewType, config, onPatchConfig, properties = 
           label="Open pages in"
         />
       </Popover>
+
+      {extra && <div className="mt-1 border-t border-menu-divider pt-1">{extra}</div>}
 
       {/* M12 (Chart's own dedicated work, 2026-09-02) — the real
         * post-creation config surface `view-tab-bar.md`'s own "Chart is a

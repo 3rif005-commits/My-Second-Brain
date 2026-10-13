@@ -1,64 +1,53 @@
 "use client";
 
+// Date cell: Notion's long form ("October 3, 2026", ranges with " → ") in the user's
+// chosen date format, and a single click opens Notion's date picker card.
 import { useState } from "react";
 import type { DateValue } from "@/lib/database/types";
 import type { CellProps } from "./CellProps";
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
+import { Popover } from "@/components/ui/primitives/Popover";
+import { DatePicker } from "@/components/ui/DatePicker";
+import { formatDateRange } from "@/lib/formatDate";
+import { usePreferences } from "@/app/providers";
 
 export function DateCell({ value, editable, onChange }: CellProps<DateValue>) {
-  const start = value?.date?.start;
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(start ? start.slice(0, 10) : "");
+  const { preferences } = usePreferences();
+  const start = value?.date?.start ?? null;
+  const end = value?.date?.end ?? null;
+  const [open, setOpen] = useState(false);
 
-  if (!editable) {
-    return (
-      <span className="text-gray-700 dark:text-gray-300">
-        {start ? formatDate(start) : <span className="text-gray-400">—</span>}
-      </span>
-    );
-  }
+  const text = start ? (
+    <span className="text-ink">{formatDateRange(start.slice(0, 10), end?.slice(0, 10), preferences.dateFormat)}</span>
+  ) : (
+    <span className="db-empty-cell">—</span>
+  );
 
-  if (editing) {
-    function commit() {
-      setEditing(false);
-      onChange(
-        draft === ""
-          ? { type: "date", date: null }
-          : { type: "date", date: { start: draft, end: null, time_zone: null } }
-      );
-    }
-    return (
-      <input
-        autoFocus
-        aria-label="Date"
-        type="date"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
-          if (e.key === "Escape") setEditing(false);
-        }}
-        className="w-full px-1 -mx-1 rounded border border-indigo-300 dark:border-indigo-500 bg-white dark:bg-gray-900 text-sm outline-none"
-      />
-    );
-  }
+  if (!editable) return text;
 
   return (
-    <button
-      type="button"
-      onClick={() => {
-        setDraft(start ? start.slice(0, 10) : "");
-        setEditing(true);
-      }}
-      className="w-full text-left text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      width={248}
+      label="Date picker"
+      className="!rounded-md"
+      trigger={
+        <button type="button" className="-mx-1 w-full rounded px-1 text-left">
+          {text}
+        </button>
+      }
     >
-      {start ? formatDate(start) : <span className="text-gray-400">—</span>}
-    </button>
+      <DatePicker
+        value={start ? { start: start.slice(0, 10), end: end ? end.slice(0, 10) : null } : null}
+        weekStartsOnMonday={preferences.startWeekOnMonday}
+        onChange={(next) =>
+          onChange(
+            next
+              ? { type: "date", date: { start: next.start, end: next.end, time_zone: value?.date?.time_zone ?? null } }
+              : { type: "date", date: null },
+          )
+        }
+      />
+    </Popover>
   );
 }

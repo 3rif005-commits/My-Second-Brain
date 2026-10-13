@@ -79,7 +79,8 @@ const ToolbarButton = forwardRef<
       title={disabled ? disabledReason : label}
       disabled={disabled}
       {...rest}
-      className={`flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:hover:bg-gray-800 dark:hover:text-gray-300 ${className}`}
+      // Notion: 28×28, radius 6px, 16px icons, no gap between them.
+      className={`flex size-7 shrink-0 items-center justify-center rounded-md text-ink-icon transition-colors duration-fast hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent [&>svg]:size-4 ${className}`}
     >
       {icon}
     </button>
@@ -121,7 +122,7 @@ export function ViewToolbar({
   const isDashboard = view.type === "dashboard";
 
   return (
-    <div className="ml-auto flex items-center gap-0.5" role="toolbar" aria-label="View toolbar">
+    <div className="ml-auto flex shrink-0 items-center pr-2" role="toolbar" aria-label="View toolbar">
       {!isForm && !isDashboard && (
         <>
           <Popover
@@ -133,6 +134,7 @@ export function ViewToolbar({
               <ToolbarButton
                 label={ruleCount === 1 ? "1 rule" : ruleCount > 1 ? `${ruleCount} rules` : "Filter"}
                 icon={<FilterIcon size={14} />}
+                className={ruleCount > 0 ? "!text-accent" : ""}
               />
             }
           >
@@ -159,6 +161,7 @@ export function ViewToolbar({
                       : "Sort"
                 }
                 icon={<ArrowUpDown size={14} />}
+                className={sorts.length > 0 ? "!text-accent" : ""}
               />
             }
           >
@@ -195,7 +198,7 @@ export function ViewToolbar({
           href={`/forms/${view.id}`}
           target="_blank"
           rel="noreferrer"
-          className="ml-1 flex h-6 items-center gap-1 rounded px-2 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+          className="ml-1 flex h-7 items-center gap-1.5 rounded-md px-2 text-sm text-ink-secondary hover:bg-surface-hover"
         >
           <Eye size={13} /> Preview
         </a>

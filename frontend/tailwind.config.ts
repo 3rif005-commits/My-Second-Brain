@@ -120,6 +120,8 @@ const config: Config = {
           red: { text: "var(--blk-red-text)", bg: "var(--blk-red-bg)" },
         },
         toggle: { off: "var(--c-toggle-off)" },
+        // Chart bars: the option palette's mid-tones (tokens.json → color.chartBar).
+        chart: { blue: "rgb(94 159 232)", green: "rgb(114 188 143)", brown: "rgb(189 149 118)", gray: "rgb(227 226 224)" },
         // Database-UI primitives. Values are CSS vars (globals.css) so the
         // light/dark swap lives in one place; these surface them to Tailwind.
         // Measured from live Notion — see the design doc §5.

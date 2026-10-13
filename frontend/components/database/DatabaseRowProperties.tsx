@@ -96,19 +96,21 @@ export function DatabaseRowProperties({ noteId }: DatabaseRowPropertiesProps) {
   }
 
   return (
-    <div className="mb-6 pb-4 border-b border-gray-100 dark:border-gray-800">
+    // Notion's properties block on a database row page: 160px labels, 34px rows,
+    // "Empty" in grey, a hairline below (row-page.md §2).
+    <div className="db-props mb-6 border-b border-line pb-4">
       <Link
         href={`/brain/db/${rowInfo.database_id}`}
-        className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        className="text-xs text-ink-tertiary hover:text-ink-secondary"
       >
         {rowInfo.database_title}
       </Link>
       {otherProperties.length > 0 && (
-        <div className="space-y-2 mt-2">
+        <div className="mt-2 flex flex-col gap-1">
           {otherProperties.map((property) => (
-            <div key={property.key} className="grid grid-cols-[120px_1fr] items-center gap-3 text-sm">
-              <span className="text-gray-500 dark:text-gray-400 truncate">{property.name}</span>
-              <div>
+            <div key={property.key} className="grid min-h-[34px] grid-cols-[160px_1fr] items-center text-sm">
+              <span className="flex h-[34px] items-center truncate rounded-md px-1.5 text-ink-secondary hover:bg-surface-hover">{property.name}</span>
+              <div className="min-w-0 px-2 py-1.5">
                 {renderCellValue(property, rowInfo.values[property.key], true, (value) =>
                   handleChange(property, value)
                 )}

@@ -110,7 +110,7 @@ type AnyBlock = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const BlockEditor = dynamic(
   () => import("../editor/BlockEditor").then((m) => m.BlockEditor),
-  { ssr: false, loading: () => <div className="h-48 animate-pulse bg-gray-50 dark:bg-gray-800 rounded-lg" /> }
+  { ssr: false, loading: () => <div className="h-48 animate-pulse rounded-md bg-surface-field" /> }
 ) as React.ForwardRefExoticComponent<
   React.ComponentProps<typeof import("../editor/BlockEditor").BlockEditor> &
     React.RefAttributes<BlockEditorHandle>
@@ -251,7 +251,7 @@ export function RowPeek({
     <div
       className={
         isCenter
-          ? "fixed inset-0 z-[9999] flex items-center justify-center bg-black/30"
+          ? "fixed inset-0 z-[9999] flex items-center justify-center bg-surface-backdrop p-[72px]"
           // Non-modal: no backdrop, and the wrapper itself does not intercept
           // clicks — only the panel does — so the table stays interactive
           // underneath, matching Notion's own "Keeps the view behind
@@ -272,8 +272,10 @@ export function RowPeek({
       <div
         className={
           isCenter
-            ? "max-h-[85vh] w-[min(90vw,880px)] rounded-lg bg-white dark:bg-gray-900 shadow-xl overflow-y-auto"
-            : "pointer-events-auto h-full w-full max-w-2xl bg-white dark:bg-gray-900 shadow-xl overflow-y-auto"
+            // Notion: center peek 975px max, radius 12px, modal shadow; side peek
+            // 650px with the float shadow along its edge (row-page.md §1).
+            ? "h-full w-full max-w-[975px] overflow-y-auto rounded-modal bg-surface-panel shadow-modal"
+            : "pointer-events-auto h-full w-[min(650px,100vw)] overflow-y-auto bg-surface-panel shadow-float"
         }
       >
         {/* row-peek.md's header bar: "»  ⤢          Share  ★  ⋯". `»`
@@ -286,14 +288,14 @@ export function RowPeek({
           * yet, matching M9's own disabled-not-omitted convention for a
           * real, named gap. "Open in Workspace" has no Notion equivalent at
           * all — kept as an explicit additive control, not a parity gap. */}
-        <div className="sticky top-0 flex items-center justify-between gap-2 px-4 py-2 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
+        <div className="sticky top-0 z-[1] flex h-11 items-center justify-between gap-2 bg-surface-panel px-3">
           <div className="flex items-center gap-0.5">
             <button
               type="button"
               aria-label="Close"
               title="Close"
               onClick={onClose}
-              className="flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              className="flex size-6 items-center justify-center rounded-md text-ink-icon hover:bg-surface-active"
             >
               <X size={15} />
             </button>
@@ -302,7 +304,7 @@ export function RowPeek({
               aria-label="Open as full page"
               title="Open as full page"
               onClick={() => router.push(`/brain/${row.id}`)}
-              className="flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              className="flex size-6 items-center justify-center rounded-md text-ink-icon hover:bg-surface-active"
             >
               <Maximize2 size={13} />
             </button>
@@ -313,7 +315,7 @@ export function RowPeek({
               aria-label="Share"
               title="Sharing isn't available yet"
               disabled
-              className="flex h-6 w-6 items-center justify-center rounded text-gray-300 dark:text-gray-600 opacity-40"
+              className="flex size-6 items-center justify-center rounded-md text-ink-icon opacity-40"
             >
               <Share2 size={13} />
             </button>
@@ -322,7 +324,7 @@ export function RowPeek({
               aria-label="Add to Favorites"
               title="Add to Favorites"
               onClick={favorite}
-              className="flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              className="flex size-6 items-center justify-center rounded-md text-ink-icon hover:bg-surface-active"
             >
               <Star size={13} />
             </button>
@@ -331,23 +333,23 @@ export function RowPeek({
               aria-label="More"
               title="The page menu isn't available yet"
               disabled
-              className="flex h-6 w-6 items-center justify-center rounded text-gray-300 dark:text-gray-600 opacity-40"
+              className="flex size-6 items-center justify-center rounded-md text-ink-icon opacity-40"
             >
               <MoreHorizontal size={13} />
             </button>
             <button
               type="button"
               onClick={() => router.push(noteWorkspacePath(row.id))}
-              className="ml-1 text-xs text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100"
+              className="ml-1 h-7 rounded-md px-2 text-sm text-ink hover:bg-surface-active"
             >
               Open in Workspace
             </button>
           </div>
         </div>
 
-        <div className="px-6 py-4">
+        <div className={isCenter ? "mx-auto max-w-[708px] px-6 pb-24 pt-10" : "mx-auto max-w-[483px] px-6 pb-24 pt-10 sm:px-0"}>
           {titleProperty && (
-            <div className="text-xl font-semibold mb-4">
+            <div className="mb-4 text-[32px] font-bold leading-[38.4px] text-ink">
               {renderCellValue(
                 titleProperty,
                 row.properties[titleProperty.key],
@@ -358,7 +360,9 @@ export function RowPeek({
           )}
 
           {(otherProperties.length > 0 || (editable && dataSourceId)) && (
-            <div className="space-y-2 mb-6 pb-6 border-b border-gray-100 dark:border-gray-800">
+            // Notion's properties block: 160px label column, 34px rows at a 38px
+            // pitch, "Empty" in grey, then a hairline before the body.
+            <div className="db-props mb-6 flex flex-col gap-1 border-b border-[color:var(--c-border)] pb-4">
               {otherProperties.map((property) => {
                 const value = row.properties[property.key];
                 // Clicking "Empty" activates the real control for this
@@ -367,18 +371,18 @@ export function RowPeek({
                 // `value` stops being empty).
                 const showEmptyPlaceholder = isEmptyPropertyValue(value) && activePropertyKey !== property.key;
                 return (
-                  <div key={property.key} className="grid grid-cols-[120px_1fr] items-center gap-3 text-sm">
-                    <span className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 truncate">
-                      <span className="shrink-0 text-gray-400 dark:text-gray-500">{propertyTypeIcon(property.type)}</span>
+                  <div key={property.key} className="grid min-h-[34px] grid-cols-[160px_1fr] items-center text-sm">
+                    <span className="flex h-[34px] items-center gap-1.5 truncate rounded-md px-1.5 text-ink-secondary hover:bg-surface-hover">
+                      <span className="flex w-[18px] shrink-0 justify-center text-ink-icon">{propertyTypeIcon(property.type)}</span>
                       {property.name}
                     </span>
-                    <div>
+                    <div className="min-w-0 px-2 py-1.5">
                       {showEmptyPlaceholder ? (
                         <button
                           type="button"
                           disabled={!editable}
                           onClick={() => setActivePropertyKey(property.key)}
-                          className="w-full text-left text-gray-400 dark:text-gray-500 disabled:cursor-default"
+                          className="w-full text-left text-ink-tertiary disabled:cursor-default"
                         >
                           Empty
                         </button>
@@ -394,8 +398,7 @@ export function RowPeek({
                 * read-only source (no `dataSourceId`/`!editable`) — same
                 * States-table rule as the table header's own version. */}
               {editable && dataSourceId && (
-                <div className="grid grid-cols-[120px_1fr] items-center gap-3 text-sm">
-                  <span />
+                <div className="flex min-h-[34px] items-center text-sm text-ink-tertiary">
                   <AddPropertyPopover
                     dataSourceId={dataSourceId}
                     properties={properties}
@@ -412,7 +415,7 @@ export function RowPeek({
           {loaded ? (
             <BlockEditor noteId={row.id} initialContent={content} onSave={handleSaveContent} />
           ) : (
-            <div className="h-48 animate-pulse bg-gray-50 dark:bg-gray-800 rounded-lg" />
+            <div className="h-48 animate-pulse rounded-md bg-surface-field" />
           )}
         </div>
       </div>

@@ -7,6 +7,7 @@
 // destructive (nothing to undo-by-confirming; the property just appears),
 // so this doesn't need ConfirmDialog either, only a plain error toast on
 // a failed POST/PATCH.
+import { Settings2 } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/app/providers";
 import { DATE_SHIFT_MODES, findSystemRelationProperty } from "@/lib/database/types";
@@ -188,15 +189,16 @@ export function DatabaseSettingsMenu({
         type="button"
         aria-label="Database settings"
         onClick={() => setOpen((o) => !o)}
-        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-sm px-1.5 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+        title="Database settings"
+        className="flex size-7 items-center justify-center rounded-md text-ink-icon transition-colors duration-fast hover:bg-surface-active"
       >
-        ⚙
+        <Settings2 size={18} strokeWidth={1.75} />
       </button>
       {open && (
         <div
           role="dialog"
           aria-label="Database settings"
-          className="absolute right-0 z-20 mt-1 w-72 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg p-3 text-xs space-y-4"
+          className="absolute right-0 z-20 mt-1 w-72 space-y-4 rounded-menu bg-menu-bg p-3 text-xs text-ink shadow-menu"
         >
           <section>
             <h3 className="font-semibold text-gray-700 dark:text-gray-200 mb-1.5">Sub-items</h3>

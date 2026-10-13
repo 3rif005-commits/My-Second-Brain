@@ -52,6 +52,8 @@ import type { FilterUpdater } from "./FilterBuilder";
 import { groupPanel } from "./GroupBuilder";
 import type { GroupByUpdater } from "./GroupBuilder";
 import { ViewLayoutPanel } from "./ViewLayoutPanel";
+import { BoardLayoutOptions } from "./views/BoardView";
+import { GalleryLayoutOptions } from "./views/GalleryView";
 import { AutomationManager } from "./AutomationManager";
 
 function asSorts(raw: unknown[]): Sort[] {
@@ -293,6 +295,21 @@ export function ViewSettingsSidebar({
                       config={config}
                       onPatchConfig={onPatchConfig}
                       properties={properties}
+                      extra={
+                        view.type === "board" ? (
+                          <BoardLayoutOptions
+                            properties={properties}
+                            config={config}
+                            onConfigChange={onPatchConfig}
+                            hideEmptyGroups={getGroupBySpec(config)?.hide_empty_groups ?? false}
+                            onToggleHideEmptyGroups={(value) =>
+                              onSetGroupBy((current) => (current ? { ...current, hide_empty_groups: value } : null))
+                            }
+                          />
+                        ) : view.type === "gallery" ? (
+                          <GalleryLayoutOptions properties={properties} config={config} onConfigChange={onPatchConfig} />
+                        ) : undefined
+                      }
                     />
                   ),
                 },

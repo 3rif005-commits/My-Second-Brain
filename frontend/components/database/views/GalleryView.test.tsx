@@ -22,7 +22,7 @@ vi.mock("@/components/editor/BlockEditor", () => ({
   BlockEditor: () => <div data-testid="block-editor-stub" />,
 }));
 
-import { GalleryView } from "./GalleryView";
+import { GalleryLayoutOptions, GalleryView } from "./GalleryView";
 import type { DatabaseRow, PropertyResponse } from "@/lib/database/types";
 
 beforeEach(() => {
@@ -98,7 +98,7 @@ describe("GalleryView", () => {
     const user = userEvent.setup();
     const onConfigChange = vi.fn();
     render(
-      <GalleryView
+      <GalleryLayoutOptions
         properties={[TITLE_PROP]}
         rows={[row("row-1", "First")]}
         editable={false}
@@ -116,7 +116,7 @@ describe("GalleryView", () => {
     const user = userEvent.setup();
     const onConfigChange = vi.fn();
     render(
-      <GalleryView
+      <GalleryLayoutOptions
         properties={[TITLE_PROP]}
         rows={[row("row-1", "First")]}
         editable={false}
@@ -134,7 +134,7 @@ describe("GalleryView", () => {
     const user = userEvent.setup();
     const onConfigChange = vi.fn();
     render(
-      <GalleryView
+      <GalleryLayoutOptions
         properties={[TITLE_PROP]}
         rows={[row("row-1", "First")]}
         editable={false}
@@ -152,7 +152,7 @@ describe("GalleryView", () => {
     const user = userEvent.setup();
     const onConfigChange = vi.fn();
     render(
-      <GalleryView
+      <GalleryLayoutOptions
         properties={[TITLE_PROP, STATUS_PROP]}
         rows={[row("row-1", "First")]}
         editable={false}
@@ -381,7 +381,7 @@ describe("GalleryView", () => {
       const user = userEvent.setup();
       const onConfigChange = vi.fn();
       render(
-        <GalleryView
+        <GalleryLayoutOptions
           properties={[TITLE_PROP, FILES_PROP]}
           rows={[row("row-1", "First")]}
           editable={false}

@@ -12,7 +12,8 @@ import { MenuList, Popover } from "@/components/ui/primitives";
 import type { MenuPanel } from "@/components/ui/primitives";
 import type { StatusValue } from "@/lib/database/types";
 import type { CellProps } from "./CellProps";
-import { pillStyleForOption, type ConfiguredOption } from "./CellProps";
+import { optionColorFor, type ConfiguredOption } from "./CellProps";
+import { Tag } from "@/components/ui/Tag";
 import { STATUS_GROUPS, type StatusGroup } from "../EditPropertyPanel";
 
 type StatusOption = ConfiguredOption & { group?: StatusGroup };
@@ -21,25 +22,21 @@ export interface StatusCellProps extends CellProps<StatusValue> {
   options?: ConfiguredOption[];
 }
 
-function dot(name: string, options: ConfiguredOption[] | undefined) {
-  // `pillStyleForOption` returns pill classes ("bg-x-100 text-x-700 …") —
-  // reused here for the swatch's fill/text colour alone (the dot is a
-  // `bg-current` circle), not for a pill background.
-  return <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${pillStyleForOption(name, options)}`} />;
+/** Notion's status pill: radius 10px, a leading 8px dot in the option colour. */
+function pill(name: string, options: ConfiguredOption[] | undefined) {
+  return (
+    <Tag status color={optionColorFor(name, options)}>
+      {name}
+    </Tag>
+  );
 }
 
 export function StatusCell({ value, editable, onChange, options }: StatusCellProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
 
-  const content = value?.status ? (
-    <span className="inline-flex items-center gap-1.5 text-xs">
-      {dot(value.status, options)}
-      {value.status}
-    </span>
-  ) : (
-    <span className="text-gray-400">—</span>
-  );
+  // Empty cells are blank in Notion — no dash, no placeholder.
+  const content = value?.status ? pill(value.status, options) : <span className="block h-5" />;
 
   if (!editable) return content;
 
@@ -66,12 +63,7 @@ export function StatusCell({ value, editable, onChange, options }: StatusCellPro
           .map((o) => ({
             id: o.id,
             label: o.name,
-            labelNode: (
-              <span className="flex items-center gap-1.5">
-                {dot(o.name, options)}
-                {o.name}
-              </span>
-            ),
+            labelNode: pill(o.name, options),
             checked: value?.status === o.name,
             onSelect: () => assign(o.name),
           })),
@@ -110,10 +102,10 @@ export function StatusCell({ value, editable, onChange, options }: StatusCellPro
                   close();
                 }
               }}
-              className="w-full px-1 -mx-1 rounded border border-indigo-300 dark:border-indigo-500 bg-white dark:bg-gray-900 text-sm outline-none"
+              className="w-full px-1 -mx-1 rounded-md bg-surface-elevated shadow-menu text-sm outline-none"
             />
           ) : (
-            <button type="button" className="w-full text-left hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-1 -mx-1">
+            <button type="button" className="w-full text-left rounded px-1 -mx-1">
               {content}
             </button>
           )}

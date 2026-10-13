@@ -11,12 +11,13 @@
 // Reuses the Popover/MenuList primitives — the same "input IS the trigger,
 // panel hangs below" shape AddPropertyPopover.tsx already established for
 // property creation — rather than a bespoke dropdown.
+import { Tag } from "@/components/ui/Tag";
 import { useState } from "react";
 import { MenuList, Popover } from "@/components/ui/primitives";
 import type { MenuPanel } from "@/components/ui/primitives";
 import type { SelectValue } from "@/lib/database/types";
 import type { CellProps } from "./CellProps";
-import { pillStyleForOption, type ConfiguredOption } from "./CellProps";
+import { optionColorFor, type ConfiguredOption } from "./CellProps";
 
 export interface SelectCellProps extends CellProps<SelectValue> {
   options?: ConfiguredOption[];
@@ -30,9 +31,7 @@ export interface SelectCellProps extends CellProps<SelectValue> {
 
 function chip(label: string, options: ConfiguredOption[] | undefined) {
   return (
-    <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${pillStyleForOption(label, options)}`}>
-      {label}
-    </span>
+    <Tag color={optionColorFor(label, options)}>{label}</Tag>
   );
 }
 
@@ -41,7 +40,7 @@ export function SelectCell({ value, editable, onChange, options, onCreateOption 
   const [draft, setDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const content = value?.select ? chip(value.select, options) : <span className="text-gray-400">—</span>;
+  const content = value?.select ? chip(value.select, options) : <span className="db-empty-cell">—</span>;
 
   if (!editable) return content;
 
@@ -86,7 +85,7 @@ export function SelectCell({ value, editable, onChange, options, onCreateOption 
             if (e.key === "Enter") commit();
             if (e.key === "Escape") setEditing(false);
           }}
-          className="w-full px-1 -mx-1 rounded border border-indigo-300 dark:border-indigo-500 bg-white dark:bg-gray-900 text-sm outline-none"
+          className="w-full px-1 -mx-1 rounded-md bg-surface-elevated shadow-menu text-sm outline-none"
         />
       );
     }
@@ -97,7 +96,7 @@ export function SelectCell({ value, editable, onChange, options, onCreateOption 
           setDraft(value?.select ?? "");
           setEditing(true);
         }}
-        className="w-full text-left hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+        className="w-full text-left rounded px-1 -mx-1"
       >
         {content}
       </button>
@@ -187,10 +186,10 @@ export function SelectCell({ value, editable, onChange, options, onCreateOption 
                   close();
                 }
               }}
-              className="w-full px-1 -mx-1 rounded border border-indigo-300 dark:border-indigo-500 bg-white dark:bg-gray-900 text-sm outline-none"
+              className="w-full px-1 -mx-1 rounded-md bg-surface-elevated shadow-menu text-sm outline-none"
             />
           ) : (
-            <button type="button" className="w-full text-left hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-1 -mx-1">
+            <button type="button" className="w-full text-left rounded px-1 -mx-1">
               {content}
             </button>
           )}

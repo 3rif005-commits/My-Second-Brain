@@ -618,7 +618,7 @@ function BarChart({
               <rect
                 key={g.key}
                 data-testid={`chart-bar-${g.key}`}
-                className="fill-indigo-500"
+                className="fill-chart-blue"
                 {...rectProps}
               />
             );
@@ -646,7 +646,7 @@ function BarChart({
                 <rect
                   key={`${g.key}:${seg.key}`}
                   data-testid={`chart-bar-${g.key}-${seg.key}`}
-                  className="fill-indigo-500"
+                  className="fill-chart-blue"
                   opacity={0.55 + 0.45 * (seg.index % 2)}
                   {...rectProps}
                 />
@@ -676,7 +676,7 @@ function BarChart({
               <rect
                 key={`${g.key}:${seg.key}`}
                 data-testid={`chart-bar-${g.key}-${seg.key}`}
-                className="fill-indigo-500"
+                className="fill-chart-blue"
                 opacity={0.55 + 0.45 * (seg.index % 2)}
                 {...rectProps}
               />
@@ -709,7 +709,7 @@ function LineChart({ data, referenceLines }: { data: ChartDatum[]; referenceLine
             cx={i * stepX}
             cy={valueToY(d.value, scale)}
             r={3}
-            className="fill-indigo-500"
+            className="fill-chart-blue"
           />
         ))}
         <ReferenceLines referenceLines={referenceLines} scale={scale} axis="y" />
@@ -719,8 +719,10 @@ function LineChart({ data, referenceLines }: { data: ChartDatum[]; referenceLine
 }
 
 const DONUT_COLORS = [
-  "#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4",
-  "#a855f7", "#ec4899", "#84cc16", "#0ea5e9", "#f97316",
+  // Notion's chart mid-tones of the option palette (tokens.json → chartBar), then
+  // the remaining hues in the same family.
+  "rgb(94,159,232)", "rgb(114,188,143)", "rgb(189,149,118)", "rgb(227,173,92)", "rgb(220,120,110)",
+  "rgb(176,138,204)", "rgb(220,120,170)", "rgb(230,150,90)", "rgb(160,160,155)", "rgb(120,175,225)",
 ];
 
 function DonutChart({ data }: { data: ChartDatum[] }) {

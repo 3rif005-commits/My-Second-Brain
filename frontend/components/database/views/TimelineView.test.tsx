@@ -400,14 +400,13 @@ describe("TimelineView", () => {
     expect(onConfigChange).toHaveBeenCalledWith({ preference: { zoom_level: "quarter" } });
   });
 
-  it("a row with no `end` renders as a point marker, not a bar", () => {
+  it("a row with no `end` renders as a one-day bar with its title, as in Notion", () => {
     const rows = [row("row-1", "Milestone", { start: "2026-01-05T00:00:00.000Z", end: null, time_zone: null })];
     renderTimeline({ rows });
     const bar = screen.getByTestId("timeline-bar-row-1");
-    // A point marker is square (equal width/height, the MARKER_SIZE
-    // constant) and rounded-full, unlike a ranged bar's wide rectangle.
-    expect(bar.style.width).toBe(bar.style.height);
-    expect(bar.className).toContain("rounded-full");
+    expect(bar.className).not.toContain("rounded-full");
+    expect(parseFloat(bar.style.width)).toBeGreaterThan(0);
+    expect(bar).toHaveTextContent("Milestone");
   });
 
   it("a ranged bar is a wide rectangle, not rounded-full", () => {

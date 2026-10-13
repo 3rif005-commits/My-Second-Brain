@@ -23,8 +23,8 @@ export function TitleCell({ value, editable, onChange, autoEdit }: TitleCellProp
 
   if (!editable) {
     return (
-      <span className="truncate font-medium text-gray-900 dark:text-gray-100">
-        {value?.title || <span className="font-normal text-gray-400">Untitled</span>}
+      <span className="truncate font-medium text-ink">
+        {value?.title || <span className="font-normal text-ink-tertiary">Untitled</span>}
       </span>
     );
   }
@@ -45,7 +45,7 @@ export function TitleCell({ value, editable, onChange, autoEdit }: TitleCellProp
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setEditing(false);
         }}
-        className="w-full px-1 -mx-1 rounded border border-indigo-300 dark:border-indigo-500 bg-white dark:bg-gray-900 text-sm font-medium text-gray-900 dark:text-gray-100 outline-none"
+        className="w-full px-1 -mx-1 rounded-md bg-surface-elevated shadow-menu text-sm font-medium text-ink outline-none"
       />
     );
   }
@@ -57,9 +57,9 @@ export function TitleCell({ value, editable, onChange, autoEdit }: TitleCellProp
         setDraft(value?.title ?? "");
         setEditing(true);
       }}
-      className="w-full truncate text-left font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+      className="w-full truncate text-left font-medium text-ink rounded px-1 -mx-1"
     >
-      {value?.title || <span className="font-normal text-gray-400">Untitled</span>}
+      {value?.title || <span className="font-normal text-ink-tertiary">Untitled</span>}
     </button>
   );
 }

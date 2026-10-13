@@ -1,9 +1,10 @@
 "use client";
 
+import { Tag } from "@/components/ui/Tag";
 import { useState } from "react";
 import type { MultiSelectValue } from "@/lib/database/types";
 import type { CellProps } from "./CellProps";
-import { pillStyleForOption, type ConfiguredOption } from "./CellProps";
+import { optionColorFor, type ConfiguredOption } from "./CellProps";
 
 /** `options` is the property's configured option list. Optional so the older
  * callers that predate the `Edit property` panel (Board/Gallery/List/Feed)
@@ -38,25 +39,22 @@ export function MultiSelectCell({ value, editable, onChange, options }: MultiSel
           if (e.key === "Escape") setEditing(false);
         }}
         placeholder="comma, separated, values"
-        className="w-full px-1 -mx-1 rounded border border-indigo-300 dark:border-indigo-500 bg-white dark:bg-gray-900 text-sm outline-none"
+        className="w-full px-1 -mx-1 rounded-md bg-surface-elevated shadow-menu text-sm outline-none"
       />
     );
   }
 
   const content =
     items.length > 0 ? (
-      <div className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap gap-x-2 gap-y-1.5">
         {items.map((item) => (
-          <span
-            key={item}
-            className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${pillStyleForOption(item, options)}`}
-          >
+          <Tag key={item} color={optionColorFor(item, options)}>
             {item}
-          </span>
+          </Tag>
         ))}
       </div>
     ) : (
-      <span className="text-gray-400">—</span>
+      <span className="db-empty-cell">—</span>
     );
 
   if (!editable) return content;
@@ -68,7 +66,7 @@ export function MultiSelectCell({ value, editable, onChange, options }: MultiSel
         setDraft(items.join(", "));
         setEditing(true);
       }}
-      className="w-full text-left hover:bg-gray-50 dark:hover:bg-gray-800 rounded px-1 -mx-1"
+      className="w-full text-left rounded px-1 -mx-1"
     >
       {content}
     </button>

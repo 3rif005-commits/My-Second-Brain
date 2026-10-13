@@ -25,7 +25,7 @@ vi.mock("@/components/editor/BlockEditor", () => ({
   BlockEditor: () => <div data-testid="block-editor-stub" />,
 }));
 
-import { BoardView, cardDraggableId, computeDragEndWrite, resolveDropValue } from "./BoardView";
+import { BoardLayoutOptions, BoardView, cardDraggableId, computeDragEndWrite, resolveDropValue } from "./BoardView";
 
 beforeEach(() => {
   mockSearch = "";
@@ -267,7 +267,7 @@ describe("BoardView", () => {
     const user = userEvent.setup();
     const onToggle = vi.fn();
     render(
-      <BoardView
+      <BoardLayoutOptions
         properties={[TITLE_PROP, STATUS_PROP]}
         groups={GROUPS}
         groupPropertyKey="status"
@@ -441,7 +441,7 @@ describe("BoardView", () => {
       const user = userEvent.setup();
       const onConfigChange = vi.fn();
       render(
-        <BoardView
+        <BoardLayoutOptions
           properties={[TITLE_PROP, STATUS_PROP]}
           groups={GROUPS}
           groupPropertyKey="status"
@@ -463,7 +463,7 @@ describe("BoardView", () => {
     const user = userEvent.setup();
     const onConfigChange = vi.fn();
     render(
-      <BoardView
+      <BoardLayoutOptions
         properties={[TITLE_PROP, STATUS_PROP]}
         groups={GROUPS}
         groupPropertyKey="status"
@@ -520,7 +520,7 @@ describe("BoardView", () => {
       const user = userEvent.setup();
       const onConfigChange = vi.fn();
       render(
-        <BoardView
+        <BoardLayoutOptions
           properties={[TITLE_PROP, STATUS_PROP]}
           groups={GROUPS}
           groupPropertyKey="status"

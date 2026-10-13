@@ -138,20 +138,20 @@ export function extractFileUrl(value: PropertyValue | undefined): string | undef
   return undefined;
 }
 
+/** A card with no cover: Notion shows a plain faint fill, no image glyph. */
 export function CoverPlaceholder() {
-  return (
-    <div
-      data-testid="cover-placeholder"
-      className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 text-gray-300 dark:text-gray-600"
-    >
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        <circle cx="8.5" cy="8.5" r="1.5" />
-        <path d="M21 15l-5-5L5 21" />
-      </svg>
-    </div>
-  );
+  return <div data-testid="cover-placeholder" className="h-full w-full bg-surface-field" />;
 }
+
+/** A property value with nothing to show; Notion hides these on cards. */
+export function isEmptyCardValue(v: unknown): boolean {
+  if (!v || typeof v !== "object" || !("type" in v)) return true;
+  const inner = (v as Record<string, unknown>)[(v as { type: string }).type];
+  if (inner === null || inner === undefined || inner === "" || inner === false) return true;
+  if (Array.isArray(inner)) return inner.length === 0;
+  return false;
+}
+
 
 function GalleryCard({
   row,
@@ -218,7 +218,8 @@ function GalleryCard({
 
   return (
     <div
-      className={`group relative ${COVER_SIZE_CLASSES[coverSize]} shrink-0 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden`}
+      // Notion's gallery card: radius 10px, the card shadow, hover tint (§J).
+      className={`group relative ${COVER_SIZE_CLASSES[coverSize]} shrink-0 overflow-hidden rounded-card bg-surface-elevated shadow-card transition-colors duration-instant hover:bg-surface-hover`}
     >
       {/* Real Notion (live capture, 2026-09-02): both icons are hover-only,
         * top-right of the WHOLE card — not anchored to the cover, since
@@ -236,7 +237,7 @@ function GalleryCard({
                 type="button"
                 aria-label="Row options"
                 aria-haspopup="menu"
-                className="flex h-5 w-5 items-center justify-center rounded bg-white/80 dark:bg-gray-900/80 text-gray-500 hover:bg-white hover:text-gray-800 dark:hover:bg-gray-900 dark:hover:text-gray-100"
+                className="flex h-6 w-6 items-center justify-center rounded-md bg-surface-elevated text-ink-icon shadow-float hover:bg-surface-hover"
               >
                 <MoreHorizontal size={13} />
               </button>
@@ -246,7 +247,7 @@ function GalleryCard({
       </HoverAffordance>
 
       {cardPreview !== "none" && (
-        <div className="relative aspect-video">
+        <div className="relative aspect-video border-b border-line">
           {coverUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- arbitrary
             // user-provided URLs, not a local/optimizable asset Next's <Image>
@@ -261,19 +262,20 @@ function GalleryCard({
           )}
         </div>
       )}
-      <div className={cardLayout === "compact" ? "p-1.5" : "p-2.5"}>
+      <div className={cardLayout === "compact" ? "px-2.5 py-1.5" : "px-2.5 pb-2 pt-2"}>
         {!titleHidden && titleProp && (
-          <div className="text-sm font-medium mb-1 text-gray-900 dark:text-gray-100 truncate">
+          <div className="mb-1 truncate text-sm font-medium text-ink">
             {renderCellValue(titleProp, row.properties[titleProp.key], editable, (value) =>
               onCellChange(row.id, titleProp.key, value)
             )}
           </div>
         )}
         {cardLayout === "list" ? (
-          <div className="space-y-1">
-            {otherProps.map((p) => (
-              <div key={p.key} className="text-xs flex items-start gap-1">
-                <span className="text-gray-400 shrink-0">{p.name}:</span>
+          <div className="flex flex-col gap-1">
+            {otherProps.filter((p) => !isEmptyCardValue(row.properties[p.key])).map((p) => (
+              <div key={p.key} className="flex min-h-[22px] items-start text-xs leading-[18px] text-ink">
+                {/* Notion shows no property labels on cards; kept for screen readers. */}
+                <span className="sr-only">{p.name}:</span>
                 <span className="min-w-0 flex-1 truncate">
                   {renderCellValue(p, row.properties[p.key], editable, (value) =>
                     onCellChange(row.id, p.key, value)
@@ -284,7 +286,7 @@ function GalleryCard({
           </div>
         ) : (
           otherProps.length > 0 && (
-            <div className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+            <div className="truncate text-xs text-ink-secondary">
               {otherProps
                 .map((p) => {
                   const v = row.properties[p.key];
@@ -313,6 +315,103 @@ export interface GalleryViewProps {
   onConfigChange: (patch: Record<string, unknown>) => void;
   dataSourceId?: string;
   refetch?: () => void | Promise<void>;
+}
+
+/** Gallery's own layout options (Card preview, Cover size, Cover fit, Layout, Hide
+ * title), shown in View settings › Layout as in Notion. */
+export type GalleryLayoutOptionsProps = Pick<GalleryViewProps, "properties" | "config" | "onConfigChange"> &
+  Partial<GalleryViewProps>;
+
+export function GalleryLayoutOptions({ properties, config, onConfigChange }: GalleryLayoutOptionsProps) {
+  const coverSize = readCoverSize(config);
+  const coverAspect = readCoverAspect(config);
+  const cardLayout = readCardLayout(config);
+  const filesProperties = properties.filter((p) => p.type === "files");
+  const cardPreview = readCardPreview(config, filesProperties);
+  const hiddenProperties = readHiddenProperties(config);
+  const titleProp = properties.find((p) => p.type === "title");
+  const titleHidden = titleProp ? hiddenProperties.includes(titleProp.key) : false;
+
+  function toggleHideTitle() {
+    if (!titleProp) return;
+    const next = titleHidden
+      ? hiddenProperties.filter((k) => k !== titleProp.key)
+      : [...hiddenProperties, titleProp.key];
+    onConfigChange({ hidden_properties: next });
+  }
+
+  return (
+  <div className="flex flex-col gap-px">
+    <label className="flex min-h-menu-row w-full items-center justify-between gap-2 px-2 text-menu">
+      Card preview
+      <select
+        aria-label="Card preview"
+        value={cardPreview}
+        onChange={(e) => onConfigChange({ card_preview: e.target.value })}
+        className="h-7 rounded-md border border-line-strong bg-transparent px-1.5 text-sm text-ink outline-none"
+      >
+        <option value="cover">Page cover</option>
+        <option value="none">None</option>
+        {filesProperties.map((p) => (
+          <option key={p.key} value={p.key}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+    </label>
+    <label className="flex min-h-menu-row w-full items-center justify-between gap-2 px-2 text-menu">
+      Cover size
+      <select
+        aria-label="Cover size"
+        value={coverSize}
+        onChange={(e) => onConfigChange({ cover_size: e.target.value })}
+        className="h-7 rounded-md border border-line-strong bg-transparent px-1.5 text-sm text-ink outline-none"
+      >
+        {COVER_SIZES.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
+      </select>
+    </label>
+    <label className="flex min-h-menu-row w-full items-center justify-between gap-2 px-2 text-menu">
+      Cover fit
+      <select
+        aria-label="Cover fit"
+        value={coverAspect}
+        onChange={(e) => onConfigChange({ cover_aspect: e.target.value })}
+        className="h-7 rounded-md border border-line-strong bg-transparent px-1.5 text-sm text-ink outline-none"
+      >
+        {COVER_ASPECTS.map((a) => (
+          <option key={a} value={a}>
+            {a}
+          </option>
+        ))}
+      </select>
+    </label>
+    <label className="flex min-h-menu-row w-full items-center justify-between gap-2 px-2 text-menu">
+      Layout
+      <select
+        aria-label="Card layout"
+        value={cardLayout}
+        onChange={(e) => onConfigChange({ card_layout: e.target.value })}
+        className="h-7 rounded-md border border-line-strong bg-transparent px-1.5 text-sm text-ink outline-none"
+      >
+        {CARD_LAYOUTS.map((l) => (
+          <option key={l} value={l}>
+            {l}
+          </option>
+        ))}
+      </select>
+    </label>
+    {titleProp && (
+      <label className="flex min-h-menu-row w-full items-center justify-between gap-2 px-2 text-menu">
+        <input type="checkbox" checked={titleHidden} onChange={toggleHideTitle} />
+        Hide title
+      </label>
+    )}
+  </div>
+  );
 }
 
 export function GalleryView({
@@ -349,83 +448,12 @@ export function GalleryView({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="px-3 py-2 flex items-center gap-3 flex-wrap border-b border-gray-100 dark:border-gray-800 shrink-0 text-xs text-gray-500 dark:text-gray-400">
-        <label className="flex items-center gap-1.5">
-          Card preview
-          <select
-            aria-label="Card preview"
-            value={cardPreview}
-            onChange={(e) => onConfigChange({ card_preview: e.target.value })}
-            className="px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-          >
-            <option value="cover">Page cover</option>
-            <option value="none">None</option>
-            {filesProperties.map((p) => (
-              <option key={p.key} value={p.key}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-1.5">
-          Cover size
-          <select
-            aria-label="Cover size"
-            value={coverSize}
-            onChange={(e) => onConfigChange({ cover_size: e.target.value })}
-            className="px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-          >
-            {COVER_SIZES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-1.5">
-          Cover fit
-          <select
-            aria-label="Cover fit"
-            value={coverAspect}
-            onChange={(e) => onConfigChange({ cover_aspect: e.target.value })}
-            className="px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-          >
-            {COVER_ASPECTS.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-1.5">
-          Layout
-          <select
-            aria-label="Card layout"
-            value={cardLayout}
-            onChange={(e) => onConfigChange({ card_layout: e.target.value })}
-            className="px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
-          >
-            {CARD_LAYOUTS.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </label>
-        {titleProp && (
-          <label className="flex items-center gap-1.5">
-            <input type="checkbox" checked={titleHidden} onChange={toggleHideTitle} />
-            Hide title
-          </label>
-        )}
-      </div>
-
       {rows.length === 0 ? (
-        <div className="flex items-center justify-center flex-1 text-sm text-gray-400 dark:text-gray-500">
+        <div className="flex flex-1 items-center justify-center text-sm text-ink-tertiary">
           No rows yet.
         </div>
       ) : (
-        <div className="flex-1 min-h-0 overflow-auto flex flex-wrap gap-3 p-3 content-start">
+        <div className="flex min-h-0 flex-1 flex-wrap content-start gap-4 overflow-auto pb-6 pt-1">
           {rows.map((row) => (
             <GalleryCard
               key={row.id}
