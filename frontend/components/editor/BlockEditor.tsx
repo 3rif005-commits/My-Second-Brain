@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, useMemo } from "react";
-import { useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuItems, useBlockNoteEditor, useExtension } from "@blocknote/react";
+import { useCreateBlockNote, BlockNoteContext, SuggestionMenuController, getDefaultReactSlashMenuItems, useBlockNoteEditor, useExtension } from "@blocknote/react";
 import type { DefaultReactSuggestionItem } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { AIExtension, AIMenuController } from "@blocknote/xl-ai";
@@ -563,6 +563,11 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     return (
       <div className="notion-editor max-w-none">
         <NoteIdContext.Provider value={_noteId}>
+        {/* BlockNote adds "dark" or "light" as a CLASS on its container from the OS
+            colour scheme, and our tokens key off .dark. Without this the editor
+            turns its text light on a light page whenever the OS is dark but the
+            app theme is light. The context makes it follow the app theme. */}
+        <BlockNoteContext.Provider value={{ colorSchemePreference: resolvedTheme }}>
         <BlockNoteView
           editor={editor}
           theme={notionTheme}
@@ -753,6 +758,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
             }}
           />
         </BlockNoteView>
+        </BlockNoteContext.Provider>
         </NoteIdContext.Provider>
       </div>
     );

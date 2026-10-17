@@ -71,6 +71,10 @@
 .notion-editor .bn-block-group .bn-block-group {
   margin-left: 26px;
 }
+/* Notion draws no guide line beside nested content (BlockNote's "indent line"). */
+.notion-editor .bn-block-group .bn-block-group .bn-block-outer::before {
+  border-left: 0 !important;
+}
 
 /* To-do: 16px box, radius 1.5px, 1px strong border; checked = accent fill with
  * a white tick; checked text at 0.7 opacity with a line-through. */

@@ -57,7 +57,7 @@
 
   /* embedded controls */
   --menu-field-bg: rgba(66, 35, 3, 0.03);
-  --menu-badge-bg: rgba(0, 124, 215, 0.094);
+  --menu-badge-bg: rgb(var(--accent-600) / 0.094);
 
   /* widths — each observed on a real surface, see the design doc §5 */
   --menu-width-sm: 248px;   /* column header menu, row menu */
@@ -79,7 +79,7 @@
   --menu-fg-disabled: rgb(95, 94, 89);
 
   --menu-field-bg: rgba(252, 252, 252, 0.03);
-  --menu-badge-bg: rgba(67, 155, 255, 0.24);
+  --menu-badge-bg: rgb(var(--accent-500) / 0.24);
 }
 
 /* @mention inline links */
@@ -208,22 +208,16 @@
  * opens with a blank band and the toggle underneath sits outside the bar. Notion
  * draws one box, bar running its full height, content flush at the top.
  *
- * Collapse the empty line and promote the bar onto the children instead. Gated on
- * the quote having BOTH an empty own-line and children, so an ordinary quote with
- * text is untouched, and so is a new empty one the user just made by typing `>`
- * (no children yet — it keeps its clickable line). Bar colour and indent are
- * copied from BlockNote's own quote rule so the two can't drift apart. */
+ * Collapse the empty line only. Notion draws no rule beside the content that sits
+ * under such a quote (a bullet, its nested paragraphs, a table…), so the bar is not
+ * promoted onto the children. Gated on the quote having BOTH an empty own-line and
+ * children, so an ordinary quote with text is untouched, and so is a new empty one
+ * the user just made by typing `>` (it keeps its clickable line). */
 .bn-block:has(> .bn-block-group)
   > .bn-block-content[data-content-type="quote"]:has(> blockquote > br.ProseMirror-trailingBreak:only-child) {
   height: 0;
   padding: 0;
   overflow: hidden;
-}
-.bn-block:has(> .bn-block-group)
-  > .bn-block-content[data-content-type="quote"]:has(> blockquote > br.ProseMirror-trailingBreak:only-child)
-  + .bn-block-group {
-  border-left: 2px solid #7d797a;
-  padding-left: 1em;
 }
 
 /* A coloured HEADING must colour itself, not everything nested underneath it.
@@ -346,7 +340,7 @@ body {
 }
 
 ::selection {
-  background: rgba(35, 131, 226, 0.28);
+  background: rgb(var(--accent-600) / 0.28);
 }
 
 @media (prefers-reduced-motion: reduce) {
