@@ -198,17 +198,58 @@
   box-shadow: var(--shadow-menu) !important;
   background: var(--c-bg-elevated) !important;
 }
+/* Slash menu, Notion-style: one compact line per block (icon + title), small
+ * group labels, a soft selected row. The description line and the shortcut badges
+ * are hidden: they overloaded the list, and the icon already says what it is. */
+.bn-mantine .bn-suggestion-menu {
+  width: 290px;
+  max-height: min(380px, 60vh);
+  padding: 6px;
+}
 .bn-mantine .bn-suggestion-menu-item {
+  height: 32px;
   min-height: 32px;
+  padding: 0 8px;
+  gap: 10px;
   border-radius: var(--radius-md);
 }
 .bn-mantine .bn-suggestion-menu-item[aria-selected="true"],
 .bn-mantine .bn-suggestion-menu-item:hover {
   background: var(--c-bg-hover) !important;
 }
+.bn-mantine .bn-mt-suggestion-menu-item-section[data-position="left"] {
+  background: transparent;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-icon-strong);
+}
+.bn-mantine .bn-mt-suggestion-menu-item-section[data-position="left"] svg {
+  width: 14px;
+  height: 14px;
+}
+.bn-mantine .bn-mt-suggestion-menu-item-section[data-position="right"],
+.bn-mantine .bn-mt-suggestion-menu-item-subtitle {
+  display: none;
+}
+.bn-mantine .bn-mt-suggestion-menu-item-body {
+  padding-right: 0;
+}
+.bn-mantine .bn-mt-suggestion-menu-item-title {
+  color: var(--c-text);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
 .bn-mantine .bn-suggestion-menu-label {
+  padding: 8px 8px 4px;
   font-size: 12px;
   font-weight: 500;
+  line-height: 16px;
   color: var(--c-text-secondary);
 }
 
