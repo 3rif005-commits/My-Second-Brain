@@ -27,3 +27,6 @@ ALTER TABLE user_plugins ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS user_plugins_own ON user_plugins;
 CREATE POLICY user_plugins_own ON user_plugins
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- The API layer (PostgREST) only sees a new table after a schema reload.
+NOTIFY pgrst, 'reload schema';

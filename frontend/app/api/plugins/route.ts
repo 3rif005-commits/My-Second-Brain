@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     // 42P01: migration 031 not applied yet — say so rather than "error".
     const missing = error.code === "42P01" || /user_plugins/.test(error.message);
     return NextResponse.json(
-      { error: missing ? "Plugins need database migration 031_user_plugins.sql" : error.message },
+      { error: missing ? "Plugins need database migration 031_user_plugins.sql" : error.message, detail: error.message },
       { status: missing ? 503 : 500 },
     );
   }
