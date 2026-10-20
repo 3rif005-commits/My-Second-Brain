@@ -1,0 +1,36 @@
+{
+  "name": "second-brain-plugin-api",
+  "version": "1.0.0",
+  "description": "Types for writing Second Brain plugins (the PluginAPI a plugin's onload receives).",
+  "license": "MIT",
+  "types": "index.d.ts",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/3rif005-commits/My-Second-Brain.git",
+    "directory": "packages/plugin-api"
+  },
+  "peerDependencies": {
+    "@types/react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "build": "dts-bundle-generator --project ../../frontend/tsconfig.json --external-imports react --no-banner -o index.d.ts ../../frontend/lib/plugins/api.ts && node -e \"const v=require('fs').readFileSync('index.d.ts','utf8').match(/PLUGIN_API_VERSION = (\\\\d+)/)[1];require('fs').writeFileSync('index.js','export const PLUGIN_API_VERSION = '+v+';\\\\n')\"",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.28",
+    "dts-bundle-generator": "9.5.1",
+    "typescript": "^5.9.3"
+  },
+  "type": "module",
+  "main": "index.js"
+}

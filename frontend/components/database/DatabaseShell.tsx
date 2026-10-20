@@ -4,10 +4,11 @@
 // switch over the active view's `type` that renders the matching view
 // component. Was hardcoded to `views[0]` + TableView only (Milestone 2);
 // task-16 adds real view switching/creation and the Board view.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useToast } from "@/app/providers";
 import { useDatabaseView } from "@/lib/database/useDatabaseView";
+import { usePublishDatabase } from "@/lib/plugins/usePublish";
 import type { ViewResponse } from "@/lib/database/types";
 import { defaultGroupBySpec, getGroupBySpec, getSubGroupBySpec, getSubtaskDisplayMode } from "@/lib/database/types";
 import type { GroupBySpec } from "@/lib/database/types";
@@ -120,6 +121,31 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }
+
+  // Plugins (Settings → Plugins) see this database while it is open: its
+  // live schema, views and rows, and the same actions the UI uses —
+  // `selectView` rather than `setActiveViewId`, so the URL follows.
+  const pluginDbState = useMemo(
+    () =>
+      dataSource && database
+        ? {
+            name: database.title || "Untitled database",
+            dataSourceId: dataSource.id,
+            properties,
+            views,
+            activeViewId,
+            rows,
+            groups,
+          }
+        : null,
+    [database, dataSource, properties, views, activeViewId, rows, groups],
+  );
+  usePublishDatabase(`database:${databaseId}`, pluginDbState, {
+    selectView,
+    updateCell,
+    updateView,
+    refetchRows,
+  });
 
   // Live-discovered fix (post-M13-review, controller-added): every
   // config-driven view below (Gallery/Feed/Calendar/Timeline/Form) used to

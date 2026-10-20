@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Component, useState, useCallback, useEffect, useRef } from "react";
+import React, { Component, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Link, Layers, Send, Star, FileDown, Printer, Trash2, Globe } from "lucide-react";
@@ -24,6 +24,7 @@ import { useLegacyInteractiveMigration } from "./useLegacyInteractiveMigration";
 import { useNotion } from "@/context/NotionContext";
 import { NotionChip } from "../notion/NotionChip";
 import type { BlockEditorHandle } from "./BlockEditor";
+import { usePublishNote } from "@/lib/plugins/usePublish";
 
 const EMOJIS = [
   "📄","📝","📋","📌","📍","📎","🔗","📚","📖","📕","📗","📘","📙","🗒️","🗓️",
@@ -289,6 +290,34 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
     [note.id]
   );
 
+  // Plugins (Settings → Plugins) see this note while it is open. Reads go
+  // through the editor handle, so they include edits not yet autosaved. A
+  // plugin changing mastery remounts NoteProperties so its chip shows it.
+  const [mastery, setMastery] = useState(note.mastery_status);
+  const [topics, setTopics] = useState<string[]>(note.topics ?? []);
+  const [masteryNonce, setMasteryNonce] = useState(0);
+  const pluginNoteState = useMemo(
+    () => ({ id: note.id, title, mastery, topics }),
+    [note.id, title, mastery, topics],
+  );
+  usePublishNote(pluginNoteState, {
+    getBlocks: () => editorRef.current?.getDocument() ?? null,
+    appendMarkdown: async (markdown) => {
+      await editorRef.current?.insertMarkdownAtEnd(markdown);
+    },
+    setMastery: async (status) => {
+      const r = await fetch(`/api/notes/${note.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mastery_status: status }),
+      });
+      if (!r.ok) throw new Error(`Could not save mastery (${r.status})`);
+      setMastery(status as Note["mastery_status"]);
+      setMasteryNonce((n) => n + 1);
+      window.dispatchEvent(new Event("notes-changed"));
+    },
+  });
+
   async function confirmDelete() {
     setShowDeleteModal(false);
     await fetch(`/api/notes/${note.id}`, { method: "DELETE" });
@@ -451,7 +480,14 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
             />
 
             {/* Properties panel */}
-            <NoteProperties note={note} />
+            <NoteProperties
+              key={masteryNonce}
+              note={{ ...note, mastery_status: mastery, topics }}
+              onChange={(u) => {
+                if (u.mastery_status) setMastery(u.mastery_status);
+                if (u.topics) setTopics(u.topics);
+              }}
+            />
 
             {/* Database row properties — RowPeek's deferred phase 2, renders
              * nothing for an ordinary note (see DatabaseRowProperties.tsx). */}

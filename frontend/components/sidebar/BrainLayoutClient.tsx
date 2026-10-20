@@ -18,6 +18,7 @@ import { NotionProvider } from "@/context/NotionContext";
 import { AIPanelControlsContext, type AIPanelControls } from "@/context/AIPanelContext";
 import type { WorkspaceBinding } from "@/components/ai/Chat";
 import { IngestStreamDialog } from "@/components/ingestion/IngestStreamDialog";
+import { PluginRuntime } from "@/components/plugins/PluginRuntime";
 import type { IngestSource } from "@/components/ingestion/IngestDropzone";
 
 const AI_PANEL_DEFAULT_WIDTH = 360;
@@ -344,6 +345,9 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
         {!isAiOpen && <SidePanelToggleButton onClick={toggleAi} />}
 
         <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+
+        {/* Installed plugins (Settings → Plugins) and the panels they add */}
+        <PluginRuntime />
       </div>
       <IngestStreamDialog
         source={ingestSource}

@@ -28,16 +28,19 @@ const MASTERY_LABEL: Record<string, string> = {
 
 interface Props {
   note: Note;
+  /** Hears every change saved from here (mastery, topics). */
+  onChange?: (update: Partial<Pick<Note, "mastery_status" | "topics">>) => void;
 }
 
-export function NoteProperties({ note }: Props) {
+export function NoteProperties({ note, onChange }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [mastery, setMastery] = useState(note.mastery_status);
   const [topics, setTopics] = useState<string[]>(note.topics ?? []);
   const [newTopic, setNewTopic] = useState("");
   const [showInput, setShowInput] = useState(false);
 
-  async function patch(update: Record<string, unknown>) {
+  async function patch(update: Partial<Pick<Note, "mastery_status" | "topics">>) {
+    onChange?.(update);
     await fetch(`/api/notes/${note.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

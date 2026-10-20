@@ -6,6 +6,7 @@ import {
   AppWindow,
   Clock,
   Plug,
+  Puzzle,
   Route,
   Send,
   Server,
@@ -45,6 +46,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "mcp", label: "MCP servers", icon: Server, href: "/brain/settings/mcp", group: "Integrations", keywords: "tools web search" },
   // Apps that use YOUR Second Brain (remote MCP, 5.4) — the reverse of the above.
   { id: "connected-apps", label: "Connected apps", icon: AppWindow, href: "/brain/settings/connected-apps", group: "Integrations", keywords: "claude remote access" },
+  // Add-ons installed per account (Obsidian-style plugins; lib/plugins/).
+  { id: "plugins", label: "Plugins", icon: Puzzle, href: "/brain/settings/plugins", group: "Integrations", keywords: "extensions add-ons webmcp install" },
   // Rules for jobs that run later (5.3): the monthly limit. What ran is at /brain/activity.
   { id: "background-jobs", label: "Background jobs", icon: Clock, href: "/brain/settings/background-jobs", group: "Workspace", keywords: "limit monthly schedule" },
 ];
