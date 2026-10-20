@@ -196,6 +196,10 @@ export interface BlockEditorHandle {
    *  Used by workspace synthesis in "append" mode (the `ingestHtml` prop is
    *  the replace path and rewrites the whole document). */
   insertHtmlAtEnd: (html: string) => Promise<AnyBlock[]>;
+  /** Parse Markdown and append it at the end; returns the blocks that landed.
+   *  For callers (plugins, agents) that write headings, lists and code fences
+   *  without knowing the block schema. */
+  insertMarkdownAtEnd: (markdown: string) => Promise<AnyBlock[]>;
   /** Swap the whole document for this HTML and save — a draft going into an
    *  empty note, where appending would leave an empty line above the title. */
   replaceWithHtml: (html: string) => Promise<AnyBlock[]>;
@@ -484,6 +488,19 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         if (saveTimer.current) clearTimeout(saveTimer.current);
         persist(now);
         return added;
+      },
+      async insertMarkdownAtEnd(markdown: string) {
+        const parsed = (await editor.tryParseMarkdownToBlocks(markdown)) as AnyBlock[];
+        if (!parsed.length) return [];
+        // Same insert-after-last / replace-empty-doc shape as insertHtmlAtEnd.
+        const before = (editor.document as AnyBlock[]).length;
+        const last = (editor.document as AnyBlock[])[before - 1];
+        if (last) editor.insertBlocks(parsed, last.id, "after");
+        else editor.replaceBlocks(editor.document, parsed);
+        const now = editor.document as AnyBlock[];
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        persist(now);
+        return last ? now.slice(before) : now;
       },
       blockIds() {
         return (editor.document as AnyBlock[]).map((b) => b.id);

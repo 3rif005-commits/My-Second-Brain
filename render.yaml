@@ -2,14 +2,17 @@
 #
 # Cloud has no llama.cpp: generation goes to Claude, embeddings to Gemini.
 # Set the secret env vars in the Render dashboard, not in this file.
+#
+# Small host? Set APP_MODULE=main_slim and REQUIREMENTS_FILE=requirements-slim.txt
+# on the service to run only notes + databases (see backend/main_slim.py).
 services:
   - type: web
     name: second-brain-api
     runtime: python
     plan: free
     rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install -r ${REQUIREMENTS_FILE:-requirements.txt}
+    startCommand: uvicorn ${APP_MODULE:-main}:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
@@ -38,3 +41,8 @@ services:
         sync: false
       - key: INTERNAL_API_KEY
         generateValue: true
+      # Fernet key that encrypts saved Notion tokens (Send to Notion).
+      # Generate with `python -m services.secrets generate` in backend/.
+      # Losing it means every Notion connection must be reconnected.
+      - key: SECRETS_KEY
+        sync: false
