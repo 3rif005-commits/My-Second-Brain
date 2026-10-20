@@ -31,3 +31,13 @@ frontend/e2e/.auth/
 # Eval reports are run artefacts, not source. The numbers that matter get
 # written into docs/superpowers/plans/2026-09-22-harness-experiment-plan.md.
 backend/evals/reports/
+.vercel
+.env*
+!.env*.example
+
+# Build and run artefacts that change on every build or run
+*.tsbuildinfo
+frontend/next-env.d.ts
+test-results/
+*.swp
+.claude/scheduled_tasks.lock
