@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { fetchPlugin } from "@/lib/plugins/fetchPlugin";
+import { allowLocal, fetchPlugin } from "@/lib/plugins/fetchPlugin";
 import { incompatibility, parseSource, sourceKey } from "@/lib/plugins/manifest";
 
 // Downloads run here, server side (see lib/plugins/fetchPlugin.ts).
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   try {
-    const src = parseSource(String(body.source ?? ""));
+    const src = parseSource(String(body.source ?? ""), { allowLocal: allowLocal() });
     const { manifest, code } = await fetchPlugin(src);
     const why = incompatibility(manifest);
     if (why) return NextResponse.json({ error: `${manifest.name} ${why}` }, { status: 422 });

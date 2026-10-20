@@ -70,7 +70,9 @@ export type PluginSource =
 const GITHUB_SHORT = /^([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100})$/;
 const GITHUB_URL = /^https:\/\/github\.com\/([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100}?)(?:\.git)?\/?$/;
 
-export function parseSource(input: string): PluginSource {
+/** `allowLocal` (dev only, PLUGINS_ALLOW_LOCAL=1) also accepts http, so a
+ *  plugin author can install straight from a local `npx serve dist`. */
+export function parseSource(input: string, { allowLocal = false } = {}): PluginSource {
   const s = input.trim();
   const m = GITHUB_SHORT.exec(s) ?? GITHUB_URL.exec(s);
   if (m) return { kind: "github", owner: m[1], repo: m[2] };
@@ -80,7 +82,9 @@ export function parseSource(input: string): PluginSource {
   } catch {
     throw new Error("Enter a GitHub repo (owner/repo) or an https link to a plugin folder");
   }
-  if (url.protocol !== "https:") throw new Error("Plugin links must use https");
+  if (url.protocol !== "https:" && !(allowLocal && url.protocol === "http:")) {
+    throw new Error("Plugin links must use https");
+  }
   if (url.username || url.password) throw new Error("Plugin links can't contain a login");
   url.hash = "";
   url.search = "";

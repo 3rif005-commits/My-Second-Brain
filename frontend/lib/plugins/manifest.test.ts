@@ -46,3 +46,10 @@ describe("parseSource", () => {
     expect(() => parseSource("not a link")).toThrow();
   });
 });
+
+describe("parseSource in development", () => {
+  it("accepts http only when local installs are allowed", () => {
+    expect(() => parseSource("http://localhost:8787/")).toThrow(/https/);
+    expect(sourceKey(parseSource("http://localhost:8787/", { allowLocal: true }))).toBe("http://localhost:8787/");
+  });
+});

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { fetchPlugin } from "@/lib/plugins/fetchPlugin";
+import { allowLocal, fetchPlugin } from "@/lib/plugins/fetchPlugin";
 import { incompatibility, parseSource } from "@/lib/plugins/manifest";
 
 export const runtime = "nodejs";
@@ -22,7 +22,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (readError || !row) return NextResponse.json({ error: "Not installed" }, { status: 404 });
 
   try {
-    const { manifest, code } = await fetchPlugin(parseSource(row.source));
+    const { manifest, code } = await fetchPlugin(parseSource(row.source, { allowLocal: allowLocal() }));
     if (manifest.id !== id) {
       return NextResponse.json({ error: `The source now holds "${manifest.id}", not "${id}"` }, { status: 409 });
     }

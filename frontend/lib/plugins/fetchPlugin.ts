@@ -6,6 +6,9 @@
 // refused if it points at a private, loopback or link-local address,
 // redirects followed by hand (so each hop is checked), a timeout and a size cap.
 //
+// PLUGINS_ALLOW_LOCAL=1 (development only) turns the address checks off so a
+// plugin can be installed from localhost; never set it on a deployed server.
+//
 // PLUGINS_GITHUB_TOKEN (optional, server env) lets installs read releases of
 // private repos; it is sent to api.github.com only, never to a redirect target.
 import { lookup } from "node:dns/promises";
@@ -49,7 +52,11 @@ export function isPrivateAddress(ip: string): boolean {
   return true; // not an address at all: refuse
 }
 
+/** Read per call so tests can flip it. */
+export const allowLocal = () => process.env.PLUGINS_ALLOW_LOCAL === "1";
+
 async function assertPublicHost(url: URL) {
+  if (allowLocal()) return;
   if (url.protocol !== "https:") throw new Error("Plugin downloads must use https");
   const host = url.hostname.replace(/^\[|\]$/g, "");
   const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
