@@ -1,6 +1,7 @@
 # One app, plugins on the side — repo consolidation plan
 
-Status: **draft for review** (2026-10-20). Nothing below has been executed yet.
+Status (2026-10-20): **A–E done; F waits on the Vercel/Render/Supabase dashboards.**
+See "Progress" at the end.
 
 ## The goal in one paragraph
 
@@ -189,3 +190,43 @@ its checkpoint passes.
    GitHub Packages, slightly more setup for plugin authors.)
 4. **Plugin trust**: allow installing from any URL (Obsidian-style, with a warning), or
    only from a list of approved plugins you maintain?
+
+## Progress (2026-10-20)
+
+- **A** `second_brain/.git` replaced by the healthy clone (corrupt one in `~/projects/_archive/`);
+  venv, root `.env`, build artefacts untracked.
+- **B** fork's app-level pieces brought home (editor `insertMarkdownAtEnd`, `main_slim.py`,
+  `render.yaml` with `APP_MODULE`/`REQUIREMENTS_FILE` and `SECRETS_KEY`).
+- **C** plugin system: `frontend/lib/plugins/`, `/api/plugins`, Settings → Plugins, migration 031,
+  `packages/plugin-api` (npm name `second-brain-plugin-api`, not yet published). Production
+  build passes; tested live in Chrome: install from link, note tools (`note.read` ran), database
+  tools (7, from the live schema), turning off removes panel + styles, uninstall.
+- **D** `second-brain-webmcp` rebuilt as the plugin (branch `plugin`, release **v1.0.0**). The
+  full-app fork is kept at tag `fork-final` and branch `legacy/fork`.
+- **E** GitHub `main` fast-forwarded to today's work (`28494f6`); local checkout is on `main`.
+
+## Step F — move the live site (you, in the dashboards)
+
+Do these in order. Nothing in git needs to change for them.
+
+1. **Supabase (the live site's project):** in the SQL editor run, in order, any of
+   `029_privacy_routing.sql`, `030_notion_sync.sql`, `031_user_plugins.sql` that are missing.
+   All three are safe to run twice.
+2. **Render** → the `second-brain-api` service → Settings → Repository: switch to
+   `3rif005-commits/My-Second-Brain`, branch `main`, root `backend`. Keep the env vars that are
+   already set; add `SECRETS_KEY` if missing (`python -m services.secrets generate`). The free
+   plan can't fit the full build? Set `APP_MODULE=main_slim`, `REQUIREMENTS_FILE=requirements-slim.txt`.
+3. **Vercel** → the project → Settings → Git: connect `3rif005-commits/My-Second-Brain`,
+   production branch `main`, Root Directory `frontend`. Env vars stay.
+4. **Plugins from a private repo:** `second-brain-webmcp` is private, so add
+   `PLUGINS_GITHUB_TOKEN` on Vercel: a fine-grained token with read-only *Contents* access
+   to that one repo. (Or make that repo public; then no token is needed.)
+5. Redeploy both, open the live site → Settings → Plugins → WebMCP → Install.
+6. Tell Claude it's live. Then: `second-brain-webmcp`'s `main` is replaced by `plugin`
+   (the old fork stays at `fork-final` / `legacy/fork`), and its CI starts releasing on tags.
+
+## Small things left
+
+- `npm login && cd packages/plugin-api && npm publish` (then the plugin repo can drop `vendor/`).
+- Delete the old clone: `rm -rf ~/projects/second_brain_clean` (it is fully replaced).
+- Stale branches on GitHub: all are fully contained in `main`; delete once you agree.
