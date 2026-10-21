@@ -1,6 +1,6 @@
 # One app, plugins on the side — repo consolidation plan
 
-Status (2026-10-20): **A–E done; F waits on the Vercel/Render/Supabase dashboards.**
+Status (2026-10-21): **A–F done.** The live site deploys from `My-Second-Brain` `main`. One push to the plugin repo is left (end of file).
 See "Progress" at the end.
 
 ## The goal in one paragraph
@@ -230,3 +230,18 @@ Do these in order. Nothing in git needs to change for them.
 - `npm login && cd packages/plugin-api && npm publish` (then the plugin repo can drop `vendor/`).
 - Delete the old clone: `rm -rf ~/projects/second_brain_clean` (it is fully replaced).
 - Stale branches on GitHub: all are fully contained in `main`; delete once you agree.
+
+## Step F result (2026-10-21)
+
+Checked in the dashboards: **Vercel** and **Render** were already building from
+`My-Second-Brain` (since 2026-10-06); only the fork's CLI deploys used the fork. Vercel's
+production branch was `feat/ai-harness` and is now `main`. Render moved itself to `main` when
+that branch was deleted and is live on `28494f6` with all 13 env vars, `SECRETS_KEY` included.
+The user applied migrations 029–031 to the live Supabase. The 11 merged branches on GitHub are
+deleted, so only `main` is left.
+
+Left for the user:
+- `cd ~/projects/second-brain-webmcp-plugin && git push --force-with-lease=main:4b020e8 origin plugin:main`
+  (replaces the fork's `main` with the plugin; the old fork stays at `fork-final` / `legacy/fork`).
+- `PLUGINS_GITHUB_TOKEN` on Vercel (read-only Contents on `second-brain-webmcp`), or make that repo public.
+- `npm publish` in `packages/plugin-api`; `rm -rf ~/projects/second_brain_clean`.
