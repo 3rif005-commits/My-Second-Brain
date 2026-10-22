@@ -295,6 +295,12 @@ def _process_resource(resource_id: str) -> None:
                         _mark_subtitle_paired(db, subtitle, resource_id)
                     else:
                         snippets = vsvc.transcribe(tmp_path)
+                    # Speaker labels only when clearly more than one voice (speakers.py).
+                    from services.workspace.speakers import label_speakers, with_speakers
+                    labels = label_speakers(tmp_path, snippets)
+                    if labels:
+                        snippets = with_speakers(snippets, labels)
+                        meta["speakers"] = max(labels) + 1
                     from services.workspace import youtube as yts
                     meta["has_transcript"] = True
                     meta["transcript"] = yts.transcript_lines(snippets)
