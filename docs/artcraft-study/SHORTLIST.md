@@ -63,10 +63,18 @@ user-facing ideas from FINDINGS, in this order:
 | 14 | Export note as LaTeX, beside Export Markdown/PDF (F10) | S | done (unit tests): standalone .tex (sections, lists, tables, math kept, pictures as caption + link). Not compiled with a real TeX here (none installed) |
 | 15 | Speaker labels in transcripts (V5) | M | done (unit tests on synthetic voices): uploaded video only, MFCC fingerprints + k-means, labels only when silhouette ≥ 0.25 and every speaker ≥ 12 % of speech; first 60 min; skipped without numpy/ffmpeg (numpy added to requirements.txt). Never run on a real recording |
 
+| 16 | Quoted passages tinted in the PDF (rest of #5) | S | done (unit tests): read from the note's quote + page pill, so no table/migration; deleting the quote removes the tint. No live check |
+| 17 | Overlong slide continues on a "(cont.)" slide (rest of D2) | S | done (unit tests, layout stubbed). No live check |
+| 18 | Uploaded video's own chapter marks with pictures (V3, A5) | S | done: ffprobe chapters + ffmpeg frames, tested on a real generated file; list shows "Chapters" even without a transcript. Done server-side, not A5's canvas grab. No live upload |
+| 19 | Model checksum in `llama.sh setup` (rest of AI4) | S | done; read live from Hugging Face headers. Found the local Gemma file 1,760 bytes short |
+| 20 | Notion parity floor that only rises (M2) | S | done: `parity-floor.json` + guard test; parity.mjs not re-run |
+| 21 | Eval slowdown rule >15 % and >500 ms (R9) | S | done in `evals/compare.py` |
+| 22 | `docs/editor-behaviour.md` pinned by tests (M4) | S | done; unpinned rows marked "—" |
+| 23 | Commands with stable ids, ⌘P runs them (M1) | S | done for this study's page actions, not an app-wide refactor |
+
 Done inside the items above, not as separate work: ranked "Next" table in STATUS.md (M6),
 "verified / not verified" per feature (AI3/M8), hostile-input tests per extractor (F4/M3).
-Not done (correction): the checksum half of AI4 — `llama.sh` already printed model sizes, it
-checks no SHA-256. A deeper second survey pass (PhotoCraft/LightCraft
+The checksum half of AI4 was missing at first and is now #19. A deeper second survey pass (PhotoCraft/LightCraft
 AI tools, DesignCraft EPUB, craft-i18n, ArtCraft's other frontend libs) comes after #15 unless
 moved up.
 

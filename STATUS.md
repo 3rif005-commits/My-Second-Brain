@@ -18,10 +18,11 @@
 ## ArtCraft study build — 2026-10-22 (code complete, not live-checked)
 
 Study + plan: `docs/artcraft-study/FINDINGS.md`, `SHORTLIST.md` (build list with per-item state).
-All local commits on `main`, **not pushed**. Tests: frontend 1,325 pass (lib + components); full backend suite 2,367 passed,
+All local commits on `main`, **not pushed**. Tests: frontend 1,371 pass (full suite); full backend suite 2,372 passed,
 0 failed (449 errors = no local test Postgres, expected). No setting or panel was added: the UI additions are two menu items
-(Present, Export as LaTeX), a ⤓ button on live blocks, a collapsed Transcript row under
-videos, and a one-line warning under a live block that tries to reach the network.
+(Present, Export as LaTeX), a ⤓ button on live blocks, a collapsed Transcript (or Chapters) row under
+videos, a one-line warning under a live block that tries to reach the network, a yellow tint on
+quoted PDF passages, and page actions listed in quick find (⌘P).
 
 | Item | Verified | Not verified |
 |------|----------|--------------|
@@ -41,6 +42,12 @@ videos, and a one-line warning under a live block that tries to reach the networ
 | Scanned PDF pages → vision | unit tests; no false positives on 2 real PDFs | a real scan + vision model |
 | Export as LaTeX | unit tests | compiling (no TeX installed here) |
 | Speaker labels | synthetic voices | a real recording (numpy now in requirements.txt) |
+| Quoted passages tinted in the PDF (read from the note, no migration) | unit tests on matching + reading back what Send wrote | the tint lining up over real PDF text |
+| Overlong slide continues on a "(cont.)" slide | unit tests (layout stubbed) | real measurement in a browser |
+| Uploaded video's own chapter marks, with pictures | real ffmpeg file with 2 chapters → 2 chapters + 2 JPEGs; signing tested | a real upload; storage of the JPEGs |
+| ⌘P lists and runs page actions (`lib/commands.ts`) | unit + quick-find test | in browser |
+| `llama.sh setup` checks models against Hugging Face's sha256 | run here: embed model matches; **your Gemma file is 1,760 bytes short of the published one** (older upload or damaged) | — |
+| Notion parity floor (`docs/ui-audit/parity-floor.json`), eval slowdown rule, `docs/editor-behaviour.md` | unit tests | parity.mjs not re-run (needs a browser) |
 
 **How to check (run when the laptop is otherwise idle — live browser runs crashed Claude's
 session three times):**
@@ -58,7 +65,9 @@ cd frontend && npx playwright test --project=unsaved-edits-live
 
 By hand in the app: drop a .docx/.pptx/.xlsx and a long PDF into a workspace; select PDF text
 → Send to note; add a live block and ask for "a flowchart of photosynthesis" and "a 3D model
-of a cell"; press ⤓; drop a .glb file into a note; ⋯ → Present; ⋯ → Export as LaTeX.
+of a cell"; press ⤓; drop a .glb file into a note; ⋯ → Present (try a page with a very long
+section); ⋯ → Export as LaTeX; ⌘P and type "latex"; after Send to note, look for the tint on
+the PDF passage, delete the quote and see it go; upload a video that has chapter marks.
 
 ---
 
