@@ -112,12 +112,24 @@ def _own_source(source_id: str, user_id: str) -> dict:
     return rows[0]
 
 
-def _source_public(r: dict) -> dict:
+def _source_public(r: dict, chapter_thumbs: bool = False) -> dict:
+    """A source for the client. `chapter_thumbs` signs the chapter pictures too — only for
+    the one-source read, not the list the client polls every 2 s."""
     out = dict(r)
     meta = r.get("meta") or {}
     if meta.get("thumbnail_path"):
         try:
             out["thumbnail_url"] = storage.signed_url(meta["thumbnail_path"], 3600)
+        except Exception:
+            pass
+    chapters = meta.get("chapters") if isinstance(meta.get("chapters"), list) else []
+    thumbs = [c["thumb_path"] for c in chapters if isinstance(c, dict) and c.get("thumb_path")] if chapter_thumbs else []
+    if thumbs:
+        try:
+            urls = storage.signed_urls(thumbs, 3600)
+            out["meta"] = {**meta, "chapters": [
+                {**c, "thumb_url": urls[c["thumb_path"]]} if isinstance(c, dict) and c.get("thumb_path") in urls else c
+                for c in chapters]}
         except Exception:
             pass
     return out
@@ -387,7 +399,7 @@ def get_source(source_id: str, authorization: str = Header()):
                 el["image_url"] = storage.signed_url(el["image_path"], 3600)
             except Exception:
                 pass
-    out = _source_public(r)
+    out = _source_public(r, chapter_thumbs=True)
     out["elements"] = elements
     return out
 

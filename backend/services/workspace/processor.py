@@ -283,6 +283,18 @@ def _process_resource(resource_id: str) -> None:
                 tmp_path = tmp.name
             try:
                 meta.update(vsvc.probe(tmp_path))
+                chapters = meta.get("chapters") or []
+                if chapters:
+                    # The file's own chapter marks, each with a picture (ArtCraft study V3).
+                    for i, frame in enumerate(vsvc.chapter_frames(tmp_path, chapters)):
+                        if not frame:
+                            continue
+                        try:
+                            cpath = f"{resource['user_id']}/{resource_id}/chapter_{i}.jpg"
+                            storage.upload(cpath, frame, "image/jpeg")
+                            chapters[i]["thumb_path"] = cpath
+                        except Exception as e:
+                            logger.info(f"resource {resource_id}: chapter picture skipped: {e}")
                 subtitle = _paired(db, resource, want_video=False)
                 try:
                     if subtitle:
@@ -304,7 +316,7 @@ def _process_resource(resource_id: str) -> None:
                     from services.workspace import youtube as yts
                     meta["has_transcript"] = True
                     meta["transcript"] = yts.transcript_lines(snippets)
-                    _insert_chunks(resource, yts.chunk_transcript(snippets))
+                    _insert_chunks(resource, yts.chunk_transcript(snippets, chapters=chapters or None))
                 except RuntimeError as e:
                     logger.warning(f"resource {resource_id}: {e}")
                     meta["has_transcript"] = False

@@ -2,6 +2,8 @@
 
 // Collapsed by default: one "Transcript" row under the player. Open, the spoken line is
 // highlighted and kept in view; clicking any line (or a chapter) jumps the video there.
+// An uploaded file's chapters carry a picture; with chapters but no transcript (no Whisper
+// on the server) the row is just "Chapters".
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { activeLine, clock, transcriptRows, type Chapter, type TranscriptLine } from "./transcript";
@@ -36,7 +38,7 @@ export function TranscriptList({ lines, chapters, timeSinkRef, onSeek }: Props) 
     }
   }, [active, open]);
 
-  if (!lines.length) return null;
+  if (!lines.length && !chapters.length) return null;
   return (
     <div className="shrink-0 border-t border-gray-100 dark:border-white/5">
       <button
@@ -45,8 +47,8 @@ export function TranscriptList({ lines, chapters, timeSinkRef, onSeek }: Props) 
         aria-expanded={open}
       >
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        Transcript
-        {chapters.length > 0 && <span className="text-gray-400 font-normal">· {chapters.length} chapters</span>}
+        {lines.length ? "Transcript" : "Chapters"}
+        {lines.length > 0 && chapters.length > 0 && <span className="text-gray-400 font-normal">· {chapters.length} chapters</span>}
       </button>
       {open && (
         <div ref={listRef} className="relative max-h-56 overflow-y-auto px-2 pb-2" role="list">
@@ -54,10 +56,15 @@ export function TranscriptList({ lines, chapters, timeSinkRef, onSeek }: Props) 
             r.kind === "chapter" ? (
               <button
                 key={`c${r.start}-${r.title}`}
-                className="block w-full text-left px-2 pt-3 pb-1 text-[12px] font-semibold text-gray-800 dark:text-gray-100 hover:text-accent-600"
+                className="flex w-full items-center gap-2 text-left px-2 pt-3 pb-1 text-[12px] font-semibold text-gray-800 dark:text-gray-100 hover:text-accent-600"
                 onClick={() => onSeek(r.start)}
               >
-                {r.title}
+                {r.thumb && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={r.thumb} alt="" loading="lazy" className="w-16 aspect-video shrink-0 rounded object-cover bg-gray-100 dark:bg-white/5" />
+                )}
+                <span>{r.title}</span>
+                {r.thumb && <span className="ml-auto shrink-0 tabular-nums text-[11px] font-normal text-gray-400">{clock(r.start)}</span>}
               </button>
             ) : (
               <button

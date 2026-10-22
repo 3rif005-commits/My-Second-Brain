@@ -60,3 +60,54 @@ def test_fetch_chapters_reads_ytdlp_and_never_raises(monkeypatch):
         def extract_info(self, url, download): raise RuntimeError("network")
     monkeypatch.setitem(sys.modules, "yt_dlp", types.SimpleNamespace(YoutubeDL=Boom))
     assert fetch_chapters("https://youtu.be/x") == []
+
+
+# ---- uploaded video: the file's own chapters, each with a picture (ArtCraft study V3) ----
+
+import shutil
+import subprocess
+
+import pytest
+
+from services.workspace import video as vsvc
+
+
+def test_chapters_from_probe_reads_marks_and_numbers_untitled_ones():
+    data = {"chapters": [
+        {"start_time": "0.000000", "tags": {"title": "Intro"}},
+        {"start_time": "95.5"},
+        {"start_time": "bad", "tags": {"title": "skipped"}},
+    ]}
+    assert vsvc.chapters_from_probe(data) == [
+        {"start": 0, "title": "Intro"}, {"start": 95, "title": "Chapter 2"}]
+    assert vsvc.chapters_from_probe({}) == []
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="needs ffmpeg")
+def test_a_real_file_with_chapter_marks(tmp_path):
+    meta = tmp_path / "chapters.txt"
+    meta.write_text(";FFMETADATA1\n[CHAPTER]\nTIMEBASE=1/1\nSTART=0\nEND=2\ntitle=Setup\n"
+                    "[CHAPTER]\nTIMEBASE=1/1\nSTART=2\nEND=4\ntitle=Results\n")
+    out = tmp_path / "v.mp4"
+    subprocess.run(["ffmpeg", "-v", "quiet", "-f", "lavfi", "-i", "testsrc=size=160x120:rate=5:duration=4",
+                    "-i", str(meta), "-map_metadata", "1", "-map_chapters", "1", str(out)], check=True)
+    info = vsvc.probe(str(out))
+    assert info["chapters"] == [{"start": 0, "title": "Setup"}, {"start": 2, "title": "Results"}]
+    frames = vsvc.chapter_frames(str(out), info["chapters"] + [{"start": 99, "title": "past the end"}])
+    assert all(f and f[:2] == b"\xff\xd8" for f in frames[:2])   # JPEGs
+    assert frames[2] is None                                      # no frame past the end
+
+
+def test_only_the_detail_read_signs_chapter_pictures(monkeypatch):
+    from routers import note_sources
+    calls = []
+    monkeypatch.setattr(note_sources.storage, "signed_urls",
+                        lambda paths, exp=3600: calls.append(paths) or {p: f"https://x/{p}" for p in paths})
+    row = {"id": "r", "meta": {"chapters": [{"start": 0, "title": "A", "thumb_path": "u/r/chapter_0.jpg"},
+                                            {"start": 9, "title": "B"}]}}
+    listed = note_sources._source_public(row)
+    assert "thumb_url" not in listed["meta"]["chapters"][0] and calls == []
+    detail = note_sources._source_public(row, chapter_thumbs=True)
+    assert detail["meta"]["chapters"][0]["thumb_url"] == "https://x/u/r/chapter_0.jpg"
+    assert detail["meta"]["chapters"][1] == {"start": 9, "title": "B"}
+    assert "thumb_url" not in row["meta"]["chapters"][0]          # the stored row is untouched

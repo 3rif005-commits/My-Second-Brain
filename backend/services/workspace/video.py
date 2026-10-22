@@ -19,14 +19,50 @@ def ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
 
 
+MAX_CHAPTERS = 200
+MAX_CHAPTER_FRAMES = 40
+
+
+def chapters_from_probe(data: dict) -> list[dict]:
+    """The file's own chapter marks `[{start, title}]` (MP4/MKV chapters, as ffprobe reports
+    them) — the same shape as a YouTube creator's chapters. Untitled ones are numbered."""
+    out = []
+    for i, c in enumerate((data.get("chapters") or [])[:MAX_CHAPTERS]):
+        try:
+            start = int(float(c.get("start_time") or 0))
+        except (TypeError, ValueError):
+            continue
+        title = str((c.get("tags") or {}).get("title") or "").strip()[:200] or f"Chapter {i + 1}"
+        out.append({"start": start, "title": title})
+    return out
+
+
+def chapter_frames(path: str, chapters: list[dict]) -> list[bytes | None]:
+    """A small JPEG (320 px wide) a second into each chapter, None where ffmpeg can't take
+    one. Only the first MAX_CHAPTER_FRAMES chapters get a picture."""
+    frames: list[bytes | None] = []
+    for c in chapters[:MAX_CHAPTER_FRAMES]:
+        try:
+            out = subprocess.run(
+                ["ffmpeg", "-ss", str(c["start"] + 1), "-i", path, "-frames:v", "1",
+                 "-vf", "scale=320:-2", "-f", "image2", "-c:v", "mjpeg", "-q:v", "5",
+                 "pipe:1", "-v", "quiet"],
+                capture_output=True, timeout=60, check=True,
+            ).stdout
+            frames.append(out or None)
+        except Exception:
+            frames.append(None)
+    return frames
+
+
 def probe(path: str) -> dict:
-    """{duration, width, height} via ffprobe. Empty dict on failure."""
+    """{duration, width, height, chapters?} via ffprobe. Empty dict on failure."""
     if not ffmpeg_available():
         return {}
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "quiet", "-print_format", "json",
-             "-show_format", "-show_streams", path],
+             "-show_format", "-show_streams", "-show_chapters", path],
             capture_output=True, timeout=60, check=True,
         ).stdout
         data = json.loads(out)
@@ -39,6 +75,9 @@ def probe(path: str) -> dict:
                 meta["width"] = s.get("width")
                 meta["height"] = s.get("height")
                 break
+        chapters = chapters_from_probe(data)
+        if chapters:
+            meta["chapters"] = chapters
         return meta
     except Exception as e:
         logger.warning(f"ffprobe failed: {e}")
