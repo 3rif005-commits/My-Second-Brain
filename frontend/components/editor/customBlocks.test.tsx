@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 // @ts-ignore — @blocknote/core@0.48.0 ships an empty index.d.ts (upstream bug); runtime exports are fine
 import { BlockNoteSchema, defaultBlockSpecs, BlockNoteEditor } from "@blocknote/core";
-import { CalloutBlockSpec, CALLOUT_PALETTE, MathBlockSpec, insertCalloutBlock, insertMathBlock } from "./customBlocks";
+import { CalloutBlockSpec, CALLOUT_PALETTE, MathBlockSpec, insertCalloutBlock, insertMathBlock, inlineMathNext } from "./customBlocks";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyBlock = any;
@@ -149,5 +149,15 @@ describe("insertMathBlock", () => {
     insertMathBlock(editor, undefined);
     const doc = editor.document as AnyBlock[];
     expect(doc.some((b) => b.type === "math")).toBe(true);
+  });
+});
+
+describe("inline math edit (docs/editor-behaviour.md)", () => {
+  it("saves a changed formula, trimmed", () => {
+    expect(inlineMathNext("  x^2 ", "x")).toBe("x^2");
+  });
+  it("an emptied or unchanged box keeps the old formula", () => {
+    expect(inlineMathNext("   ", "x")).toBeNull();
+    expect(inlineMathNext("x", "x")).toBeNull();
   });
 });

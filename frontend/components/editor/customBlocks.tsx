@@ -132,6 +132,14 @@ export function insertMathBlock(editor: AnyBlock, afterBlockId: string | undefin
  *  BlockNote registers a parse rule for `[data-inline-content-type="inlineMath"]`
  *  automatically and maps `data-latex` onto the prop, which is exactly the
  *  markup notionPaste.ts emits — no custom parse function needed. */
+/** The formula an inline-math edit saves, or null to keep the old one. An empty formula
+ *  would render as nothing and so could never be clicked again — clearing the box means
+ *  "leave it alone". (docs/editor-behaviour.md) */
+export function inlineMathNext(draft: string, latex: string): string | null {
+  const next = draft.trim();
+  return !next || next === latex ? null : next;
+}
+
 export const InlineMathSpec = createInlineContentSpec(
   {
     type: "inlineMath" as const,
@@ -199,10 +207,8 @@ export const InlineMathSpec = createInlineContentSpec(
         const commit = () => {
           if (settled) return;
           settled = true;
-          const next = input.value.trim();
-          // An empty formula would render as nothing and so could never be
-          // clicked again — treat clearing the box as "leave it alone".
-          if (!next || next === latex) return showFormula();
+          const next = inlineMathNext(input.value, latex);
+          if (next === null) return showFormula();
           updateInlineContent({ type: "inlineMath", props: { latex: next } });
         };
 
