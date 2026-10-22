@@ -68,8 +68,8 @@ damaged, not the code: `cd frontend && npm ci`.
 ## Secrets and settings
 
 - Never commit `.env` files; only `.env*.example` (with placeholder values) is tracked.
-- Don't read, print or copy real keys. New env vars: add the name to the matching
-  `.env.example`, then the user sets the value in the Vercel / Render dashboard
+- Don't read, print or copy real keys. New env vars: add the name to `backend/.env.example`
+  or `frontend/.env.local.example`, then the user sets the value in the Vercel / Render dashboard
   (backend vars are listed in `render.yaml`) and redeploys.
 
 ## Where things are written down
