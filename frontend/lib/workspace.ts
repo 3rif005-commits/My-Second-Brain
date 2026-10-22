@@ -285,7 +285,7 @@ export const wsApi = {
 
 /** What the workspace can ingest. Shared so the workspace's own picker and the
  * Import button on /brain cannot drift into offering different file types. */
-export const ACCEPTED_WORKSPACE_FILES = ".pdf,.md,.txt,.docx,.pptx,.xlsx,.mp4,.webm,.mov,.mkv,.m4v";
+export const ACCEPTED_WORKSPACE_FILES = ".pdf,.md,.txt,.docx,.pptx,.xlsx,.srt,.vtt,.mp4,.webm,.mov,.mkv,.m4v";
 
 /** Files picked on another page, waiting for the shell to mount and attach them.
  *

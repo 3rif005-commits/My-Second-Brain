@@ -112,6 +112,33 @@ def _insert_chunks(resource: dict, chunks: list[dict]) -> None:
         db.table("resource_chunks").insert(rows[start:start + 200]).execute()
 
 
+def _paired(db, resource: dict, want_video: bool) -> dict | None:
+    """The other half of a video + subtitle pair on this note: same name, the other kind."""
+    from services.workspace.subtitles import is_subtitle, same_name
+    try:
+        rows = (db.table("note_resources").select("id,title,kind,storage_path,meta")
+                .eq("note_id", resource["note_id"]).execute().data or [])
+    except Exception:                                    # noqa: BLE001
+        return None
+    for r in rows:
+        if r.get("id") == resource["id"] or not same_name(r.get("title"), resource.get("title")):
+            continue
+        if want_video and r.get("kind") == "video":
+            return r
+        if not want_video and r.get("kind") == "document" and is_subtitle(r.get("storage_path")):
+            return r
+    return None
+
+
+def _mark_subtitle_paired(db, subtitle: dict, video_id: str) -> None:
+    """The video now carries these cues: the subtitle source keeps its readable sections but
+    leaves synthesis and chat, so the words aren't counted twice."""
+    meta = dict(subtitle.get("meta") or {})
+    meta["paired_video"] = video_id
+    db.table("note_resources").update({"meta": meta}).eq("id", subtitle["id"]).execute()
+    db.table("resource_chunks").delete().eq("resource_id", subtitle["id"]).execute()
+
+
 def process_resource(resource_id: str) -> None:
     """Extract one source. Its text, figures and formulas go to models on the
     note's behalf, so the note's privacy level applies (services/privacy.py)."""
@@ -178,7 +205,21 @@ def _process_resource(resource_id: str) -> None:
                     # render these (SourceViewer routes `document` to it).
                     from services.workspace.sections import (
                         chunk_sections, sections_as_elements, split_markdown_sections)
-                    if suffix.lower() in (".docx", ".pptx", ".xlsx"):
+                    if suffix.lower() in (".srt", ".vtt"):
+                        from services.workspace.subtitles import parse_subtitles, subtitle_sections
+                        with open(tmp_path, "rb") as f:
+                            cues = parse_subtitles(f.read())
+                        if not cues:
+                            raise ValueError("No subtitle cues found in this file.")
+                        sub_sections = subtitle_sections(cues)
+                        _insert_elements(resource, sections_as_elements(sub_sections))
+                        video = _paired(db, resource, want_video=True)
+                        if video:
+                            meta["paired_video"] = video["id"]
+                        else:
+                            _insert_chunks(resource, chunk_sections(sub_sections))
+                        raw = None
+                    elif suffix.lower() in (".docx", ".pptx", ".xlsx"):
                         # Office files become markdown first (headings, lists, tables,
                         # slides, sheets) and then take the same section path.
                         from services.office_extract import office_to_markdown
@@ -186,9 +227,10 @@ def _process_resource(resource_id: str) -> None:
                     else:
                         with open(tmp_path, encoding="utf-8", errors="replace") as f:
                             raw = f.read()
-                    doc_sections = split_markdown_sections(raw)
-                    _insert_elements(resource, sections_as_elements(doc_sections))
-                    _insert_chunks(resource, chunk_sections(doc_sections))
+                    if raw is not None:
+                        doc_sections = split_markdown_sections(raw)
+                        _insert_elements(resource, sections_as_elements(doc_sections))
+                        _insert_chunks(resource, chunk_sections(doc_sections))
             finally:
                 os.unlink(tmp_path)
 
@@ -224,8 +266,18 @@ def _process_resource(resource_id: str) -> None:
                 tmp_path = tmp.name
             try:
                 meta.update(vsvc.probe(tmp_path))
+                subtitle = _paired(db, resource, want_video=False)
                 try:
-                    snippets = vsvc.transcribe(tmp_path)
+                    if subtitle:
+                        # A subtitle file of the same name: use its cues, skip Whisper.
+                        from services.workspace.subtitles import parse_subtitles
+                        snippets = parse_subtitles(storage.download(subtitle["storage_path"]))
+                        if not snippets:
+                            raise RuntimeError("the subtitle file has no cues")
+                        meta["transcript_from"] = "subtitles"
+                        _mark_subtitle_paired(db, subtitle, resource_id)
+                    else:
+                        snippets = vsvc.transcribe(tmp_path)
                     from services.workspace import youtube as yts
                     meta["has_transcript"] = True
                     meta["transcript"] = yts.transcript_lines(snippets)

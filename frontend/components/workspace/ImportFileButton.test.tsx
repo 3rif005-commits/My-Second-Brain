@@ -40,7 +40,7 @@ describe("ImportFileButton", () => {
   it("offers the same file types the workspace's own picker does", () => {
     render(<ImportFileButton className="x">Import</ImportFileButton>);
     const input = screen.getByLabelText("Import files into the workspace") as HTMLInputElement;
-    expect(input.accept).toBe(".pdf,.md,.txt,.docx,.pptx,.xlsx,.mp4,.webm,.mov,.mkv,.m4v");
+    expect(input.accept).toBe(".pdf,.md,.txt,.docx,.pptx,.xlsx,.srt,.vtt,.mp4,.webm,.mov,.mkv,.m4v");
     expect(input.multiple).toBe(true);
   });
 

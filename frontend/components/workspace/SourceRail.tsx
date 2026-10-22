@@ -116,7 +116,7 @@ export function SourceRail({
                 </span>
                 <span className="min-w-0">
                   <span className="block font-medium">Upload a file</span>
-                  <span className="block text-[11px] text-gray-400">PDF, Word, PowerPoint, Excel, text, video</span>
+                  <span className="block text-[11px] text-gray-400">PDF, Word, PowerPoint, Excel, text, video, subtitles</span>
                 </span>
               </button>
               <button

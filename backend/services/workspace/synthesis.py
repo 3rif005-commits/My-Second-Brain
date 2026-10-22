@@ -85,9 +85,11 @@ def source_text_from_chunks(source_id: str) -> str:
 
 
 def ready_sources(note_id: str) -> list[dict]:
-    return (get_supabase().table("note_resources").select("*")
+    rows = (get_supabase().table("note_resources").select("*")
             .eq("note_id", note_id).eq("status", "ready")
             .order("order_index").execute().data or [])
+    # A subtitle file whose cues became its video's transcript would only repeat it.
+    return [r for r in rows if not (r.get("meta") or {}).get("paired_video")]
 
 
 def source_signature(note_id: str) -> str:
