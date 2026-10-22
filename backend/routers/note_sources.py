@@ -393,12 +393,15 @@ def get_source(source_id: str, authorization: str = Header()):
     elements = (get_supabase().table("resource_elements").select("*")
                 .eq("resource_id", source_id)
                 .order("page").order("order_index").execute().data or [])
+    # One request for every picture: signing them one by one took ~35 s on a slide deck.
+    paths = [el["image_path"] for el in elements if el.get("image_path")]
+    try:
+        urls = storage.signed_urls(paths, 3600)
+    except Exception:
+        urls = {}
     for el in elements:
-        if el.get("image_path"):
-            try:
-                el["image_url"] = storage.signed_url(el["image_path"], 3600)
-            except Exception:
-                pass
+        if el.get("image_path") in urls:
+            el["image_url"] = urls[el["image_path"]]
     out = _source_public(r, chapter_thumbs=True)
     out["elements"] = elements
     return out

@@ -590,3 +590,23 @@ def test_model_asset_rejects_wrong_type_and_fake_glb(client):
         r2 = client.post("/notes/n1/model-asset", headers=AUTH, files={"file": ("a.glb", b"not a glb", "model/gltf-binary")})
     assert r1.status_code == 400 and r2.status_code == 400
     st.upload.assert_not_called()
+
+
+def test_source_detail_signs_every_picture_in_one_request(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    src = tables.setdefault("note_resources", MagicMock())
+    src.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+        {"id": "s1", "user_id": "user-1", "kind": "pdf", "meta": {}}]
+    els = tables.setdefault("resource_elements", MagicMock())
+    els.select.return_value.eq.return_value.order.return_value.order.return_value.execute.return_value.data = [
+        {"id": "e1", "image_path": "u/s1/a.png"}, {"id": "e2"}, {"id": "e3", "image_path": "u/s1/b.png"}]
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("routers.note_sources.storage.signed_url") as one, \
+         patch("routers.note_sources.storage.signed_urls",
+               side_effect=lambda paths, exp: {p: f"https://x/{p}" for p in paths}) as many:
+        res = client.get("/sources/s1", headers=AUTH)
+    assert res.status_code == 200
+    many.assert_called_once()
+    one.assert_not_called()
+    assert [e.get("image_url") for e in res.json()["elements"]] == ["https://x/u/s1/a.png", None, "https://x/u/s1/b.png"]
