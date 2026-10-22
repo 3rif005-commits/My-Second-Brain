@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useNotion } from "@/context/NotionContext";
-import { CornerDownLeft, FileText, Search, Send, X } from "lucide-react";
+import { ChevronRight, CornerDownLeft, FileText, Search, Send, X } from "lucide-react";
+import { findCommands } from "@/lib/commands";
 import { useNotes } from "@/lib/hooks/useNotes";
 import { cx } from "@/components/ui/cx";
 
@@ -89,11 +90,13 @@ export function SearchModal({ open, onClose }: Props) {
 
   // Commands (⌘P, then type "notion"): the keyboard route into Send to Notion (DESIGN §7.1).
   const noteId = pathname.match(/^\/brain\/([0-9a-f-]{36})$/)?.[1];
-  const commands = /notion|^>/i.test(query) ? [
+  const notionCommands = /notion|^>/i.test(query) ? [
     ...(noteId ? [{ id: "send-page", label: "Send to Notion: current page", run: () => notion.open({ note_ids: [noteId] }) }] : []),
     { id: "send-all", label: "Send whole brain to Notion", run: () => notion.open({ all: true }, "whole brain") },
     { id: "activity", label: "Open Notion activity", run: () => router.push("/brain/settings/notion?tab=activity") },
   ] : [];
+  // Plus whatever the open screen registered (lib/commands.ts), e.g. "Export as LaTeX".
+  const commands = [...notionCommands.map((c) => ({ ...c, notion: true })), ...findCommands(query)];
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
@@ -165,7 +168,7 @@ export function SearchModal({ open, onClose }: Props) {
               )}
               {commands.map((c, i) => (
                 <button key={c.id} onClick={() => { c.run(); onClose(); }} className={cx(row(i === selectedIndex), "h-9 text-sm font-medium text-ink")}>
-                  <Send size={18} className="shrink-0 text-ink-icon" />
+                  {"notion" in c ? <Send size={18} className="shrink-0 text-ink-icon" /> : <ChevronRight size={18} className="shrink-0 text-ink-icon" />}
                   <span className="flex-1">{c.label}</span>
                   {i === selectedIndex && <CornerDownLeft size={14} className="text-ink-icon" />}
                 </button>

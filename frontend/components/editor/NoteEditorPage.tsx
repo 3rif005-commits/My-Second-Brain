@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Link, Layers, Send, Star, FileDown, FileCode, Printer, Trash2, Globe, Presentation } from "lucide-react";
 import { PresentMode } from "./PresentMode";
 import { blocksToLatex } from "@/lib/latexExport";
+import { registerCommands } from "@/lib/commands";
 import type { Note } from "@/lib/types/database";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { TopBar, TopBarButton } from "@/components/shell/TopBar";
@@ -435,6 +436,19 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
     setShowMenu(false);
     window.print();
   }
+
+  // The page menu's actions as commands (lib/commands.ts): quick find (⌘P) lists them and
+  // anything can run one by id. Through a ref, so the handlers stay current.
+  const actionsRef = useRef({ present: () => setPresenting(true), markdown: handleExportMarkdown,
+    pdf: handleExportPdf, latex: handleExportLatex });
+  actionsRef.current = { present: () => setPresenting(true), markdown: handleExportMarkdown,
+    pdf: handleExportPdf, latex: handleExportLatex };
+  useEffect(() => registerCommands([
+    { id: "note.present", label: "Present this page", keywords: ["slides", "slideshow"], run: () => actionsRef.current.present() },
+    { id: "note.export.markdown", label: "Export as Markdown", keywords: ["md", "download"], run: () => actionsRef.current.markdown() },
+    { id: "note.export.pdf", label: "Export as PDF", keywords: ["print", "download"], run: () => actionsRef.current.pdf() },
+    { id: "note.export.latex", label: "Export as LaTeX", keywords: ["tex", "download"], run: () => actionsRef.current.latex() },
+  ]), [note.id]);
 
   const words = (lastPlainRef.current || "").trim().split(/\s+/).filter(Boolean).length;
 
