@@ -36,6 +36,15 @@ export default defineConfig({
     // cloud answer; deletes the threads it makes.
     // Ledger B3: an unknown block type survives load + autosave. Creates and
     // permanently deletes its own fixture note.
+    // ArtCraft study item 1: failed saves kept + restored. Creates and permanently
+    // deletes its own fixture note.
+    {
+      name: "unsaved-edits-live",
+      testMatch: "**/unsaved-edits-live.spec.ts",
+      dependencies: ["auth-setup"],
+      use: { storageState: AUTH_FILE },
+      retries: 0,
+    },
     {
       name: "unknown-block-live",
       testMatch: "**/unknown-block-live.spec.ts",

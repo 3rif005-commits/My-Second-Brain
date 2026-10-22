@@ -24,6 +24,7 @@ import { useLegacyInteractiveMigration } from "./useLegacyInteractiveMigration";
 import { useNotion } from "@/context/NotionContext";
 import { NotionChip } from "../notion/NotionChip";
 import type { BlockEditorHandle } from "./BlockEditor";
+import { createNoteSaver, dropCopy, planRestore, readCopy, type SaveStatus } from "@/lib/unsavedCopy";
 import { usePublishNote } from "@/lib/plugins/usePublish";
 
 const EMOJIS = [
@@ -84,8 +85,13 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
   const [title, setTitle] = useState(note.title);
   const [icon, setIcon] = useState(note.icon || "📄");
   const [isPublic, setIsPublic] = useState(note.is_public ?? false);
-  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  // Edits this browser never got to the server (lib/unsavedCopy.ts). Decided once, on the
+  // client: the server render has no localStorage and reads nothing.
+  const [restorePlan] = useState(() => planRestore(readCopy(note.id), note.content));
+  const saverRef = useRef<ReturnType<typeof createNoteSaver> | null>(null);
+  const dirtyRef = useRef(false);
   const [ingestHtml, setIngestHtml] = useState<string | undefined>();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -262,18 +268,64 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
   // the note (as real blocks); the browser's copy is deleted only after the note, with them, has been saved.
   const afterSave = useLegacyInteractiveMigration(editorRef, note.id);
 
+  // One save loop per note: copy first, send, keep the copy until the server confirms,
+  // retry with backoff, never two requests in flight.
+  useEffect(() => {
+    const saver = createNoteSaver({
+      noteId: note.id,
+      serverContent: note.content,
+      send: async (blocks, plainText) => {
+        const res = await fetch(`/api/notes/${note.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: blocks, content_text: plainText }),
+        });
+        return res.ok;
+      },
+      onStatus: setSaveStatus,
+      onSaved: (blocks, ok) => {
+        if (ok) setLastSaved(new Date());
+        afterSave(ok, blocks);
+      },
+    });
+    saverRef.current = saver;
+    const retry = () => { void saver.retryNow(); };
+    // Closing the tab inside the autosave debounce: keep what is on screen.
+    const keep = () => {
+      const doc = dirtyRef.current ? editorRef.current?.getDocument() : null;
+      if (doc) saver.keepNow(doc, getPlainText(doc));
+    };
+    window.addEventListener("online", retry);
+    window.addEventListener("pagehide", keep);
+    return () => {
+      window.removeEventListener("online", retry);
+      window.removeEventListener("pagehide", keep);
+      saver.dispose();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.id]);
+
+  // What the browser kept from a session whose save never landed.
+  useEffect(() => {
+    const at = (c: { at: number }) =>
+      new Date(c.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    if (restorePlan.action === "restore") {
+      showToast(`Restored edits from ${at(restorePlan.copy)} that hadn't been saved`, "info");
+      void saverRef.current?.save(restorePlan.copy.blocks, restorePlan.copy.plainText);
+    } else if (restorePlan.action === "conflict") {
+      // Changed on another device since: overwrite nothing, delete nothing unseen.
+      showToast(`This note changed elsewhere. Your unsaved edits from ${at(restorePlan.copy)} are kept in this browser.`, "info");
+    } else if (readCopy(note.id)) {
+      dropCopy(note.id); // it was saved after all
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.id]);
+
   const handleSaveContent = useCallback(
     async (blocks: AnyBlock[], plainText: string) => {
       lastPlainRef.current = plainText;
-      setSaving(true);
-      const res = await fetch(`/api/notes/${note.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: blocks, content_text: plainText }),
-      });
-      setSaving(false);
-      setLastSaved(new Date());
-      afterSave(res.ok, blocks);
+      dirtyRef.current = false;
+      await saverRef.current?.save(blocks, plainText);
 
       // Debounce re-index: fire 30s after last block change
       if (reindexDebounceRef.current) clearTimeout(reindexDebounceRef.current);
@@ -379,7 +431,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
             ...(collectionName ? [{ label: collectionName }] : []),
             { label: title || "Untitled", icon: icon },
           ]}
-          meta={saving ? "Saving…" : ingestHtml && !lastSaved ? "Applying…" : undefined}
+          meta={saveStatus === "saving" ? "Saving…" : saveStatus === "failed" ? "Not saved — retrying" : ingestHtml && !lastSaved ? "Applying…" : undefined}
         >
           <NotionChip noteId={note.id} />
           {sourceCount > 0 && (
@@ -501,11 +553,14 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
                 ref={editorRef}
                 noteId={note.id}
                 initialContent={
-                  Array.isArray(note.content) && note.content.length > 0
-                    ? (note.content as AnyBlock[])
-                    : undefined
+                  restorePlan.action === "restore"
+                    ? restorePlan.copy.blocks
+                    : Array.isArray(note.content) && note.content.length > 0
+                      ? (note.content as AnyBlock[])
+                      : undefined
                 }
                 onSave={handleSaveContent}
+                onDirty={() => { dirtyRef.current = true; }}
                 ingestHtml={ingestHtml}
               />
             </EditorErrorBoundary>

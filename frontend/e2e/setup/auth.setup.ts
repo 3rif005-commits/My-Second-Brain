@@ -24,6 +24,7 @@ function login(name: string): string {
 }
 
 setup("authenticate", async ({ page }) => {
+  setup.setTimeout(360_000);
   await page.goto("/login");
   await page.waitForSelector('button[type="submit"]');
 
@@ -32,9 +33,9 @@ setup("authenticate", async ({ page }) => {
   await page.click('button[type="submit"]');
 
   // Wait for redirect to /brain — confirms login succeeded
-  // 60s: the dev server compiles /brain on first visit, which takes longer
-  // than 15s on a 2-core machine.
-  await page.waitForURL("**/brain", { timeout: 60_000 });
+  // 5 min: a cold dev server compiles /brain on first visit; measured over 2 min
+  // on this 2-core, 4 GB machine (2026-10-22).
+  await page.waitForURL("**/brain", { timeout: 300_000 });
   expect(page.url()).toContain("/brain");
 
   // Save auth cookies + localStorage

@@ -473,7 +473,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         const parsed = await parseDraftHtml(html);
         editor.replaceBlocks(editor.document, parsed);
         const now = editor.document as AnyBlock[];
-        if (saveTimer.current) clearTimeout(saveTimer.current);
+        if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
         persist(now);
         return now;
       },
@@ -485,7 +485,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         else editor.replaceBlocks(editor.document, parsed);
         const now = editor.document as AnyBlock[];
         const added = last ? now.slice(before) : now;
-        if (saveTimer.current) clearTimeout(saveTimer.current);
+        if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
         persist(now);
         return added;
       },
@@ -498,7 +498,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         if (last) editor.insertBlocks(parsed, last.id, "after");
         else editor.replaceBlocks(editor.document, parsed);
         const now = editor.document as AnyBlock[];
-        if (saveTimer.current) clearTimeout(saveTimer.current);
+        if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
         persist(now);
         return last ? now.slice(before) : now;
       },
@@ -534,12 +534,17 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     useEffect(() => {
       const unsubscribe = editor.onChange(() => {
         onDirtyRef.current?.();
-        if (saveTimer.current) clearTimeout(saveTimer.current);
-        saveTimer.current = setTimeout(save, 2000);
+        if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+        saveTimer.current = setTimeout(() => { saveTimer.current = null; save(); }, 2000);
       });
       return () => {
         unsubscribe();
-        if (saveTimer.current) clearTimeout(saveTimer.current);
+        // Leaving the note inside the 2 s debounce: save now instead of dropping the edit.
+        if (saveTimer.current) {
+          clearTimeout(saveTimer.current);
+          saveTimer.current = null;
+          save();
+        }
       };
     }, [editor, save]);
 
@@ -569,7 +574,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           // interactive blocks found in the ingest are real blocks of the note now (ledger B1)
           ...interactiveData.map((d) => ({ type: "interactive", props: { title: d.title, html: d.html } }))] as AnyBlock[];
         editor.replaceBlocks(editor.document, blocks);
-        if (saveTimer.current) clearTimeout(saveTimer.current);
+        if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
         persist(blocks as AnyBlock[]);
 
         onBlocksApplied?.(blocks as AnyBlock[]);

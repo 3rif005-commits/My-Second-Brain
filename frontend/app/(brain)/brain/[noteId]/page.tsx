@@ -42,5 +42,5 @@ export default async function NotePage({ params }: Props) {
     collectionName = col?.name ?? undefined;
   }
 
-  return <NoteEditorPage note={noteRes.data as Note} collectionName={collectionName} />;
+  return <NoteEditorPage key={(noteRes.data as Note).id} note={noteRes.data as Note} collectionName={collectionName} />;
 }
