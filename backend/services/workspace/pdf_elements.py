@@ -179,6 +179,7 @@ def extract_pdf(path: str, max_pages: int = 300) -> dict:
     pages_text: list[str] = []
     page_sizes: list[list[float]] = []
     elements: list[dict] = []
+    textless_pages: list[int] = []   # 1-based; scanned pages a vision model can read
 
     # Document-wide type metrics, in ONE pass (this walks every span in the
     # file, so it is not worth doing twice):
@@ -356,6 +357,14 @@ def extract_pdf(path: str, max_pages: int = 300) -> dict:
         missing = [heading_marker(m["level"]) + m["title"] for m in page_marks if not m["used"]]
         page_lines[:0] = missing
 
+        if not page_lines:
+            # Scanned = no text AND a picture over most of the page; a blank or separator
+            # page is not worth a vision call.
+            page_area = max(page.rect.width * page.rect.height, 1.0)
+            img_area = sum((e["bbox"][2] - e["bbox"][0]) * (e["bbox"][3] - e["bbox"][1])
+                           for e in elements if e["page"] == pno + 1 and e["element_type"] == "image")
+            if img_area / page_area >= 0.5:
+                textless_pages.append(pno + 1)
         pages_text.append(f"[page {pno + 1}]\n" + "\n".join(page_lines))
 
     doc.close()
@@ -364,6 +373,7 @@ def extract_pdf(path: str, max_pages: int = 300) -> dict:
         "page_sizes": page_sizes,
         "pages_text": pages_text,
         "elements": elements,
+        "textless_pages": textless_pages,
     }
 
 

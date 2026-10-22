@@ -195,7 +195,24 @@ def _process_resource(resource_id: str) -> None:
                     except Exception:
                         pass
                     _insert_elements(resource, data["elements"])
-                    _insert_chunks(resource, chunk_pages(data["pages_text"]))
+                    pages_text = data["pages_text"]
+                    textless = data.get("textless_pages") or []
+                    if textless:
+                        # Scanned pages: a vision model reads them (services/workspace/scanned.py).
+                        from services.workspace.scanned import NoVision, read_scanned_pages
+                        try:
+                            read = read_scanned_pages(tmp_path, textless, resource["user_id"])
+                        except NoVision:
+                            read = {}
+                            if len(textless) == len(pages_text):
+                                raise ValueError(
+                                    "This PDF is scanned (no text in it). Reading it needs an AI "
+                                    "provider that can read images, allowed for this note.")
+                        for pno, text in read.items():
+                            pages_text[pno - 1] = f"[page {pno}]\n{text}"
+                        meta["scanned_pages"] = len(textless)
+                        meta["scanned_pages_read"] = len(read)
+                    _insert_chunks(resource, chunk_pages(pages_text))
                 else:
                     # md/txt: split into sections, exactly like a website. The
                     # old path tagged the WHOLE file "[page 1]", so every chunk,
