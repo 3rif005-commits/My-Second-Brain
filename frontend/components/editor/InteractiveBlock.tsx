@@ -10,6 +10,7 @@ import { InteractiveBlockCard } from "./InteractiveBlockCard";
 type AnyBlock = any;
 
 import { DEFAULT_INTERACTIVE_HTML } from "@/lib/liveBlock";
+import { detectKind } from "@/lib/liveRuntime";
 export { DEFAULT_INTERACTIVE_HTML };
 
 export const InteractiveBlockSpec = createReactBlockSpec(
@@ -41,6 +42,15 @@ export const InteractiveBlockSpec = createReactBlockSpec(
         )}
       </div>
     ),
+    // What leaves the editor (Export as Markdown, copy): the block's content, not its toolbar.
+    // Mermaid stays Mermaid, a 3D model is a link, anything else is named like the LaTeX export.
+    toExternalHTML: ({ block }: { block: AnyBlock }) => {
+      const { title, html } = block.props as { title: string; html: string };
+      const kind = detectKind(html ?? "");
+      if (kind === "mermaid") return <pre><code className="language-mermaid">{html.trim()}</code></pre>;
+      if (kind === "model") return <p><a href={html.trim()}>{title || "3D model"}</a></p>;
+      return <p><em>[Interactive block: {title}]</em></p>;
+    },
   }
 );
 

@@ -55,3 +55,23 @@ describe("planLegacyMigration / migrationSaved", () => {
     expect(migrationSaved(["<p>q</p>", "<i/>"], doc)).toBe(false);
   });
 });
+
+describe("InteractiveBlockSpec export (Export as Markdown)", () => {
+  it("writes the block's content, not its toolbar", async () => {
+    const { BlockNoteSchema, defaultBlockSpecs, BlockNoteEditor } = await import("@blocknote/core");
+    const { InteractiveBlockSpec } = await import("./InteractiveBlock");
+    const schema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, interactive: InteractiveBlockSpec() } });
+    const editor = BlockNoteEditor.create({ schema });
+    editor.mount(document.createElement("div"));
+    editor.replaceBlocks(editor.document, [
+      { type: "interactive", props: { title: "Flow", html: "flowchart LR\n  A --> B" } },
+      { type: "interactive", props: { title: "Heart", html: "https://x.supabase.co/heart.glb" } },
+      { type: "interactive", props: { title: "Quiz", html: "<button>Go</button>" } },
+    ] as never);
+    const md = await editor.blocksToMarkdownLossy(editor.document);
+    expect(md).toContain("```mermaid\nflowchart LR\n  A --> B\n```");
+    expect(md).toContain("[Heart](https://x.supabase.co/heart.glb)");
+    expect(md).toContain("*[Interactive block: Quiz]*");
+    expect(md).not.toMatch(/Preview|Code|AI|⤓/);
+  });
+});
