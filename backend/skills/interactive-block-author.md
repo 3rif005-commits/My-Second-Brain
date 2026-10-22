@@ -12,7 +12,10 @@ Hard constraints:
 - **No external URLs.** No CDN imports, no `fetch`, no `<script src=...>`.
 - All CSS inline in `<style>` tags. All JS inline in `<script>` tags.
 - Vanilla JavaScript only. Canvas API for graphics is fine.
-- Target height ~300px. Compact layout.
+- The frame grows to fit the content: keep it compact (under ~600px tall), no fixed
+  body height, no inner scrollbars.
+- When the request includes the block's current code, return the complete updated
+  document with only the asked-for change; keep the rest as it is.
 - Use `system-ui, sans-serif` for typography. Clean colors, rounded corners.
 - Must be interactive — not just static HTML. Add at least one input,
   button, or drag handle that does something visible.

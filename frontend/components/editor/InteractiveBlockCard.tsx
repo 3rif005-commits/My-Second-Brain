@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { isPlaceholderHtml, liveBlockRequest, stripFences, useFrameHeight, withAutoHeight } from "@/lib/liveBlock";
 import type { InteractiveBlock } from "./BlockEditor";
 
 interface Props {
@@ -19,6 +20,8 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const frameHeight = useFrameHeight(frameRef);
 
   function save() {
     onUpdate(index, { title, html: code });
@@ -34,7 +37,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [{ role: "user", content: `Title: "${title}"\n\n${prompt.trim()}` }],
+          messages: [{ role: "user", content: liveBlockRequest(title, prompt, isPlaceholderHtml(code) ? null : code) }],
           query: prompt.trim(),
           surface: "interactive",
           mode: "api",
@@ -66,10 +69,13 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
         }
       }
 
-      // Strip any markdown code fences the model may have wrapped around the HTML
-      const stripped = html.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
-      setCode(stripped);
-      setMode("edit");
+      const next = stripFences(html);
+      if (!next) throw new Error("The model returned nothing");
+      // Show the result straight away and keep it; Code is one click if it needs a tweak.
+      setCode(next);
+      onUpdate(index, { title, html: next });
+      setPrompt("");
+      setMode("preview");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generation failed");
     } finally {
@@ -117,10 +123,12 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
       {/* Preview */}
       {mode === "preview" && (
         <iframe
-          srcDoc={code}
+          ref={frameRef}
+          srcDoc={withAutoHeight(code)}
           sandbox="allow-scripts"
           className="w-full border-none block bg-gray-50 dark:bg-gray-900"
-          style={{ height: 300 }}
+          style={{ height: frameHeight }}
+          title={title}
         />
       )}
 
@@ -156,7 +164,9 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
       {mode === "ai" && (
         <div className="p-4 bg-white dark:bg-gray-900 flex flex-col gap-3">
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Describe what this block should do — simulation, quiz, chart, timeline, calculator…
+            {isPlaceholderHtml(code)
+              ? "Describe what this block should do — simulation, quiz, chart, timeline, calculator…"
+              : "Describe a change — the AI edits this block rather than starting over."}
           </p>
           <textarea
             value={prompt}

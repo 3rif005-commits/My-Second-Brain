@@ -9,10 +9,8 @@ import { InteractiveBlockCard } from "./InteractiveBlockCard";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyBlock = any;
 
-export const DEFAULT_INTERACTIVE_HTML = `<div style="font-family:sans-serif;padding:16px">
-  <strong style="color:#6366f1">Interactive Block</strong><br/>
-  <p>Edit the code, or ask the AI to build something here.</p>
-</div>`;
+import { DEFAULT_INTERACTIVE_HTML } from "@/lib/liveBlock";
+export { DEFAULT_INTERACTIVE_HTML };
 
 export const InteractiveBlockSpec = createReactBlockSpec(
   {
