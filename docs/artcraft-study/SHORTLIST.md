@@ -60,7 +60,7 @@ user-facing ideas from FINDINGS, in this order:
 | 11 | Photo of a whiteboard → Mermaid diagram (VC5) | S | done (unit + route tests): paste/drop a photo in the live block's AI box → vision task (switchboard + note privacy) → Mermaid. Needs a vision-capable provider; local text models can't. No live check |
 | 12 | `.srt`/`.vtt` subtitle files as a video's transcript (V7) | S | done (unit tests): forgiving reader; alone = readable timed source; with a same-name uploaded video = its transcript (no Whisper), the subtitle source then leaves synthesis/chat. No live check |
 | 13 | Scanned PDF page → vision model reads it (P3) | M | done (unit tests): pages with no text and a page-sized image go to the vision task (≤40 per file); all-scanned + no vision provider = clear failure message. Real PDFs: no false positives. No live check with a real scan |
-| 14 | Export note as LaTeX, beside Export Markdown/PDF (F10) | S | |
+| 14 | Export note as LaTeX, beside Export Markdown/PDF (F10) | S | done (unit tests): standalone .tex (sections, lists, tables, math kept, pictures as caption + link). Not compiled with a real TeX here (none installed) |
 | 15 | Speaker labels in transcripts (V5) | M | |
 
 Done inside the items above, not as separate work: ranked "Next" table in STATUS.md (M6),

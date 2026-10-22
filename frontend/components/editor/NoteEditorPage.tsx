@@ -3,8 +3,9 @@
 import React, { Component, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { Link, Layers, Send, Star, FileDown, Printer, Trash2, Globe, Presentation } from "lucide-react";
+import { Link, Layers, Send, Star, FileDown, FileCode, Printer, Trash2, Globe, Presentation } from "lucide-react";
 import { PresentMode } from "./PresentMode";
+import { blocksToLatex } from "@/lib/latexExport";
 import type { Note } from "@/lib/types/database";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { TopBar, TopBarButton } from "@/components/shell/TopBar";
@@ -418,6 +419,18 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
     editorRef.current?.exportMarkdown(title || "note");
   }
 
+  function handleExportLatex() {
+    setShowMenu(false);
+    const doc = editorRef.current?.getDocument();
+    if (!doc) return;
+    const blob = new Blob([blocksToLatex(title, doc)], { type: "application/x-tex" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(title || "note").replace(/[^a-z0-9]+/gi, "_").toLowerCase() || "note"}.tex`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   function handleExportPdf() {
     setShowMenu(false);
     window.print();
@@ -470,6 +483,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
                 { label: "Present", icon: <Presentation />, onSelect: () => setPresenting(true) },
                 { label: "Export as Markdown", icon: <FileDown />, onSelect: handleExportMarkdown },
                 { label: "Export as PDF", icon: <Printer />, onSelect: handleExportPdf },
+                { label: "Export as LaTeX", icon: <FileCode />, onSelect: handleExportLatex },
                 { label: "Send to Notion…", icon: <Send />, onSelect: () => notion.open({ note_ids: [note.id] }) },
               ],
             ]}
