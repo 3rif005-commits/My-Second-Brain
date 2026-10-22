@@ -609,3 +609,11 @@ input[type="radio"],
 input[type="range"] {
   accent-color: var(--c-accent);
 }
+
+/* A PDF passage the note quotes (components/workspace/viewers/passageMarks.ts). The text
+   layer is transparent over the canvas, so only the tint shows. */
+.react-pdf__Page__textContent mark.sb-passage {
+  background: rgba(250, 204, 21, 0.35);
+  color: transparent;
+  border-radius: 2px;
+}

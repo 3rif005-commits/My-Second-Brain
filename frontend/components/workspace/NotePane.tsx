@@ -17,6 +17,7 @@ import {
 } from "@/lib/workspace";
 import { anchorRows, findLevelHeadings, readDraftAnchors, type DraftAnchor } from "./anchorHeadings";
 import { textBlocks } from "./sendBlocks";
+import { quotedPassages, type Passage } from "./viewers/passageMarks";
 
 const BlockEditor = dynamic(
   () => import("@/components/editor/BlockEditor").then((m) => m.BlockEditor),
@@ -67,6 +68,8 @@ interface NotePaneProps {
   onSavingChange?: (saving: boolean) => void;
   /** Slash-menu entries the workspace supplies — its skills. */
   extraSlashItems?: ExtraSlashItem[];
+  /** The source passages the note quotes, on open and after each save (tinted in the PDF). */
+  onPassages?: (passages: Passage[]) => void;
 }
 
 function getPlainText(blocks: AnyBlock[]): string {
@@ -108,7 +111,7 @@ function markdownTableToBlock(md: string): AnyBlock | null {
 
 export function NotePane({
   note, sources, activeSourceId, onJump, actionSinkRef,
-  positionSinkRef, applyRef, onApplied, onSavingChange, extraSlashItems,
+  positionSinkRef, applyRef, onApplied, onSavingChange, extraSlashItems, onPassages,
 }: NotePaneProps) {
   const [anchors, setAnchors] = useState<NoteAnchor[]>([]);
   const [ingestHtml, setIngestHtml] = useState<string | undefined>();
@@ -166,8 +169,13 @@ export function NotePane({
   }, [note.id]);
 
   // ── save ──────────────────────────────────────────────────────────────────
+  const passagesRef = useRef(onPassages);
+  passagesRef.current = onPassages;
+  useEffect(() => { passagesRef.current?.(quotedPassages(note.content)); }, [note.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSave = useCallback(async (blocks: AnyBlock[], plainText: string) => {
     currentTextRef.current = plainText;
+    passagesRef.current?.(quotedPassages(blocks));
     onSavingChange?.(true);
     // Returns whether the note is durably stored — `persistApplied` below only
     // marks a synthesis draft applied once this has actually succeeded.

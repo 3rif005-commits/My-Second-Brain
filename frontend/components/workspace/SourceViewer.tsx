@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AlertCircle, Layers } from "lucide-react";
 import { wsApi, type NoteSource, type SendAction } from "@/lib/workspace";
+import type { Passage } from "./viewers/passageMarks";
 import { YouTubePlayer } from "./viewers/YouTubePlayer";
 import { VideoPlayer } from "./viewers/VideoPlayer";
 import { WebsiteViewer } from "./viewers/WebsiteViewer";
@@ -32,6 +33,8 @@ interface SourceViewerProps {
   onPosition: (value: number) => void;
   onAction: (a: SendAction) => void;
   seekRef: React.MutableRefObject<((value: number) => void) | null>;
+  /** Passages the note quotes (any source); a PDF tints its own. */
+  passages?: Passage[];
 }
 
 function Message({ icon, children }: { icon?: React.ReactNode; children: React.ReactNode }) {
@@ -54,7 +57,7 @@ function Spinner({ tone = "indigo" }: { tone?: "indigo" | "gray" }) {
   );
 }
 
-export function SourceViewer({ source, onPosition, onAction, seekRef }: SourceViewerProps) {
+export function SourceViewer({ source, onPosition, onAction, seekRef, passages }: SourceViewerProps) {
   const [detail, setDetail] = useState<NoteSource | null>(null);
   // The playhead also feeds the transcript list. Both callbacks go through refs so this
   // stays one stable function: the YouTube player keeps the first one it is given.
@@ -116,7 +119,7 @@ export function SourceViewer({ source, onPosition, onAction, seekRef }: SourceVi
   }
 
   const common = { resource: detail, onPosition, onAction, seekRef };
-  if (detail.kind === "pdf") return <PdfViewer {...common} />;
+  if (detail.kind === "pdf") return <PdfViewer {...common} passages={passages} />;
   if (detail.kind === "youtube" || detail.kind === "video") {
     const { lines, chapters } = readTranscript(detail.meta);
     const Player = detail.kind === "youtube" ? YouTubePlayer : VideoPlayer;

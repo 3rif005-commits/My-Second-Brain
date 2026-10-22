@@ -18,6 +18,7 @@ import { DropZone } from "./DropZone";
 import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
 import { SourceRail } from "./SourceRail";
 import { SourceViewer } from "./SourceViewer";
+import type { Passage } from "./viewers/passageMarks";
 import { useSynthesis } from "./useSynthesis";
 import { useAIPanel } from "@/context/AIPanelContext";
 import { DRAFT_EVENT, UNDO_EVENT, type NoteDraft, type UndoOutcome } from "@/lib/noteDraft";
@@ -131,6 +132,12 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
 
   const seekRef = useRef<((value: number) => void) | null>(null);
   const actionSinkRef = useRef<((a: SendAction) => void) | null>(null);
+  // Passages the note quotes; the PDF tints them. Kept identical when unchanged so a save
+  // doesn't redraw every text layer.
+  const [passages, setPassages] = useState<Passage[]>([]);
+  const updatePassages = useCallback((next: Passage[]) => {
+    setPassages((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+  }, []);
   const positionSinkRef = useRef<((value: number) => void) | null>(null);
   const applyRef = useRef<NoteApplyApi | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -596,6 +603,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
                   onPosition={(v) => positionSinkRef.current?.(v)}
                   onAction={(a) => actionSinkRef.current?.(a)}
                   seekRef={seekRef}
+                  passages={passages}
                 />
               </div>
             </div>
@@ -631,6 +639,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
             applyRef={applyRef}
             onApplied={syn.markApplied}
             onSavingChange={setSaving}
+            onPassages={updatePassages}
           />
         </div>
 

@@ -16,6 +16,7 @@ import { useToast } from "@/app/providers";
 import { ActionBar, ActionButton, ActionLabel, ActionSeparator } from "./ActionBar";
 import { pageHeight, pagesToRender } from "./pageWindow";
 import { pageOfNode } from "../sendBlocks";
+import { markTextRun, passagesByPage, type Passage } from "./passageMarks";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url
@@ -29,6 +30,8 @@ interface PdfViewerProps {
   onAction: (action: SendAction) => void;
   /** Parent stores a seek function here: seekRef.current = (page) => …  */
   seekRef: React.MutableRefObject<((value: number) => void) | null>;
+  /** Passages the note quotes; those from this file are tinted on their page. */
+  passages?: Passage[];
 }
 
 const ELEMENT_COLORS: Record<string, string> = {
@@ -39,7 +42,7 @@ const ELEMENT_COLORS: Record<string, string> = {
   text: "border-transparent hover:border-accent-300/60 hover:bg-accent-300/5",
 };
 
-export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewerProps) {
+export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }: PdfViewerProps) {
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [active, setActive] = useState<{ el: WsElement; x: number; y: number } | null>(null);
@@ -53,6 +56,10 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
   // Pages on screen (IntersectionObserver), and from them the few that get drawn.
   const [visible, setVisible] = useState<number[]>([]);
   const toDraw = useMemo(() => pagesToRender(visible, numPages), [visible, numPages]);
+  const quoted = useMemo(() => passagesByPage(passages ?? [], resource.id), [passages, resource.id]);
+  const tintQuoted = useCallback(
+    ({ str, pageNumber }: { str: string; pageNumber: number }) => markTextRun(str, quoted.get(pageNumber) ?? []),
+    [quoted]);
 
   useEffect(() => {
     wsApi.sourceFileUrl(resource.id).then((r) => setFileUrl(r.url)).catch(() => {});
@@ -220,7 +227,8 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
                 style={{ width: PAGE_WIDTH, height: height ?? undefined }}
               >
                 {draw && <Page pageNumber={pno} width={PAGE_WIDTH}
-                  renderAnnotationLayer={false} />}
+                  renderAnnotationLayer={false}
+                  customTextRenderer={quoted.has(pno) ? tintQuoted : undefined} />}
                 {/* element overlays — text/heading stay pointer-events-none so
                     react-pdf's text layer (which sits above the canvas for
                     native selection) still receives clicks/drags for the
