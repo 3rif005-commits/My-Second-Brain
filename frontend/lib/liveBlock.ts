@@ -68,3 +68,27 @@ export function stripFences(text: string): string {
 export function isPlaceholderHtml(html: string): boolean {
   return !html.trim() || html.trim() === DEFAULT_INTERACTIVE_HTML.trim();
 }
+
+/** The first image in a paste/drop, if any (a photo of a diagram for the AI). */
+export function imageFromTransfer(dt: DataTransfer | null | undefined): File | null {
+  if (!dt) return null;
+  for (const f of Array.from(dt.files ?? [])) if (f.type.startsWith("image/")) return f;
+  for (const item of Array.from(dt.items ?? [])) {
+    if (item.kind === "file" && item.type.startsWith("image/")) return item.getAsFile();
+  }
+  return null;
+}
+
+/** A diagram photo → Mermaid source, via the note's vision model. Throws a readable Error. */
+export async function diagramFromImage(noteId: string, image: File): Promise<string> {
+  const body = new FormData();
+  body.append("file", image, image.name || "diagram.png");
+  const res = await fetch(`/api/ws/notes/${encodeURIComponent(noteId)}/diagram-from-image`, { method: "POST", body });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = (data?.detail?.error ?? data?.error ?? `HTTP ${res.status}`) as string;
+    throw new Error(msg);
+  }
+  if (typeof data?.code !== "string" || !data.code.trim()) throw new Error("No diagram came back.");
+  return data.code;
+}

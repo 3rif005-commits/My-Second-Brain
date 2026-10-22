@@ -57,7 +57,7 @@ user-facing ideas from FINDINGS, in this order:
 | 8 | Equations from Word documents (rank 8) | S | done; 19 tests; real lab sheet: 20 of 20 equations → LaTeX (12 were inside tables) |
 | 9 | Video transcript and chapters (rank 9) | M | done (unit tests): collapsed transcript under YouTube/uploaded video, click to jump, creator chapters (yt-dlp) as headings for the list and the model, fillers stripped. Not done: chapter thumbnails for uploaded video (no chapters to hang them on). Only sources processed from now on get the list. No live check |
 | 10 | Present a note as slides (rank 10) | M | done (unit tests): one *Present* menu item; title slide + one slide per h1/h2 from the note's own rendered blocks; toggles open; shrink-to-fit (floor 0.5, then scroll); keys from DeckCraft. Not done: splitting an overlong slide into a continued one. No live check |
-| 11 | Photo of a whiteboard → Mermaid diagram (VC5) | S | |
+| 11 | Photo of a whiteboard → Mermaid diagram (VC5) | S | done (unit + route tests): paste/drop a photo in the live block's AI box → vision task (switchboard + note privacy) → Mermaid. Needs a vision-capable provider; local text models can't. No live check |
 | 12 | `.srt`/`.vtt` subtitle files as a video's transcript (V7) | S | |
 | 13 | Scanned PDF page → vision model reads it (P3) | M | |
 | 14 | Export note as LaTeX, beside Export Markdown/PDF (F10) | S | |

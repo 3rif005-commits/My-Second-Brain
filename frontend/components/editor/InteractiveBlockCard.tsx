@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { isPlaceholderHtml, liveBlockRequest, stripFences, useFrameHeight } from "@/lib/liveBlock";
+import { useContext, useMemo, useRef, useState } from "react";
+import { NoteIdContext } from "./noteIdContext";
+import { diagramFromImage, imageFromTransfer, isPlaceholderHtml, liveBlockRequest, stripFences, useFrameHeight } from "@/lib/liveBlock";
 import { assetOrigin, buildSrcDoc, detectKind, preflightWarnings } from "@/lib/liveRuntime";
 import { exportFrameImage, MAX_SNAPSHOT_CHARS } from "@/lib/liveExport";
 import type { InteractiveBlock } from "./BlockEditor";
@@ -49,6 +50,32 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   function save() {
     onUpdate(index, { title, html: code });
     setMode("preview");
+  }
+
+  const noteId = useContext(NoteIdContext);
+
+  // A photo pasted or dropped into the AI box: the vision model writes it as a diagram.
+  async function fromPhoto(image: File) {
+    if (!noteId) { setError("Open this block inside a note to use a photo."); return; }
+    setGenerating(true);
+    setError("");
+    try {
+      const next = await diagramFromImage(noteId, image);
+      setCode(next);
+      onUpdate(index, { title, html: next });
+      setMode("preview");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not read the photo");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function onPhotoTransfer(e: React.ClipboardEvent | React.DragEvent, dt: DataTransfer | null) {
+    const img = imageFromTransfer(dt);
+    if (!img) return;
+    e.preventDefault();
+    void fromPhoto(img);
   }
 
   async function generate() {
@@ -205,11 +232,14 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
             {isPlaceholderHtml(code)
               ? "Describe what this block should do — simulation, quiz, chart, timeline, calculator…"
               : "Describe a change — the AI edits this block rather than starting over."}
+            {" "}Or paste a photo of a diagram.
           </p>
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             rows={3}
+            onPaste={(e) => onPhotoTransfer(e, e.clipboardData)}
+            onDrop={(e) => onPhotoTransfer(e, e.dataTransfer)}
             className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-accent-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none"
             placeholder="e.g. A bar chart comparing bubble sort vs merge sort complexity, or a Newton's law simulator with sliders…"
           />
@@ -226,7 +256,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
               disabled={generating || !prompt.trim()}
               className="text-xs px-4 py-1.5 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white font-medium transition-colors flex items-center gap-1.5"
             >
-              {generating ? "Generating…" : "Generate"}
+              {generating ? "Working…" : "Generate"}
             </button>
           </div>
         </div>

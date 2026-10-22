@@ -451,6 +451,24 @@ def formula_latex(source_id: str, body: FormulaRequest,
         raise HTTPException(status_code=502, detail={"error": f"Formula OCR failed: {e}"})
 
 
+@router.post("/notes/{note_id}/diagram-from-image")
+async def diagram_from_image_route(note_id: str, file: UploadFile = File(...),
+                                   authorization: str = Header()):
+    """A diagram photo → Mermaid source for a live block in this note. The photo is the note's
+    content, so the note's privacy level decides which model may see it."""
+    from services import privacy
+    from services.live_block import MAX_IMAGE_BYTES, diagram_from_image
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    data = await file.read(MAX_IMAGE_BYTES + 1)
+    try:
+        with privacy.handling([note_id], user_id):
+            code = diagram_from_image(data, (file.content_type or "").lower(), user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail={"error": str(e)})
+    return {"code": code}
+
+
 # ── synthesis ────────────────────────────────────────────────────────────────
 
 @router.post("/notes/{note_id}/synthesize")

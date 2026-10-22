@@ -42,3 +42,14 @@ describe("stripFences", () => {
     expect(stripFences("```mermaid\nflowchart LR\n  A-->B\n```")).toBe("flowchart LR\n  A-->B");
   });
 });
+
+describe("imageFromTransfer", () => {
+  it("finds an image among dropped/pasted files, ignores text", async () => {
+    const { imageFromTransfer } = await import("./liveBlock");
+    const img = new File([new Uint8Array([1])], "board.png", { type: "image/png" });
+    const txt = new File(["x"], "a.txt", { type: "text/plain" });
+    expect(imageFromTransfer({ files: [txt, img], items: [] } as unknown as DataTransfer)).toBe(img);
+    expect(imageFromTransfer({ files: [txt], items: [] } as unknown as DataTransfer)).toBeNull();
+    expect(imageFromTransfer(null)).toBeNull();
+  });
+});

@@ -527,3 +527,37 @@ def test_paste_image_requires_note_ownership(client):
         res = client.post("/notes/not-mine/paste-image",
                           json={"url": "https://files.example.com/img.png"}, headers=AUTH)
     assert res.status_code == 404
+
+
+def test_diagram_from_image_returns_mermaid_under_the_notes_privacy(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    handled = {}
+
+    class Gate:
+        def __init__(self, ids, uid): handled["ids"] = ids
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("services.privacy.handling", Gate), \
+         patch("services.live_block.diagram_from_image", return_value="flowchart LR\n A-->B") as d:
+        r = client.post("/notes/n1/diagram-from-image", headers=AUTH,
+                        files={"file": ("board.jpg", b"\xff\xd8jpeg", "image/jpeg")})
+    assert r.status_code == 200
+    assert r.json() == {"code": "flowchart LR\n A-->B"}
+    assert handled["ids"] == ["n1"]
+    assert d.call_args.args[1] == "image/jpeg"
+
+
+def test_diagram_from_image_reports_a_readable_error(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("services.live_block.diagram_from_image", side_effect=ValueError("needs an AI provider")):
+        r = client.post("/notes/n1/diagram-from-image", headers=AUTH,
+                        files={"file": ("b.png", b"\x89PNG", "image/png")})
+    assert r.status_code == 422
+    assert "needs an AI provider" in r.text
