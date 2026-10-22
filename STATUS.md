@@ -11,7 +11,6 @@
 |---|------|-----------|
 | 1 | Live-check the ArtCraft-study items (commands in the dated section below) | 16 commits are unit-tested only; none was seen in a browser |
 | 2 | Push `main` after the live check (deploys Vercel + Render) | everything is committed locally, not pushed |
-| 3 | Delete any leftover note titled "SB-TEST unsaved edits (safe to delete)" | an interrupted live test may have left one |
 
 ---
 
@@ -30,7 +29,7 @@ quoted PDF passages, and page actions listed in quick find (⌘P).
 | Fast big PDFs (only near pages drawn) | unit tests | scrolling a 300-page PDF in a browser |
 | PDF bookmarks → chapters | real file: 10 bookmarks → 10 headings; Lect10 unchanged | — |
 | Word/PowerPoint/Excel in Workspace | 14 tests; 6 real files (FR/AR) | live upload (Supabase bucket MIME rules) |
-| Send to note keeps the page | unit tests | in browser |
+| Send to note keeps the page | unit tests; **live**: quote + "📍 p. 1" pill land in the note | clicking the pill back |
 | Live block basics (auto-height, edit in place) | unit tests | in browser |
 | Live block: Mermaid, 3D, export, CSP | unit tests; every generated script parsed with acorn; CDN files return 200 | CDN loading, WebGL, export in a real browser |
 | Drop .glb/.stl → 3D block | route + unit tests | drop events, storage MIME |
@@ -42,7 +41,7 @@ quoted PDF passages, and page actions listed in quick find (⌘P).
 | Scanned PDF pages → vision | unit tests; no false positives on 2 real PDFs | a real scan + vision model |
 | Export as LaTeX | unit tests | compiling (no TeX installed here) |
 | Speaker labels | synthetic voices | a real recording (numpy now in requirements.txt) |
-| Quoted passages tinted in the PDF (read from the note, no migration) | unit tests on matching + reading back what Send wrote | the tint lining up over real PDF text |
+| Quoted passages tinted in the PDF (read from the note, no migration) | **live in Chrome 2026-10-22**: Send to note → tint exactly over the line; quote deleted → tint gone. Found + fixed: pill read "p. 1 p. 1" | — |
 | Overlong slide continues on a "(cont.)" slide | unit tests (layout stubbed) | real measurement in a browser |
 | Uploaded video's own chapter marks, with pictures | real ffmpeg file with 2 chapters → 2 chapters + 2 JPEGs; signing tested | a real upload; storage of the JPEGs |
 | ⌘P lists and runs page actions (`lib/commands.ts`) | unit + quick-find test | in browser |
