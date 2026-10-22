@@ -227,9 +227,7 @@ Do these in order. Nothing in git needs to change for them.
 
 ## Small things left
 
-- `npm login && cd packages/plugin-api && npm publish` (then the plugin repo can drop `vendor/`).
-- Delete the old clone: `rm -rf ~/projects/second_brain_clean` (it is fully replaced).
-- Stale branches on GitHub: all are fully contained in `main`; delete once you agree.
+All done (2026-10-22); see the end of this doc.
 
 ## Step F result (2026-10-21)
 
@@ -240,8 +238,15 @@ that branch was deleted and is live on `28494f6` with all 13 env vars, `SECRETS_
 The user applied migrations 029–031 to the live Supabase. The 11 merged branches on GitHub are
 deleted, so only `main` is left.
 
-Left for the user:
-- `cd ~/projects/second-brain-webmcp-plugin && git push --force-with-lease=main:4b020e8 origin plugin:main`
-  (replaces the fork's `main` with the plugin; the old fork stays at `fork-final` / `legacy/fork`).
-- `PLUGINS_GITHUB_TOKEN` on Vercel (read-only Contents on `second-brain-webmcp`), or make that repo public.
-- `npm publish` in `packages/plugin-api`; `rm -rf ~/projects/second_brain_clean`.
+## Cleanup result (2026-10-22)
+
+- `second-brain-webmcp`'s `main` is now the plugin. The old fork stays at tag `fork-final` and
+  branch `legacy/fork`, and every other branch is deleted. The local worktree
+  `~/projects/second-brain-webmcp-plugin` has branch `plugin` tracking `origin/main`
+  (`push.default=upstream`, so a plain `git push` updates `main`).
+- `second-brain-plugin-api@1.0.0` is on npm (2FA on; publish with `--otp`). The plugin repo
+  depends on it from npm and `vendor/` is gone.
+- `~/projects/second_brain_clean` is deleted.
+
+Still open: `PLUGINS_GITHUB_TOKEN` on Vercel (read-only Contents on `second-brain-webmcp`), or
+make that repo public, so the live site can install WebMCP.
