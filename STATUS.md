@@ -1,7 +1,65 @@
 # Second Brain — Project Status
 
 > Source of truth across all conversations. Read at session start, update at session end.
-> Last updated: 2026-08-25
+> Last updated: 2026-10-22
+
+---
+
+## Next (ranked — pick from the top)
+
+| # | What | Why first |
+|---|------|-----------|
+| 1 | Live-check the ArtCraft-study items (commands in the dated section below) | 16 commits are unit-tested only; none was seen in a browser |
+| 2 | Push `main` after the live check (deploys Vercel + Render) | everything is committed locally, not pushed |
+| 3 | Delete any leftover note titled "SB-TEST unsaved edits (safe to delete)" | an interrupted live test may have left one |
+| 4 | Decide: add `numpy` to backend/requirements.txt? | speaker labels are off on Render without it |
+
+---
+
+## ArtCraft study build — 2026-10-22 (code complete, not live-checked)
+
+Study + plan: `docs/artcraft-study/FINDINGS.md`, `SHORTLIST.md` (build list with per-item state).
+All local commits on `main`, **not pushed**. Tests: frontend 1,325 pass (lib + components); full backend suite 2,367 passed,
+0 failed (449 errors = no local test Postgres, expected). No setting or panel was added: the UI additions are two menu items
+(Present, Export as LaTeX), a ⤓ button on live blocks, a collapsed Transcript row under
+videos, and a one-line warning under a live block that tries to reach the network.
+
+| Item | Verified | Not verified |
+|------|----------|--------------|
+| Never lose an edit (failed saves kept, retried, restored) | 12 unit tests incl. random failures; no overlapping saves | live e2e `unsaved-edits-live` never completed (session crashes) |
+| Fast big PDFs (only near pages drawn) | unit tests | scrolling a 300-page PDF in a browser |
+| PDF bookmarks → chapters | real file: 10 bookmarks → 10 headings; Lect10 unchanged | — |
+| Word/PowerPoint/Excel in Workspace | 14 tests; 6 real files (FR/AR) | live upload (Supabase bucket MIME rules) |
+| Send to note keeps the page | unit tests | in browser |
+| Live block basics (auto-height, edit in place) | unit tests | in browser |
+| Live block: Mermaid, 3D, export, CSP | unit tests; every generated script parsed with acorn; CDN files return 200 | CDN loading, WebGL, export in a real browser |
+| Drop .glb/.stl → 3D block | route + unit tests | drop events, storage MIME |
+| Word equations → LaTeX | real lab sheet: 20/20 (12 in tables) | — |
+| Video transcript + creator chapters | unit tests | real YouTube (yt-dlp chapters), only new sources get it |
+| Present a note as slides | unit tests | full-screen + keys in browser |
+| Photo of a diagram → Mermaid | unit + route tests | a real vision model |
+| Subtitles (.srt/.vtt) | unit tests incl. pairing either order | real upload |
+| Scanned PDF pages → vision | unit tests; no false positives on 2 real PDFs | a real scan + vision model |
+| Export as LaTeX | unit tests | compiling (no TeX installed here) |
+| Speaker labels | synthetic voices | a real recording; numpy absent on Render |
+
+**How to check (run when the laptop is otherwise idle — live browser runs crashed Claude's
+session three times):**
+
+```bash
+# unit tests for everything above (no browser)
+cd frontend && npx tsc --noEmit && npx vitest run lib components
+cd ../backend && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest tests/test_office_extract.py tests/test_pdf_bookmarks.py tests/test_scanned_pdf.py tests/test_speakers.py -q
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 venv/bin/python -m pytest tests/test_live_block.py tests/test_subtitles.py tests/test_video_transcript.py tests/test_note_sources_router.py -p asyncio -q
+
+# the one live e2e (creates and deletes its own "SB-TEST" note)
+./app.sh start            # from the repo root; first /brain compile takes 2+ min
+cd frontend && npx playwright test --project=unsaved-edits-live
+```
+
+By hand in the app: drop a .docx/.pptx/.xlsx and a long PDF into a workspace; select PDF text
+→ Send to note; add a live block and ask for "a flowchart of photosynthesis" and "a 3D model
+of a cell"; press ⤓; drop a .glb file into a note; ⋯ → Present; ⋯ → Export as LaTeX.
 
 ---
 
