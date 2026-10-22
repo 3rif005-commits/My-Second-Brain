@@ -16,6 +16,7 @@ import {
   type NoteAnchor, type NoteSource, type SendAction,
 } from "@/lib/workspace";
 import { anchorRows, findLevelHeadings, readDraftAnchors, type DraftAnchor } from "./anchorHeadings";
+import { textBlocks } from "./sendBlocks";
 
 const BlockEditor = dynamic(
   () => import("@/components/editor/BlockEditor").then((m) => m.BlockEditor),
@@ -311,9 +312,8 @@ export function NotePane({
     if (!ed) return;
     const blocks: AnyBlock[] = [];
     if (action.type === "text") {
-      for (const para of action.text.split("\n\n")) {
-        if (para.trim()) blocks.push({ type: "paragraph", content: para.trim() });
-      }
+      blocks.push(...textBlocks(action.text, action.page,
+        { noteId: note.id, resourceId: activeSourceId ?? "" }));
     } else if (action.type === "image") {
       blocks.push({ type: "image", props: { url: action.url, caption: action.caption ?? "" } });
     } else if (action.type === "table") {

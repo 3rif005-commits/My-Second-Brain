@@ -186,7 +186,7 @@ export interface RecentSession {
 }
 
 export type SendAction =
-  | { type: "text"; text: string }
+  | { type: "text"; text: string; /** PDF page it came from → quote + page pill */ page?: number }
   | { type: "image"; url: string; caption?: string }
   | { type: "table"; markdown: string }
   | { type: "latex"; latex: string }

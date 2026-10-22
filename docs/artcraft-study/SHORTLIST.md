@@ -50,7 +50,7 @@ user-facing ideas from FINDINGS, in this order:
 | 2 | Fast big PDFs (rank 2) | S | code + unit tests done; no live check |
 | 3 | Chapters from PDF bookmarks (rank 3) | S | done; verified on a real PDF (Labs-2.pdf: 10 bookmarks → 10 headings) |
 | 4 | Word, PowerPoint and Excel files in Workspace (rank 4) | M | done; 14 tests; checked on 6 real files (FR/AR docx, xlsx, pptx). Live upload not checked (Supabase bucket MIME rules unverifiable from here) |
-| 5 | "Send to note" keeps the page link (rank 5) | S | |
+| 5 | "Send to note" keeps the page link (rank 5) | S | done (unit tests); the selection bar's separate Checkpoint button is gone. Not done: tinting the quoted passage (needs stored highlights, more than S). No live check |
 | 6 | Live block: basics (rank 6) | S | |
 | 7 | Live block: diagrams, 3D, image export, safety check (rank 7 + VC4) | M | |
 | 8 | Equations from Word documents (rank 8) | S | |

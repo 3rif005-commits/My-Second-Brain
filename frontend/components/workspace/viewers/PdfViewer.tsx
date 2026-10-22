@@ -15,6 +15,7 @@ import { wsApi, type SendAction, type WsElement, type NoteSource } from "@/lib/w
 import { useToast } from "@/app/providers";
 import { ActionBar, ActionButton, ActionLabel, ActionSeparator } from "./ActionBar";
 import { pageHeight, pagesToRender } from "./pageWindow";
+import { pageOfNode } from "../sendBlocks";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url
@@ -42,7 +43,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [active, setActive] = useState<{ el: WsElement; x: number; y: number } | null>(null);
-  const [selection, setSelection] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [selection, setSelection] = useState<{ text: string; x: number; y: number; page?: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const { showToast } = useToast();
@@ -127,6 +128,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
       text,
       x: rect.left + rect.width / 2 - crect.left,
       y: rect.top - crect.top + containerRef.current.scrollTop,
+      page: pageOfNode(sel.anchorNode),
     });
   }, []);
 
@@ -168,7 +170,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
       }
       return;
     }
-    onAction({ type: "text", text: el.content || "" });
+    onAction({ type: "text", text: el.content || "", page: el.page });
   }
 
   // Confirm in place rather than closing instantly — a popover that vanishes is
@@ -279,22 +281,12 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
 
       {selection && (
         <ActionBar x={selection.x} y={selection.y}>
-          <ActionButton primary title="Send the selected text to the note" onClick={() => {
-            onAction({ type: "text", text: selection.text });
+          <ActionButton primary title="Send the selected text to the note, with a link back to its page" onClick={() => {
+            onAction({ type: "text", text: selection.text, page: selection.page ?? currentPage.current });
             setSelection(null);
             window.getSelection()?.removeAllRanges();
           }}>
             <CornerDownRight size={12} /> Send to note
-          </ActionButton>
-          <ActionButton title="Bookmark this page in the note" onClick={() => {
-            onAction({
-              type: "checkpoint", anchorType: "page",
-              value: currentPage.current,
-              label: selection.text.slice(0, 40),
-            });
-            setSelection(null);
-          }}>
-            <Bookmark size={12} /> Checkpoint
           </ActionButton>
         </ActionBar>
       )}
