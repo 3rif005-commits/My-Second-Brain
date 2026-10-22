@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { PromptDialog } from "@/components/ui/PromptDialog";
-import { sourceColor, type NoteSource, type ResourceKind } from "@/lib/workspace";
+import { ACCEPTED_WORKSPACE_FILES, sourceColor, type NoteSource, type ResourceKind } from "@/lib/workspace";
 import { SourceTrigger } from "./SourceTrigger";
 
 const KIND_ICON = {
@@ -116,7 +116,7 @@ export function SourceRail({
                 </span>
                 <span className="min-w-0">
                   <span className="block font-medium">Upload a file</span>
-                  <span className="block text-[11px] text-gray-400">PDF, Markdown, text, video</span>
+                  <span className="block text-[11px] text-gray-400">PDF, Word, PowerPoint, Excel, text, video</span>
                 </span>
               </button>
               <button
@@ -229,7 +229,7 @@ export function SourceRail({
         ref={fileInputRef}
         type="file"
         multiple
-        accept=".pdf,.md,.txt,.mp4,.webm,.mov,.mkv,.m4v"
+        accept={ACCEPTED_WORKSPACE_FILES}
         className="hidden"
         onChange={(e) => {
           const files = Array.from(e.target.files ?? []);

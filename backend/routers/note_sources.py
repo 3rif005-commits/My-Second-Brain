@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["note-sources"])
 
 _VIDEO_EXTS = {".mp4", ".webm", ".mov", ".mkv", ".m4v"}
-_DOC_EXTS = {".pdf", ".md", ".txt"}
+_DOC_EXTS = {".pdf", ".md", ".txt", ".docx", ".pptx", ".xlsx"}
 _NOTE_SOURCE_TYPE = {"pdf": "pdf", "document": "text", "youtube": "video",
                      "video": "video", "website": "url"}
 

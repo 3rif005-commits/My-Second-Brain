@@ -178,8 +178,14 @@ def _process_resource(resource_id: str) -> None:
                     # render these (SourceViewer routes `document` to it).
                     from services.workspace.sections import (
                         chunk_sections, sections_as_elements, split_markdown_sections)
-                    with open(tmp_path, encoding="utf-8", errors="replace") as f:
-                        raw = f.read()
+                    if suffix.lower() in (".docx", ".pptx", ".xlsx"):
+                        # Office files become markdown first (headings, lists, tables,
+                        # slides, sheets) and then take the same section path.
+                        from services.office_extract import office_to_markdown
+                        raw = office_to_markdown(tmp_path, suffix)
+                    else:
+                        with open(tmp_path, encoding="utf-8", errors="replace") as f:
+                            raw = f.read()
                     doc_sections = split_markdown_sections(raw)
                     _insert_elements(resource, sections_as_elements(doc_sections))
                     _insert_chunks(resource, chunk_sections(doc_sections))
