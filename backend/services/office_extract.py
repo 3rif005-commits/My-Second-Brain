@@ -39,7 +39,8 @@ _M = lambda t: f"{{{M_NS}}}{t}"  # noqa: E731
 def office_to_markdown(path: str, ext: str) -> str:
     """Dispatch on extension. Raises ValueError for an unreadable or empty file."""
     ext = ext.lower()
-    readers = {".docx": docx_to_markdown, ".pptx": pptx_to_markdown, ".xlsx": xlsx_to_markdown}
+    readers = {".docx": lambda p: docx_to_markdown(p, math=omml_math),
+               ".pptx": pptx_to_markdown, ".xlsx": xlsx_to_markdown}
     if ext not in readers:
         raise ValueError(f"Unsupported Office file type: {ext}")
     try:
@@ -85,6 +86,117 @@ def _join_blocks(blocks: list[tuple[str, str]]) -> str:
         out.append(text)
         prev = kind
     return "\n".join(out)
+
+
+
+# ── Office Math (OMML) → LaTeX (ArtCraft study item 8, after wordcraft read/math.rs) ─────
+
+_NARY = {"∑": r"\sum", "∏": r"\prod", "∐": r"\coprod", "∫": r"\int", "∬": r"\iint",
+         "∭": r"\iiint", "∮": r"\oint", "⋃": r"\bigcup", "⋂": r"\bigcap", "⋁": r"\bigvee",
+         "⋀": r"\bigwedge"}
+_ACCENT = {"\u0302": r"\hat", "^": r"\hat", "\u0303": r"\tilde", "~": r"\tilde", "\u0304": r"\bar",
+           "\u0305": r"\bar", "\u20d7": r"\vec", "\u2192": r"\vec", "\u0307": r"\dot", "\u0308": r"\ddot"}
+_FUNCS = {"sin", "cos", "tan", "cot", "sec", "csc", "sinh", "cosh", "tanh", "arcsin", "arccos",
+          "arctan", "log", "ln", "exp", "lim", "max", "min", "sup", "inf", "det", "deg", "arg", "gcd"}
+_TEX_ESCAPE = {"\\": r"\backslash ", "{": r"\{", "}": r"\}", "#": r"\#", "%": r"\%",
+               "&": r"\&", "$": r"\$"}
+_DELIM = {"{": r"\{", "}": r"\}", "|": "|", "‖": r"\|", "⟨": r"\langle", "⟩": r"\rangle",
+          "⌈": r"\lceil", "⌉": r"\rceil", "⌊": r"\lfloor", "⌋": r"\rfloor", "": "."}
+
+
+def _mval(el, path: str, default: str | None = None) -> str | None:
+    """`m:val` of the first descendant at `path` (e.g. "naryPr/chr")."""
+    node = el
+    for part in path.split("/"):
+        node = node.find(_M(part)) if node is not None else None
+    if node is None:
+        return default
+    v = node.get(_M("val"))
+    return default if v is None else v
+
+
+def _tex_text(t: str) -> str:
+    word = t.strip()
+    if word in _FUNCS:
+        return "\\" + word + " "
+    return "".join(_TEX_ESCAPE.get(c, c) for c in t)
+
+
+def omml_to_latex(el, depth: int = 0) -> str:
+    """LaTeX for an OMML element (m:oMath, m:oMathPara or any part of one)."""
+    if depth > MAX_DEPTH or el is None:
+        return ""
+    tag = el.tag
+    sub = lambda name: omml_to_latex(el.find(_M(name)), depth + 1)  # noqa: E731
+    kids = lambda: "".join(omml_to_latex(c, depth + 1) for c in el)  # noqa: E731
+
+    if tag == _M("r"):
+        return "".join(_tex_text(t.text or "") for t in el.iter(_M("t")))
+    if tag == _M("t"):
+        return _tex_text(el.text or "")
+    if tag == _M("f"):
+        num, den = sub("num"), sub("den")
+        return f"{num}/{den}" if _mval(el, "fPr/type") == "lin" else f"\\frac{{{num}}}{{{den}}}"
+    if tag == _M("sSup"):
+        return f"{{{sub('e')}}}^{{{sub('sup')}}}"
+    if tag == _M("sSub"):
+        return f"{{{sub('e')}}}_{{{sub('sub')}}}"
+    if tag == _M("sSubSup"):
+        return f"{{{sub('e')}}}_{{{sub('sub')}}}^{{{sub('sup')}}}"
+    if tag == _M("sPre"):
+        return f"{{}}_{{{sub('sub')}}}^{{{sub('sup')}}}{{{sub('e')}}}"
+    if tag == _M("rad"):
+        deg = sub("deg")
+        hide = _mval(el, "radPr/degHide") in ("1", "on", "true")
+        return f"\\sqrt{{{sub('e')}}}" if hide or not deg.strip() else f"\\sqrt[{deg}]{{{sub('e')}}}"
+    if tag == _M("nary"):
+        op = _NARY.get(_mval(el, "naryPr/chr", "∫") or "∫", r"\int")
+        lo = "" if _mval(el, "naryPr/subHide") in ("1", "on", "true") else sub("sub")
+        hi = "" if _mval(el, "naryPr/supHide") in ("1", "on", "true") else sub("sup")
+        return op + (f"_{{{lo}}}" if lo else "") + (f"^{{{hi}}}" if hi else "") + f" {sub('e')}"
+    if tag == _M("d"):
+        beg = _mval(el, "dPr/begChr", "(")
+        end = _mval(el, "dPr/endChr", ")")
+        sep = _mval(el, "dPr/sepChr", "|")
+        parts = [omml_to_latex(e, depth + 1) for e in el.findall(_M("e"))]
+        inner = f" {_DELIM.get(sep, sep)} ".join(parts)
+        return f"\\left{_DELIM.get(beg, beg)} {inner} \\right{_DELIM.get(end, end)}"
+    if tag == _M("func"):
+        name = sub("fName").strip()
+        if name in _FUNCS:
+            name = "\\" + name
+        return f"{name} {sub('e')}"
+    if tag == _M("acc"):
+        cmd = _ACCENT.get(_mval(el, "accPr/chr", "\u0302") or "\u0302", r"\hat")
+        return f"{cmd}{{{sub('e')}}}"
+    if tag == _M("bar"):
+        under = _mval(el, "barPr/pos") == "bot"
+        return f"\\underline{{{sub('e')}}}" if under else f"\\overline{{{sub('e')}}}"
+    if tag == _M("limLow"):
+        base = sub("e").strip()
+        if base.startswith("\\") and base[1:].strip() in _FUNCS:
+            return f"{base}_{{{sub('lim')}}}"
+        return f"\\underset{{{sub('lim')}}}{{{base}}}"
+    if tag == _M("limUpp"):
+        return f"\\overset{{{sub('lim')}}}{{{sub('e')}}}"
+    if tag == _M("m"):
+        rows = [" & ".join(omml_to_latex(e, depth + 1) for e in mr.findall(_M("e")))
+                for mr in el.findall(_M("mr"))]
+        return "\\begin{matrix} " + " \\\\ ".join(rows) + " \\end{matrix}"
+    if tag == _M("eqArr"):
+        rows = [omml_to_latex(e, depth + 1) for e in el.findall(_M("e"))]
+        return "\\begin{aligned} " + " \\\\ ".join(rows) + " \\end{aligned}"
+    if tag.endswith("Pr") or tag == _M("ctrlPr"):
+        return ""  # properties, never content
+    return kids()  # oMath, e, num, den, box, groupChr, phant, unknowns: keep their content
+
+
+def omml_math(el) -> str:
+    """An equation as it sits in the text: `$$…$$` for a display equation, `$…$` inline."""
+    latex = re.sub(r"\s+", " ", omml_to_latex(el)).strip()
+    if not latex:
+        return ""
+    return f"$${latex}$$" if el.tag == _M("oMathPara") else f"${latex}$"
 
 
 # ── .docx ───────────────────────────────────────────────────────────────────
@@ -188,7 +300,7 @@ def docx_list_level(paragraph) -> int | None:
     return None
 
 
-def _docx_table(tbl, parent) -> str:
+def _docx_table(tbl, parent, math: Callable = _omml_plain) -> str:
     from docx.table import Table
     rows: list[list[str]] = []
     for row in Table(tbl, parent).rows:
@@ -197,7 +309,9 @@ def _docx_table(tbl, parent) -> str:
             if c._tc is prev:  # a horizontally merged cell repeats; keep it once
                 continue
             prev = c._tc
-            cells.append(c.text)
+            # Not `c.text`: that skips equations, and lab sheets keep formulas in tables.
+            cells.append(" ".join(t for t in (_run_text(p, math).strip()
+                                              for p in c._tc.iter(_W("p"))) if t))
         rows.append(cells)
     return markdown_table(rows)
 
@@ -228,7 +342,7 @@ def docx_to_markdown(path: str, math: Callable = _omml_plain) -> str:
                 else:
                     blocks.append(("text", text))
             elif el.tag == _W("tbl"):
-                blocks.append(("table", _docx_table(el, doc)))
+                blocks.append(("table", _docx_table(el, doc, math)))
             elif el.tag == _W("sdt"):  # content controls wrap ordinary paragraphs/tables
                 content = el.find(_W("sdtContent"))
                 if content is not None:

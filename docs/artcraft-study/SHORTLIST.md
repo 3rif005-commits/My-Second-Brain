@@ -54,7 +54,7 @@ user-facing ideas from FINDINGS, in this order:
 | 6 | Live block: basics (rank 6) | S | done (unit tests): auto-height, result shown + saved after AI, AI edits a filled block. No live check |
 | 7 | Live block: diagrams, 3D, image export, safety check (rank 7 + VC4) | M | done (unit tests; every generated script parsed): Mermaid / model-URL / HTML+`sbScene` kinds, CSP to pinned CDN, ⤓ export + print snapshot, warnings. No live check — CDN loading and WebGL unverified in a browser |
 | 7b | Drop a `.glb`/`.stl` file into a note → 3D live block | S | not started — needs a note-asset upload endpoint (editor has no upload hook today); a model *link* already works |
-| 8 | Equations from Word documents (rank 8) | S | |
+| 8 | Equations from Word documents (rank 8) | S | done; 19 tests; real lab sheet: 20 of 20 equations → LaTeX (12 were inside tables) |
 | 9 | Video transcript and chapters (rank 9) | M | |
 | 10 | Present a note as slides (rank 10) | M | |
 | 11 | Photo of a whiteboard → Mermaid diagram (VC5) | S | |

@@ -227,3 +227,84 @@ def test_workspace_processor_reads_docx_as_sections(tmp_path, monkeypatch):
     assert all(c["anchor_type"] == "section" for c in got["chunks"])
     assert any(e["element_type"] == "heading" and e["content"] == "Week 3" for e in got["els"])
     assert "failed" not in statuses
+
+
+# ── Word equations → LaTeX (item 8) ─────────────────────────────────────────
+
+M = 'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"'
+
+
+def _omml(inner: str, para: bool = False):
+    from lxml import etree
+    xml = f"<m:oMath {M}>{inner}</m:oMath>"
+    if para:
+        xml = f"<m:oMathPara {M}>{xml}</m:oMathPara>"
+    return etree.fromstring(xml)
+
+
+def r(t: str) -> str:
+    return f"<m:r><m:t>{t}</m:t></m:r>"
+
+
+def test_omml_fraction_scripts_radical():
+    from services.office_extract import omml_math
+    frac = f"<m:f><m:num>{r('a')}</m:num><m:den>{r('b')}</m:den></m:f>"
+    assert omml_math(_omml(frac)) == r"$\frac{a}{b}$"
+    sup = f"<m:sSup><m:e>{r('x')}</m:e><m:sup>{r('2')}</m:sup></m:sSup>"
+    assert omml_math(_omml(sup)) == "${x}^{2}$"
+    both = f"<m:sSubSup><m:e>{r('x')}</m:e><m:sub>{r('i')}</m:sub><m:sup>{r('2')}</m:sup></m:sSubSup>"
+    assert omml_math(_omml(both)) == "${x}_{i}^{2}$"
+    rad = f"<m:rad><m:radPr><m:degHide m:val='1'/></m:radPr><m:deg/><m:e>{r('y')}</m:e></m:rad>"
+    assert omml_math(_omml(rad)) == r"$\sqrt{y}$"
+    cube = f"<m:rad><m:deg>{r('3')}</m:deg><m:e>{r('y')}</m:e></m:rad>"
+    assert omml_math(_omml(cube)) == r"$\sqrt[3]{y}$"
+
+
+def test_omml_sum_delimiters_functions_matrix_display():
+    from services.office_extract import omml_math
+    nary = (f"<m:nary><m:naryPr><m:chr m:val='∑'/></m:naryPr><m:sub>{r('i=1')}</m:sub>"
+            f"<m:sup>{r('n')}</m:sup><m:e>{r('i')}</m:e></m:nary>")
+    assert omml_math(_omml(nary)) == r"$\sum_{i=1}^{n} i$"
+    d = f"<m:d><m:e>{r('a+b')}</m:e></m:d>"
+    assert omml_math(_omml(d)) == r"$\left( a+b \right)$"
+    abs_ = f"<m:d><m:dPr><m:begChr m:val='|'/><m:endChr m:val='|'/></m:dPr><m:e>{r('x')}</m:e></m:d>"
+    assert omml_math(_omml(abs_)) == r"$\left| x \right|$"
+    func = f"<m:func><m:fName>{r('sin')}</m:fName><m:e>{r('θ')}</m:e></m:func>"
+    assert omml_math(_omml(func)) == r"$\sin θ$"
+    mat = (f"<m:m><m:mr><m:e>{r('1')}</m:e><m:e>{r('0')}</m:e></m:mr>"
+           f"<m:mr><m:e>{r('0')}</m:e><m:e>{r('1')}</m:e></m:mr></m:m>")
+    assert omml_math(_omml(mat)) == r"$\begin{matrix} 1 & 0 \\ 0 & 1 \end{matrix}$"
+    assert omml_math(_omml(r("E=mc"), para=True)) == "$$E=mc$$"
+
+
+def test_omml_escapes_and_keeps_unknown_content():
+    from services.office_extract import omml_math
+    assert omml_math(_omml(r("50%"))) == r"$50\%$"
+    assert omml_math(_omml(f"<m:groupChr><m:e>{r('z')}</m:e></m:groupChr>")) == "$z$"
+    assert omml_math(_omml("")) == ""
+
+
+def test_docx_equation_becomes_latex_in_its_paragraph(tmp_path):
+    from docx.oxml import parse_xml
+
+    def build(d):
+        p = d.add_paragraph("Energy is ")
+        p._p.append(parse_xml(
+            f"<m:oMath {M}><m:r><m:t>E=m</m:t></m:r><m:sSup><m:e><m:r><m:t>c</m:t></m:r></m:e>"
+            f"<m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup></m:oMath>"))
+        p.add_run(" exactly.")
+    md = office_to_markdown(_docx(tmp_path, build), ".docx")
+    assert md == "Energy is $E=m{c}^{2}$ exactly."
+
+
+def test_docx_equation_inside_a_table_cell_is_kept(tmp_path):
+    from docx.oxml import parse_xml
+
+    def build(d):
+        t = d.add_table(rows=1, cols=2)
+        t.cell(0, 0).text = "Delay"
+        t.cell(0, 1).paragraphs[0]._p.append(parse_xml(
+            f"<m:oMath {M}><m:f><m:num><m:r><m:t>1</m:t></m:r></m:num>"
+            f"<m:den><m:r><m:t>2f</m:t></m:r></m:den></m:f></m:oMath>"))
+    md = office_to_markdown(_docx(tmp_path, build), ".docx")
+    assert r"| Delay | $\frac{1}{2f}$ |" in md
