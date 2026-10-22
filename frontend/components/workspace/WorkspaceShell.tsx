@@ -390,9 +390,8 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
 
   // ── whole-shell drag & drop ───────────────────────────────────────────────
   const onDrop = useCallback((e: React.DragEvent) => {
+    if (e.defaultPrevented) return;   // already taken inside the note (photo into a live block)
     e.preventDefault();
-    dragDepth.current = 0;
-    setDragOver(false);
     const files = Array.from(e.dataTransfer.files ?? []);
     if (files.length) { addFiles(files); return; }
     const text = e.dataTransfer.getData("text/uri-list")
@@ -412,6 +411,9 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       dragDepth.current = Math.max(0, dragDepth.current - 1);
       if (dragDepth.current === 0) setDragOver(false);
     },
+    // Capture phase: runs even when the note takes the drop itself and stops it there
+    // (a .glb into the editor, a photo into a live block), so the overlay never sticks.
+    onDropCapture: () => { dragDepth.current = 0; setDragOver(false); },
     onDrop,
   }), [onDrop]);
 

@@ -74,7 +74,9 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   function onPhotoTransfer(e: React.ClipboardEvent | React.DragEvent, dt: DataTransfer | null) {
     const img = imageFromTransfer(dt);
     if (!img) return;
+    // Taken here: the workspace page around the note would otherwise add the photo as a source.
     e.preventDefault();
+    e.stopPropagation();
     void fromPhoto(img);
   }
 

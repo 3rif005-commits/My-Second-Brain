@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "acorn";
-import { CDN, MERMAID_URL, buildSrcDoc, detectKind, preflightWarnings } from "./liveRuntime";
+import { CDN, FIT_CAMERA_JS, MERMAID_URL, buildSrcDoc, detectKind, preflightWarnings } from "./liveRuntime";
 
 // Every inline script the runtime emits must at least parse — no browser needed to catch a slip.
 function scripts(doc: string): { module: boolean; src: string }[] {
@@ -81,5 +81,34 @@ describe("preflightWarnings", () => {
     expect(preflightWarnings('<img src="https://evil.com/a.png">')[0]).toMatch(/other sites/);
     expect(preflightWarnings(`<script src="${CDN}/npm/x"></script>`)).toEqual([]);
     expect(preflightWarnings("flowchart LR\n A-->B")).toEqual([]);
+  });
+});
+
+describe("fitCamera (3D framing)", () => {
+  const fitCamera = new Function(`${FIT_CAMERA_JS}; return fitCamera;`)() as
+    (sx: number, sy: number, sz: number, fov: number) => { x: number; y: number; z: number; ty: number };
+
+  // Every corner of the box must sit inside the camera's vertical field of view.
+  function cornersFit(sx: number, sy: number, sz: number, fov = 50) {
+    const p = fitCamera(sx, sy, sz, fov);
+    const f = [-p.x, p.ty - p.y, -p.z], fl = Math.hypot(...f);
+    const half = (fov * Math.PI) / 360;
+    for (const cx of [-sx / 2, sx / 2]) for (const cy of [0, sy]) for (const cz of [-sz / 2, sz / 2]) {
+      const v = [cx - p.x, cy - p.y, cz - p.z], vl = Math.hypot(...v);
+      const angle = Math.acos((v[0] * f[0] + v[1] * f[1] + v[2] * f[2]) / (vl * fl));
+      if (angle > half) return false;
+    }
+    return true;
+  }
+
+  it("keeps a whole cube in view (the 2-unit cube used to be cut off)", () => {
+    expect(cornersFit(2, 2, 2)).toBe(true);
+  });
+
+  it("keeps flat, tall and long models in view, aimed at their middle", () => {
+    expect(cornersFit(2, 0.2, 2)).toBe(true);
+    expect(cornersFit(0.5, 2, 0.5)).toBe(true);
+    expect(cornersFit(2, 0.5, 0.3)).toBe(true);
+    expect(fitCamera(2, 2, 2, 50).ty).toBe(1);
   });
 });

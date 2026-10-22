@@ -8,7 +8,7 @@
 //             three.js scene that is already lit and framed.
 //
 // 3D uses ArtCraft's recipe (captureModelThumbnail.ts, Apache-2.0/MIT, rewritten here): scale
-// to a 2-unit box standing on the origin, camera on a 45° diagonal at fitDistance × 1.3, a
+// to a 2-unit box standing on the origin, camera on a 45° diagonal fitted to the bounding sphere, a
 // fixed five-light rig, damped orbit controls. Every frame gets a CSP that allows the pinned
 // CDN only (plus `assetOrigin` for model files), the height reporter and an export responder.
 
@@ -63,6 +63,18 @@ parent.postMessage({"sb-live-image":out,"sb-live-kind":kind},"*");});</script>`;
 
 const BASE_STYLE = `<style>html,body{margin:0}body{font-family:system-ui,sans-serif;background:#fff;color:#1f2937}</style>`;
 
+// Where the camera goes for a model of size (sx, sy, sz) standing on the origin: far enough
+// that the whole bounding sphere fits the vertical field of view (seen from a corner a box is
+// wider than its longest side — a cube was cut off), on the 45° diagonal, a little above.
+// Plain JS source so the frame embeds exactly what the tests run.
+export const FIT_CAMERA_JS = `function fitCamera(sx, sy, sz, fov) {
+  var r = Math.sqrt(sx * sx + sy * sy + sz * sz) / 2;
+  var d = (r / Math.sin((fov * Math.PI) / 360)) * 1.1;
+  var dir = [Math.SQRT1_2, 0.45, Math.SQRT1_2], n = Math.hypot(dir[0], dir[1], dir[2]);
+  var ty = sy / 2;
+  return { x: (dir[0] / n) * d, y: ty + (dir[1] / n) * d, z: (dir[2] / n) * d, ty: ty };
+}`;
+
 // The 3D helper: `await sbScene(el?)` → { THREE, scene, camera, renderer, controls, frame(obj),
 // onFrame(cb) }. `frame` scales/centres an object and points the camera at it.
 const SCENE_RUNTIME = `<script type="importmap">{"imports":{"three":"${THREE_URL}","three/addons/":"${THREE_ADDONS}"}}</script>
@@ -72,6 +84,7 @@ window.sbScene=function(el){return window.sbReady.then(function(rt){return rt.ma
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 const FOV = 50;
+${FIT_CAMERA_JS}
 function lights(scene) {
   scene.add(new THREE.AmbientLight(0xffffff, 2));
   scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.2));
@@ -114,9 +127,9 @@ function makeScene(el) {
     const b2 = new THREE.Box3().setFromObject(obj), c = b2.getCenter(new THREE.Vector3());
     obj.position.x -= c.x; obj.position.z -= c.z; obj.position.y -= b2.min.y;
     const s = new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3());
-    const m = Math.max(s.x, s.y, s.z), d = (m / 2 / Math.tan((FOV * Math.PI) / 360)) * 1.3, a = Math.PI / 4;
-    camera.position.set(Math.sin(a) * d, s.y * 0.5 + d * 0.4, Math.cos(a) * d);
-    controls.target.set(0, s.y * 0.4, 0); controls.update();
+    const p = fitCamera(s.x, s.y, s.z, FOV);
+    camera.position.set(p.x, p.y, p.z);
+    controls.target.set(0, p.ty, 0); controls.update();
   }
   return { THREE, scene, camera, renderer, controls, frame, onFrame: (f) => hooks.push(f) };
 }
