@@ -25,28 +25,46 @@ quoted PDF passages, and page actions listed in quick find (⌘P).
 
 | Item | Verified | Not verified |
 |------|----------|--------------|
-| Never lose an edit (failed saves kept, retried, restored) | 12 unit tests incl. random failures; no overlapping saves | live e2e `unsaved-edits-live` never completed (session crashes) |
-| Fast big PDFs (only near pages drawn) | unit tests | scrolling a 300-page PDF in a browser |
+| Never lose an edit (failed saves kept, retried, restored) | 12 unit tests; **live (deployed)**: saves forced to fail → "Not saved — retrying" + browser copy; reload → line restored, saved to server, copy dropped | — |
+| Fast big PDFs (only near pages drawn) | unit tests | scrolling a 300-page PDF in a browser (blocked: the 300-page test PDF never finished processing on Render, see Open) |
 | PDF bookmarks → chapters | real file: 10 bookmarks → 10 headings; Lect10 unchanged | — |
-| Word/PowerPoint/Excel in Workspace | 14 tests; 6 real files (FR/AR) | live upload (Supabase bucket MIME rules) |
-| Send to note keeps the page | unit tests; **live (local + deployed)**: quote + one "📍 p. 1" pill land in the note; PDF tint shows; source opens in ~2 s on Render | clicking the pill back |
-| Live block basics (auto-height, edit in place) | unit tests | in browser |
-| Live block: Mermaid, 3D, export, CSP | unit tests; every generated script parsed with acorn; CDN files return 200 | CDN loading, WebGL, export in a real browser |
-| Drop .glb/.stl → 3D block | route + unit tests | drop events, storage MIME |
+| Word/PowerPoint/Excel in Workspace | 14 tests; 6 real files (FR/AR); **live (deployed)**: .docx (table, equation → LaTeX, FR/AR), .pptx (FR/AR), .xlsx all upload and show | equation shows as raw `$…$` in the source viewer |
+| Send to note keeps the page | unit tests; **live (local + deployed)**: quote + one "📍 p. 1" pill land in the note; PDF tint shows; source opens in ~2 s on Render | clicking the pill back to the page |
+| Live block basics (auto-height, edit in place) | unit tests; **live (deployed)**: inserted from the slash menu, Code → Apply | a little empty space under short diagrams |
+| Live block: Mermaid, 3D, export, CSP | **live (deployed)**: Mermaid renders from the pinned CDN; ⤓ saved a correct SVG; 3D renders. Found + fixed: cube cut off (camera now fits the bounding sphere) | a model with no material renders black on unlit faces (glTF default is metallic) |
+| Drop .glb/.stl → 3D block | **live (deployed)**: .glb drop → upload → 3D block. Found + fixed: "Drop to add sources" stuck after the drop. Model links are 10-year signed URLs stored in the note | — |
 | Word equations → LaTeX | real lab sheet: 20/20 (12 in tables) | — |
-| Video transcript + creator chapters | unit tests | real YouTube (yt-dlp chapters), only new sources get it |
+| Video transcript + creator chapters | unit tests | real YouTube (yt-dlp chapters) |
 | Present a note as slides | unit tests; **live (deployed)**: opened from ⌘P on Lecture 10, arrows + G overview work | — |
-| Photo of a diagram → Mermaid | unit + route tests | a real vision model |
-| Subtitles (.srt/.vtt) | unit tests incl. pairing either order | real upload |
-| Scanned PDF pages → vision | unit tests; no false positives on 2 real PDFs | a real scan + vision model |
-| Export as LaTeX | unit tests | compiling (no TeX installed here) |
-| Speaker labels | synthetic voices | a real recording (numpy now in requirements.txt) |
+| Photo of a diagram → Mermaid | **live (deployed)**: dropped photo → correct Mermaid (Haiku). Found + fixed: the drop also reached the page ("Unsupported file type .png") | — |
+| Subtitles (.srt/.vtt) | **live (deployed)**: .srt + .mp4 of the same name → transcript from the subtitles | — |
+| Scanned PDF pages → vision | **live (deployed)**: image-only PDF → page read, embedded; chat answer cites it and opens it | — |
+| Export as LaTeX | unit tests; **live (deployed)**: downloads, live blocks as placeholders. Markdown export: found + fixed (live blocks exported their toolbar text) | compiling (no TeX here); Export as PDF (opens the print dialog — check by hand) |
+| Speaker labels | **live (deployed)**: two synthetic voices A/B/A/B → "Speaker 1/2/1/2" (numpy works on Render) | a real recording |
 | Quoted passages tinted in the PDF (read from the note, no migration) | **live in Chrome 2026-10-22**: Send to note → tint exactly over the line; quote deleted → tint gone. Found + fixed: pill read "p. 1 p. 1" | — |
 | Overlong slide continues on a "(cont.)" slide | unit tests; **live (deployed)**: Lecture 10 → 9 slides, "Reinforcement Learning (cont.)" + 4× "Q-Learning (cont.)" in the G overview (label shows there, not on the slide) | — |
 | Uploaded video's own chapter marks, with pictures | real ffmpeg file; **live (deployed)**: uploaded 8 s video with 2 chapters → Chapters row with 2 pictures (Render has ffmpeg); clicking a chapter seeks | a long real video |
 | ⌘P lists and runs page actions (`lib/commands.ts`) | unit + quick-find test; **live (deployed)**: "latex" → Export as LaTeX listed; "present" → runs Present | running an export (downloads a file) |
 | `llama.sh setup` checks models against Hugging Face's sha256 | run here: embed model matches; **your Gemma file is 1,760 bytes short of the published one** (older upload or damaged) | — |
 | Notion parity floor (`docs/ui-audit/parity-floor.json`), eval slowdown rule, `docs/editor-behaviour.md` | unit tests | parity.mjs not re-run (needs a browser) |
+
+**Found on the deployed site and fixed (2026-10-22):** a missing session spun forever; photo drop
+leaked to the page; drop highlight stuck; 3D cube cut off; Markdown export wrote toolbar text;
+**a source being processed when Render restarts stayed "processing" forever** (now resumed at
+startup, gives up after 2 restarts; `render.yaml` build filter so frontend pushes don't restart
+Render — if the service isn't Blueprint-synced, set the same filter in the Render dashboard);
+**Gemini embeddings were one request per chunk** (now 100 per request).
+
+**Open (not fixed):** uploads over **4.5 MB fail on the deployed site** (413 — Vercel's function
+body limit; the upload goes through `/api/ws/[...path]`). Fix = upload straight to Supabase
+Storage from the browser (signed upload URL), then register the source. Needs a decision.
+
+**Open (not fixed): a 300-page PDF never finishes on Render.** Generated test file (184 KB, text
+only) stays "processing" with 0 elements stored, through 2 resumes and a fresh upload; small PDFs,
+Office files, video and scans all work. Locally the same extraction takes 3 s (31 s at a 10% CPU
+quota, 52 MB), so it hangs somewhere on Render before elements are written. Next step: Render →
+Logs, search `1c7ba5f1-75f1-4765-b4b5-7fcbf211de7b` / `2b4ead6a-0ef0-4598-a4e1-2798d33d6587`.
+Both test sources sit in the trashed "sb-test-office" note.
 
 **How to check (run when the laptop is otherwise idle — live browser runs crashed Claude's
 session three times):**
