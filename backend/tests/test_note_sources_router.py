@@ -561,3 +561,32 @@ def test_diagram_from_image_reports_a_readable_error(client):
                         files={"file": ("b.png", b"\x89PNG", "image/png")})
     assert r.status_code == 422
     assert "needs an AI provider" in r.text
+
+
+def test_model_asset_upload_stores_and_returns_a_long_lived_link(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("routers.note_sources.storage") as st:
+        st.signed_url.return_value = "https://p.supabase.co/storage/v1/object/sign/b/x.glb?token=t"
+        r = client.post("/notes/n1/model-asset", headers=AUTH,
+                        files={"file": ("cell.glb", b"glTF\x02\x00\x00\x00rest", "model/gltf-binary")})
+    assert r.status_code == 200
+    assert r.json()["url"].endswith(".glb?token=t")
+    path, data, mime = st.upload.call_args.args
+    assert path.startswith("user-1/notes/n1/models/") and path.endswith(".glb")
+    assert mime == "model/gltf-binary"
+    assert st.signed_url.call_args.args[1] >= 365 * 24 * 3600
+
+
+def test_model_asset_rejects_wrong_type_and_fake_glb(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("routers.note_sources.storage") as st:
+        r1 = client.post("/notes/n1/model-asset", headers=AUTH, files={"file": ("a.gltf", b"{}", "model/gltf+json")})
+        r2 = client.post("/notes/n1/model-asset", headers=AUTH, files={"file": ("a.glb", b"not a glb", "model/gltf-binary")})
+    assert r1.status_code == 400 and r2.status_code == 400
+    st.upload.assert_not_called()

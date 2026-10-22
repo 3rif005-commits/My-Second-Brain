@@ -28,6 +28,8 @@ import { SkillAIMenu } from "./selectionSkills";
 import { transformNotionHtml } from "./notionPaste";
 import { readNotionJson, notionJsonToBlocks } from "./notionBlocks";
 import { NoteIdContext } from "./noteIdContext";
+import { modelFileFrom, modelTitle, uploadModel } from "@/lib/modelDrop";
+import { useToast } from "@/app/providers";
 import { freshFileUrl } from "@/lib/freshFileUrl";
 import { DatabaseBlockSpec, insertDatabaseBlock } from "../database/DatabaseBlock";
 import { ButtonBlockSpec, insertButtonBlock } from "../database/ButtonBlock";
@@ -582,8 +584,25 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ingestHtml]);
 
+    // A .glb/.stl dropped anywhere in the note becomes a 3D live block (lib/modelDrop.ts).
+    // ProseMirror already accepts drags over the editor, so only the drop is handled here;
+    // every other drop goes through untouched.
+    const { showToast } = useToast();
+    const onDropModel = (e: React.DragEvent) => {
+      const file = modelFileFrom(e.dataTransfer);
+      if (!file || !_noteId) return;
+      e.preventDefault();
+      e.stopPropagation();
+      showToast(`Uploading ${file.name}…`, "info");
+      uploadModel(_noteId, file).then((url) => {
+        const block = { type: "interactive", props: { title: modelTitle(file.name), html: url } };
+        const target = insertionTarget(editor.document as AnyBlock[], lastUserBlockRef.current);
+        if (target) editor.insertBlocks([block] as AnyBlock[], target, "after");
+        else editor.replaceBlocks(editor.document, [block] as AnyBlock[]);
+      }).catch((err) => showToast(err instanceof Error ? err.message : "Upload failed"));
+    };
     return (
-      <div className="notion-editor max-w-none">
+      <div className="notion-editor max-w-none" onDropCapture={onDropModel}>
         <NoteIdContext.Provider value={_noteId}>
         {/* BlockNote adds "dark" or "light" as a CLASS on its container from the OS
             colour scheme, and our tokens key off .dark. Without this the editor

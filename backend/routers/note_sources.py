@@ -451,6 +451,31 @@ def formula_latex(source_id: str, body: FormulaRequest,
         raise HTTPException(status_code=502, detail={"error": f"Formula OCR failed: {e}"})
 
 
+_MODEL_MAX_BYTES = 50 * 1024 * 1024
+_MODEL_TYPES = {".glb": "model/gltf-binary", ".stl": "model/stl"}
+
+
+@router.post("/notes/{note_id}/model-asset")
+async def upload_model_asset(note_id: str, file: UploadFile = File(...),
+                             authorization: str = Header()):
+    """A 3D model dropped into a note (ArtCraft study 7b) → a long-lived link the note's live
+    block can load. Only single-file formats: a .gltf usually needs side files."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _MODEL_TYPES:
+        raise HTTPException(status_code=400, detail={"error": "Drop a .glb or .stl file."})
+    data = await file.read(_MODEL_MAX_BYTES + 1)
+    if not data or len(data) > _MODEL_MAX_BYTES:
+        raise HTTPException(status_code=413, detail={"error": "The model is empty or larger than 50 MB."})
+    if ext == ".glb" and not data.startswith(b"glTF"):
+        raise HTTPException(status_code=400, detail={"error": "This isn't a valid .glb file."})
+    path = f"{user_id}/notes/{note_id}/models/{uuid.uuid4().hex}{ext}"
+    storage.upload(path, data, _MODEL_TYPES[ext])
+    # Long-lived on purpose (ledger B2): the link sits inside the note.
+    return {"url": storage.signed_url(path, 10 * 365 * 24 * 3600), "path": path}
+
+
 @router.post("/notes/{note_id}/diagram-from-image")
 async def diagram_from_image_route(note_id: str, file: UploadFile = File(...),
                                    authorization: str = Header()):
