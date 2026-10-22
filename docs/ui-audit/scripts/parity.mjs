@@ -1,7 +1,9 @@
 // Parity check: opens the running app (http://localhost:3000) in light and dark,
 // reads COMPUTED styles from the real DOM and compares them with the values measured
 // from live Notion (docs/notion-reference/checklist.md). Writes
-// docs/ui-audit/parity-report.md and exits non-zero if any check fails.
+// docs/ui-audit/parity-report.md. The pass count has a floor that only rises
+// (parity-floor.json, after WordCraft's `xtask parity`): a run below it exits non-zero, a run
+// above it raises it. So a new check may start out failing, but nothing that passed may regress.
 //
 // Usage (app running, logged-in storage state from shoot.mjs):
 //   AUDIT_TMP=/tmp/ui-audit node docs/ui-audit/scripts/parity.mjs
@@ -103,4 +105,14 @@ const lines = [
 fs.writeFileSync(path.join(HERE, "..", "parity-report.md"), lines.join("\n"));
 console.log(`${passed}/${results.length} parity checks pass`);
 for (const r of results.filter((x) => !x.pass)) console.log("FAIL", r.theme, r.n, r.label, "want", r.want, "got", r.actual);
-process.exit(passed === results.length ? 0 : 1);
+const floorFile = path.join(HERE, "..", "parity-floor.json");
+const floor = JSON.parse(fs.readFileSync(floorFile, "utf8")).passing;
+if (passed < floor) {
+  console.log(`BELOW FLOOR: ${passed} pass, the floor is ${floor}`);
+  process.exit(1);
+}
+if (passed > floor) {
+  fs.writeFileSync(floorFile, JSON.stringify({ passing: passed }, null, 2) + "\n");
+  console.log(`floor raised ${floor} → ${passed} (commit parity-floor.json)`);
+}
+process.exit(0);
