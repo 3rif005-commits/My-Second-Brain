@@ -18,7 +18,7 @@ def embed(text: str) -> list[float]:
 def embed_batch(texts: list[str]) -> list[list[float]]:
     """Embed multiple texts; falls back to sequential if batch unsupported."""
     if settings.embedder_provider == "gemini":
-        return [_embed_gemini(t) for t in texts]
+        return _embed_gemini_many(texts)
     return _embed_llamacpp_batch(texts)
 
 
@@ -79,9 +79,16 @@ def _embed_llamacpp_batch(texts: list[str]) -> list[list[float]]:
 # ── Gemini (future) ──────────────────────────────────────────────────────────
 
 _gemini_client = None
+# Texts per embed_content request (the API's limit). One request per text made a 300-page PDF
+# take many minutes on the deployed backend and ran into the per-minute request quota.
+GEMINI_BATCH = 100
 
 
 def _embed_gemini(text: str) -> list[float]:
+    return _embed_gemini_many([text])[0]
+
+
+def _embed_gemini_many(texts: list[str]) -> list[list[float]]:
     global _gemini_client
     # Embedding a note sends its text to Google: same rule as any model call.
     from services import privacy
@@ -93,9 +100,13 @@ def _embed_gemini(text: str) -> list[float]:
         if not settings.google_api_key:
             raise RuntimeError("GOOGLE_API_KEY not set")
         _gemini_client = genai.Client(api_key=settings.google_api_key)
-    result = _gemini_client.models.embed_content(
-        model="models/gemini-embedding-001",
-        contents=text[:8000],
-        config=genai_types.EmbedContentConfig(output_dimensionality=EMBEDDING_DIM),
-    )
-    return list(result.embeddings[0].values)
+    config = genai_types.EmbedContentConfig(output_dimensionality=EMBEDDING_DIM)
+    out: list[list[float]] = []
+    for start in range(0, len(texts), GEMINI_BATCH):
+        part = [t[:8000] for t in texts[start:start + GEMINI_BATCH]]
+        result = _gemini_client.models.embed_content(
+            model="models/gemini-embedding-001", contents=part, config=config)
+        if len(result.embeddings or []) != len(part):
+            raise RuntimeError(f"Gemini returned {len(result.embeddings or [])} embeddings for {len(part)} texts")
+        out.extend(list(e.values) for e in result.embeddings)
+    return out
