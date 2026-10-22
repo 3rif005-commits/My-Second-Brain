@@ -12,7 +12,6 @@
 | 1 | Live-check the ArtCraft-study items (commands in the dated section below) | 16 commits are unit-tested only; none was seen in a browser |
 | 2 | Push `main` after the live check (deploys Vercel + Render) | everything is committed locally, not pushed |
 | 3 | Delete any leftover note titled "SB-TEST unsaved edits (safe to delete)" | an interrupted live test may have left one |
-| 4 | Decide: add `numpy` to backend/requirements.txt? | speaker labels are off on Render without it |
 
 ---
 
@@ -41,7 +40,7 @@ videos, and a one-line warning under a live block that tries to reach the networ
 | Subtitles (.srt/.vtt) | unit tests incl. pairing either order | real upload |
 | Scanned PDF pages → vision | unit tests; no false positives on 2 real PDFs | a real scan + vision model |
 | Export as LaTeX | unit tests | compiling (no TeX installed here) |
-| Speaker labels | synthetic voices | a real recording; numpy absent on Render |
+| Speaker labels | synthetic voices | a real recording (numpy now in requirements.txt) |
 
 **How to check (run when the laptop is otherwise idle — live browser runs crashed Claude's
 session three times):**
