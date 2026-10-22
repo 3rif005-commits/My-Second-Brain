@@ -286,11 +286,13 @@ export const CheckpointBlockSpec = createReactBlockSpec(
   {
     render: ({ block }) => {
       const p = block.props;
+      const where = fmtAnchor(p.anchorType, p.value);
       const body = (
         <>
           <span>{p.anchorType === "time" ? "⏱" : "📍"}</span>
           <span>{p.label || "Checkpoint"}</span>
-          <span className="opacity-70">{fmtAnchor(p.anchorType, p.value)}</span>
+          {/* "Send to note" labels its pill with the page itself: don't say "p. 1 p. 1". */}
+          {p.label !== where && <span className="opacity-70">{where}</span>}
         </>
       );
       // A checkpoint left behind by the old canvas model has nowhere to link to.
