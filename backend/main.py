@@ -1,5 +1,6 @@
 import logging
 import sys
+import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -19,6 +20,13 @@ logging.basicConfig(
 )
 
 
+def _safe_resume(resume) -> None:
+    try:
+        resume()
+    except Exception as e:                               # noqa: BLE001
+        logging.getLogger(__name__).warning(f"resume_interrupted failed: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Milestone 12 (task-37): the in-process job scheduler for repeating row
@@ -32,6 +40,10 @@ async def lifespan(app: FastAPI):
     # E8: index notes changed by any writer, not only the editor's timer.
     from services import index_sweep
     sweep = index_sweep.start()
+    # Sources a restart cut off mid-processing (deploy, sleep, crash) run again, one by one.
+    if "pytest" not in sys.modules:
+        from services.workspace.processor import resume_interrupted
+        threading.Thread(target=_safe_resume, args=(resume_interrupted,), daemon=True).start()
     yield
     if sweep is not None:
         sweep.cancel()

@@ -11,6 +11,12 @@ services:
     runtime: python
     plan: free
     rootDir: backend
+    # Only a backend change redeploys: each restart kills sources being processed
+    # (they resume at startup, see processor.resume_interrupted).
+    buildFilter:
+      paths:
+        - backend/**
+        - render.yaml
     buildCommand: pip install -r ${REQUIREMENTS_FILE:-requirements.txt}
     startCommand: uvicorn ${APP_MODULE:-main}:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health

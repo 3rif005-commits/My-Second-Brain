@@ -139,6 +139,35 @@ def _mark_subtitle_paired(db, subtitle: dict, video_id: str) -> None:
     db.table("resource_chunks").delete().eq("resource_id", subtitle["id"]).execute()
 
 
+RESUME_LIMIT = 2
+
+
+def resume_interrupted(limit: int = 20) -> int:
+    """Run again the sources a restart cut off. Processing runs inside the web process, so a
+    deploy, the free plan's sleep or a crash leaves a source on "processing" with nothing
+    working on it — a spinner forever, no retry button. Called once at startup. After
+    RESUME_LIMIT restarts in a row the source is marked failed instead (it may be what crashed
+    the server), so the user gets the retry button. "queued" is left alone: a deferred drop
+    waits there on purpose until the user starts it."""
+    rows = (get_supabase().table("note_resources").select("id,meta")
+            .eq("status", "processing").limit(limit).execute().data or [])
+    resumed = 0
+    for r in rows:
+        meta = dict(r.get("meta") or {})
+        tries = int(meta.get("resumed") or 0)
+        if tries >= RESUME_LIMIT:
+            _set_status(r["id"], "error",
+                        "Processing was cut off twice (the server restarted). Try again.")
+            continue
+        meta["resumed"] = tries + 1
+        _save_meta(r["id"], meta)
+        process_resource(r["id"])
+        resumed += 1
+    if rows:
+        logger.info(f"resume_interrupted: {resumed} resumed, {len(rows) - resumed} given up")
+    return resumed
+
+
 def process_resource(resource_id: str) -> None:
     """Extract one source. Its text, figures and formulas go to models on the
     note's behalf, so the note's privacy level applies (services/privacy.py)."""
