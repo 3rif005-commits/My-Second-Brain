@@ -22,6 +22,12 @@ from pathlib import Path
 
 REPORTS = Path(__file__).parent / "reports"
 
+# A slowdown counts only when it is big in both senses (PhotoCraft's perf budgets): more
+# than 15 % AND more than half a second. Model latency is noisy, so either test alone flags
+# runs that differ by luck.
+SLOWER_SHARE = 0.15
+SLOWER_MS = 500
+
 
 def latest(config: str) -> dict:
     """The most recent report for a config name."""
@@ -45,6 +51,14 @@ def _delta(a: float | None, b: float | None) -> str:
     return f"{change:+.0f}%"
 
 
+def slower(a_ms: int | None, b_ms: int | None) -> bool | None:
+    """True when B is slower than A by both margins; None when either wasn't measured
+    (an unknown is said as unknown, never a made-up number)."""
+    if a_ms is None or b_ms is None:
+        return None
+    return b_ms - a_ms > SLOWER_MS and b_ms > a_ms * (1 + SLOWER_SHARE)
+
+
 def compare(a: dict, b: dict, a_name: str, b_name: str) -> int:
     models_a, models_b = _models(a), _models(b)
     if models_a != models_b:
@@ -66,6 +80,8 @@ def compare(a: dict, b: dict, a_name: str, b_name: str) -> int:
     print("-" * len(head))
 
     totals = {"out_a": 0, "out_b": 0, "pass_a": 0, "pass_b": 0, "runs": 0}
+    slow: list[str] = []
+    unmeasured: list[str] = []
     for case, sa in a["summary"].items():
         sb = b["summary"].get(case)
         if sb is None:
@@ -76,6 +92,11 @@ def compare(a: dict, b: dict, a_name: str, b_name: str) -> int:
         totals["pass_a"] += sa["passed"]
         totals["pass_b"] += sb["passed"]
         totals["runs"] += sa["runs"]
+        verdict = slower(sa.get("median_latency_ms"), sb.get("median_latency_ms"))
+        if verdict is None:
+            unmeasured.append(case)
+        elif verdict:
+            slow.append(f"{case} ({sa['median_latency_ms']:,} → {sb['median_latency_ms']:,} ms)")
         print(f"{case:<24}{sa['passed']}/{sa['runs']:<5}{sb['passed']}/{sb['runs']:<6}"
               f"{sa['median_output_tokens']:>8}{sb['median_output_tokens']:>8}"
               f"{_delta(sa['median_output_tokens'], sb['median_output_tokens']):>8}"
@@ -86,6 +107,11 @@ def compare(a: dict, b: dict, a_name: str, b_name: str) -> int:
           f"({_delta(totals['out_a'], totals['out_b'])})")
     print(f"  cases passed:  {totals['pass_a']}/{totals['runs']} → "
           f"{totals['pass_b']}/{totals['runs']}")
+
+    if slow:
+        print(f"  SLOWER (>{SLOWER_SHARE:.0%} and >{SLOWER_MS} ms): {', '.join(slow)}")
+    if unmeasured:
+        print(f"  latency not measured in: {', '.join(unmeasured)}")
 
     # Checked per arm: merging the two summaries first would let one arm's
     # reported numbers mask the other's estimate for the same case.

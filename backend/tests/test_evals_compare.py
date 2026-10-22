@@ -82,3 +82,19 @@ def test_latest_never_picks_a_longer_config_with_the_same_prefix(tmp_path, monke
     (tmp_path / "base-20260101-000000.json").write_text('{"id": "base"}')
     (tmp_path / "base-b-20260102-000000.json").write_text('{"id": "base-b"}')
     assert compare.latest("base")["id"] == "base"
+
+
+def test_a_slowdown_counts_only_when_big_in_both_senses():
+    assert cmp.slower(10_000, 12_000) is True     # +20 %, +2 s
+    assert cmp.slower(10_000, 11_000) is False    # +10 %: noise
+    assert cmp.slower(1_000, 1_400) is False      # +40 % but only 0.4 s
+    assert cmp.slower(None, 5_000) is None        # not measured is not "fine"
+
+
+def test_it_names_a_slower_case(capsys):
+    a = _report("html", "html", "m", {"case-1": (3, 7000, 26, [])})
+    b = _report("md", "md", "m", {"case-1": (3, 7000, 26, [])})
+    b["summary"]["case-1"]["median_latency_ms"] = 130_000
+
+    cmp.compare(a, b, "html", "md")
+    assert "SLOWER" in capsys.readouterr().out
