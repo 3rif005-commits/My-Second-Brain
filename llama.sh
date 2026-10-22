@@ -59,10 +59,44 @@ kill_server() {
   fi
 }
 
+# The size and SHA-256 Hugging Face publishes for a file (headers of the resolve URL), as
+# "size sha"; empty when offline. Read live, not pinned: a re-uploaded model would make a
+# pinned hash wrong.
+published_digest() {
+  local url=$1 headers size sha
+  headers=$(curl -sIL --max-time 20 "$url" 2>/dev/null || true)
+  size=$(grep -i '^x-linked-size:' <<<"$headers" | tail -1 | tr -dc '0-9')
+  sha=$(grep -i '^x-linked-etag:' <<<"$headers" | tail -1 | tr -dc '0-9a-f' | tail -c 64)
+  [[ -n "$size" && ${#sha} -eq 64 ]] && echo "$size $sha"
+  return 0
+}
+
+# 0 = matches what Hugging Face publishes (or can't tell: offline), 1 = differs.
+check_model() {
+  local url=$1 dest=$2 name=$3 digest size sha
+  command -v curl &>/dev/null && command -v sha256sum &>/dev/null || return 0
+  digest=$(published_digest "$url")
+  [[ -z "$digest" ]] && { warn "$name: couldn't fetch the published checksum (offline?) — not checked"; return 0; }
+  read -r size sha <<<"$digest"
+  if [[ $(stat -c%s "$dest") -ne $size ]]; then
+    warn "$name: size $(stat -c%s "$dest") bytes, Hugging Face has $size"
+    return 1
+  fi
+  info "Checking $name (sha256) …"
+  if [[ $(sha256sum "$dest" | cut -d' ' -f1) != "$sha" ]]; then
+    warn "$name: sha256 differs from Hugging Face"
+    return 1
+  fi
+  ok "$name checksum matches Hugging Face"
+}
+
 download_model() {
   local url=$1 dest=$2 name=$3
   if [[ -f "$dest" && $(stat -c%s "$dest") -gt 1048576 ]]; then
     ok "$name already downloaded ($(du -sh "$dest" | cut -f1)) — skipping"
+    # Never delete a model that is already here: an older upload may still run fine.
+    check_model "$url" "$dest" "$name" \
+      || warn "  to replace it: rm \"$dest\" && ./llama.sh setup"
     return
   fi
   # remove incomplete/empty file if present
@@ -75,6 +109,7 @@ download_model() {
   else
     die "Neither wget nor curl found — install one and retry"
   fi
+  check_model "$url" "$dest" "$name" || { rm -f "$dest"; die "$name arrived damaged — run setup again"; }
   ok "$name downloaded ($(du -sh "$dest" | cut -f1))"
 }
 
@@ -108,7 +143,7 @@ cmd_setup() {
 
   # 3. models
   mkdir -p "$MODELS_DIR"
-  download_model "$GEN_URL"   "$MODELS_DIR/$GEN_MODEL"   "Gemma 4 E2B (generation, ~1.2 GB)"
+  download_model "$GEN_URL"   "$MODELS_DIR/$GEN_MODEL"   "Gemma 4 E2B (generation, ~2.6 GB)"
   download_model "$EMBED_URL" "$MODELS_DIR/$EMBED_MODEL" "nomic-embed-text (embeddings, ~270 MB)"
 
   echo ""
