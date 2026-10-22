@@ -114,11 +114,67 @@ def _math_density(text: str) -> float:
     return hits / len(text)
 
 
+
+# ---- the document's own structure (ArtCraft study P2) ----------------------
+# A PDF's bookmarks are the author's table of contents: exact titles, levels and
+# pages. When a file has them they beat any font-size guess, so they are applied
+# first and the size rules below only add headings the bookmarks don't cover.
+
+# "2.3 ", "1) ", "IV. ", "a) " — a number, or a numeral/letter only when a "." or ")" follows.
+_SECTION_NUMBER = re.compile(r"^\s*(?:\d+(?:\.\d+)*[.)]?\s+|(?:[IVXLCDM]+|[ivxlcdm]+|[A-Za-z])[.)]\s+)")
+MAX_TOC_ENTRIES = 2000
+MAX_TOC_TITLE = 200
+
+
+def norm_heading(text: str) -> str:
+    """Comparable form of a heading: no leading section number, letters/digits only."""
+    t = _SECTION_NUMBER.sub("", (text or "").strip(), count=1)
+    return re.sub(r"[\W_]+", "", t.lower())
+
+
+def toc_by_page(toc: list, page_count: int) -> dict[int, list[dict]]:
+    """Bookmarks (`[level, title, page, ...]`, 1-based pages) grouped by 0-based page."""
+    out: dict[int, list[dict]] = {}
+    for entry in (toc or [])[:MAX_TOC_ENTRIES]:
+        try:
+            level, title, page = int(entry[0]), str(entry[1]).strip(), int(entry[2])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if not title or not (1 <= page <= page_count) or level < 1:
+            continue
+        title = title[:MAX_TOC_TITLE]
+        out.setdefault(page - 1, []).append(
+            {"level": level, "title": title, "norm": norm_heading(title), "used": False})
+    return out
+
+
+def heading_marker(level: int) -> str:
+    """Bookmark level 1 → "# ", 2 → "## ", deeper → "### "."""
+    return "#" * min(max(level, 1), 3) + " "
+
+
+def match_toc(entries: list[dict], text: str) -> dict | None:
+    """The first unused bookmark on this page whose title is this block's text."""
+    n = norm_heading(text)
+    if not n:
+        return None
+    for e in entries:
+        if e["used"] or not e["norm"]:
+            continue
+        if n == e["norm"] or (len(e["norm"]) >= 6 and n.startswith(e["norm"]) and len(n) <= len(e["norm"]) + 40):
+            return e
+    return None
+
+
 def extract_pdf(path: str, max_pages: int = 300) -> dict:
     import fitz  # pymupdf
 
     doc = fitz.open(path)
     page_count = min(doc.page_count, max_pages)
+    try:
+        bookmarks = toc_by_page(doc.get_toc(simple=True), page_count)
+    except Exception:
+        bookmarks = {}
 
     pages_text: list[str] = []
     page_sizes: list[list[float]] = []
@@ -209,6 +265,7 @@ def extract_pdf(path: str, max_pages: int = 300) -> dict:
 
         page_lines: list[str] = []
         line_tops: list[float] = []      # parallel to page_lines, for table splicing
+        page_marks = bookmarks.get(pno, [])
         for block in d.get("blocks", []):
             if block.get("type") != 0:
                 continue
@@ -256,9 +313,15 @@ def extract_pdf(path: str, max_pages: int = 300) -> dict:
                 )
             )
 
+            mark = match_toc(page_marks, text) if not is_formula else None
+            if mark:
+                mark["used"] = True
+                is_heading = True
+
             # Marked, not just detected: the model is asked to follow the
             # document's own structure, so it has to be able to see it.
-            page_lines.append(f"## {text}" if is_heading else text)
+            marker = heading_marker(mark["level"]) if mark else "## "
+            page_lines.append(f"{marker}{text}" if is_heading else text)
             line_tops.append(bbox[1])
 
             if is_formula:
@@ -287,6 +350,11 @@ def extract_pdf(path: str, max_pages: int = 300) -> dict:
             idx = next((i for i, y in enumerate(line_tops) if y > top), len(page_lines))
             page_lines.insert(idx, md)
             line_tops.insert(idx, top)
+
+        # A bookmark whose title isn't any block's text (set in an image, worded
+        # differently) still starts its chapter on this page.
+        missing = [heading_marker(m["level"]) + m["title"] for m in page_marks if not m["used"]]
+        page_lines[:0] = missing
 
         pages_text.append(f"[page {pno + 1}]\n" + "\n".join(page_lines))
 
