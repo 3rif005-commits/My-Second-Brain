@@ -6,6 +6,8 @@ endpoint, with yt-dlp --dump-json as the richer fallback.
 """
 from __future__ import annotations
 
+import re
+
 import httpx
 
 from services.url_extractor import _youtube_video_id as youtube_video_id
@@ -73,8 +75,73 @@ def transcript_text(snippets: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def chunk_transcript(snippets: list[dict], window_seconds: float = 75.0) -> list[dict]:
-    """Time-anchored chunks: consecutive snippets grouped into ~75s windows."""
+_FILLER = re.compile(r"(?<![\w'])(?:u+m+|u+h+|uhm|erm|er|ah|hm+|mm+|mhm)(?![\w'])[,.]?\s*", re.IGNORECASE)
+MAX_TRANSCRIPT_LINES_CHARS = 150_000
+
+
+def strip_fillers(text: str) -> str:
+    """Drop spoken fillers (um, uh, erm, hmm…) — fewer tokens, cleaner quotes (ArtCraft study V4,
+    after filmcraft's DEFAULT_FILLERS)."""
+    out = _FILLER.sub("", text)
+    return re.sub(r"\s{2,}", " ", out).strip()
+
+
+def transcript_lines(snippets: list[dict], target_seconds: float = 20.0) -> list[list]:
+    """`[[start_seconds, text], …]` for the clickable transcript under the player: snippets merged
+    into ~20 s lines, fillers removed, bounded in size (it lives in the source's meta)."""
+    lines: list[list] = []
+    buf: list[str] = []
+    start: float | None = None
+    total = 0
+    for s in snippets:
+        text = strip_fillers((s.get("text") or "").replace("\n", " "))
+        if not text:
+            continue
+        t = float(s.get("start", 0) or 0)
+        if start is None:
+            start = t
+        buf.append(text)
+        if t + float(s.get("duration", 0) or 0) - start >= target_seconds:
+            line = " ".join(buf)
+            total += len(line)
+            if total > MAX_TRANSCRIPT_LINES_CHARS:
+                break
+            lines.append([int(start), line])
+            buf, start = [], None
+    if buf and start is not None and total <= MAX_TRANSCRIPT_LINES_CHARS:
+        lines.append([int(start), " ".join(buf)])
+    return lines
+
+
+def fetch_chapters(url: str) -> list[dict]:
+    """The creator's own chapters `[{start, title}]` (yt-dlp metadata, no download); [] when the
+    video has none or yt-dlp isn't available. Never raises."""
+    try:
+        import yt_dlp
+        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True,
+                               "socket_timeout": 15}) as ydl:
+            info = ydl.extract_info(url, download=False) or {}
+    except Exception:
+        return []
+    out = []
+    for c in (info.get("chapters") or [])[:200]:
+        title = str(c.get("title") or "").strip()[:200]
+        try:
+            start = int(float(c.get("start_time") or 0))
+        except (TypeError, ValueError):
+            continue
+        if title:
+            out.append({"start": start, "title": title})
+    return out
+
+
+def chunk_transcript(snippets: list[dict], window_seconds: float = 75.0,
+                     chapters: list[dict] | None = None) -> list[dict]:
+    """Time-anchored chunks: consecutive snippets grouped into ~75s windows.
+
+    With the creator's chapters, each chapter starts a new chunk headed `## title`, so the model
+    follows the video's own structure (the PDF-bookmarks idea, for video)."""
+    pending = sorted(chapters or [], key=lambda c: c["start"])
     chunks: list[dict] = []
     buf: list[str] = []
     win_start = None
@@ -95,11 +162,15 @@ def chunk_transcript(snippets: list[dict], window_seconds: float = 75.0) -> list
         buf, win_start = [], None
 
     for s in snippets:
-        text = (s.get("text") or "").strip()
+        text = strip_fillers((s.get("text") or "").strip())
         if not text:
             continue
         start = float(s.get("start", 0))
         dur = float(s.get("duration", 0))
+        while pending and pending[0]["start"] <= start + 0.5:
+            flush()
+            win_start = start
+            buf.append(f"## {pending.pop(0)['title']}")
         if win_start is None:
             win_start = start
         buf.append(text)

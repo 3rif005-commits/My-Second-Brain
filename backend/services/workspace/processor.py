@@ -203,10 +203,14 @@ def _process_resource(resource_id: str) -> None:
                 db.table("note_resources").update(
                     {"title": ometa["title"]}).eq("id", resource_id).execute()
                 resource["title"] = ometa["title"]
+            chapters = youtube.fetch_chapters(resource["source_url"])
+            if chapters:
+                meta["chapters"] = chapters
             try:
                 snippets = youtube.fetch_transcript(vid)
                 meta["has_transcript"] = True
-                _insert_chunks(resource, youtube.chunk_transcript(snippets))
+                meta["transcript"] = youtube.transcript_lines(snippets)
+                _insert_chunks(resource, youtube.chunk_transcript(snippets, chapters=chapters))
             except ValueError:
                 # No transcript: synthesis re-derives the video URL from the
                 # source row and takes the Gemini-native path (synthesis._complete).
@@ -224,6 +228,7 @@ def _process_resource(resource_id: str) -> None:
                     snippets = vsvc.transcribe(tmp_path)
                     from services.workspace import youtube as yts
                     meta["has_transcript"] = True
+                    meta["transcript"] = yts.transcript_lines(snippets)
                     _insert_chunks(resource, yts.chunk_transcript(snippets))
                 except RuntimeError as e:
                     logger.warning(f"resource {resource_id}: {e}")

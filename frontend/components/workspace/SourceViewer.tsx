@@ -3,13 +3,15 @@
 // Thin dispatcher from a source's `kind` onto the proven viewers. It also loads
 // the source detail (elements + signed image URLs), which is what the viewers'
 // element overlays and send-to-note actions need.
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { AlertCircle, Layers } from "lucide-react";
 import { wsApi, type NoteSource, type SendAction } from "@/lib/workspace";
 import { YouTubePlayer } from "./viewers/YouTubePlayer";
 import { VideoPlayer } from "./viewers/VideoPlayer";
 import { WebsiteViewer } from "./viewers/WebsiteViewer";
+import { TranscriptList } from "./viewers/TranscriptList";
+import { readTranscript } from "./viewers/transcript";
 
 // react-pdf's pdfjs touches DOMMatrix at import time, which does not exist in
 // Node — this viewer can never be server-rendered.
@@ -54,6 +56,15 @@ function Spinner({ tone = "indigo" }: { tone?: "indigo" | "gray" }) {
 
 export function SourceViewer({ source, onPosition, onAction, seekRef }: SourceViewerProps) {
   const [detail, setDetail] = useState<NoteSource | null>(null);
+  // The playhead also feeds the transcript list. Both callbacks go through refs so this
+  // stays one stable function: the YouTube player keeps the first one it is given.
+  const positionRef = useRef(onPosition);
+  positionRef.current = onPosition;
+  const timeSinkRef = useRef<((t: number) => void) | null>(null);
+  const onVideoPosition = useCallback((t: number) => {
+    positionRef.current(t);
+    timeSinkRef.current?.(t);
+  }, []);
 
   const sourceId = source?.id ?? null;
   const status = source?.status ?? null;
@@ -106,8 +117,17 @@ export function SourceViewer({ source, onPosition, onAction, seekRef }: SourceVi
 
   const common = { resource: detail, onPosition, onAction, seekRef };
   if (detail.kind === "pdf") return <PdfViewer {...common} />;
-  if (detail.kind === "youtube") return <YouTubePlayer {...common} />;
-  if (detail.kind === "video") return <VideoPlayer {...common} />;
+  if (detail.kind === "youtube" || detail.kind === "video") {
+    const { lines, chapters } = readTranscript(detail.meta);
+    const Player = detail.kind === "youtube" ? YouTubePlayer : VideoPlayer;
+    return (
+      <div className="flex-1 min-h-0 flex flex-col">
+        <Player {...common} onPosition={onVideoPosition} />
+        <TranscriptList lines={lines} chapters={chapters} timeSinkRef={timeSinkRef}
+          onSeek={(sec) => seekRef.current?.(sec)} />
+      </div>
+    );
+  }
   // `document` (.md/.txt) and `website` both arrive as a flat list of
   // section-anchored elements, so one viewer renders both. `document` used to be
   // routed to PdfViewer alongside `pdf`, which handed a markdown file to
