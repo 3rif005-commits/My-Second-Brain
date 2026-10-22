@@ -56,7 +56,7 @@ user-facing ideas from FINDINGS, in this order:
 | 7b | Drop a `.glb`/`.stl` file into a note → 3D live block | S | not started — needs a note-asset upload endpoint (editor has no upload hook today); a model *link* already works |
 | 8 | Equations from Word documents (rank 8) | S | done; 19 tests; real lab sheet: 20 of 20 equations → LaTeX (12 were inside tables) |
 | 9 | Video transcript and chapters (rank 9) | M | done (unit tests): collapsed transcript under YouTube/uploaded video, click to jump, creator chapters (yt-dlp) as headings for the list and the model, fillers stripped. Not done: chapter thumbnails for uploaded video (no chapters to hang them on). Only sources processed from now on get the list. No live check |
-| 10 | Present a note as slides (rank 10) | M | |
+| 10 | Present a note as slides (rank 10) | M | done (unit tests): one *Present* menu item; title slide + one slide per h1/h2 from the note's own rendered blocks; toggles open; shrink-to-fit (floor 0.5, then scroll); keys from DeckCraft. Not done: splitting an overlong slide into a continued one. No live check |
 | 11 | Photo of a whiteboard → Mermaid diagram (VC5) | S | |
 | 12 | `.srt`/`.vtt` subtitle files as a video's transcript (V7) | S | |
 | 13 | Scanned PDF page → vision model reads it (P3) | M | |

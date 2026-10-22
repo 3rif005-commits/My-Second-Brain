@@ -3,7 +3,8 @@
 import React, { Component, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { Link, Layers, Send, Star, FileDown, Printer, Trash2, Globe } from "lucide-react";
+import { Link, Layers, Send, Star, FileDown, Printer, Trash2, Globe, Presentation } from "lucide-react";
+import { PresentMode } from "./PresentMode";
 import type { Note } from "@/lib/types/database";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { TopBar, TopBarButton } from "@/components/shell/TopBar";
@@ -95,6 +96,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
   const [ingestHtml, setIngestHtml] = useState<string | undefined>();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [presenting, setPresenting] = useState(false);
   const [favorited, setFavorited] = useState(note.is_favorited ?? false);
   const { style: pageStyle, update: updatePageStyle } = usePageStyle(note.id);
   const { showToast } = useToast();
@@ -465,6 +467,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
                 { label: "Move to Trash", icon: <Trash2 />, danger: true, onSelect: () => setShowDeleteModal(true) },
               ],
               [
+                { label: "Present", icon: <Presentation />, onSelect: () => setPresenting(true) },
                 { label: "Export as Markdown", icon: <FileDown />, onSelect: handleExportMarkdown },
                 { label: "Export as PDF", icon: <Printer />, onSelect: handleExportPdf },
                 { label: "Send to Notion…", icon: <Send />, onSelect: () => notion.open({ note_ids: [note.id] }) },
@@ -570,6 +573,8 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
           </div>
         </div>
       </div>
+
+      {presenting && <PresentMode title={title} onClose={() => setPresenting(false)} />}
 
       <ConfirmDialog
         open={showDeleteModal}
