@@ -14,6 +14,7 @@ import { Bookmark, Check, Copy, CornerDownRight, Sigma, X } from "lucide-react";
 import { wsApi, type SendAction, type WsElement, type NoteSource } from "@/lib/workspace";
 import { useToast } from "@/app/providers";
 import { ActionBar, ActionButton, ActionLabel, ActionSeparator } from "./ActionBar";
+import { pageHeight, pagesToRender } from "./pageWindow";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url
@@ -48,6 +49,9 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const currentPage = useRef(1);
+  // Pages on screen (IntersectionObserver), and from them the few that get drawn.
+  const [visible, setVisible] = useState<number[]>([]);
+  const toDraw = useMemo(() => pagesToRender(visible, numPages), [visible, numPages]);
 
   useEffect(() => {
     wsApi.sourceFileUrl(resource.id).then((r) => setFileUrl(r.url)).catch(() => {});
@@ -65,6 +69,25 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
     }
     return map;
   }, [resource.elements]);
+
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root || !numPages || typeof IntersectionObserver === "undefined") return;
+    const onScreen = new Set<number>();
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        const pno = Number((e.target as HTMLElement).dataset.page);
+        if (e.isIntersecting) onScreen.add(pno); else onScreen.delete(pno);
+      }
+      const next = [...onScreen].sort((a, b) => a - b);
+      setVisible((prev) => (prev.join() === next.join() ? prev : next));
+    }, { root, rootMargin: "800px 0px" });
+    for (let p = 1; p <= numPages; p++) {
+      const el = pageRefs.current[p];
+      if (el) io.observe(el);
+    }
+    return () => io.disconnect();
+  }, [numPages, fileUrl]);
 
   // scroll → current page tracking
   const handleScroll = useCallback(() => {
@@ -183,22 +206,26 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef }: PdfViewer
             const pno = i + 1;
             const size = pageSizes[i];
             const scale = size ? PAGE_WIDTH / size[0] : 1;
+            const height = pageHeight(pageSizes, pno, PAGE_WIDTH);
+            // Without a known size the box can't hold its place, so the page is always drawn.
+            const draw = height === null || toDraw.has(pno);
             return (
               <div
                 key={pno}
+                data-page={pno}
                 ref={(el) => { pageRefs.current[pno] = el; }}
                 className="relative mb-5 bg-white rounded-lg overflow-hidden ring-1 ring-black/5 shadow-[0_2px_8px_-2px_rgba(16,24,40,0.12),0_18px_40px_-24px_rgba(16,24,40,0.5)]"
-                style={{ width: PAGE_WIDTH }}
+                style={{ width: PAGE_WIDTH, height: height ?? undefined }}
               >
-                <Page pageNumber={pno} width={PAGE_WIDTH}
-                  renderAnnotationLayer={false} />
+                {draw && <Page pageNumber={pno} width={PAGE_WIDTH}
+                  renderAnnotationLayer={false} />}
                 {/* element overlays — text/heading stay pointer-events-none so
                     react-pdf's text layer (which sits above the canvas for
                     native selection) still receives clicks/drags for the
                     mouseup-based "select text" flow; image/table/formula have
                     no competing text layer, so they get raised z-index +
                     pointer events to be reliably clickable. */}
-                {size && (elementsByPage[pno] ?? []).map((el) => {
+                {draw && size && (elementsByPage[pno] ?? []).map((el) => {
                   const [x0, y0, x1, y1] = el.bbox!;
                   const clickable = el.element_type !== "text" && el.element_type !== "heading";
                   return (
