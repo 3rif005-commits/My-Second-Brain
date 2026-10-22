@@ -5,7 +5,7 @@
 // Keys (lib/present.ts): → / Space next, ← back, number + Enter jumps, G all slides,
 // B black screen, Esc leaves.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { fitScale, groupSlides, initialPresent, presentKey, type PresentState } from "@/lib/present";
+import { FIT_FLOOR, fitScale, groupSlides, initialPresent, presentKey, splitSlide, type PresentState } from "@/lib/present";
 
 interface Slide { html: string; label: string }
 
@@ -30,6 +30,42 @@ export function slidesFromEditor(root: ParentNode, title: string): Slide[] {
   return slides;
 }
 
+// The slide area: FitSlide's box (inset-x-10 top-10 bottom-14) and its content classes.
+const SLIDE_INSET_X = 80, SLIDE_INSET_Y = 96;
+const SLIDE_CONTENT = "bn-editor bn-default-styles text-[1.35rem]";
+
+/** Continue a slide that won't fit even at the fit floor on a "(cont.)" slide, splitting
+ *  between blocks as laid out at slide size (DeckCraft's auto-fit: shrink first, then split).
+ *  Without layout (no window size, jsdom) every slide stays whole. */
+export function splitToFit(slides: Slide[], boxW: number, boxH: number): Slide[] {
+  if (!(boxW > 0) || !(boxH > 0)) return slides;
+  const probe = document.createElement("div");
+  probe.className = "bn-container mx-auto max-w-4xl";
+  probe.style.cssText = `position:fixed;left:-100000px;top:0;visibility:hidden;width:${boxW}px`;
+  const content = document.createElement("div");
+  content.className = SLIDE_CONTENT;
+  probe.appendChild(content);
+  document.body.appendChild(probe);
+  try {
+    return slides.flatMap((slide, n) => {
+      if (n === 0) return [slide];
+      content.innerHTML = slide.html;
+      const blocks = [...content.children] as HTMLElement[];
+      const tops = blocks.map((b) => b.offsetTop);
+      const heights = tops.map((t, i) => (i + 1 < tops.length ? tops[i + 1] : content.scrollHeight) - t);
+      const headings = blocks.map((b) => b.querySelector(".bn-block-content")?.getAttribute("data-content-type") === "heading");
+      const parts = splitSlide(heights, boxH / FIT_FLOOR, headings);
+      if (parts.length < 2) return [slide];
+      return parts.map((part, k) => ({
+        html: part.map((i) => blocks[i].outerHTML).join(""),
+        label: k === 0 ? slide.label : `${slide.label} (cont.)`,
+      }));
+    });
+  } finally {
+    probe.remove();
+  }
+}
+
 function FitSlide({ html }: { html: string }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -44,10 +80,10 @@ function FitSlide({ html }: { html: string }) {
     return () => ro.disconnect();
   }, [html]);
   return (
-    <div ref={boxRef} className={`absolute inset-0 ${scale <= 0.5 ? "overflow-y-auto" : "overflow-hidden"}`}>
+    <div ref={boxRef} className={`absolute inset-0 ${scale <= FIT_FLOOR ? "overflow-y-auto" : "overflow-hidden"}`}>
       <div ref={innerRef} style={{ transform: `scale(${scale})`, transformOrigin: "top center" }}
         className="bn-container mx-auto max-w-4xl">
-        <div className="bn-editor bn-default-styles text-[1.35rem]" dangerouslySetInnerHTML={{ __html: html }} />
+        <div className={SLIDE_CONTENT} dangerouslySetInnerHTML={{ __html: html }} />
       </div>
     </div>
   );
@@ -55,8 +91,19 @@ function FitSlide({ html }: { html: string }) {
 
 export function PresentMode({ title, onClose }: { title: string; onClose: () => void }) {
   const overlayRef = useRef<HTMLDivElement>(null);
-  const [slides] = useState(() => (typeof document === "undefined" ? [] : slidesFromEditor(document, title)));
+  const [slides, setSlides] = useState(() => (typeof document === "undefined" ? [] : slidesFromEditor(document, title)));
   const [s, setS] = useState<PresentState>(() => initialPresent(slides.length));
+
+  // Once, before the first paint: continue overlong slides (needs real layout, so not in
+  // the useState initialiser above).
+  useLayoutEffect(() => {
+    const fitted = splitToFit(slides, Math.min(896, window.innerWidth - SLIDE_INSET_X), window.innerHeight - SLIDE_INSET_Y);
+    if (fitted.length !== slides.length) {
+      setSlides(fitted);
+      setS((p) => ({ ...p, count: fitted.length }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const wentFullscreen = useRef(false);
 
   const handle = useCallback((key: string) => {

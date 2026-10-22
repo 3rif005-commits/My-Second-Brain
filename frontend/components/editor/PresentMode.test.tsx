@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { PresentMode, slidesFromEditor } from "./PresentMode";
+import { PresentMode, slidesFromEditor, splitToFit } from "./PresentMode";
 
 function block(type: string, text: string, level?: number) {
   const lvl = level ? ` data-level="${level}"` : "";
@@ -24,6 +24,30 @@ describe("slidesFromEditor", () => {
   it("skips empty slides", () => {
     document.body.innerHTML = editorHtml(block("paragraph", ""), block("heading", "Only", 1));
     expect(slidesFromEditor(document, "T").map((s) => s.label)).toEqual(["T", "Only"]);
+  });
+});
+
+describe("splitToFit", () => {
+  it("continues a slide too tall for the fit floor on a (cont.) slide", () => {
+    // jsdom has no layout: every block gets a 400px box.
+    const top = vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
+      return [...(this.parentElement?.children ?? [])].indexOf(this) * 400;
+    });
+    const sh = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
+      return this.children.length * 400;
+    });
+    try {
+      const slides = [{ html: "", label: "T" },
+        { html: [1, 2, 3, 4, 5].map((n) => block("paragraph", `p${n}`)).join(""), label: "Long" },
+        { html: block("paragraph", "short"), label: "Short" }];
+      const out = splitToFit(slides, 800, 500); // holds 1000px at the 0.5 floor = 2 blocks
+      expect(out.map((s) => s.label)).toEqual(["T", "Long", "Long (cont.)", "Long (cont.)", "Short"]);
+      expect(out[3].html).toContain("p5");
+    } finally { top.mockRestore(); sh.mockRestore(); }
+  });
+  it("without layout every slide stays whole", () => {
+    const slides = [{ html: "", label: "T" }, { html: block("paragraph", "x"), label: "A" }];
+    expect(splitToFit(slides, 800, 500)).toEqual(slides);
   });
 });
 

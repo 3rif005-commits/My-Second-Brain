@@ -48,7 +48,32 @@ export function presentKey(s: PresentState, key: string): PresentState | "exit" 
 }
 
 /** Scale that makes content fit its box: never larger than 1, never below `floor`. */
-export function fitScale(contentW: number, contentH: number, boxW: number, boxH: number, floor = 0.5): number {
+/** Slides shrink to fit down to this scale; below it they are split (splitSlide). */
+export const FIT_FLOOR = 0.5;
+
+export function fitScale(contentW: number, contentH: number, boxW: number, boxH: number, floor = FIT_FLOOR): number {
   if (!(contentW > 0) || !(contentH > 0)) return 1;
   return Math.max(floor, Math.min(1, boxW / contentW, boxH / contentH));
+}
+
+/** Split one slide's blocks (their heights at full size) into parts that each fit `capacity`
+ *  — the height a slide holds once shrunk to the fit floor. Greedy, in order; a block taller
+ *  than a whole slide gets a part of its own (it then scrolls), and a heading never ends a
+ *  part: it moves on with the block it introduces. */
+export function splitSlide(heights: number[], capacity: number, isHeading: boolean[] = []): number[][] {
+  const parts: number[][] = [];
+  let part: number[] = [], used = 0;
+  heights.forEach((h, i) => {
+    if (part.length && used + h > capacity) {
+      const carry: number[] = [];
+      while (part.length > 1 && isHeading[part[part.length - 1]]) carry.unshift(part.pop()!);
+      parts.push(part);
+      part = carry;
+      used = carry.reduce((sum, j) => sum + heights[j], 0);
+    }
+    part.push(i);
+    used += h;
+  });
+  if (part.length) parts.push(part);
+  return parts;
 }

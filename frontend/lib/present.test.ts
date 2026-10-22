@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitScale, groupSlides, initialPresent, presentKey, type PresentState } from "./present";
+import { fitScale, groupSlides, splitSlide, initialPresent, presentKey, type PresentState } from "./present";
 
 const run = (s: PresentState | "exit", ...keys: string[]) =>
   keys.reduce<PresentState | "exit">((acc, k) => (acc === "exit" ? acc : presentKey(acc, k)), s);
@@ -41,5 +41,20 @@ describe("fitScale", () => {
     expect(fitScale(400, 300, 800, 600)).toBe(1);
     expect(fitScale(800, 3000, 800, 600)).toBe(0.5);
     expect(fitScale(0, 0, 800, 600)).toBe(1);
+  });
+});
+
+describe("splitSlide", () => {
+  it("keeps a slide that fits whole", () => {
+    expect(splitSlide([100, 200, 300], 600)).toEqual([[0, 1, 2]]);
+  });
+  it("continues an overlong slide on the next, in order", () => {
+    expect(splitSlide([300, 300, 300, 300], 650)).toEqual([[0, 1], [2, 3]]);
+  });
+  it("a block taller than a slide gets a part of its own", () => {
+    expect(splitSlide([100, 2000, 100], 600)).toEqual([[0], [1], [2]]);
+  });
+  it("a heading moves on with the block it introduces", () => {
+    expect(splitSlide([300, 50, 300], 400, [false, true, false])).toEqual([[0], [1, 2]]);
   });
 });
