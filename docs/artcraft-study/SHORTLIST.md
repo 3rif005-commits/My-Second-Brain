@@ -52,7 +52,8 @@ user-facing ideas from FINDINGS, in this order:
 | 4 | Word, PowerPoint and Excel files in Workspace (rank 4) | M | done; 14 tests; checked on 6 real files (FR/AR docx, xlsx, pptx). Live upload not checked (Supabase bucket MIME rules unverifiable from here) |
 | 5 | "Send to note" keeps the page link (rank 5) | S | done (unit tests); the selection bar's separate Checkpoint button is gone. Not done: tinting the quoted passage (needs stored highlights, more than S). No live check |
 | 6 | Live block: basics (rank 6) | S | done (unit tests): auto-height, result shown + saved after AI, AI edits a filled block. No live check |
-| 7 | Live block: diagrams, 3D, image export, safety check (rank 7 + VC4) | M | |
+| 7 | Live block: diagrams, 3D, image export, safety check (rank 7 + VC4) | M | done (unit tests; every generated script parsed): Mermaid / model-URL / HTML+`sbScene` kinds, CSP to pinned CDN, ⤓ export + print snapshot, warnings. No live check — CDN loading and WebGL unverified in a browser |
+| 7b | Drop a `.glb`/`.stl` file into a note → 3D live block | S | not started — needs a note-asset upload endpoint (editor has no upload hook today); a model *link* already works |
 | 8 | Equations from Word documents (rank 8) | S | |
 | 9 | Video transcript and chapters (rank 9) | M | |
 | 10 | Present a note as slides (rank 10) | M | |

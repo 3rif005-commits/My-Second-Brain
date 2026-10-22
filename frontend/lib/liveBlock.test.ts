@@ -39,5 +39,6 @@ describe("stripFences", () => {
   it("unwraps a fenced reply and leaves plain HTML alone", () => {
     expect(stripFences("Here:\n```html\n<p>a</p>\n```\nDone")).toBe("<p>a</p>");
     expect(stripFences("<p>b</p>")).toBe("<p>b</p>");
+    expect(stripFences("```mermaid\nflowchart LR\n  A-->B\n```")).toBe("flowchart LR\n  A-->B");
   });
 });

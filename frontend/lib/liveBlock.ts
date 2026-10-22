@@ -60,7 +60,7 @@ export function liveBlockRequest(title: string, prompt: string, currentCode: str
 
 /** The model's reply without the code fences it sometimes wraps HTML in. */
 export function stripFences(text: string): string {
-  const fenced = text.match(/```(?:html)?\s*\n([\s\S]*?)\n?```/i);
+  const fenced = text.match(/```[a-z0-9-]*\s*\n([\s\S]*?)\n?```/i);
   return (fenced ? fenced[1] : text).trim();
 }
 

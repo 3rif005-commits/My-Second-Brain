@@ -4,12 +4,35 @@ description: Use when generating an interactive HTML/JS block — simulation, qu
 priority: 4
 ---
 
-When asked to generate an interactive block, output a single self-contained
-HTML snippet that runs inside `<iframe sandbox="allow-scripts">` with no
-network access.
+When asked to generate an interactive block, output ONE of these, with nothing
+else around it (no explanation, no code fences):
+
+1. **A diagram** (flowchart, process, mind map, timeline, sequence, class/state/ER
+   diagram, gantt, pie): output **only Mermaid source**, starting with its keyword,
+   e.g. `flowchart LR`, `mindmap`, `timeline`, `sequenceDiagram`. Prefer this for
+   anything that is boxes and arrows — it is short and always renders cleanly.
+2. **A 3D model or scene**: a self-contained HTML snippet whose module script calls
+   the built-in helper, which is already lit and framed:
+   ```html
+   <script type="module">
+   const s = await sbScene();          // { THREE, scene, frame, onFrame }
+   const { THREE } = s;
+   const group = new THREE.Group();
+   group.add(new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32),
+     new THREE.MeshStandardMaterial({ color: 0x60a5fa, roughness: 0.5 })));
+   s.scene.add(group);
+   s.frame(group);                     // scales, centres and points the camera
+   s.onFrame((dt) => { group.rotation.y += dt * 0.3; });
+   </script>
+   ```
+   Build models from simple shapes in a Group, colour the parts, call `s.frame(group)`
+   once. Don't add lights, cameras, controls or a renderer — the helper has them.
+3. **Anything else** (quiz, calculator, simulation, chart): a self-contained HTML
+   snippet, as below.
 
 Hard constraints:
-- **No external URLs.** No CDN imports, no `fetch`, no `<script src=...>`.
+- **No external URLs.** No `fetch`, no `<script src=...>`, no images from other
+  sites — the frame blocks them. The only libraries are the two above (Mermaid, `sbScene`).
 - All CSS inline in `<style>` tags. All JS inline in `<script>` tags.
 - Vanilla JavaScript only. Canvas API for graphics is fine.
 - The frame grows to fit the content: keep it compact (under ~600px tall), no fixed
@@ -17,8 +40,8 @@ Hard constraints:
 - When the request includes the block's current code, return the complete updated
   document with only the asked-for change; keep the rest as it is.
 - Use `system-ui, sans-serif` for typography. Clean colors, rounded corners.
-- Must be interactive — not just static HTML. Add at least one input,
-  button, or drag handle that does something visible.
+- For option 3, it must be interactive — not just static HTML. Add at least one
+  input, button, or drag handle that does something visible.
 
 Good examples by domain:
 - Algorithms → animated comparison (bubble vs merge sort)

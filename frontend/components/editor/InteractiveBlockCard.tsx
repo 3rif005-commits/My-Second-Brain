@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { isPlaceholderHtml, liveBlockRequest, stripFences, useFrameHeight, withAutoHeight } from "@/lib/liveBlock";
+import { useMemo, useRef, useState } from "react";
+import { isPlaceholderHtml, liveBlockRequest, stripFences, useFrameHeight } from "@/lib/liveBlock";
+import { assetOrigin, buildSrcDoc, detectKind, preflightWarnings } from "@/lib/liveRuntime";
+import { exportFrameImage, MAX_SNAPSHOT_CHARS } from "@/lib/liveExport";
 import type { InteractiveBlock } from "./BlockEditor";
 
 interface Props {
@@ -22,6 +24,27 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   const [error, setError] = useState("");
   const frameRef = useRef<HTMLIFrameElement>(null);
   const frameHeight = useFrameHeight(frameRef);
+  const srcDoc = useMemo(() => buildSrcDoc(code, { assetOrigin: assetOrigin() }), [code]);
+  const warnings = useMemo(() => preflightWarnings(code), [code]);
+  const [exporting, setExporting] = useState(false);
+
+  async function exportImage() {
+    if (!frameRef.current) return;
+    setExporting(true);
+    setError("");
+    try {
+      const img = await exportFrameImage(frameRef.current);
+      if (!img) { setError("This block has no picture to save (no diagram, chart or 3D view)."); return; }
+      const a = document.createElement("a");
+      a.href = img.dataUrl;
+      a.download = `${(title || "block").replace(/[^\w-]+/g, "_")}.${img.kind}`;
+      a.click();
+      // Keep the picture with the block: it is what prints and what shows where scripts can't run.
+      if (img.dataUrl.length <= MAX_SNAPSHOT_CHARS) onUpdate(index, { title, html: code, snapshot: img.dataUrl });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function save() {
     onUpdate(index, { title, html: code });
@@ -110,6 +133,16 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
               {m === "preview" ? "Preview" : m === "edit" ? "Code" : "AI"}
             </button>
           ))}
+          {mode === "preview" && (detectKind(code) !== "html" || /<canvas|<svg|sbScene/.test(code)) ? (
+            <button
+              onClick={exportImage}
+              disabled={exporting}
+              className="ml-1 text-accent-200 hover:text-white text-xs px-1 disabled:opacity-50"
+              title="Save as image"
+            >
+              ⤓
+            </button>
+          ) : null}
           <button
             onClick={() => onRemove(index)}
             className="ml-1 text-accent-300 hover:text-white text-xs px-1"
@@ -124,12 +157,17 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
       {mode === "preview" && (
         <iframe
           ref={frameRef}
-          srcDoc={withAutoHeight(code)}
+          srcDoc={srcDoc}
           sandbox="allow-scripts"
           className="w-full border-none block bg-gray-50 dark:bg-gray-900"
           style={{ height: frameHeight }}
           title={title}
         />
+      )}
+      {mode === "preview" && (warnings.length > 0 || error) && (
+        <div className="px-3 py-1.5 text-[11px] text-amber-700 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-300 border-t border-amber-100 dark:border-amber-900/40">
+          {[...warnings, ...(error ? [error] : [])].join(" ")}
+        </div>
       )}
 
       {/* Code editor */}

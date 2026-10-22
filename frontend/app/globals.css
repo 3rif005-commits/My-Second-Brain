@@ -250,9 +250,13 @@
   background-color: transparent;
 }
 
+/* Shown only on paper: a live block's saved picture stands in for its frame. */
+.print-only { display: none; }
+
 @media print {
   /* Hide all UI chrome */
   .no-print { display: none !important; }
+  .print-only { display: block !important; }
 
   /* Reset page geometry so content isn't clipped */
   html, body {

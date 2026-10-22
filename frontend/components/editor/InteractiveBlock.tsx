@@ -18,6 +18,7 @@ export const InteractiveBlockSpec = createReactBlockSpec(
     propSchema: {
       title: { default: "Knowledge Check" },
       html: { default: DEFAULT_INTERACTIVE_HTML },
+      snapshot: { default: "" },
     },
     content: "none",
   },
@@ -26,10 +27,18 @@ export const InteractiveBlockSpec = createReactBlockSpec(
       <div contentEditable={false} className="w-full">
         <InteractiveBlockCard
           index={0}
-          block={{ title: block.props.title, html: block.props.html }}
-          onUpdate={(_i, updated) => editor.updateBlock(block, { props: { title: updated.title, html: updated.html } })}
+          block={{ title: block.props.title, html: block.props.html, snapshot: block.props.snapshot }}
+          onUpdate={(_i, updated) => editor.updateBlock(block, { props: {
+            title: updated.title, html: updated.html,
+            // A changed block's old picture is stale; a new export replaces it.
+            snapshot: updated.snapshot ?? (updated.html === block.props.html ? block.props.snapshot : ""),
+          } })}
           onRemove={() => editor.removeBlocks([block])}
         />
+        {block.props.snapshot && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={block.props.snapshot} alt={block.props.title} className="print-only max-w-full mt-6" />
+        )}
       </div>
     ),
   }

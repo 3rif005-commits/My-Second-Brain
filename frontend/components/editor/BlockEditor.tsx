@@ -215,7 +215,7 @@ export interface BlockEditorHandle {
   replaceDocument: (blocks: AnyBlock[]) => void;
 }
 
-export interface InteractiveBlock { title: string; html: string }
+export interface InteractiveBlock { title: string; html: string; /** exported picture, data URL */ snapshot?: string }
 
 const DEFAULT_BLOCK_HTML = `<style>
 *{box-sizing:border-box;margin:0;padding:0}
