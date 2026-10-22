@@ -14,10 +14,10 @@
 
 ---
 
-## ArtCraft study build — 2026-10-22 (code complete, not live-checked)
+## ArtCraft study build — 2026-10-22 (deployed; core flows live-checked on the deployed site)
 
 Study + plan: `docs/artcraft-study/FINDINGS.md`, `SHORTLIST.md` (build list with per-item state).
-All local commits on `main`, **not pushed**. Tests: frontend 1,371 pass (full suite); full backend suite 2,372 passed,
+**Pushed to `main` and deployed 2026-10-22** (Vercel + Render); checked on the live site the same evening. Tests: frontend 1,371 pass (full suite); full backend suite 2,372 passed,
 0 failed (449 errors = no local test Postgres, expected). No setting or panel was added: the UI additions are two menu items
 (Present, Export as LaTeX), a ⤓ button on live blocks, a collapsed Transcript (or Chapters) row under
 videos, a one-line warning under a live block that tries to reach the network, a yellow tint on
@@ -29,22 +29,22 @@ quoted PDF passages, and page actions listed in quick find (⌘P).
 | Fast big PDFs (only near pages drawn) | unit tests | scrolling a 300-page PDF in a browser |
 | PDF bookmarks → chapters | real file: 10 bookmarks → 10 headings; Lect10 unchanged | — |
 | Word/PowerPoint/Excel in Workspace | 14 tests; 6 real files (FR/AR) | live upload (Supabase bucket MIME rules) |
-| Send to note keeps the page | unit tests; **live**: quote + "📍 p. 1" pill land in the note | clicking the pill back |
+| Send to note keeps the page | unit tests; **live (local + deployed)**: quote + one "📍 p. 1" pill land in the note; PDF tint shows; source opens in ~2 s on Render | clicking the pill back |
 | Live block basics (auto-height, edit in place) | unit tests | in browser |
 | Live block: Mermaid, 3D, export, CSP | unit tests; every generated script parsed with acorn; CDN files return 200 | CDN loading, WebGL, export in a real browser |
 | Drop .glb/.stl → 3D block | route + unit tests | drop events, storage MIME |
 | Word equations → LaTeX | real lab sheet: 20/20 (12 in tables) | — |
 | Video transcript + creator chapters | unit tests | real YouTube (yt-dlp chapters), only new sources get it |
-| Present a note as slides | unit tests | full-screen + keys in browser |
+| Present a note as slides | unit tests; **live (deployed)**: opened from ⌘P on Lecture 10, arrows + G overview work | — |
 | Photo of a diagram → Mermaid | unit + route tests | a real vision model |
 | Subtitles (.srt/.vtt) | unit tests incl. pairing either order | real upload |
 | Scanned PDF pages → vision | unit tests; no false positives on 2 real PDFs | a real scan + vision model |
 | Export as LaTeX | unit tests | compiling (no TeX installed here) |
 | Speaker labels | synthetic voices | a real recording (numpy now in requirements.txt) |
 | Quoted passages tinted in the PDF (read from the note, no migration) | **live in Chrome 2026-10-22**: Send to note → tint exactly over the line; quote deleted → tint gone. Found + fixed: pill read "p. 1 p. 1" | — |
-| Overlong slide continues on a "(cont.)" slide | unit tests (layout stubbed) | real measurement in a browser |
-| Uploaded video's own chapter marks, with pictures | real ffmpeg file with 2 chapters → 2 chapters + 2 JPEGs; signing tested | a real upload; storage of the JPEGs |
-| ⌘P lists and runs page actions (`lib/commands.ts`) | unit + quick-find test | in browser |
+| Overlong slide continues on a "(cont.)" slide | unit tests; **live (deployed)**: Lecture 10 → 9 slides, "Reinforcement Learning (cont.)" + 4× "Q-Learning (cont.)" in the G overview (label shows there, not on the slide) | — |
+| Uploaded video's own chapter marks, with pictures | real ffmpeg file; **live (deployed)**: uploaded 8 s video with 2 chapters → Chapters row with 2 pictures (Render has ffmpeg); clicking a chapter seeks | a long real video |
+| ⌘P lists and runs page actions (`lib/commands.ts`) | unit + quick-find test; **live (deployed)**: "latex" → Export as LaTeX listed; "present" → runs Present | running an export (downloads a file) |
 | `llama.sh setup` checks models against Hugging Face's sha256 | run here: embed model matches; **your Gemma file is 1,760 bytes short of the published one** (older upload or damaged) | — |
 | Notion parity floor (`docs/ui-audit/parity-floor.json`), eval slowdown rule, `docs/editor-behaviour.md` | unit tests | parity.mjs not re-run (needs a browser) |
 

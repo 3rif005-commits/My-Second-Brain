@@ -115,6 +115,8 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const { showToast } = useToast();
 
   const [note, setNote] = useState<NoteData | null>(null);
+  // the note couldn't be loaded (deleted, someone else's, or the API is down)
+  const [missing, setMissing] = useState(false);
   const [sources, setSources] = useState<NoteSource[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
@@ -222,11 +224,13 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   }, [noteId]);
 
   useEffect(() => {
+    setMissing(false);
     if (!noteId) { setNote(null); setSources([]); return; }
     let cancelled = false;
     (async () => {
-      const res = await fetch(`/api/notes/${noteId}`);
-      if (!res.ok || cancelled) return;
+      const res = await fetch(`/api/notes/${noteId}`).catch(() => null);
+      if (cancelled) return;
+      if (!res?.ok) { setMissing(true); return; }
       const n = await res.json();
       setNote({ id: n.id, title: n.title ?? "Untitled", content: n.content ?? [] });
     })();
@@ -487,7 +491,18 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   if (!noteId || !note) {
     return (
       <div className="ws-canvas relative h-full" {...dragProps}>
-        {noteId ? (
+        {noteId && missing ? (
+          <div className="h-full flex flex-col items-center justify-center gap-3 text-sm text-gray-400">
+            This session couldn&apos;t be opened. It may have been deleted.
+            <button
+              onClick={() => router.push("/brain/workspace")}
+              className="px-3 py-1.5 rounded-lg text-gray-700 dark:text-gray-200 bg-black/5 dark:bg-white/10
+                hover:bg-black/10 dark:hover:bg-white/15 transition-colors"
+            >
+              Start a new session
+            </button>
+          </div>
+        ) : noteId ? (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-sm text-gray-400">
             <span className="w-5 h-5 rounded-full border-2 border-accent-400 border-t-transparent animate-spin" />
             Opening your session…
