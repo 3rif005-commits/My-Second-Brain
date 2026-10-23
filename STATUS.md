@@ -26,10 +26,10 @@ quoted PDF passages, and page actions listed in quick find (⌘P).
 | Item | Verified | Not verified |
 |------|----------|--------------|
 | Never lose an edit (failed saves kept, retried, restored) | 12 unit tests; **live (deployed)**: saves forced to fail → "Not saved — retrying" + browser copy; reload → line restored, saved to server, copy dropped | — |
-| Fast big PDFs (only near pages drawn) | unit tests | scrolling a 300-page PDF in a browser (not run yet; the processing hang is fixed, see below) |
+| Fast big PDFs (only near pages drawn) | unit tests; **live 2026-10-23**: 300-page PDF ready in seconds on the locked build; jumping to the middle/end draws only pages 148–154 / 297–300 | — |
 | PDF bookmarks → chapters | real file: 10 bookmarks → 10 headings; Lect10 unchanged | — |
 | Word/PowerPoint/Excel in Workspace | 14 tests; 6 real files (FR/AR); **live (deployed)**: .docx (table, equation → LaTeX, FR/AR), .pptx (FR/AR), .xlsx all upload and show | equation shows as raw `$…$` in the source viewer |
-| Send to note keeps the page | unit tests; **live (local + deployed)**: quote + one "📍 p. 1" pill land in the note; PDF tint shows; source opens in ~2 s on Render | clicking the pill back to the page |
+| Send to note keeps the page | unit tests; **live (local + deployed)**: quote + one "📍 p. 1" pill land in the note; PDF tint shows; source opens in ~2 s on Render; **pill jump live 2026-10-23** (p. 150 from page 1, and a cold `?p=220` link). Found + fixed: it opened page 1 (seek before the PDF loaded; deep-link timer killed by its own effect) and a second tab (tiptap opened every `<a>`) | — |
 | Live block basics (auto-height, edit in place) | unit tests; **live (deployed)**: inserted from the slash menu, Code → Apply | a little empty space under short diagrams |
 | Live block: Mermaid, 3D, export, CSP | **live (deployed)**: Mermaid renders from the pinned CDN; ⤓ saved a correct SVG; 3D renders. Found + fixed: cube cut off (camera now fits the bounding sphere) | a model with no material renders black on unlit faces (glTF default is metallic) |
 | Drop .glb/.stl → 3D block | **live (deployed)**: .glb drop → upload → 3D block. Found + fixed: "Drop to add sources" stuck after the drop. Model links are 10-year signed URLs stored in the note | — |
@@ -62,6 +62,13 @@ Live-checked: a 7 MB PDF attached and reached "ready" (test session moved to Tra
 project limit (50 MB on the free plan) is now the cap. 3D model drops take the same route
 (`/notes/{id}/model-upload-url`, 1165e838): live-checked with a 6 MB .glb dropped into a test
 note: link → Storage → registered, cube rendered (note moved to Trash).
+
+**2026-10-23, also done:** backend versions locked (`backend/requirements.lock`, every package exact;
+Render installs with `-c requirements.lock`, live). Polish, each checked on the deployed site: Word
+equations render (KaTeX) in the source viewer; live blocks fit their content (a two-node diagram
+106 px, no inner scrollbar on 3D); material-less glTF no longer black (RoomEnvironment). Still by
+hand: Export as PDF (print dialog). Test sessions to empty from Trash: sb-test-deploy-check,
+sb-test-office, sb-test-upload, sb-test-model, sb-test-big.
 
 **Fixed 2026-10-23: a 300-page PDF never finished on Render.** Render's logs and events showed
 "Ran out of memory (used over 512MB)". The unpinned `pymupdf>=1.24` had started installing
