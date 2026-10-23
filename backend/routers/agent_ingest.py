@@ -20,6 +20,7 @@ from fastapi.responses import StreamingResponse
 from models.agent import AgentRequest, ChatMessage, Mode
 from routers.ingest import get_user_id
 from services.agent.engine import run_ingest_turn
+from services.agent.permissions import approval_key
 from services.agent.skills import SkillRegistry
 from services.database import get_supabase
 from services.file_extractor import extract_file
@@ -115,6 +116,13 @@ async def agent_ingest(
             mode=ingest_mode,
             current_note_id=note_id,
             surface="ingest",
+            # The user asked for this import, and the note is the blank one created just
+            # above. Without this the source text (untrusted) made the permission gate
+            # hold brain.update_note for an approval this dialog cannot give, and the user
+            # got an empty "Note created!". Keyed to this note only: text in the file
+            # still cannot get a write approved on any other note.
+            approvals=[approval_key(t, {"id": note_id})
+                       for t in ("brain.update_note", "brain.patch_note")],
         )
 
         async for ev in run_ingest_turn(request, user_id=user_id, skill_registry=registry):
