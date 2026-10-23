@@ -149,7 +149,7 @@ function RoutingSettings() {
         </div>
 
         {tab !== "activity" && draft && (
-          <div className="sticky bottom-0 mt-8 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-white/95 dark:bg-gray-900/95
+          <div className="sticky bottom-0 mt-8 py-3 bg-white/95 dark:bg-gray-900/95
             backdrop-blur border-t border-gray-100 dark:border-gray-800 flex flex-wrap items-center gap-2">
             <button onClick={() => void save()} disabled={!dirty || saving}
               className="h-8 px-3.5 rounded-md bg-accent text-ink-on-accent text-[13px] font-medium hover:bg-accent-hover
