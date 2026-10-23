@@ -18,6 +18,20 @@ def upload(path: str, data: bytes, content_type: str = "application/octet-stream
     return path
 
 
+def signed_upload(path: str) -> dict:
+    """A one-time link the browser uploads one file to, straight to Storage: the file never
+    passes through Vercel (4.5 MB request cap) or the backend. → {"signed_url", "token", "path"}."""
+    res = get_supabase().storage.from_(BUCKET).create_signed_upload_url(path)
+    return {"signed_url": res.get("signed_url") or res.get("signedUrl"),
+            "token": res["token"], "path": path}
+
+
+def exists(path: str) -> bool:
+    folder, _, name = path.rpartition("/")
+    objs = get_supabase().storage.from_(BUCKET).list(folder, {"search": name}) or []
+    return any(o.get("name") == name for o in objs)
+
+
 def download(path: str) -> bytes:
     return get_supabase().storage.from_(BUCKET).download(path)
 

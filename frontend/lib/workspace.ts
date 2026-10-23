@@ -2,6 +2,8 @@
 // One note, many sources: sources attach directly to a note and one AI
 // synthesis comes out. No workspaces, no pages, no canvas positions.
 
+import { createClient } from "@/lib/supabase/client";
+
 export type ResourceKind = "pdf" | "document" | "youtube" | "video" | "website";
 export type ResourceStatus = "queued" | "processing" | "ready" | "failed";
 export type AnchorType = "time" | "page" | "section";
@@ -208,11 +210,42 @@ async function j<T>(res: Response): Promise<T> {
   return res.json();
 }
 
+const SOURCE_BUCKET = "workspace-resources";
+
+/** Put a dropped file straight into Storage through a one-time link from the backend, so it
+ *  never passes through the Vercel function (which refuses request bodies over 4.5 MB).
+ *  → the Storage path, or null when the backend doesn't offer links yet (a deploy in
+ *  between: Vercel goes live minutes before Render) and the old upload should be used. */
+export async function uploadSourceFile(file: File): Promise<string | null> {
+  const res = await fetch("/api/ws/sources/upload-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename: file.name }),
+  });
+  if (res.status === 404 || res.status === 405) return null;
+  const { upload_path, token } = await j<{ upload_path: string; token: string }>(res);
+  const { error } = await createClient().storage.from(SOURCE_BUCKET)
+    .uploadToSignedUrl(upload_path, token, file, { contentType: file.type || undefined });
+  if (error) {
+    throw new Error(/exceeded|too large|maximum allowed size/i.test(error.message)
+      ? `"${file.name}" is larger than your storage allows.`
+      : `Upload failed: ${error.message}`);
+  }
+  return upload_path;
+}
+
 export const wsApi = {
   /** Attach a file or URL. Without noteId the backend creates the note first. */
-  addSource: (input: { file?: File; url?: string; noteId?: string | null; defer?: boolean }) => {
+  addSource: async (input: { file?: File; url?: string; noteId?: string | null; defer?: boolean }) => {
     const fd = new FormData();
-    if (input.file) fd.set("file", input.file);
+    const uploaded = input.file ? await uploadSourceFile(input.file) : null;
+    if (input.file && uploaded) {
+      fd.set("upload_path", uploaded);
+      fd.set("filename", input.file.name);
+      if (input.file.type) fd.set("mime_type", input.file.type);
+    } else if (input.file) {
+      fd.set("file", input.file);
+    }
     if (input.url) fd.set("url", input.url);
     if (input.noteId) fd.set("note_id", input.noteId);
     if (input.defer) fd.set("defer", "true");

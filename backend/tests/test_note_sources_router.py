@@ -610,3 +610,78 @@ def test_source_detail_signs_every_picture_in_one_request(client):
     many.assert_called_once()
     one.assert_not_called()
     assert [e.get("image_url") for e in res.json()["elements"]] == ["https://x/u/s1/a.png", None, "https://x/u/s1/b.png"]
+
+
+# ── direct-to-Storage uploads (no Vercel 4.5 MB cap) ─────────────────────────
+
+SID = "3f2b8c1e-1111-4222-8333-444455556666"
+
+
+def test_upload_url_hands_out_a_one_time_link_under_the_users_folder(client):
+    with patch("routers.note_sources.storage.signed_upload",
+               side_effect=lambda p: {"signed_url": f"https://s/{p}?token=t", "token": "t", "path": p}) as su:
+        res = client.post("/sources/upload-url", json={"filename": "Lecture 10.pdf"}, headers=AUTH)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["token"] == "t"
+    assert body["upload_path"].startswith("user-1/") and body["upload_path"].endswith("/source.pdf")
+    su.assert_called_once_with(body["upload_path"])
+
+
+def test_upload_url_rejects_an_unsupported_file(client):
+    with patch("routers.note_sources.storage.signed_upload") as su:
+        res = client.post("/sources/upload-url", json={"filename": "x.exe"}, headers=AUTH)
+    assert res.status_code == 400
+    su.assert_not_called()
+
+
+def test_attach_an_uploaded_file_registers_it_without_uploading_again(client):
+    tables: dict = {}
+    db = _table_router(tables)
+    _note_owned(tables)
+    srcs = tables.setdefault("note_resources", MagicMock())
+    srcs.select.return_value.eq.return_value.execute.return_value.data = []
+    srcs.insert.return_value.execute.return_value.data = [{
+        "id": SID, "note_id": "n1", "kind": "pdf", "title": "Lecture 10",
+        "status": "queued", "meta": {}, "order_index": 0}]
+    path = f"user-1/{SID}/source.pdf"
+    with patch("routers.note_sources.get_supabase", return_value=db), \
+         patch("routers.note_sources.storage.exists", return_value=True), \
+         patch("routers.note_sources.storage.upload") as up, \
+         patch("routers.note_sources.process_resource") as proc:
+        res = client.post("/sources", data={
+            "upload_path": path, "filename": "Lecture 10.pdf",
+            "mime_type": "application/pdf", "note_id": "n1"}, headers=AUTH)
+    assert res.status_code == 200
+    row = srcs.insert.call_args[0][0]
+    assert row["id"] == SID and row["storage_path"] == path and row["kind"] == "pdf"
+    assert row["title"] == "Lecture 10" and row["mime_type"] == "application/pdf"
+    up.assert_not_called()
+    proc.assert_called_once_with(SID)
+
+
+@pytest.mark.parametrize("path", [
+    f"someone-else/{SID}/source.pdf",          # another user's folder
+    f"user-1/{SID}/source.docx",               # extension doesn't match the filename
+    f"user-1/{SID}/thumbnail.png",             # not a source path
+    f"user-1/{SID}/../x/source.pdf",
+    "user-1/not-a-uuid-at-all-but-36-chars-xx/source.pdf",
+])
+def test_attach_rejects_an_upload_path_it_did_not_hand_out(client, path):
+    with patch("routers.note_sources.get_supabase", return_value=_table_router({})), \
+         patch("routers.note_sources.storage.exists", return_value=True), \
+         patch("routers.note_sources.process_resource") as proc:
+        res = client.post("/sources", data={"upload_path": path, "filename": "a.pdf"}, headers=AUTH)
+    assert res.status_code == 400
+    proc.assert_not_called()
+
+
+def test_attach_rejects_an_upload_that_never_arrived(client):
+    tables: dict = {}
+    with patch("routers.note_sources.get_supabase", return_value=_table_router(tables)), \
+         patch("routers.note_sources.storage.exists", return_value=False):
+        res = client.post("/sources", data={
+            "upload_path": f"user-1/{SID}/source.pdf", "filename": "a.pdf"}, headers=AUTH)
+    assert res.status_code == 400
+    assert "finish uploading" in res.json()["detail"]["error"]
+    assert "notes" not in tables or not tables["notes"].insert.called   # no empty note left

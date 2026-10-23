@@ -12,6 +12,7 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import socket
 import uuid
 from datetime import datetime, timezone
@@ -155,10 +156,10 @@ def _discard_orphan_upload(storage_path: str) -> None:
         logger.warning(f"could not remove orphaned upload {storage_path}")
 
 
-def _classify(file: UploadFile | None, url: str | None) -> tuple[str, str, str]:
+def _classify(filename: str | None, url: str | None) -> tuple[str, str, str]:
     """→ (kind, title, ext). Raises 400 on an unsupported or empty input."""
-    if file is not None and file.filename:
-        ext = os.path.splitext(file.filename)[1].lower()
+    if filename:
+        ext = os.path.splitext(filename)[1].lower()
         if ext in _VIDEO_EXTS:
             kind = "video"
         elif ext in _DOC_EXTS:
@@ -167,12 +168,34 @@ def _classify(file: UploadFile | None, url: str | None) -> tuple[str, str, str]:
             raise HTTPException(status_code=400, detail={
                 "error": f"Unsupported file type '{ext}'. Accepted: "
                          f"{', '.join(sorted(_DOC_EXTS | _VIDEO_EXTS))}"})
-        return kind, os.path.splitext(os.path.basename(file.filename))[0], ext
+        return kind, os.path.splitext(os.path.basename(filename))[0], ext
     if url:
         kind = "youtube" if youtube_video_id(url) else "website"
         return kind, ("YouTube video" if kind == "youtube" else url), ""
     raise HTTPException(status_code=400,
                         detail={"error": "Provide a file or a url."})
+
+
+_UPLOAD_PATH = re.compile(r"^([^/]+)/([0-9a-f-]{36})/source(\.[a-z0-9]+)$")
+
+
+def _check_upload_path(path: str, user_id: str, ext: str) -> str:
+    """A path from /sources/upload-url → its source id. It must be this user's, in the exact
+    shape that endpoint hands out, with the file's own extension, and already uploaded."""
+    m = _UPLOAD_PATH.match(path)
+    if not m or m.group(1) != user_id or m.group(3) != ext:
+        raise HTTPException(status_code=400, detail={"error": "Invalid upload path."})
+    try:
+        uuid.UUID(m.group(2))
+        found = storage.exists(path)
+    except ValueError:
+        found = False
+    except Exception as e:
+        raise HTTPException(status_code=502, detail={"error": f"Could not check the upload: {e}"})
+    if not found:
+        raise HTTPException(status_code=400,
+                            detail={"error": "The file didn't finish uploading. Try again."})
+    return m.group(2)
 
 
 _PASTE_IMAGE_MAX_BYTES = 15 * 1024 * 1024
@@ -250,6 +273,25 @@ async def _fetch_external_image(url: str) -> tuple[bytes, str]:
 
 # ── attach / list / detach ───────────────────────────────────────────────────
 
+class UploadUrlRequest(BaseModel):
+    filename: str
+
+
+@router.post("/sources/upload-url")
+def source_upload_url(body: UploadUrlRequest, authorization: str = Header()):
+    """Step 1 of a file drop: a one-time link the browser uploads the file to, straight to
+    Storage. Step 2 is POST /sources with the returned `upload_path`. Nothing is created
+    until then; Storage's own size limit is the only cap."""
+    user_id = get_user_id(authorization)
+    _, _, ext = _classify(body.filename, None)
+    path = f"{user_id}/{uuid.uuid4()}/source{ext}"
+    try:
+        signed = storage.signed_upload(path)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail={"error": f"Could not start the upload: {e}"})
+    return {"upload_path": path, "token": signed["token"], "signed_url": signed["signed_url"]}
+
+
 @router.post("/sources")
 async def attach_source(
     background: BackgroundTasks,
@@ -258,13 +300,23 @@ async def attach_source(
     url: str | None = Form(default=None),
     note_id: str | None = Form(default=None),
     defer: bool = Form(default=False),
+    upload_path: str | None = Form(default=None),
+    filename: str | None = Form(default=None),
+    mime_type: str | None = Form(default=None),
 ):
     """Attach a source. With no note_id, the note is created first — the first
-    drop is one request, not create-then-attach."""
+    drop is one request, not create-then-attach. A file comes either in the
+    request (`file`) or already in Storage (`upload_path` + `filename`, from
+    /sources/upload-url) — the second way has no size cap from Vercel."""
     user_id = get_user_id(authorization)
     db = get_supabase()
     url = url.strip() if url else None
-    kind, title, ext = _classify(file, url)
+    if file is not None and file.filename:
+        filename, mime_type = file.filename, file.content_type
+    elif not upload_path:
+        filename = None
+    kind, title, ext = _classify(filename, url)
+    uploaded_sid = _check_upload_path(upload_path, user_id, ext) if upload_path and filename else None
 
     created_note = False
     if note_id:
@@ -274,7 +326,7 @@ async def attach_source(
             "user_id": user_id, "title": title, "content": [], "content_text": "",
             "source_type": _NOTE_SOURCE_TYPE.get(kind, "text"),
             "source_url": url,
-            "source_filename": (file.filename if file is not None else None),
+            "source_filename": filename,
         }).execute().data[0]["id"]
         created_note = True
 
@@ -282,19 +334,23 @@ async def attach_source(
                 .eq("note_id", note_id).execute().data or [])
     order_index = len(attached)
 
-    if file is not None and file.filename:
-        sid = str(uuid.uuid4())
-        spath = f"{user_id}/{sid}/source{ext}"
-        data = await file.read()
-        try:
-            storage.upload(spath, data, file.content_type or "application/octet-stream")
-        except Exception as e:
-            _discard_lazy_note(note_id, created_note)
-            raise HTTPException(status_code=502, detail={"error": f"Upload failed: {e}"})
+    if filename:
+        if uploaded_sid:
+            sid = uploaded_sid
+            spath = upload_path
+        else:
+            sid = str(uuid.uuid4())
+            spath = f"{user_id}/{sid}/source{ext}"
+            data = await file.read()
+            try:
+                storage.upload(spath, data, mime_type or "application/octet-stream")
+            except Exception as e:
+                _discard_lazy_note(note_id, created_note)
+                raise HTTPException(status_code=502, detail={"error": f"Upload failed: {e}"})
         try:
             row = db.table("note_resources").insert({
                 "id": sid, "note_id": note_id, "user_id": user_id, "kind": kind,
-                "title": title, "storage_path": spath, "mime_type": file.content_type,
+                "title": title, "storage_path": spath, "mime_type": mime_type,
                 "order_index": order_index,
             }).execute().data[0]
         except Exception as e:
