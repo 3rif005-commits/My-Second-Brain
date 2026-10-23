@@ -112,14 +112,25 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }:
     }
   }, [onPosition]);
 
-  // parent-commanded jump (sync, citations, checkpoints)
+  // parent-commanded jump (sync, citations, checkpoints). The viewer registers before the
+  // PDF has loaded, and a "📍 p. 150" link or a citation calls it right then: with no page
+  // elements yet the jump used to be lost and the file opened on page 1. Keep it until the
+  // pages exist.
+  const pendingPage = useRef<number | null>(null);
   useEffect(() => {
     seekRef.current = (page: number) => {
       const el = pageRefs.current[Math.max(1, Math.round(page))];
-      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (el) { pendingPage.current = null; el.scrollIntoView({ behavior: "smooth", block: "start" }); }
+      else pendingPage.current = page;
     };
     return () => { seekRef.current = null; };
   }, [seekRef]);
+  useEffect(() => {
+    if (!numPages || pendingPage.current === null) return;
+    const el = pageRefs.current[Math.min(numPages, Math.max(1, Math.round(pendingPage.current)))];
+    pendingPage.current = null;
+    el?.scrollIntoView({ block: "start" });
+  }, [numPages]);
 
   // text-layer selection → floating send button
   const handleMouseUp = useCallback(() => {

@@ -4,7 +4,8 @@
 //   math       — KaTeX-rendered LaTeX, click to edit the source
 //   checkpoint — deep link to an exact spot in a workspace resource
 //                (timestamp for video, page for documents, section for websites)
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { createReactBlockSpec } from "@blocknote/react";
 // @ts-ignore — @blocknote/core@0.48.0 ships an empty index.d.ts (upstream bug); runtime exports are fine
 import { createInlineContentSpec } from "@blocknote/core";
@@ -307,18 +308,36 @@ export const CheckpointBlockSpec = createReactBlockSpec(
           </span>
         );
       }
-      return (
-        <a
-          href={checkpointHref(p)}
-          className="inline-flex items-center gap-1.5 my-0.5 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-xs font-medium no-underline hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors cursor-pointer"
-          contentEditable={false}
-        >
-          {body}
-        </a>
-      );
+      return <CheckpointLink href={checkpointHref(p)}>{body}</CheckpointLink>;
     },
   }
 );
+
+/** The pill's link. Not an <a>: the editor's link extension catches every <a> clicked inside
+ *  the note and window.open()s it, so a click opened a second tab on top of following the
+ *  link. Navigates inside the app instead (no reload: the open session just jumps);
+ *  Ctrl/⌘-click still opens a new tab. */
+export function CheckpointLink({ href, children }: { href: string; children: ReactNode }) {
+  const router = useRouter();
+  const go = (newTab: boolean) => {
+    if (newTab) window.open(href, "_blank", "noopener");
+    else router.push(href);
+  };
+  return (
+    <span
+      role="link"
+      tabIndex={0}
+      data-href={href}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); go(e.ctrlKey || e.metaKey); }}
+      onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); go(true); } }}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); go(e.ctrlKey || e.metaKey); } }}
+      className="inline-flex items-center gap-1.5 my-0.5 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-xs font-medium no-underline hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors cursor-pointer"
+      contentEditable={false}
+    >
+      {children}
+    </span>
+  );
+}
 
 export type CalloutType =
   | "OVERVIEW" | "NOTE" | "TIP" | "IMPORTANT" | "WARNING"
