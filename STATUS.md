@@ -1,7 +1,7 @@
 # Second Brain — Project Status
 
 > Source of truth across all conversations. Read at session start, update at session end.
-> Last updated: 2026-10-22
+> Last updated: 2026-10-23
 
 ---
 
@@ -9,8 +9,36 @@
 
 | # | What | Why first |
 |---|------|-----------|
-| 1 | Live-check the ArtCraft-study items (commands in the dated section below) | 16 commits are unit-tested only; none was seen in a browser |
-| 2 | Push `main` after the live check (deploys Vercel + Render) | everything is committed locally, not pushed |
+| 1 | AI-written notes render wrong: `brain.update_note`/`create_note` store the model's invented block shape (`{type,text,level}`, `details`) raw — headings show "Heading", toggles show "Unsupported block". Decide: tool takes HTML and the editor converts it (existing `parseDraftHtml` path), or a server-side converter | every AI import and every chat edit of a note hits it |
+| 2 | Inline editor AI never worked on the deployed site: pinned to OpenRouter, `OPENROUTER_API_KEY` not set on Render. Quick: set the key (needs OpenRouter credit for `openai/gpt-4o-mini`). Proper: route it through the user's own provider | 500 on every use |
+| 3 | Database rows/databases moved to Trash don't appear in Trash (the list reads the notes view that hides rows) — can't be restored | data you can't get back from the UI |
+| 4 | Not checked live: Send to Notion (needs the user's token), MCP servers (needs a server) | — |
+
+Live check 2026-10-23 (older features on the deployed site): see "Live check of older features" below.
+
+---
+
+## Live check of older features — 2026-10-23
+
+Fixed and re-verified on the deployed site:
+- **Privacy:** the `local` provider fell back to OpenRouter on a server with no local model; private
+  notes are allowed to reach `local`, so with an OpenRouter key set they'd have gone to a cloud.
+  Now `LocalModelUnavailable` with a plain message (1725a142).
+- **CSV import:** select cells showed option ids ("UE1lkFAU") — importer stored ids, the app reads
+  names (236e99c8); import answered after indexing every row (31 s for 5 rows) — now indexes after
+  the response (5789ba9f, NameError fixed in de5c32c6, which a no-Postgres endpoint test now covers).
+- **AI ingest** saved an empty note: the permission gate held `brain.update_note` (untrusted source
+  text) and the dialog can't approve; the route now pre-approves writes to its own new note only
+  (bbe2c2fa). Content now arrives, but see Next #1.
+
+Worked: chat answer + citation jump; all settings pages (no console errors); routing test (Fast);
+database filter / sort / board view.
+
+Noted, not fixed (small): chat box placeholder wraps (shows "notes…"); settings pane scrolls
+sideways after Test; filter popover too narrow ("To read" cut off); a database shows an empty table
+(no spinner) while rows load; CSV import still ~7 s for 3 rows; three "Loaded skill" chips on every
+chat answer (the assistant rules load each turn). Two test chat conversations left for the user to
+delete (deleting is permanent).
 
 ---
 
