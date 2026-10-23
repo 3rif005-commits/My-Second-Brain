@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  MAX_FRAME_HEIGHT, MIN_FRAME_HEIGHT, heightFromMessage, liveBlockRequest, stripFences, withAutoHeight,
+  CONTENT_HEIGHT_JS, MAX_FRAME_HEIGHT, MIN_FRAME_HEIGHT, heightFromMessage, liveBlockRequest, stripFences, withAutoHeight,
 } from "./liveBlock";
 
 describe("withAutoHeight", () => {
@@ -51,5 +51,23 @@ describe("imageFromTransfer", () => {
     expect(imageFromTransfer({ files: [txt, img], items: [] } as unknown as DataTransfer)).toBe(img);
     expect(imageFromTransfer({ files: [txt], items: [] } as unknown as DataTransfer)).toBeNull();
     expect(imageFromTransfer(null)).toBeNull();
+  });
+});
+
+describe("CONTENT_HEIGHT_JS", () => {
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
+  const contentHeight = new Function(`${CONTENT_HEIGHT_JS}; return contentHeight;`)() as
+    (b: unknown, scrollY?: number) => number;
+  const kid = (tagName: string, bottom: number) => ({ tagName, getBoundingClientRect: () => ({ bottom }) });
+
+  it("is the content's height, not the frame's: a 120 px diagram in a 300 px frame reports 120", () => {
+    expect(contentHeight({ scrollHeight: 120, children: [kid("DIV", 118)] })).toBe(120);
+  });
+  it("counts children that stick out of the body (absolutely positioned, full height)", () => {
+    expect(contentHeight({ scrollHeight: 0, children: [kid("CANVAS", 300)] })).toBe(300);
+    expect(contentHeight({ scrollHeight: 50, children: [kid("DIV", 200)] }, 40)).toBe(240);
+  });
+  it("ignores script and style tags", () => {
+    expect(contentHeight({ scrollHeight: 90, children: [kid("SCRIPT", 500), kid("STYLE", 500)] })).toBe(90);
   });
 });

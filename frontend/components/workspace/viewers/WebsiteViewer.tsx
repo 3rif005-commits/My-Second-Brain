@@ -7,6 +7,7 @@ import { Bookmark, Copy, CornerDownRight, ExternalLink, X } from "lucide-react";
 import type { SendAction, WsElement, NoteSource } from "@/lib/workspace";
 import { ActionBar, ActionButton, ActionSeparator } from "./ActionBar";
 import { Markdown } from "@/lib/markdown/Markdown";
+import { needsMarkdown } from "./sectionMarkup";
 
 interface WebsiteViewerProps {
   resource: NoteSource;
@@ -96,8 +97,8 @@ export function WebsiteViewer({ resource, onPosition, onAction, seekRef }: Websi
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mt-4 mb-1">
                 {el.content}
               </h2>
-            ) : /^\s*(\||- )/m.test(el.content ?? "") ? (
-              // Tables and lists (Word / PowerPoint / Excel sources) keep their shape.
+            ) : needsMarkdown(el.content) ? (
+              // Tables, lists and equations (Word / PowerPoint / Excel sources) keep their shape.
               <div className="text-sm leading-relaxed text-gray-700 dark:text-gray-300 mb-2 overflow-x-auto">
                 <Markdown>{el.content ?? ""}</Markdown>
               </div>

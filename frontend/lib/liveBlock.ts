@@ -15,8 +15,16 @@ export const MIN_FRAME_HEIGHT = 80;
 export const MAX_FRAME_HEIGHT = 900;
 const MESSAGE_KEY = "sb-live-height";
 
-const HEIGHT_SCRIPT = `<script>(function(){function s(){var d=document.documentElement,b=document.body;` +
-  `var h=Math.max(d.scrollHeight,b?b.scrollHeight:0);parent.postMessage({"${MESSAGE_KEY}":h},"*");}` +
+/** How tall the block's content is. Not documentElement.scrollHeight: that never drops below
+ *  the frame's own height, so a short diagram kept the 300 px the frame starts at. The body's
+ *  height, or the lowest edge of its children (absolutely positioned or full-height content). */
+export const CONTENT_HEIGHT_JS = `function contentHeight(b,scrollY){if(!b)return 0;` +
+  `var h=b.scrollHeight;for(var i=0;i<b.children.length;i++){var c=b.children[i];` +
+  `if(c.tagName==="SCRIPT"||c.tagName==="STYLE")continue;` +
+  `h=Math.max(h,c.getBoundingClientRect().bottom+(scrollY||0));}return h;}`;
+
+const HEIGHT_SCRIPT = `<script>(function(){${CONTENT_HEIGHT_JS}function s(){` +
+  `var h=contentHeight(document.body,window.scrollY);parent.postMessage({"${MESSAGE_KEY}":h},"*");}` +
   `if(window.ResizeObserver){new ResizeObserver(s).observe(document.documentElement);}` +
   `window.addEventListener("load",s);setTimeout(s,50);setTimeout(s,600);})();</script>`;
 

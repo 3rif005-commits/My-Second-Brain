@@ -83,6 +83,7 @@ window.sbScene=function(el){return window.sbReady.then(function(rt){return rt.ma
 <script type="module">
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 const FOV = 50;
 ${FIT_CAMERA_JS}
 function lights(scene) {
@@ -108,6 +109,9 @@ function makeScene(el) {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.dampingFactor = 0.05;
   lights(scene);
+  // Something to reflect: a glTF without a material gets the spec's default, fully metallic,
+  // and a metal with no environment is black wherever no direct light hits it.
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
   const hooks = [];
   const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {

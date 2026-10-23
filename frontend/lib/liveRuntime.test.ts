@@ -46,6 +46,9 @@ describe("buildSrcDoc", () => {
     expect(doc).toContain('"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js"');
     expect(doc).toContain("GLTFLoader");
     expect(doc).toContain("dampingFactor = 0.05");
+    // an environment to reflect, so material-less (default metallic) glTF isn't black
+    expect(doc).toContain('from "three/addons/environments/RoomEnvironment.js"');
+    expect(doc).toContain("scene.environment = ");
     expect(cspOf(doc)).toContain("https://models.example.org");
     expect(cspOf(doc)).toContain("https://p.supabase.co");
     allParse(doc);
