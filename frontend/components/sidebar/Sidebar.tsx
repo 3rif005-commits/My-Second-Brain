@@ -31,7 +31,7 @@ import { usePreferences, useToast } from "@/app/providers";
 import { createClient } from "@/lib/supabase/client";
 import { useNotes } from "@/lib/hooks/useNotes";
 import { useCollections } from "@/lib/hooks/useCollections";
-import { useTrash } from "@/lib/hooks/useTrash";
+import { useTrash, type TrashedNote } from "@/lib/hooks/useTrash";
 import { NoteTree } from "./NoteTree";
 import { NotionDot } from "@/components/notion/NotionDot";
 import { RowMenu, type RowMenuTarget } from "@/components/notion/RowMenu";
@@ -44,6 +44,13 @@ import { Logo } from "@/components/brand/Logo";
 
 /** One round icon button in the nav pill row. The current page's button grows into
  * a labelled pill (Notion's 2026 sidebar, shell.md §1). */
+function trashLabel(item: TrashedNote): string {
+  const title = item.title || "Untitled";
+  if (item.kind === "database") return `${title} — a database; restore brings back its rows and views`;
+  if (item.kind === "row") return `${title} — a row of ${item.database}`;
+  return title;
+}
+
 function NavPill({
   label,
   icon: Icon,
@@ -322,6 +329,9 @@ export function Sidebar({
 
   useEffect(() => {
     loadDatabases();
+    // A database restored from the Trash comes back here without a reload.
+    window.addEventListener("notes-changed", loadDatabases);
+    return () => window.removeEventListener("notes-changed", loadDatabases);
   }, [loadDatabases]);
 
   // "New database" and "Import CSV" used to be two separate top-level nav rows. They
@@ -622,7 +632,14 @@ export function Sidebar({
                       key={note.id}
                       className="group flex h-[30px] items-center gap-1 rounded-md pl-9 pr-1.5 text-sm text-ink-secondary hover:bg-surface-active"
                     >
-                      <span className="min-w-0 flex-1 truncate">{note.title || "Untitled"}</span>
+                      <span className="min-w-0 flex-1 truncate" title={trashLabel(note)}>
+                        {note.title || "Untitled"}
+                        {note.kind && note.kind !== "note" && (
+                          <span className="ml-1.5 text-xs text-ink-tertiary">
+                            {note.kind === "database" ? "Database" : `in ${note.database}`}
+                          </span>
+                        )}
+                      </span>
                       <button
                         onClick={() => restoreNote(note.id)}
                         title="Restore"
@@ -631,14 +648,14 @@ export function Sidebar({
                       >
                         <RotateCcw size={14} />
                       </button>
-                      <button
+                      {note.kind !== "database" && <button
                         onClick={() => permanentDelete(note.id)}
                         title="Delete forever"
                         aria-label={`Delete ${note.title || "Untitled"} forever`}
                         className="flex size-5 shrink-0 items-center justify-center rounded text-ink-icon opacity-0 hover:bg-surface-active hover:text-ink-danger focus-visible:opacity-100 group-hover:opacity-100"
                       >
                         <Trash2 size={14} />
-                      </button>
+                      </button>}
                     </div>
                   ))}
                 </div>

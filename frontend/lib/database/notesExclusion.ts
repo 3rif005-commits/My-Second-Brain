@@ -33,7 +33,7 @@
  * tests without a module-reload dance, and so a process-level env change
  * (unlikely outside tests, but cheap to support) takes effect immediately.
  */
-function databaseRowsEnabled(): boolean {
+export function databaseRowsEnabled(): boolean {
   return process.env.DATABASE_ROWS_ENABLED === "true";
 }
 
