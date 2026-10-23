@@ -408,7 +408,7 @@ async def import_csv(
     # (asyncpg/FastAPI's own behavior, unchanged by this try/except) -- this only
     # changes what *response* the caller sees once that rollback has already happened.
     try:
-        return await _run_import(conn, user_id, title, fieldnames, csv_rows, title_idx)
+        return await _run_import(conn, user_id, title, fieldnames, csv_rows, title_idx, background)
     except asyncpg.PostgresError as exc:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, f"CSV import failed: {exc}"
@@ -422,6 +422,7 @@ async def _run_import(
     fieldnames: list[str],
     csv_rows: list[dict[str, str | None]],
     title_idx: int,
+    background: BackgroundTasks,
 ) -> CsvImportResponse:
     async with conn.transaction():
         created = await create_database(DatabaseCreate(title=title), user_id=user_id, conn=conn)
