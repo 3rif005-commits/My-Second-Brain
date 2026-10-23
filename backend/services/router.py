@@ -1,9 +1,12 @@
-"""SmartRouter — routes generation requests: LiteRT tablet → llama.cpp laptop → OpenRouter.
+"""SmartRouter — finds the LOCAL model: LiteRT tablet → llama.cpp laptop. Nothing else.
 
 Priority:
   1. LiteRT tablet  (if LITERT_URL set and tablet responds within 2 s)
   2. llama.cpp local (if LLM_PROVIDER=llamacpp)
-  3. OpenRouter      (always available cloud fallback)
+
+There is deliberately no cloud fallback. This is what the "local" provider resolves to, and the
+privacy gate lets private notes reach "local": falling back to OpenRouter here (as it once did)
+would send them to a cloud on any server without a local model, e.g. the deployed backend.
 
 Health status is cached for 30 s so we don't ping the tablet on every token request.
 """
@@ -18,8 +21,10 @@ logger = logging.getLogger(__name__)
 HEALTH_TTL = 30          # seconds between tablet health re-checks
 HEALTH_TIMEOUT = 2.0     # seconds to wait for tablet health response
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+
+
+class LocalModelUnavailable(RuntimeError):
+    """No local model on this server: no tablet answering and LLM_PROVIDER isn't llamacpp."""
 
 
 class SmartRouter:
@@ -48,13 +53,13 @@ class SmartRouter:
         return self._tablet_alive
 
     def get_endpoint(self) -> dict:
-        """Return the best available generation endpoint.
+        """Return the local generation endpoint, or raise LocalModelUnavailable.
 
         Returns a dict with:
           url      — full completions URL
-          headers  — HTTP headers (auth included)
+          headers  — HTTP headers
           model    — model name string for the payload
-          source   — 'tablet' | 'llamacpp' | 'openrouter'
+          source   — 'tablet' | 'llamacpp'
         """
         # 1. LiteRT tablet
         if self._tablet_ok():
@@ -76,21 +81,11 @@ class SmartRouter:
                 "source": "llamacpp",
             }
 
-        # 3. OpenRouter fallback
-        logger.info("smartrouter | routing → openrouter")
-        return {
-            "url": OPENROUTER_URL,
-            "headers": {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {settings.openrouter_api_key}",
-            },
-            "model": OPENROUTER_MODEL,
-            "source": "openrouter",
-        }
-
-    def invalidate(self) -> None:
-        """Force a fresh health probe on the next request (e.g. after a timeout)."""
-        self._last_check = 0.0
+        raise LocalModelUnavailable(
+            "No local model is running on this server (no tablet, and LLM_PROVIDER isn't "
+            "llamacpp). Point this role at a cloud provider in Settings → Routing, or run the "
+            "app on your own machine with the local model. Private notes are never sent to a "
+            "cloud instead.")
 
 
 smart_router = SmartRouter()
