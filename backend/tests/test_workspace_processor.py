@@ -87,5 +87,21 @@ def test_resume_interrupted_reruns_cut_off_sources_and_gives_up_after_two_restar
     assert ran == ["fresh", "again"]
     assert saved["fresh"] == {"pages": 300, "resumed": 1}
     assert saved["again"]["resumed"] == 2
-    assert statuses["crashy"][0] == "error" and "Try again" in statuses["crashy"][1]
+    assert statuses["crashy"][0] == "failed" and "Try again" in statuses["crashy"][1]
     assert "crashy" not in saved
+
+
+def test_resume_interrupted_keeps_going_when_one_source_cannot_be_updated():
+    db = _db()
+    q = db.tables.setdefault("note_resources", MagicMock())
+    q.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {"id": "crashy", "meta": {"resumed": 2}},
+        {"id": "fresh", "meta": {}},
+    ]
+    ran = []
+    with patch.object(processor, "get_supabase", return_value=db), \
+         patch.object(processor, "_save_meta"), \
+         patch.object(processor, "_set_status", side_effect=Exception("check constraint")), \
+         patch.object(processor, "process_resource", side_effect=ran.append):
+        assert processor.resume_interrupted() == 1
+    assert ran == ["fresh"]

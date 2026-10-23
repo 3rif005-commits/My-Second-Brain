@@ -7,7 +7,10 @@ apscheduler>=3.10.0
 pydantic>=2.9.0
 pydantic-settings>=2.6.0
 python-jose[cryptography]>=3.3.0
-pymupdf>=1.24.0
+# <2: PyMuPDF 2.0 pulls in an AI layout model (onnxruntime, pymupdf_layout) that runs on
+#   every page — measured +200 MB and ~40x slower per page. On Render's free plan
+#   (512 MB, 0.1 CPU) a 300-page PDF ran for 15+ minutes and was killed for memory.
+pymupdf>=1.24.0,<2
 # figure crops are downscaled before they are sent to a vision model
 #   (services/workspace/figures.py); until then this was only a pymupdf transitive
 pillow

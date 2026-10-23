@@ -155,14 +155,19 @@ def resume_interrupted(limit: int = 20) -> int:
     for r in rows:
         meta = dict(r.get("meta") or {})
         tries = int(meta.get("resumed") or 0)
-        if tries >= RESUME_LIMIT:
-            _set_status(r["id"], "error",
-                        "Processing was cut off twice (the server restarted). Try again.")
-            continue
-        meta["resumed"] = tries + 1
-        _save_meta(r["id"], meta)
-        process_resource(r["id"])
-        resumed += 1
+        try:
+            if tries >= RESUME_LIMIT:
+                # "failed", the only give-up status the table's check constraint allows
+                _set_status(r["id"], "failed",
+                            "Processing was cut off twice (the server restarted). Try again.")
+                continue
+            meta["resumed"] = tries + 1
+            _save_meta(r["id"], meta)
+            process_resource(r["id"])
+            resumed += 1
+        except Exception as e:                           # noqa: BLE001
+            # one bad row must not keep the others on "processing" forever
+            logger.warning(f"resume_interrupted: {r['id']} skipped: {e}")
     if rows:
         logger.info(f"resume_interrupted: {resumed} resumed, {len(rows) - resumed} given up")
     return resumed
