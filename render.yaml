@@ -17,7 +17,8 @@ services:
       paths:
         - backend/**
         - render.yaml
-    buildCommand: pip install -r ${REQUIREMENTS_FILE:-requirements.txt}
+    # requirements.lock pins every version (see its header); upgrades are a deliberate step
+    buildCommand: pip install -r ${REQUIREMENTS_FILE:-requirements.txt} -c requirements.lock
     startCommand: uvicorn ${APP_MODULE:-main}:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:

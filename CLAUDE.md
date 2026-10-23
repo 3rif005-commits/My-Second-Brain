@@ -54,6 +54,9 @@ damaged, not the code: `cd frontend && npm ci`.
 - Backend: `cd backend && PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 venv/bin/python -m pytest tests/ -p asyncio -q`
   (~3 min). The ~450 errors from `asyncpg.connect(LOCAL_PGTEST_DSN)` mean no local test
   Postgres is running; they are not failures of your change.
+- Backend dependencies: Render installs `requirements.txt` with the exact versions in
+  `backend/requirements.lock`. A new or upgraded package means regenerating the lock (steps in
+  its header) and running the backend tests; `tests/test_requirements_lock.py` fails otherwise.
 - The e2e tests and anything driving the browser run on the user's **real** notes: read-only
   where possible, undo every change, delete what you create.
 
