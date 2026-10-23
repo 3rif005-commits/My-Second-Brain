@@ -34,7 +34,7 @@ import { ViewSettingsSidebar } from "./ViewSettingsSidebar";
 import { DatabaseSettingsMenu } from "./DatabaseSettingsMenu";
 import { DatabasePageMenu } from "./DatabasePageMenu";
 import { TopBar } from "@/components/shell/TopBar";
-import { Table2 } from "lucide-react";
+import { Loader2, Table2 } from "lucide-react";
 
 interface DatabaseShellProps {
   databaseId: string;
@@ -52,6 +52,7 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
     groups,
     aggregates,
     loading,
+    rowsLoading,
     error,
     updateCell,
     relationLinks,
@@ -818,7 +819,13 @@ export function DatabaseShell({ databaseId }: DatabaseShellProps) {
       </div>
 
       {/* Active view */}
-      <div className={`min-h-0 flex-1 ${viewPadding}`}>{renderActiveView()}</div>
+      <div className={`min-h-0 flex-1 ${viewPadding}`}>
+        {rowsLoading && rows.length === 0 && !groups ? (
+          <div role="status" className="flex items-center gap-2 px-2 py-6 text-sm text-ink-tertiary">
+            <Loader2 size={14} className="animate-spin" /> Loading rows…
+          </div>
+        ) : renderActiveView()}
+      </div>
 
       {editable && activeView && (
         <ViewSettingsSidebar

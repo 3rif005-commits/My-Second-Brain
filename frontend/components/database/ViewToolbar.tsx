@@ -128,7 +128,8 @@ export function ViewToolbar({
           <Popover
             open={filterOpen}
             onOpenChange={setFilterOpen}
-            width="sm"
+            // with a rule it opens the rule builder, which is cramped at sm
+            width={ruleCount > 0 ? "md" : "sm"}
             label="Filter"
             trigger={
               <ToolbarButton

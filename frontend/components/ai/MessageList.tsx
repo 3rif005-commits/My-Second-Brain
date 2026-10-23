@@ -56,7 +56,7 @@ interface Props {
 export function MessageList({ items, onApprove, renderJob, renderAnswerActions, renderPrivacy, onRerun, busy, onCitation, colorIndex }: Props) {
   return (
     <div className="px-4 py-5 flex flex-col gap-4">
-      {items.map((item) => {
+      {items.map((item, i) => {
         if (item.kind === "user") {
           return (
             <div key={item.id} className="flex justify-end">
@@ -88,7 +88,15 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
         }
 
         if (item.kind === "skill") {
-          return <SkillBadge key={item.id} name={item.name} />;
+          // Skills load in a burst at the start of a turn: one chip for the
+          // run, not one per skill (three chips led every answer).
+          if (items[i - 1]?.kind === "skill") return null;
+          const names: string[] = [];
+          for (let j = i; items[j]?.kind === "skill"; j++) {
+            const name = (items[j] as Extract<StreamItem, { kind: "skill" }>).name;
+            if (!names.includes(name)) names.push(name);
+          }
+          return <SkillBadge key={item.id} names={names} />;
         }
 
         if (item.kind === "tool") {

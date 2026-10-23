@@ -1038,12 +1038,13 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             onKeyDown={handleKey}
             onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
             placeholder={attachments.length
-              ? "Ask about them, or type / for a skill…"
+              ? "Ask about them, or / for a skill…"
               : workspace ? "Ask, or / for a skill…"
               : "Ask anything about your notes…"}
             disabled={loading}
             aria-label="Message the AI"
-            className="flex-1 resize-none text-sm bg-transparent border-none outline-none disabled:opacity-50 placeholder-gray-400"
+            /* the placeholder stays one line in a narrow panel instead of wrapping */
+            className="flex-1 min-w-0 resize-none text-sm bg-transparent border-none outline-none disabled:opacity-50 placeholder-gray-400 placeholder:truncate"
             style={{ minHeight: "1.5rem" }}
           />
 

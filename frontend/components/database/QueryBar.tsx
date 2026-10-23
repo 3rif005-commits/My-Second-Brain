@@ -141,7 +141,8 @@ function FilterAddButton({
     <Popover
       open={open}
       onOpenChange={setOpen}
-      width="sm"
+      // opens the rule builder (a filter already exists here), which needs md
+      width="md"
       label="Add filter"
       side="bottom"
       align="start"

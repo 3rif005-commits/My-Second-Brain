@@ -102,6 +102,23 @@ afterEach(() => {
 });
 
 describe("useDatabaseView", () => {
+  it("reports rowsLoading until the active view's rows arrive (no empty table meanwhile)", async () => {
+    let answer: (r: Response) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));
+      if (url === "/api/db/data-sources/ds-1/query" && init?.method === "POST") {
+        return new Promise<Response>((r) => { answer = r; });
+      }
+      return Promise.resolve(jsonResponse([]));
+    }));
+    const { result } = renderHook(() => useDatabaseView("db-1"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.rowsLoading).toBe(true);
+    answer(jsonResponse({ rows: ROWS }));
+    await waitFor(() => expect(result.current.rowsLoading).toBe(false));
+    expect(result.current.rows).toHaveLength(2);
+  });
+
   it("loads database detail, defaults activeViewId to the first view, and queries rows via POST .../query", async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === "/api/db/databases/db-1") return Promise.resolve(jsonResponse(DETAIL));

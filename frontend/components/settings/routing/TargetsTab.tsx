@@ -44,7 +44,7 @@ export function TargetsTab({ policy, onChange, targets, help }: Props) {
         const now = targets?.slots.find((s) => s.slot === slot);
         const isLocal = slot === "local";
         return (
-          <div key={slot} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+          <div key={slot} className="min-w-0 rounded-xl border border-gray-200 dark:border-gray-700 p-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 w-20 text-[13px] font-semibold text-gray-800 dark:text-gray-100">
                 {isLocal && <Lock size={12} className="text-emerald-600" />}{SLOT_NAME[slot]}
@@ -76,7 +76,9 @@ export function TargetsTab({ policy, onChange, targets, help }: Props) {
                 value={policy.slots[slot].model}
                 onChange={(e) => set(slot, { model: e.target.value.trim() })} />
             </div>
-            <p className="mt-1.5 text-[12px]">
+            {/* a failed Test can carry a long unbroken error (a URL, JSON): wrap it
+                rather than push the whole settings pane sideways */}
+            <p className="mt-1.5 text-[12px] [overflow-wrap:anywhere]">
               <span className="text-gray-400">Now: </span>
               {now?.error
                 ? <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">

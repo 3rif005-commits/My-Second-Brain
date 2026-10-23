@@ -75,6 +75,9 @@ export function useDatabaseView(databaseId: string) {
   // ungrouped + aggregations" contract.
   const [aggregates, setAggregates] = useState<Record<string, number> | null>(null);
   const [loading, setLoading] = useState(true);
+  // The view whose rows are on screen. Until the first query for the active
+  // view answers, `rows` is just [] — an empty table that read as "no rows".
+  const [rowsViewId, setRowsViewId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Milestone 7 (task-21/task-22): a relation property's value never lands
   // in `rows[i].properties` — migration 015 keeps `db_relation_links` as
@@ -193,11 +196,14 @@ export function useDatabaseView(databaseId: string) {
       setGroups(null);
       setAggregates(data.aggregates ?? null);
     }
+    setRowsViewId(activeView.id);
   }, [dataSource, activeView, properties]);
 
   useEffect(() => {
+    const viewId = activeView?.id ?? null;
     loadRows().catch((e) => {
       setError(e instanceof Error ? e.message : "Unknown error");
+      setRowsViewId(viewId);                // no endless spinner on a failed query
     });
     // activeView is an object pulled fresh from `views` on every render;
     // depending on its id/filter/sorts/config (rather than the object
@@ -639,6 +645,8 @@ export function useDatabaseView(databaseId: string) {
     groups,
     aggregates,
     loading,
+    /** The active view's rows haven't arrived yet (first load or a view switch). */
+    rowsLoading: !!activeView && !!dataSource && rowsViewId !== activeView.id,
     error,
     updateCell,
     relationLinks,
