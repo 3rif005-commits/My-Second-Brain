@@ -26,7 +26,7 @@ quoted PDF passages, and page actions listed in quick find (⌘P).
 | Item | Verified | Not verified |
 |------|----------|--------------|
 | Never lose an edit (failed saves kept, retried, restored) | 12 unit tests; **live (deployed)**: saves forced to fail → "Not saved — retrying" + browser copy; reload → line restored, saved to server, copy dropped | — |
-| Fast big PDFs (only near pages drawn) | unit tests | scrolling a 300-page PDF in a browser (blocked: the 300-page test PDF never finished processing on Render, see Open) |
+| Fast big PDFs (only near pages drawn) | unit tests | scrolling a 300-page PDF in a browser (not run yet; the processing hang is fixed, see below) |
 | PDF bookmarks → chapters | real file: 10 bookmarks → 10 headings; Lect10 unchanged | — |
 | Word/PowerPoint/Excel in Workspace | 14 tests; 6 real files (FR/AR); **live (deployed)**: .docx (table, equation → LaTeX, FR/AR), .pptx (FR/AR), .xlsx all upload and show | equation shows as raw `$…$` in the source viewer |
 | Send to note keeps the page | unit tests; **live (local + deployed)**: quote + one "📍 p. 1" pill land in the note; PDF tint shows; source opens in ~2 s on Render | clicking the pill back to the page |
@@ -59,11 +59,12 @@ Render — if the service isn't Blueprint-synced, set the same filter in the Ren
 body limit; the upload goes through `/api/ws/[...path]`). Fix = upload straight to Supabase
 Storage from the browser (signed upload URL), then register the source. Needs a decision.
 
-**Open (not fixed): a 300-page PDF never finishes on Render.** Generated test file (184 KB, text
-only) stays "processing" with 0 elements stored, through 2 resumes and a fresh upload; small PDFs,
-Office files, video and scans all work. Locally the same extraction takes 3 s (31 s at a 10% CPU
-quota, 52 MB), so it hangs somewhere on Render before elements are written. Next step: Render →
-Logs, search `1c7ba5f1-75f1-4765-b4b5-7fcbf211de7b` / `2b4ead6a-0ef0-4598-a4e1-2798d33d6587`.
+**Fixed 2026-10-23: a 300-page PDF never finished on Render.** Render's logs and events showed
+"Ran out of memory (used over 512MB)". The unpinned `pymupdf>=1.24` had started installing
+PyMuPDF 2.0, which brings an AI layout model (onnxruntime + pymupdf_layout): 146 → 333 MB peak and
+~40× slower per page. Pinned `<2` (b4d91c35); the same 300-page file now goes from download to
+ready in ~22 s on Render. The logs also showed the startup resume crashing every boot: it wrote
+status "error", which the table's check constraint rejects. It now writes "failed".
 Both test sources sit in the trashed "sb-test-office" note.
 
 **How to check (run when the laptop is otherwise idle — live browser runs crashed Claude's
