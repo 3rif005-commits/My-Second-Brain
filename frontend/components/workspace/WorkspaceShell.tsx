@@ -429,23 +429,6 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const deepLinkKey = deepLink ? `${deepLink.sid}:${deepLink.value ?? ""}` : null;
   const handledDeepLink = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (!deepLink || !deepLinkKey || handledDeepLink.current === deepLinkKey) return;
-    if (!sources.some((s) => s.id === deepLink.sid)) return;
-    handledDeepLink.current = deepLinkKey;
-    if (deepLink.sid !== activeId) seekRef.current = null;
-    setActiveId(deepLink.sid);
-    if (deepLink.value === null || Number.isNaN(deepLink.value)) return;
-    const timer = setInterval(() => {
-      if (seekRef.current) {
-        seekRef.current(deepLink.value as number);
-        clearInterval(timer);
-      }
-    }, 300);
-    const stop = setTimeout(() => clearInterval(timer), 15000);
-    return () => { clearInterval(timer); clearTimeout(stop); };
-  }, [deepLink, deepLinkKey, sources, activeId]);
-
   // Switching sources swaps the viewer, and the outgoing viewer's seek function
   // is still in the ref at that instant — so a naive setActiveId-then-seek either
   // seeks the pane that is unmounting or is lost. Clear the ref at the switch and
@@ -455,7 +438,8 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     const timer = setInterval(() => {
       if (seekRef.current) { seekRef.current(value); clearInterval(timer); }
     }, 200);
-    setTimeout(() => clearInterval(timer), 8000);
+    // Long enough for a sleeping free-plan backend (~1 min to wake) to serve the source.
+    setTimeout(() => clearInterval(timer), 60000);
   }, []);
 
   const selectAndSeek = useCallback((sourceId: string, value: number) => {
@@ -465,6 +449,20 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     }
     seekWhenReady(value);
   }, [activeId, seekWhenReady]);
+
+  // Not a timer owned by this effect: setActiveId changes activeId and the 2 s source poll
+  // changes `sources`, both re-run the effect, and its cleanup used to kill the wait for the
+  // viewer while the "handled" guard stopped a new one, so a cold ?p=150 opened on page 1.
+  useEffect(() => {
+    if (!deepLink || !deepLinkKey || handledDeepLink.current === deepLinkKey) return;
+    if (!sources.some((s) => s.id === deepLink.sid)) return;
+    handledDeepLink.current = deepLinkKey;
+    if (deepLink.value === null || Number.isNaN(deepLink.value)) {
+      if (deepLink.sid !== activeId) { seekRef.current = null; setActiveId(deepLink.sid); }
+      return;
+    }
+    selectAndSeek(deepLink.sid, deepLink.value);
+  }, [deepLink, deepLinkKey, sources, activeId, selectAndSeek]);
 
   const handleCitation = useCallback((c: Citation) => {
     selectAndSeek(c.resource_id, c.anchor_start);
