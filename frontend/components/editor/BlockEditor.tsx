@@ -287,8 +287,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           // OpenAI's Responses API (`input: [...]`), and /agent/inline
           // forwards to chat/completions, which answered every editor AI
           // request with 400 "specify prompt or messages" — found live when
-          // stock "Improve Writing" wrote nothing. The model id is replaced
-          // server-side by settings.inline_model.
+          // stock "Improve Writing" wrote nothing. The model id is ignored:
+          // the backend runs the user's Fast routing slot (agent_inline.py).
           model: createOpenAI({
             apiKey: "x",
             fetch: fetchViaProxy(

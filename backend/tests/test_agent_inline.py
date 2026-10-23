@@ -1,37 +1,63 @@
-"""Tests for the inline AI endpoint config.
+"""The inline editor AI (/agent/inline).
 
-The /agent/inline route is a transparent OpenAI-compatible streaming proxy;
-the unit-testable surface is the endpoint selection: always OpenRouter with
-settings.inline_model (forced tool-calling support), failing loudly when the
-key is missing.
+It runs on the user's Fast routing slot. OpenAI-dialect providers get the
+request byte-for-byte; Anthropic is translated (tests/test_openai_bridge.py).
+It used to be pinned to OpenRouter, so with no OpenRouter key (the live site)
+every editor AI request failed.
 """
+from dataclasses import replace
 from unittest.mock import patch
 
 import pytest
 
 from routers import agent_inline
+from services.ai.providers import Provider
+from services.routing.policy import default_policy
+from services.routing.switchboard import NoProvider
+
+OPENROUTER = Provider(provider="openai_compatible", api_key="sk-test",
+                      base_url="https://openrouter.ai/api/v1",
+                      chat_model="nvidia/some-free-model:free", label="OpenRouter",
+                      capabilities={"text"})
+ANTHROPIC = Provider(provider="anthropic", api_key="sk-ant-test",
+                     chat_model="claude-haiku-4-5", label="Anthropic", capabilities={"text"})
 
 
-def test_inline_endpoint_uses_openrouter_and_inline_model():
-    with patch.object(agent_inline.settings, "openrouter_api_key", "sk-test"), \
+def _policy(model=""):
+    pol = default_policy()
+    pol["slots"]["fast"] = {"provider": "auto", "model": model}
+    return pol
+
+
+def test_uses_the_fast_slot_provider():
+    with patch.object(agent_inline.routing_policy, "load", return_value=_policy()), \
+         patch.object(agent_inline, "resolve_slot", return_value=ANTHROPIC) as rs:
+        assert agent_inline._inline_provider("u1") is ANTHROPIC
+    assert rs.call_args[0][0] == "fast"
+
+
+def test_openrouter_without_a_slot_model_uses_the_tool_capable_inline_model():
+    with patch.object(agent_inline.routing_policy, "load", return_value=_policy()), \
+         patch.object(agent_inline, "resolve_slot", return_value=OPENROUTER), \
          patch.object(agent_inline.settings, "inline_model", "openai/gpt-4o-mini"):
-        ep = agent_inline._inline_endpoint()
+        assert agent_inline._inline_provider("u1").model == "openai/gpt-4o-mini"
+    with patch.object(agent_inline.routing_policy, "load", return_value=_policy("x/chosen")), \
+         patch.object(agent_inline, "resolve_slot", return_value=OPENROUTER):
+        # the user's own pick stands (resolve_slot already applied it)
+        assert agent_inline._inline_provider("u1").model == OPENROUTER.model
 
-    assert ep["url"] == "https://openrouter.ai/api/v1/chat/completions"
-    assert ep["model"] == "openai/gpt-4o-mini"
-    assert ep["headers"]["Authorization"] == "Bearer sk-test"
 
-
-def test_inline_endpoint_requires_api_key():
-    with patch.object(agent_inline.settings, "openrouter_api_key", ""):
-        with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
-            agent_inline._inline_endpoint()
+@pytest.mark.asyncio
+async def test_nothing_configured_is_a_readable_503(monkeypatch):
+    monkeypatch.setattr(agent_inline, "get_user_id", lambda auth: "u1")
+    with patch.object(agent_inline, "_inline_provider", side_effect=NoProvider("Map it")):
+        with pytest.raises(agent_inline.HTTPException) as e:
+            await agent_inline.agent_inline({"messages": []}, authorization="Bearer x")
+    assert e.value.status_code == 503 and "Map it" in e.value.detail["error"]
 
 
 # ── the run log tee ──────────────────────────────────────────────────────────
 
-import json
-from unittest.mock import MagicMock
 
 from services.ai import passthrough
 from services.ai import usage as usage_log
@@ -88,8 +114,8 @@ async def test_the_proxy_forwards_bytes_untouched_and_still_logs_the_spend(monke
     monkeypatch.setattr(agent_inline, "get_user_id", lambda auth: "u1")
     monkeypatch.setattr(passthrough.httpx, "AsyncClient", lambda **kw: _Client())
 
-    with patch.object(agent_inline.settings, "openrouter_api_key", "sk-test"), \
-         patch.object(agent_inline.settings, "inline_model", "openai/gpt-4o-mini"):
+    gpt = replace(OPENROUTER, chat_model="openai/gpt-4o-mini")
+    with patch.object(agent_inline, "_inline_provider", return_value=gpt):
         response = await agent_inline.agent_inline({"messages": []}, authorization="Bearer x")
         body = await _drain(response)
 
@@ -120,7 +146,7 @@ async def test_without_upstream_usage_the_row_is_marked_an_estimate(monkeypatch)
             return _C()
 
     monkeypatch.setattr(passthrough.httpx, "AsyncClient", lambda **kw: _NoUsage())
-    with patch.object(agent_inline.settings, "openrouter_api_key", "sk-test"):
+    with patch.object(agent_inline, "_inline_provider", return_value=OPENROUTER):
         response = await agent_inline.agent_inline({"messages": [{"role": "user",
                                                                  "content": "x" * 400}]},
                                                    authorization="Bearer x")
