@@ -59,8 +59,9 @@ Render — if the service isn't Blueprint-synced, set the same filter in the Ren
 body limit). Files now go straight from the browser to Supabase Storage through a one-time signed
 link (`POST /sources/upload-url`), then `POST /sources` registers the `upload_path` (25452ce1).
 Live-checked: a 7 MB PDF attached and reached "ready" (test session moved to Trash). Storage's
-project limit (50 MB on the free plan) is now the cap. Not moved yet: 3D model drops
-(`/notes/{id}/model-asset`) still go through Vercel, so a .glb over 4.5 MB still fails.
+project limit (50 MB on the free plan) is now the cap. 3D model drops take the same route
+(`/notes/{id}/model-upload-url`, 1165e838): live-checked with a 6 MB .glb dropped into a test
+note: link → Storage → registered, cube rendered (note moved to Trash).
 
 **Fixed 2026-10-23: a 300-page PDF never finished on Render.** Render's logs and events showed
 "Ran out of memory (used over 512MB)". The unpinned `pymupdf>=1.24` had started installing
