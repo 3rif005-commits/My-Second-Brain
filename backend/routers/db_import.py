@@ -19,7 +19,6 @@ reimplementing any of their transactional logic here.
 """
 from __future__ import annotations
 
-import asyncio
 import csv
 import io
 import math
@@ -30,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 import asyncpg
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
 from models.database import DatabaseCreate, PropertyCreate, PropertyUpdate
@@ -254,6 +253,12 @@ def _wrap_value(prop_type: str, cell: str, value_to_option_id: dict[str, str] | 
     return {"type": "rich_text", "rich_text": cell}
 
 
+def _index_rows(note_ids: list[str], user_id: str) -> None:
+    """Index imported rows one by one (each call is independently best-effort)."""
+    for note_id in note_ids:
+        try_index_note(note_id, user_id)
+
+
 def _is_title_header(header: str, working_title: str) -> bool:
     h = header.strip().lower()
     return h in ("title", "name") or h == working_title.strip().lower()
@@ -299,6 +304,7 @@ class CsvImportResponse(BaseModel):
 
 @router.post("/csv", response_model=CsvImportResponse, status_code=status.HTTP_201_CREATED)
 async def import_csv(
+    background: BackgroundTasks,
     file: UploadFile = File(...),
     database_title: str | None = Form(None),
     user_id: str = Depends(get_user_id),
@@ -537,7 +543,12 @@ async def _run_import(
     # stays free to serve other requests while each blocking call runs -- this request
     # still awaits every row's indexing before responding (unchanged behavior from the
     # caller's point of view), only where it runs changes.
-    for note_id in created_note_ids:
-        await asyncio.to_thread(try_index_note, note_id, user_id)
+    #
+    # And after the RESPONSE, not before it: on the deployed site each row's indexing took
+    # ~6 s (an embedding call per row), so a 5-row file answered in 31 s and a few hundred
+    # rows would outlast the Vercel proxy's time limit -- the user sees a failure for an
+    # import that worked. Indexing is best-effort either way. Starlette runs this sync
+    # function in its threadpool, so the event loop stays free (the Fix 1 concern).
+    background.add_task(_index_rows, created_note_ids, user_id)
 
     return CsvImportResponse(database_id=created.database.id, row_count=row_count, columns=column_reports)
