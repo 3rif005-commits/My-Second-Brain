@@ -55,9 +55,12 @@ startup, gives up after 2 restarts; `render.yaml` build filter so frontend pushe
 Render — if the service isn't Blueprint-synced, set the same filter in the Render dashboard);
 **Gemini embeddings were one request per chunk** (now 100 per request).
 
-**Open (not fixed):** uploads over **4.5 MB fail on the deployed site** (413 — Vercel's function
-body limit; the upload goes through `/api/ws/[...path]`). Fix = upload straight to Supabase
-Storage from the browser (signed upload URL), then register the source. Needs a decision.
+**Fixed 2026-10-23: uploads over 4.5 MB failed on the deployed site** (413, Vercel's function
+body limit). Files now go straight from the browser to Supabase Storage through a one-time signed
+link (`POST /sources/upload-url`), then `POST /sources` registers the `upload_path` (25452ce1).
+Live-checked: a 7 MB PDF attached and reached "ready" (test session moved to Trash). Storage's
+project limit (50 MB on the free plan) is now the cap. Not moved yet: 3D model drops
+(`/notes/{id}/model-asset`) still go through Vercel, so a .glb over 4.5 MB still fails.
 
 **Fixed 2026-10-23: a 300-page PDF never finished on Render.** Render's logs and events showed
 "Ran out of memory (used over 512MB)". The unpinned `pymupdf>=1.24` had started installing
