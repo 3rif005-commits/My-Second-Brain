@@ -9,10 +9,10 @@
 
 | # | What | Why first |
 |---|------|-----------|
-| 1 | AI-written notes render wrong: `brain.update_note`/`create_note` store the model's invented block shape (`{type,text,level}`, `details`) raw — headings show "Heading", toggles show "Unsupported block". Decide: tool takes HTML and the editor converts it (existing `parseDraftHtml` path), or a server-side converter | every AI import and every chat edit of a note hits it |
-| 2 | Inline editor AI never worked on the deployed site: pinned to OpenRouter, `OPENROUTER_API_KEY` not set on Render. Quick: set the key (needs OpenRouter credit for `openai/gpt-4o-mini`). Proper: route it through the user's own provider | 500 on every use |
-| 3 | Database rows/databases moved to Trash don't appear in Trash (the list reads the notes view that hides rows) — can't be restored | data you can't get back from the UI |
-| 4 | Not checked live: Send to Notion (needs the user's token), MCP servers (needs a server) | — |
+| 1 | Not checked live: Send to Notion (needs the user's token), MCP servers (needs a server) | the last untested older features |
+| 2 | Editor AI: one Revert (after Simplify) left stray letters in the paragraph ("foronr"); two later Simplify/Fix-spelling reverts restored the text exactly. Watch for it; if it recurs, check xl-ai's revert with large rewrites | couldn't reproduce |
+| 3 | CSV import still ~7 s for 3 rows | slow, not broken |
+| 4 | Connected-apps (MCP) notes: `mcp_remote/blocks.py` markdown converter drops bold, tables, code; could reuse `services/note_html.py` | plainer notes from other apps |
 
 Live check 2026-10-23 (older features on the deployed site): see "Live check of older features" below.
 
@@ -34,7 +34,20 @@ Fixed and re-verified on the deployed site:
 Worked: chat answer + citation jump; all settings pages (no console errors); routing test (Fast);
 database filter / sort / board view.
 
-Noted, not fixed (small): chat box placeholder wraps (shows "notes…"); settings pane scrolls
+**Follow-up the same day (all live-checked on the deployed site):**
+- AI-written notes: `brain.create_note`/`update_note` take `html`; `services/note_html.py` converts it
+  server-side to the exact block shapes BlockNote 0.48's own parser makes (checked against it), and
+  normalizes hand-written blocks. Live: chat-created note has callout, H2, collapsible H3, rendered
+  formula, table; no "Unsupported block", no empty heading (52903222).
+- Trash lists database rows ("A1 in sb-test-db2") and deleted databases ("Database", restore-only);
+  live restore → back in the Databases list → re-deleted (e43d41c2).
+- Editor AI runs on the user's Fast slot; Anthropic through a native Messages-API bridge
+  (`services/ai/openai_bridge.py`). Live: Simplify / Fix spelling on Claude Haiku → suggestion with
+  Accept/Revert (cd35e124).
+- Small ones fixed: one skill chip per answer, one-line chat placeholder, filter builder at md width,
+  "Loading rows…" spinner, routing pane sideways scroll (sticky Save bar's negative margins).
+
+Noted earlier (small, now fixed except CSV speed): chat box placeholder wraps (shows "notes…"); settings pane scrolls
 sideways after Test; filter popover too narrow ("To read" cut off); a database shows an empty table
 (no spinner) while rows load; CSV import still ~7 s for 3 rows; three "Loaded skill" chips on every
 chat answer (the assistant rules load each turn). Two test chat conversations left for the user to
