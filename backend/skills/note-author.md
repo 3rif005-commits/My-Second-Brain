@@ -5,31 +5,33 @@ priority: 4
 ---
 
 When you write content destined for a note (via `brain.create_note` or
-`brain.update_note`), structure it for the block editor.
+`brain.update_note`), pass it as the `html` argument. The server turns it into
+editor blocks; never hand-write block JSON.
 
 Two-layer pattern for every section:
-- **Overview callout** (blue, 📋) — scannable in 2 minutes: What / How / Why / Takeaway.
-- **Deep-dive toggles** (collapsible) — full explanation broken into sub-concepts.
+- **Overview callout** — scannable in 2 minutes: What / How / Why / Takeaway.
+  `<div data-type="callout" data-callout-type="OVERVIEW"><ul><li>…</li></ul></div>`
+- **Deep-dive toggles** — one collapsible per sub-concept.
+  `<details><summary><h3>Concept</h3></summary><p>…</p></details>`
 
-Mark heading importance with `data-importance` on H2:
-- 6 (red) — exam-critical
-- 5 (orange) — central concept
-- 4 (yellow) — must understand
-- 3 (green) — part of the lesson
-- 2 (blue) — context
-- 1 (purple) — background only
+Callout types (pick by what the content IS, never for decoration):
+- OVERVIEW — section overview
+- CAUTION — must-know / common failure
+- WARNING — important distinction
+- TIP — non-obvious insight
+- IMPORTANT — key rule
+- FORMULA — key formula
+- EXAM — what an exam asks
+- ANALOGY — an analogy
+- NOTE — historical context, asides
 
-Callout colors:
-- red 🛑 — must-know / common failure
-- orange ⚠️ — important distinction
-- purple 💡 — non-obvious insight
-- green ✅ — clarification
-- yellow 📌 — key formula / rule
-- blue 📋 — overview (default)
-- gray ℹ️ — historical context
+Highlight an exam-critical heading (sparingly — most headings stay plain):
+`<h2><span data-style-type="backgroundColor" data-value="red">Title</span></h2>`
+(red = exam-critical, orange = central concept, yellow = must understand).
 
-Use blocks the editor renders well: callouts, toggles (`<details>`), tables,
-code blocks, blockquotes for definitions. Avoid long prose paragraphs.
+Formulas: `<div data-type="math">E = mc^2</div>` (LaTeX, no dollar signs).
+Also fine: `<table>`, `<pre><code class="language-python">`, `<blockquote>` for
+definitions. Avoid long prose paragraphs.
 
 Each toggle = one concept. 2–3 sentences of prose, supported by quotes,
 callouts, tables, or code.

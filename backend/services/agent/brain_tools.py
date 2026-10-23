@@ -30,6 +30,19 @@ from services.retriever import retrieve
 
 # --- Tool schemas (advertised to the LLM as tool-use definitions) ---
 
+# Notes are written as HTML and converted on the server (services/note_html.py).
+_HTML_HELP = (
+    "The note body as HTML. Use <h1>-<h3>, <p>, <ul>/<ol>/<li>, <blockquote>, "
+    "<pre><code class=\"language-x\">, <table>, <hr>, <b>/<i>/<code>/<a href>. "
+    "Toggle: <details><summary>Title</summary>…</details> (a heading inside the "
+    "summary makes a collapsible heading). Callout: <div data-type=\"callout\" "
+    "data-callout-type=\"OVERVIEW|NOTE|TIP|IMPORTANT|WARNING|CAUTION|FORMULA|"
+    "ANALOGY|EXAM\">…</div>. Formula: <div data-type=\"math\">LaTeX</div>. "
+    "Highlight: <span data-style-type=\"backgroundColor\" data-value=\"red\">…</span>."
+)
+_BLOCKS_HELP = ("Only to write back blocks exactly as brain.get_note returned them. "
+                "For new content use `html`.")
+
 BRAIN_TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": "brain.search_brain",
@@ -82,30 +95,36 @@ BRAIN_TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": "brain.create_note",
         "description": "Create a new note. Returns the new note ID. "
-                       "Use when the user asks to make a note about something.",
+                       "Use when the user asks to make a note about something. "
+                       "Write the content as `html`.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "title": {"type": "string"},
-                "blocks": {"type": "array", "items": {"type": "object"}},
+                "html": {"type": "string", "description": _HTML_HELP},
+                "blocks": {"type": "array", "items": {"type": "object"},
+                           "description": _BLOCKS_HELP},
                 "collection_id": {"type": "string"},
                 "topics": {"type": "array", "items": {"type": "string"}},
             },
-            "required": ["title", "blocks"],
+            "required": ["title", "html"],
         },
     },
     {
         "name": "brain.update_note",
         "description": "Replace the entire content of an existing note. "
-                       "Prefer brain.patch_note for partial changes.",
+                       "Write the new content as `html`; it replaces everything, "
+                       "so include the parts you keep.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "id": {"type": "string"},
-                "blocks": {"type": "array", "items": {"type": "object"}},
+                "html": {"type": "string", "description": _HTML_HELP},
+                "blocks": {"type": "array", "items": {"type": "object"},
+                           "description": _BLOCKS_HELP},
                 "title": {"type": "string"},
             },
-            "required": ["id", "blocks"],
+            "required": ["id"],
         },
     },
     {
@@ -409,12 +428,25 @@ def _plain_text(blocks: list) -> str:
     return "\n".join(c["chunk_text"] for c in parse(blocks or []))
 
 
+def _content(args: dict[str, Any]) -> list | None:
+    """The note's blocks from a tool call: `html` through the converter, or
+    `blocks` made real (a model's invented block shapes rendered as "Heading" /
+    "Unsupported block"). None when the call carries no content."""
+    from services.note_html import html_to_blocks, normalize_blocks
+    if isinstance(args.get("html"), str) and args["html"].strip():
+        return html_to_blocks(args["html"])
+    if args.get("blocks") is not None:
+        return normalize_blocks(args["blocks"])
+    return None
+
+
 def _create_note(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    blocks = _content(args) or []
     payload = {
         "user_id": user_id,
         "title": args["title"],
-        "content": args["blocks"],
-        "content_text": _plain_text(args["blocks"]),
+        "content": blocks,
+        "content_text": _plain_text(blocks),
         "topics": args.get("topics", []),
     }
     if args.get("collection_id"):
@@ -424,10 +456,14 @@ def _create_note(args: dict[str, Any], user_id: str) -> dict[str, Any]:
 
 
 def _update_note(args: dict[str, Any], user_id: str) -> dict[str, Any]:
-    update: dict[str, Any] = {"content": args["blocks"],
-                              "content_text": _plain_text(args["blocks"])}
-    if "title" in args:
+    update: dict[str, Any] = {}
+    blocks = _content(args)
+    if blocks is not None:
+        update = {"content": blocks, "content_text": _plain_text(blocks)}
+    if args.get("title"):
         update["title"] = args["title"]
+    if not update:
+        raise ValueError("brain.update_note needs `html` (the new content) or a `title`.")
     rows = (
         get_supabase()
         .table("notes")
