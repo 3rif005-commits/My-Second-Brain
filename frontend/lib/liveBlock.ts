@@ -16,15 +16,20 @@ export const MAX_FRAME_HEIGHT = 900;
 const MESSAGE_KEY = "sb-live-height";
 
 /** How tall the block's content is. Not documentElement.scrollHeight: that never drops below
- *  the frame's own height, so a short diagram kept the 300 px the frame starts at. The body's
- *  height, or the lowest edge of its children (absolutely positioned or full-height content). */
-export const CONTENT_HEIGHT_JS = `function contentHeight(b,scrollY){if(!b)return 0;` +
-  `var h=b.scrollHeight;for(var i=0;i<b.children.length;i++){var c=b.children[i];` +
+ *  the frame's own height, so a short diagram kept the 300 px the frame starts at. The lowest
+ *  edge of the body's children (absolutely positioned or full-height content too) with their
+ *  bottom margins, plus the body's own bottom padding and margin, or the body's height.
+ *  The same answer whatever the frame's size, so the frame settles instead of oscillating. */
+export const CONTENT_HEIGHT_JS = `function contentHeight(b,scrollY,css){if(!b)return 0;` +
+  `var px=function(el,p){return parseFloat(css(el)[p])||0};` +
+  `var h=b.scrollHeight,low=0;for(var i=0;i<b.children.length;i++){var c=b.children[i];` +
   `if(c.tagName==="SCRIPT"||c.tagName==="STYLE")continue;` +
-  `h=Math.max(h,c.getBoundingClientRect().bottom+(scrollY||0));}return h;}`;
+  `low=Math.max(low,c.getBoundingClientRect().bottom+(scrollY||0)+px(c,"marginBottom"));}` +
+  `return Math.max(h,low+px(b,"paddingBottom")+px(b,"marginBottom"));}`;
 
 const HEIGHT_SCRIPT = `<script>(function(){${CONTENT_HEIGHT_JS}function s(){` +
-  `var h=contentHeight(document.body,window.scrollY);parent.postMessage({"${MESSAGE_KEY}":h},"*");}` +
+  `var h=contentHeight(document.body,window.scrollY,getComputedStyle);` +
+  `parent.postMessage({"${MESSAGE_KEY}":h},"*");}` +
   `if(window.ResizeObserver){new ResizeObserver(s).observe(document.documentElement);}` +
   `window.addEventListener("load",s);setTimeout(s,50);setTimeout(s,600);})();</script>`;
 

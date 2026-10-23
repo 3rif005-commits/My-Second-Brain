@@ -57,17 +57,34 @@ describe("imageFromTransfer", () => {
 describe("CONTENT_HEIGHT_JS", () => {
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const contentHeight = new Function(`${CONTENT_HEIGHT_JS}; return contentHeight;`)() as
-    (b: unknown, scrollY?: number) => number;
-  const kid = (tagName: string, bottom: number) => ({ tagName, getBoundingClientRect: () => ({ bottom }) });
+    (b: unknown, scrollY: number, css: (el: unknown) => Record<string, string>) => number;
+  type El = { tagName: string; bottom: number; mb?: number };
+  const kid = ({ tagName, bottom, mb = 0 }: El) =>
+    ({ tagName, mb, getBoundingClientRect: () => ({ bottom }) });
+  const body = (scrollHeight: number, kids: El[], pb = 0, bmb = 0) =>
+    ({ scrollHeight, pb, bmb, children: kids.map(kid) });
+  // getComputedStyle stand-in: margins/paddings carried on the fakes
+  const css = (el: unknown): Record<string, string> => {
+    const e = el as { mb?: number; pb?: number; bmb?: number };
+    return e.pb !== undefined
+      ? { paddingBottom: `${e.pb}px`, marginBottom: `${e.bmb}px` }
+      : { marginBottom: `${e.mb ?? 0}px` };
+  };
 
   it("is the content's height, not the frame's: a 120 px diagram in a 300 px frame reports 120", () => {
-    expect(contentHeight({ scrollHeight: 120, children: [kid("DIV", 118)] })).toBe(120);
+    expect(contentHeight(body(120, [{ tagName: "DIV", bottom: 118 }]), 0, css)).toBe(120);
+  });
+  it("counts the last line's bottom margin, which sticks out of the body (no inner scrollbar)", () => {
+    expect(contentHeight(body(440, [{ tagName: "DIV", bottom: 420 }, { tagName: "P", bottom: 440, mb: 6 }]), 0, css)).toBe(446);
+  });
+  it("counts the body's own padding and margin (a block with default body styles)", () => {
+    expect(contentHeight(body(100, [{ tagName: "P", bottom: 108 }], 0, 8), 0, css)).toBe(116);
   });
   it("counts children that stick out of the body (absolutely positioned, full height)", () => {
-    expect(contentHeight({ scrollHeight: 0, children: [kid("CANVAS", 300)] })).toBe(300);
-    expect(contentHeight({ scrollHeight: 50, children: [kid("DIV", 200)] }, 40)).toBe(240);
+    expect(contentHeight(body(0, [{ tagName: "CANVAS", bottom: 300 }]), 0, css)).toBe(300);
+    expect(contentHeight(body(50, [{ tagName: "DIV", bottom: 200 }]), 40, css)).toBe(240);
   });
   it("ignores script and style tags", () => {
-    expect(contentHeight({ scrollHeight: 90, children: [kid("SCRIPT", 500), kid("STYLE", 500)] })).toBe(90);
+    expect(contentHeight(body(90, [{ tagName: "SCRIPT", bottom: 500 }, { tagName: "STYLE", bottom: 500 }]), 0, css)).toBe(90);
   });
 });
