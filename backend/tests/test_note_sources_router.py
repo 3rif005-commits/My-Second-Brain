@@ -685,3 +685,62 @@ def test_attach_rejects_an_upload_that_never_arrived(client):
     assert res.status_code == 400
     assert "finish uploading" in res.json()["detail"]["error"]
     assert "notes" not in tables or not tables["notes"].insert.called   # no empty note left
+
+
+MODEL = "user-1/notes/n1/models/" + "a" * 32
+
+
+def test_model_upload_url_needs_the_note_and_a_model_file(client):
+    tables: dict = {}
+    _note_owned(tables)
+    with patch("routers.note_sources.get_supabase", return_value=_table_router(tables)), \
+         patch("routers.note_sources.storage.signed_upload",
+               side_effect=lambda p: {"signed_url": "https://s", "token": "t", "path": p}):
+        ok = client.post("/notes/n1/model-upload-url", json={"filename": "heart.glb"}, headers=AUTH)
+        bad = client.post("/notes/n1/model-upload-url", json={"filename": "heart.gltf"}, headers=AUTH)
+    assert ok.status_code == 200 and bad.status_code == 400
+    assert ok.json()["upload_path"].startswith("user-1/notes/n1/models/")
+    assert ok.json()["upload_path"].endswith(".glb") and ok.json()["token"] == "t"
+
+
+def test_model_asset_from_an_upload_path_checks_it_and_returns_the_long_lived_link(client):
+    tables: dict = {}
+    _note_owned(tables)
+    with patch("routers.note_sources.get_supabase", return_value=_table_router(tables)), \
+         patch("routers.note_sources.storage") as st:
+        st.exists.return_value = True
+        st.head.return_value = b"glTF"
+        st.signed_url.return_value = "https://p/x.glb?token=t"
+        r = client.post("/notes/n1/model-asset", data={"upload_path": MODEL + ".glb"}, headers=AUTH)
+    assert r.status_code == 200 and r.json()["path"] == MODEL + ".glb"
+    st.upload.assert_not_called()
+    assert st.signed_url.call_args.args[1] >= 365 * 24 * 3600
+
+
+@pytest.mark.parametrize("path", [
+    "user-2/notes/n1/models/" + "a" * 32 + ".glb",     # another user
+    "user-1/notes/n2/models/" + "a" * 32 + ".glb",     # another note
+    "user-1/notes/n1/models/" + "a" * 32 + ".gltf",
+    "user-1/" + "a" * 32 + "/source.pdf",
+])
+def test_model_asset_rejects_an_upload_path_it_did_not_hand_out(client, path):
+    tables: dict = {}
+    _note_owned(tables)
+    with patch("routers.note_sources.get_supabase", return_value=_table_router(tables)), \
+         patch("routers.note_sources.storage") as st:
+        st.exists.return_value = True
+        r = client.post("/notes/n1/model-asset", data={"upload_path": path}, headers=AUTH)
+    assert r.status_code == 400
+    st.signed_url.assert_not_called()
+
+
+def test_model_asset_removes_an_uploaded_fake_glb(client):
+    tables: dict = {}
+    _note_owned(tables)
+    with patch("routers.note_sources.get_supabase", return_value=_table_router(tables)), \
+         patch("routers.note_sources.storage") as st:
+        st.exists.return_value = True
+        st.head.return_value = b"PK\x03\x04"
+        r = client.post("/notes/n1/model-asset", data={"upload_path": MODEL + ".glb"}, headers=AUTH)
+    assert r.status_code == 400
+    st.remove.assert_called_once_with([MODEL + ".glb"])

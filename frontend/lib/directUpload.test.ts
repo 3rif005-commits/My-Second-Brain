@@ -6,6 +6,7 @@ vi.mock("@/lib/supabase/client", () => ({
 }));
 
 import { wsApi } from "./workspace";
+import { uploadModel } from "./modelDrop";
 
 const PATH = "user-1/3f2b8c1e-1111-4222-8333-444455556666/source.pdf";
 const json = (body: unknown, status = 200) =>
@@ -67,5 +68,47 @@ describe("wsApi.addSource with a file", () => {
     await wsApi.addSource({ url: "https://example.com" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/ws/sources");
+  });
+});
+
+describe("uploadModel", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    uploadToSignedUrl.mockReset();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const MODEL = "user-1/notes/n1/models/" + "a".repeat(32) + ".glb";
+
+  it("uploads the model straight to Storage, then registers it for the long-lived link", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ upload_path: MODEL, token: "tok" }))
+      .mockResolvedValueOnce(json({ url: "https://p/x.glb?token=t", path: MODEL }));
+    uploadToSignedUrl.mockResolvedValue({ data: { path: MODEL }, error: null });
+    const file = new File([new Uint8Array(8)], "heart.glb");   // browsers give .glb no type
+
+    expect(await uploadModel("n1", file)).toBe("https://p/x.glb?token=t");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/ws/notes/n1/model-upload-url");
+    expect(uploadToSignedUrl).toHaveBeenCalledWith(MODEL, "tok", file, { contentType: "model/gltf-binary" });
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/ws/notes/n1/model-asset");
+    const fd = fetchMock.mock.calls[1][1].body as FormData;
+    expect(fd.get("upload_path")).toBe(MODEL);
+    expect(fd.get("file")).toBeNull();
+  });
+
+  it("falls back to sending the file while the backend has no upload links yet", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ detail: "Not Found" }, 404))
+      .mockResolvedValueOnce(json({ url: "https://p/x.stl?token=t", path: "p" }));
+    await uploadModel("n1", new File(["solid"], "part.stl"));
+    expect(uploadToSignedUrl).not.toHaveBeenCalled();
+    expect((fetchMock.mock.calls[1][1].body as FormData).get("file")).toBeInstanceOf(File);
+  });
+
+  it("shows the backend's reason when the file type is refused", async () => {
+    fetchMock.mockResolvedValueOnce(json({ detail: { error: "Drop a .glb or .stl file." } }, 400));
+    await expect(uploadModel("n1", new File(["{}"], "a.gltf"))).rejects.toThrow("Drop a .glb or .stl file.");
   });
 });

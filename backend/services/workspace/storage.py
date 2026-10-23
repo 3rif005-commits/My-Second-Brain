@@ -32,6 +32,15 @@ def exists(path: str) -> bool:
     return any(o.get("name") == name for o in objs)
 
 
+def head(path: str, n: int) -> bytes:
+    """The first n bytes of an object (a ranged read), e.g. to check a file's magic number
+    without downloading all of it."""
+    import httpx
+    res = httpx.get(signed_url(path, 60), headers={"Range": f"bytes=0-{n - 1}"}, timeout=20)
+    res.raise_for_status()
+    return res.content[:n]
+
+
 def download(path: str) -> bytes:
     return get_supabase().storage.from_(BUCKET).download(path)
 

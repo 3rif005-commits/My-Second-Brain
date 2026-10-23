@@ -526,23 +526,69 @@ _MODEL_MAX_BYTES = 50 * 1024 * 1024
 _MODEL_TYPES = {".glb": "model/gltf-binary", ".stl": "model/stl"}
 
 
-@router.post("/notes/{note_id}/model-asset")
-async def upload_model_asset(note_id: str, file: UploadFile = File(...),
-                             authorization: str = Header()):
-    """A 3D model dropped into a note (ArtCraft study 7b) → a long-lived link the note's live
-    block can load. Only single-file formats: a .gltf usually needs side files."""
-    user_id = get_user_id(authorization)
-    _own_note(note_id, user_id)
-    ext = os.path.splitext(file.filename or "")[1].lower()
+class ModelUploadUrlRequest(BaseModel):
+    filename: str
+
+
+def _model_ext(filename: str) -> str:
+    ext = os.path.splitext(filename or "")[1].lower()
     if ext not in _MODEL_TYPES:
         raise HTTPException(status_code=400, detail={"error": "Drop a .glb or .stl file."})
-    data = await file.read(_MODEL_MAX_BYTES + 1)
-    if not data or len(data) > _MODEL_MAX_BYTES:
-        raise HTTPException(status_code=413, detail={"error": "The model is empty or larger than 50 MB."})
-    if ext == ".glb" and not data.startswith(b"glTF"):
-        raise HTTPException(status_code=400, detail={"error": "This isn't a valid .glb file."})
-    path = f"{user_id}/notes/{note_id}/models/{uuid.uuid4().hex}{ext}"
-    storage.upload(path, data, _MODEL_TYPES[ext])
+    return ext
+
+
+@router.post("/notes/{note_id}/model-upload-url")
+def model_upload_url(note_id: str, body: ModelUploadUrlRequest, authorization: str = Header()):
+    """Step 1 of a model drop: a one-time link the browser uploads the file to, straight to
+    Storage (no Vercel 4.5 MB cap). Step 2 is POST model-asset with the `upload_path`."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    path = f"{user_id}/notes/{note_id}/models/{uuid.uuid4().hex}{_model_ext(body.filename)}"
+    try:
+        signed = storage.signed_upload(path)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail={"error": f"Could not start the upload: {e}"})
+    return {"upload_path": path, "token": signed["token"]}
+
+
+@router.post("/notes/{note_id}/model-asset")
+async def upload_model_asset(note_id: str, file: UploadFile | None = File(default=None),
+                             upload_path: str | None = Form(default=None),
+                             authorization: str = Header()):
+    """A 3D model dropped into a note (ArtCraft study 7b) → a long-lived link the note's live
+    block can load. Only single-file formats: a .gltf usually needs side files. The file comes
+    in the request (`file`, ≤ 4.5 MB through Vercel) or is already in Storage (`upload_path`
+    from model-upload-url)."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    if upload_path:
+        m = re.fullmatch(rf"{re.escape(user_id)}/notes/{re.escape(note_id)}/models/[0-9a-f]{{32}}(\.glb|\.stl)",
+                         upload_path)
+        if not m:
+            raise HTTPException(status_code=400, detail={"error": "Invalid upload path."})
+        ext, path = m.group(1), upload_path
+        try:
+            found = storage.exists(path)
+            magic = storage.head(path, 4) if found and ext == ".glb" else b"glTF"
+        except Exception as e:
+            raise HTTPException(status_code=502, detail={"error": f"Could not check the upload: {e}"})
+        if not found:
+            raise HTTPException(status_code=400,
+                                detail={"error": "The file didn't finish uploading. Try again."})
+        if magic != b"glTF":
+            storage.remove([path])
+            raise HTTPException(status_code=400, detail={"error": "This isn't a valid .glb file."})
+    else:
+        if file is None:
+            raise HTTPException(status_code=400, detail={"error": "Drop a .glb or .stl file."})
+        ext = _model_ext(file.filename or "")
+        data = await file.read(_MODEL_MAX_BYTES + 1)
+        if not data or len(data) > _MODEL_MAX_BYTES:
+            raise HTTPException(status_code=413, detail={"error": "The model is empty or larger than 50 MB."})
+        if ext == ".glb" and not data.startswith(b"glTF"):
+            raise HTTPException(status_code=400, detail={"error": "This isn't a valid .glb file."})
+        path = f"{user_id}/notes/{note_id}/models/{uuid.uuid4().hex}{ext}"
+        storage.upload(path, data, _MODEL_TYPES[ext])
     # Long-lived on purpose (ledger B2): the link sits inside the note.
     return {"url": storage.signed_url(path, 10 * 365 * 24 * 3600), "path": path}
 
