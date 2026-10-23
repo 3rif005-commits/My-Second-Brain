@@ -124,14 +124,14 @@ async def test_representative_csv_infers_every_type_and_reports_per_column(clien
     assert props["Joined"]["key"] not in carol["properties"]
     assert carol["properties"][props["Active"]["key"]] == {"type": "checkbox", "checkbox": True}
 
-    # Select: each row's stored value references a real option id configured on the
-    # property, and "High" (2 rows) maps to the SAME option id both times.
+    # Select: each row stores the option's NAME (what the editor reads and writes),
+    # and that name is one of the options configured on the property.
     priority_prop = props["Priority"]
-    option_ids = {opt["name"]: opt["id"] for opt in priority_prop["config"]["options"]}
-    assert set(option_ids) == {"High", "Low"}
-    assert alice["properties"][priority_prop["key"]] == {"type": "select", "select": option_ids["High"]}
-    assert carol["properties"][priority_prop["key"]] == {"type": "select", "select": option_ids["High"]}
-    assert bob["properties"][priority_prop["key"]] == {"type": "select", "select": option_ids["Low"]}
+    option_names = {opt["name"] for opt in priority_prop["config"]["options"]}
+    assert option_names == {"High", "Low"}
+    assert alice["properties"][priority_prop["key"]] == {"type": "select", "select": "High"}
+    assert carol["properties"][priority_prop["key"]] == {"type": "select", "select": "High"}
+    assert bob["properties"][priority_prop["key"]] == {"type": "select", "select": "Low"}
 
 
 # ===========================================================================

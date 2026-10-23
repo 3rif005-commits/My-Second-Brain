@@ -241,7 +241,14 @@ def _wrap_value(prop_type: str, cell: str, value_to_option_id: dict[str, str] | 
                 "select column has no value_to_option_id map -- infer_column must "
                 "populate it for every select-inferred column"
             )
-        return {"type": "select", "select": value_to_option_id[cell]}
+        # The option's NAME, not its id: that is what every select value the app writes
+        # holds (the editor's SelectCell reads and writes names, and the backend's id
+        # lookups fall back to the raw value). Storing the id made imported cells show
+        # "UE1lkFAU" where "Done" was meant. The map still guards that the value is one
+        # of the options just created.
+        if cell not in value_to_option_id:
+            raise RuntimeError(f"select value {cell!r} has no option -- infer_column missed it")
+        return {"type": "select", "select": cell}
     if prop_type == "title":
         return {"type": "title", "title": cell}
     return {"type": "rich_text", "rich_text": cell}
