@@ -9,9 +9,19 @@
 
 | # | What | Why first |
 |---|------|-----------|
-| 1 | Not checked live: Send to Notion (needs the user's token), MCP servers (needs a server connected in Settings) | the last untested older features |
-| 2 | Every database query from Render to Supabase takes ~180 ms (measured with the CSV import's Server-Timing header); a simple database list takes ~1 s. Likely the two services are in different regions (`render.yaml` sets no region, so Render's default, Oregon). Check the Supabase project's region; co-locating would speed up every database page | the whole app, not one feature |
+| 1 | Every database query from Render to Supabase takes ~180 ms (measured with the CSV import's Server-Timing header); a simple database list takes ~1 s. Likely the two services are in different regions (`render.yaml` sets no region, so Render's default, Oregon). Check the Supabase project's region; co-locating would speed up every database page | the whole app, not one feature |
+| 2 | Settings at phone width not re-checked after the settings rework (Chrome wouldn't resize); Connected apps has no "how to connect" text because the app's own MCP server isn't deployed with Render | small |
 | 3 | Editor AI: one Revert (after Simplify) left stray letters in the paragraph ("foronr"); two later Simplify/Fix-spelling reverts restored the text exactly. Watch for it; if it recurs, check xl-ai's revert with large rewrites | couldn't reproduce |
+
+**Settings pass 2026-10-24 (live, dark mode):** every kit dropdown opened behind the Settings
+window (Popover z-50 vs z-60; now z-10000). MCP: URL servers only spoke SSE at URL+"/sse", so
+current (Streamable HTTP) servers never connected; the trust level was never enforced (now "Ask me
+first" asks per tool call); stdio ran commands on the server (now refused where RENDER is set);
+page rebuilt on the kit with live status per server. Notion page on the kit: destination picker is
+a radio list with a "pick one" prompt; backup is a download on the hosted server. Routing/Schedules
+headings consistent. Chat: Confirm no longer repeats the question. Live-checked: DeepWiki via chat
+(asked first, answered), Send to Notion (heading/bold/code/bullets/code block arrived). Test note and
+its Notion page are in the two Trashes; the Notion destination is SB-TEST-root until the user picks theirs.
 
 **Done 2026-10-24:** connected-apps Markdown now goes through `services/note_html` (bold, links,
 code, tables, task lists kept; 63f40af4). CSV import writes every row in one statement
