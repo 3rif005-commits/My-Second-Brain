@@ -14,6 +14,8 @@ function makeEditor(blocks: AnyBlock[]) {
   });
   const editor = BlockNoteEditor.create({ schema, initialContent: blocks });
   const root = document.createElement("div");
+  // In the page, like the real editor: the language menu finds its block by data-id.
+  document.body.appendChild(root);
   editor.mount(root);
   return { editor, root };
 }
@@ -90,6 +92,10 @@ describe("Notion code block", () => {
     editor.updateBlock(editor.document[0].id, { props: { wrap: true } });
     const menu = document.querySelector(".sb-lang-menu")!;
     expect(menu).toBeTruthy();
+    // The list scrolling itself, or a scroll that doesn't move the block, keeps it open.
+    menu.querySelector(".sb-lang-list")!.dispatchEvent(new Event("scroll"));
+    window.dispatchEvent(new Event("scroll"));
+    expect(document.querySelector(".sb-lang-menu")).toBe(menu);
     const search = menu.querySelector("input")!;
     search.value = "rust";
     search.dispatchEvent(new Event("input"));

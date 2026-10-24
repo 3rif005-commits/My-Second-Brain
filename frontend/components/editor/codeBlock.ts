@@ -71,8 +71,16 @@ export function filterLanguages(query: string): string[] {
   return [...hits.filter(starts), ...hits.filter((id) => !starts(id))];
 }
 
-export function openLanguageMenu(anchor: HTMLElement, current: string | undefined, onPick: (id: string) => void) {
+/** `getAnchor` returns the language button as it is NOW: ProseMirror redraws the block
+ *  (e.g. when focus moves into the search), replacing the button the menu opened from. */
+export function openLanguageMenu(
+  getAnchor: () => HTMLElement | null,
+  current: string | undefined,
+  onPick: (id: string) => void,
+) {
   closeOpenMenu?.();
+  const opener = getAnchor();
+  const anchor = () => getAnchor() ?? opener;
 
   const menu = document.createElement("div");
   menu.className = "sb-lang-menu";
@@ -142,12 +150,12 @@ export function openLanguageMenu(anchor: HTMLElement, current: string | undefine
     } else if (e.key === "Escape") {
       e.preventDefault();
       close();
-      anchor.focus();
+      anchor()?.focus();
     }
   };
 
   const place = () => {
-    const r = anchor.getBoundingClientRect();
+    const r = (anchor() ?? document.body).getBoundingClientRect();
     const width = menu.offsetWidth || 240;
     const height = menu.offsetHeight || 320;
     const below = window.innerHeight - r.bottom;
@@ -159,10 +167,17 @@ export function openLanguageMenu(anchor: HTMLElement, current: string | undefine
 
   // Outside click, page scroll or resize closes it, like Notion's menus.
   const onDown = (e: Event) => {
-    if (!menu.contains(e.target as Node) && !anchor.contains(e.target as Node)) close();
+    if (!menu.contains(e.target as Node) && !anchor()?.contains(e.target as Node)) close();
   };
+  // Only a scroll that moves the language button closes it: the menu's own list scrolling
+  // (bringing the current language into view on open) also fires scroll events up here.
+  const anchorTop = () => getAnchor()?.getBoundingClientRect().top ?? NaN;
+  let openedAt = NaN;
   const onScroll = (e: Event) => {
-    if (!menu.contains(e.target as Node)) close();
+    if (e.target instanceof Node && menu.contains(e.target)) return;
+    const top = anchorTop();
+    // Gone (block deleted) or moved: close.
+    if (!(Math.abs(top - openedAt) <= 2)) close();
   };
 
   function close() {
@@ -170,7 +185,7 @@ export function openLanguageMenu(anchor: HTMLElement, current: string | undefine
     document.removeEventListener("mousedown", onDown, true);
     window.removeEventListener("scroll", onScroll, true);
     window.removeEventListener("resize", close);
-    anchor.setAttribute("aria-expanded", "false");
+    anchor()?.setAttribute("aria-expanded", "false");
     if (closeOpenMenu === close) closeOpenMenu = null;
   }
 
@@ -189,8 +204,9 @@ export function openLanguageMenu(anchor: HTMLElement, current: string | undefine
   document.body.appendChild(menu);
   place();
   scrollActiveIntoView();
+  openedAt = anchorTop();
   search.focus();
-  anchor.setAttribute("aria-expanded", "true");
+  anchor()?.setAttribute("aria-expanded", "true");
   closeOpenMenu = close;
   return close;
 }
@@ -237,7 +253,13 @@ function render(block: AnyBlock, editor: AnyBlock) {
         closeMenu?.();
         return;
       }
-      closeMenu = openLanguageMenu(button, languageId, (id) => {
+      const pill = toolbar;
+      const current = () =>
+        (pill.isConnected
+          ? pill
+          : document.querySelector(`[data-id="${block.id}"] .sb-code-toolbar`)
+        )?.querySelector<HTMLElement>("button.sb-code-lang") ?? null;
+      closeMenu = openLanguageMenu(current, languageId, (id) => {
         // A language we don't list (from an import, say) is only replaced when you pick one.
         if (id !== languageId && editor.getBlock(block.id)) {
           editor.updateBlock(block.id, { props: { language: id } });
