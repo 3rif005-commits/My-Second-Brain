@@ -39,9 +39,11 @@ Save as image, Delete), Expand lightbox, caption. Content follows light/dark: fr
 with `--sb-*` colours, Mermaid dark/default theme like Notion; AI skill writes with those colours.
 Blocks may load libraries from jsDelivr, cdnjs, unpkg, esm.sh (user's choice). Live-checked on the
 deployed site in a throwaway note (now in Trash): split/preview/expand geometry equal to Notion's
-(box 228 / diagram 164), AI quiz in dark mode, no inner scrollbar. Not done: Notion's side resize
-bars; Notion's light-mode diagram colours weren't measured (assumed Mermaid default). An AI reply in
-words is now shown as a message instead of replacing the block.
+(box 228 / diagram 164), AI quiz in dark mode, no inner scrollbar. Then: Notion's side resize bars
+(prop `width`, share of the column, centred; real mouse drag + reload checked live) and light mode
+measured in Notion (user-approved, theme restored to Dark): Mermaid "neutral" theme, Mermaid arrows
+as operators. An AI reply in words is shown as a message instead of replacing the block. Light mode
+of our own app not checked live (switching it is the user's setting; covered by unit tests).
 
 Live check 2026-10-23 (older features on the deployed site): see "Live check of older features" below.
 
