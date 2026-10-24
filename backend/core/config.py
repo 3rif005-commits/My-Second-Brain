@@ -1,3 +1,5 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +26,10 @@ class Settings(BaseSettings):
     internal_api_key: str = "changeme-internal-key"   # MCP server ↔ FastAPI auth
     frontend_url: str = "http://localhost:3000"
     database_url: str = ""
+    # MCP "stdio" servers run a command on THIS machine. Fine on your own laptop; on a
+    # shared server it would let any signed-in user run any command there. Off by
+    # default where Render runs us (Render sets RENDER on every service).
+    mcp_allow_stdio: bool = not os.getenv("RENDER")
     # Gates the notes-row exclusion sweep and the database query engine.
     # Default False: migration 014 (db_row_props) does not exist yet, so an
     # unconditional exclusion clause would break every notes surface today.

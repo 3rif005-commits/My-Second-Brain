@@ -829,10 +829,15 @@ async def _stream_loop(
                 except Exception:
                     note_meta = None
 
+            mcp_cfg = None
+            if tool.startswith("mcp.") and tool.count(".") >= 2:
+                mcp_cfg = next((c for c in (mcp_configs or [])
+                                if c.name == tool.split(".", 2)[1]), None)
             decision = permission_check(tool, tier, args, note_meta,
                                         untrusted_context=untrusted_context,
                                         approvals=approvals,
-                                        private_context=private_context)
+                                        private_context=private_context,
+                                        mcp_ask_first=bool(mcp_cfg and mcp_cfg.trust_level != "full"))
             if isinstance(decision, NeedsApproval):
                 # Not a failure: the call is legal, it just needs a human. The
                 # client shows a Confirm button and replays the turn with this

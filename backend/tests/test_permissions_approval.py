@@ -106,3 +106,16 @@ def test_mcp_calls_need_approval_after_untrusted_text_but_not_before():
     assert isinstance(
         check("mcp.server.send", Tier.EXTERNAL, args=args, note_meta=None),
         Deny)
+
+
+def test_an_mcp_server_set_to_ask_first_needs_approval_each_call():
+    """trust_level was saved by Settings but never read (live check 2026-10-24)."""
+    from services.agent.permissions import Allow, NeedsApproval, Tier, approval_key, check
+
+    args = {"repoName": "pallets/flask"}
+    asked = check("mcp.dw.read_wiki_structure", Tier.INTERNAL_API, args, None, mcp_ask_first=True)
+    assert isinstance(asked, NeedsApproval) and "ask before each use" in asked.reason
+    key = approval_key("mcp.dw.read_wiki_structure", args)
+    assert isinstance(check("mcp.dw.read_wiki_structure", Tier.INTERNAL_API, args, None,
+                            mcp_ask_first=True, approvals=[key]), Allow)
+    assert isinstance(check("mcp.dw.read_wiki_structure", Tier.INTERNAL_API, args, None), Allow)

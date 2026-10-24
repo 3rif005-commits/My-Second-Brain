@@ -123,6 +123,7 @@ def check(
     untrusted_context: bool = False,
     approvals: Collection[str] = (),
     private_context: bool = False,
+    mcp_ask_first: bool = False,
 ) -> Allow | Deny | NeedsApproval:
     """Decide whether a tool call is permitted.
 
@@ -137,6 +138,9 @@ def check(
         approvals: approval keys the user granted on the client for this turn
         private_context: this turn runs on the device with private notes in
             reach — anything sent to an MCP server could carry them out
+        mcp_ask_first: the MCP server is set to "Ask me first" (stored as
+            trust_level "read_only"; "full" = don't ask). It was saved but never
+            read, so the setting looked like a safeguard and did nothing.
     """
     is_mcp = tool.startswith("mcp.")
 
@@ -177,6 +181,14 @@ def check(
         return NeedsApproval(
             reason=("This turn can read your private notes — confirm before "
                     "anything is sent to an outside server."),
+            key=key,
+        )
+
+    if is_mcp and mcp_ask_first:
+        if key in approvals:
+            return Allow()
+        return NeedsApproval(
+            reason="This server is set to ask before each use — confirm to run it.",
             key=key,
         )
 

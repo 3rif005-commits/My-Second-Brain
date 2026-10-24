@@ -9,9 +9,8 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from routers.ingest import get_user_id
-from services.agent.mcp_client import (
-    McpServerConfig, clear_discovery_cache, discover_tools
-)
+from core.config import settings
+from services.agent.mcp_client import McpServerConfig, clear_discovery_cache, probe
 from services.database import get_supabase
 
 router = APIRouter(tags=["mcp"])
@@ -38,7 +37,8 @@ def list_servers(authorization: str = Header()):
         .data
         or []
     )
-    return {"servers": rows}
+    # The form only offers stdio where it can work (see settings.mcp_allow_stdio).
+    return {"servers": rows, "stdio_allowed": settings.mcp_allow_stdio}
 
 
 @router.post("/mcp-servers", status_code=201)
@@ -55,6 +55,11 @@ def add_server(payload: ServerPayload, authorization: str = Header()):
         )
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
+    if payload.transport == "stdio" and not settings.mcp_allow_stdio:
+        raise HTTPException(400, detail="stdio servers run a command on the server, so they only "
+                                        "work when you run Second Brain yourself. Use an http server.")
+    if payload.transport != "stdio" and not (payload.url or "").startswith(("https://", "http://")):
+        raise HTTPException(400, detail="The URL must start with https://")
 
     row = (
         get_supabase()
@@ -120,10 +125,11 @@ async def list_server_tools(server_id: str, authorization: str = Header()):
     if not row:
         raise HTTPException(404, detail="Server not found")
     config = McpServerConfig(**row)
-    # Settings shows what the server offers right now: a user who just fixed
-    # a broken command must not be told the old story for five minutes.
-    tools = await discover_tools(config, use_cache=False)
-    return {"tools": [t.to_llm_schema() for t in tools]}
+    # Settings shows what the server offers right now, or why it offers nothing:
+    # a user who just fixed a broken URL must not be told the old story for five
+    # minutes, and a typo must not look like a server with no tools.
+    tools, error = await probe(config)
+    return {"tools": [t.to_llm_schema() for t in tools], "error": error}
 
 
 @router.get("/mcp-audit-log")

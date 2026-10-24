@@ -1,7 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, Trash2, ToggleLeft, ToggleRight, Shield, ShieldCheck } from "lucide-react";
+// MCP servers: outside toolboxes the AI can use. Built on the settings kit like the
+// other pages; it used to be hand-styled light-only (a white card with near-invisible
+// text in dark mode, live check 2026-10-24). Each server shows what it offers right
+// now, or why it offers nothing.
+import { useCallback, useEffect, useState } from "react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
+import {
+  Button, ConfirmDialog, EmptyState, IconButton, Input, Select, SettingsPage,
+  SettingsRow, SettingsSection, Tabs, Toggle,
+} from "@/components/ui";
 
 interface McpServer {
   id: string;
@@ -23,31 +31,71 @@ interface AuditEntry {
   created_at: string;
 }
 
-type Tab = "servers" | "audit";
+type Probe = { state: "checking" } | { state: "ok"; tools: string[] } | { state: "error"; error: string };
+type Tab = "servers" | "activity";
+type Trust = "read_only" | "full";
 
-const EMPTY_FORM = { name: "", transport: "http", command: "", url: "", trust_level: "read_only" as "read_only" | "full" };
+// Stored as trust_level; what it does is ask (or not) before each tool call.
+const TRUST_OPTIONS: { value: Trust; label: string; description: string }[] = [
+  { value: "read_only", label: "Ask me first", description: "The chat asks you before each tool call" },
+  { value: "full", label: "Don't ask", description: "Tools run as soon as the AI calls them" },
+];
+
+const EMPTY_FORM = { name: "", transport: "http", command: "", url: "", trust_level: "read_only" as Trust };
+
+function toolName(full: string) {
+  return full.split(".").slice(2).join(".") || full;
+}
 
 export default function McpSettingsPage() {
-  const [servers, setServers] = useState<McpServer[]>([]);
-  const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [servers, setServers] = useState<McpServer[] | null>(null);
+  const [stdioAllowed, setStdioAllowed] = useState(false);
+  const [probes, setProbes] = useState<Record<string, Probe>>({});
+  const [audit, setAudit] = useState<AuditEntry[] | null>(null);
   const [tab, setTab] = useState<Tab>("servers");
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<McpServer | null>(null);
 
-  async function loadServers() {
+  const probe = useCallback(async (id: string) => {
+    setProbes((p) => ({ ...p, [id]: { state: "checking" } }));
+    try {
+      const res = await fetch(`/api/mcp-servers/${id}/tools`);
+      const data = await res.json().catch(() => ({}));
+      const next: Probe = !res.ok
+        ? { state: "error", error: data.detail ?? data.error ?? `Error ${res.status}` }
+        : data.error
+          ? { state: "error", error: data.error }
+          : { state: "ok", tools: (data.tools ?? []).map((t: { name: string }) => toolName(t.name)) };
+      setProbes((p) => ({ ...p, [id]: next }));
+    } catch (e) {
+      setProbes((p) => ({ ...p, [id]: { state: "error", error: e instanceof Error ? e.message : String(e) } }));
+    }
+  }, []);
+
+  const loadServers = useCallback(async (probeIds?: string[]) => {
     const res = await fetch("/api/mcp-servers");
-    if (res.ok) setServers((await res.json()).servers);
-  }
+    if (!res.ok) {
+      setServers([]);
+      return;
+    }
+    const data = await res.json();
+    const list: McpServer[] = data.servers ?? [];
+    setServers(list);
+    setStdioAllowed(!!data.stdio_allowed);
+    for (const s of list) if (s.enabled && (!probeIds || probeIds.includes(s.id))) probe(s.id);
+  }, [probe]);
 
-  async function loadAudit() {
-    const res = await fetch("/api/mcp-audit-log");
-    if (res.ok) setAudit((await res.json()).entries);
-  }
-
-  useEffect(() => { loadServers(); }, []);
-  useEffect(() => { if (tab === "audit") loadAudit(); }, [tab]);
+  useEffect(() => { loadServers(); }, [loadServers]);
+  useEffect(() => {
+    if (tab !== "activity") return;
+    fetch("/api/mcp-audit-log")
+      .then((r) => (r.ok ? r.json() : { entries: [] }))
+      .then((d) => setAudit(d.entries ?? []))
+      .catch(() => setAudit([]));
+  }, [tab]);
 
   async function addServer() {
     setSaving(true);
@@ -57,237 +105,236 @@ export default function McpSettingsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: form.name,
+          name: form.name.trim(),
           transport: form.transport,
-          command: form.transport === "stdio" ? form.command : null,
-          url: form.transport !== "stdio" ? form.url : null,
+          command: form.transport === "stdio" ? form.command.trim() : null,
+          url: form.transport !== "stdio" ? form.url.trim() : null,
           trust_level: form.trust_level,
         }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         setError(data.detail ?? `Error ${res.status}`);
         return;
       }
-      await loadServers();
       setShowAdd(false);
       setForm(EMPTY_FORM);
+      await loadServers(data.id ? [data.id] : undefined);
     } finally {
       setSaving(false);
     }
   }
 
-  async function toggleServer(id: string, enabled: boolean) {
+  async function patch(id: string, body: Partial<Pick<McpServer, "enabled" | "trust_level">>) {
+    setServers((list) => list?.map((s) => (s.id === id ? { ...s, ...body } : s)) ?? list);
     await fetch(`/api/mcp-servers/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled }),
+      body: JSON.stringify(body),
     });
-    await loadServers();
+    if (body.enabled) probe(id);
   }
 
-  async function toggleTrust(id: string, trust_level: "read_only" | "full") {
-    await fetch(`/api/mcp-servers/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ trust_level }),
-    });
-    await loadServers();
+  async function confirmRemove() {
+    const target = pendingDelete;
+    setPendingDelete(null);
+    if (!target) return;
+    await fetch(`/api/mcp-servers/${target.id}`, { method: "DELETE" });
+    await loadServers([]);
   }
 
-  async function deleteServer(id: string, name: string) {
-    if (!confirm(`Remove MCP server "${name}"?`)) return;
-    await fetch(`/api/mcp-servers/${id}`, { method: "DELETE" });
-    await loadServers();
-  }
+  const canAdd = form.name.trim() && (form.transport === "stdio" ? form.command.trim() : form.url.trim());
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="w-full">
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-[26px] font-semibold leading-8 text-ink">MCP Servers</h1>
-        </div>
-        <p className="text-xs text-gray-400 mb-6">
-          Connect external MCP servers to give the AI access to web search, calendars, and other tools.
-        </p>
-
-        {/* Tabs */}
-        <div className="flex gap-4 border-b border-gray-100 mb-6">
-          {(["servers", "audit"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`pb-2 text-sm font-medium border-b-2 transition-colors capitalize ${
-                tab === t ? "border-accent-500 text-accent-600" : "border-transparent text-gray-400 hover:text-gray-700"
-              }`}
-            >
-              {t === "audit" ? "Audit Log" : "Servers"}
-            </button>
-          ))}
-        </div>
+    <div>
+      <SettingsPage
+        title="MCP servers"
+        description="Outside toolboxes the AI can use in chat, such as web search or a code wiki. Add a server by its address; the chat can then call its tools."
+        actions={tab === "servers" && !showAdd
+          ? <Button icon={<Plus />} onClick={() => setShowAdd(true)}>Add server</Button>
+          : undefined}
+      >
+        <Tabs
+          label="MCP sections"
+          value={tab}
+          onChange={setTab}
+          items={[{ value: "servers", label: "Servers" }, { value: "activity", label: "Activity" }]}
+          className="-mt-6"
+        />
 
         {tab === "servers" && (
           <>
-            {servers.length > 0 && (
-              <ul className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden mb-4">
-                {servers.map((s) => (
-                  <li key={s.id} className="px-4 py-3 bg-white">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-gray-900">{s.name}</span>
-                          <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
-                            {s.transport}
-                          </span>
-                          {!s.enabled && (
-                            <span className="text-xs text-gray-400">disabled</span>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-400 mt-0.5 truncate">
-                          {s.command || s.url || "—"}
-                        </p>
-                      </div>
-
-                      {/* Trust toggle */}
-                      <button
-                        onClick={() => toggleTrust(s.id, s.trust_level === "read_only" ? "full" : "read_only")}
-                        title={s.trust_level === "read_only" ? "Read-only — click to grant full access" : "Full access — click to restrict"}
-                        className={`p-1.5 rounded transition-colors ${
-                          s.trust_level === "full" ? "text-amber-500 hover:text-amber-700" : "text-gray-400 hover:text-gray-700"
-                        }`}
-                      >
-                        {s.trust_level === "full" ? <ShieldCheck size={16} /> : <Shield size={16} />}
-                      </button>
-
-                      {/* Enable toggle */}
-                      <button
-                        onClick={() => toggleServer(s.id, !s.enabled)}
-                        className={`p-1.5 transition-colors ${s.enabled ? "text-accent-500" : "text-gray-300"}`}
-                      >
-                        {s.enabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      </button>
-
-                      <button
-                        onClick={() => deleteServer(s.id, s.name)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {showAdd ? (
-              <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Name</label>
-                    <input
-                      value={form.name}
-                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:shadow-input"
-                      placeholder="websearch"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Transport</label>
-                    <select
+            {showAdd && (
+              <SettingsSection title="Add a server">
+                <SettingsRow stacked label="Name" htmlFor="mcp-name" help="A short word; the AI sees tools as name.tool.">
+                  <Input
+                    id="mcp-name"
+                    inputSize="lg"
+                    className="max-w-[400px]"
+                    placeholder="deepwiki"
+                    value={form.name}
+                    autoFocus
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  />
+                </SettingsRow>
+                {stdioAllowed && (
+                  <SettingsRow label="Connection" help="stdio runs a command on this computer.">
+                    <Select
+                      label="Connection"
                       value={form.transport}
-                      onChange={(e) => setForm((f) => ({ ...f, transport: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:shadow-input"
-                    >
-                      <option value="http">HTTP/SSE</option>
-                      <option value="stdio">stdio</option>
-                    </select>
-                  </div>
-                </div>
+                      onChange={(transport) => setForm((f) => ({ ...f, transport }))}
+                      options={[{ value: "http", label: "URL" }, { value: "stdio", label: "Command (stdio)" }]}
+                    />
+                  </SettingsRow>
+                )}
                 {form.transport === "stdio" ? (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Command</label>
-                    <input
+                  <SettingsRow stacked label="Command" htmlFor="mcp-command">
+                    <Input
+                      id="mcp-command"
+                      inputSize="lg"
+                      className="max-w-[400px] font-mono"
+                      placeholder="npx -y @modelcontextprotocol/server-everything"
                       value={form.command}
                       onChange={(e) => setForm((f) => ({ ...f, command: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:shadow-input font-mono"
-                      placeholder="node /path/to/server.js"
                     />
-                  </div>
+                  </SettingsRow>
                 ) : (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">URL</label>
-                    <input
+                  <SettingsRow stacked label="URL" htmlFor="mcp-url" help="The server's address, e.g. https://mcp.deepwiki.com/mcp">
+                    <Input
+                      id="mcp-url"
+                      inputSize="lg"
+                      className="max-w-[400px]"
+                      type="url"
+                      placeholder="https://"
                       value={form.url}
                       onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:shadow-input"
-                      placeholder="http://localhost:3001"
                     />
-                  </div>
+                  </SettingsRow>
                 )}
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Trust level</label>
-                  <select
+                <SettingsRow label="Before each tool call" help={TRUST_OPTIONS.find((o) => o.value === form.trust_level)?.description}>
+                  <Select
+                    label="Before each tool call"
                     value={form.trust_level}
-                    onChange={(e) => setForm((f) => ({ ...f, trust_level: e.target.value as "read_only" | "full" }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:shadow-input"
-                  >
-                    <option value="read_only">Read-only</option>
-                    <option value="full">Full access</option>
-                  </select>
-                </div>
-                {error && <p className="text-xs text-red-500">{error}</p>}
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={() => { setShowAdd(false); setError(""); }}
-                    className="text-sm text-gray-500 hover:text-gray-800 px-3 py-2"
-                  >
+                    onChange={(trust_level) => setForm((f) => ({ ...f, trust_level }))}
+                    options={TRUST_OPTIONS.map(({ value, label }) => ({ value, label }))}
+                  />
+                </SettingsRow>
+                {error && <p role="alert" className="text-sm text-ink-danger">{error}</p>}
+                <div className="flex gap-2">
+                  <Button onClick={addServer} disabled={saving || !canAdd}>
+                    {saving ? <Loader2 size={14} className="animate-spin" /> : "Add server"}
+                  </Button>
+                  <Button variant="secondary" onClick={() => { setShowAdd(false); setError(""); setForm(EMPTY_FORM); }}>
                     Cancel
-                  </button>
-                  <button
-                    onClick={addServer}
-                    disabled={saving || !form.name.trim()}
-                    className="px-4 py-2 text-sm bg-accent-600 text-white rounded-lg hover:bg-accent-hover disabled:opacity-50 transition-colors"
-                  >
-                    {saving ? "Adding…" : "Add server"}
-                  </button>
+                  </Button>
                 </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowAdd(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm text-accent-600 hover:bg-accent-50 rounded-lg transition-colors"
-              >
-                <Plus size={14} />
-                Add MCP server
-              </button>
+              </SettingsSection>
             )}
+
+            <SettingsSection title="Servers">
+              {servers === null && <p className="text-sm text-ink-tertiary">Loading…</p>}
+              {servers?.length === 0 && !showAdd && (
+                <EmptyState
+                  title="No servers yet"
+                  description="Try https://mcp.deepwiki.com/mcp: a free server that answers questions about public GitHub projects."
+                  action={<Button variant="secondary" icon={<Plus />} onClick={() => setShowAdd(true)}>Add server</Button>}
+                />
+              )}
+              {servers?.map((s) => (
+                <SettingsRow
+                  key={s.id}
+                  label={
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate">{s.name}</span>
+                      {s.transport === "stdio" && (
+                        <span className="rounded bg-surface-chip px-1 py-0.5 text-[11px] font-medium text-ink-icon">stdio</span>
+                      )}
+                    </span>
+                  }
+                  help={
+                    <span className="flex flex-col gap-0.5">
+                      <span className="truncate [overflow-wrap:anywhere]">{s.command || s.url || "—"}</span>
+                      <ServerStatus enabled={s.enabled} probe={probes[s.id]} onRetry={() => probe(s.id)} />
+                    </span>
+                  }
+                >
+                  <Select
+                    label={`Before ${s.name} runs a tool`}
+                    value={s.trust_level}
+                    onChange={(trust_level) => patch(s.id, { trust_level })}
+                    options={TRUST_OPTIONS.map(({ value, label, description }) => ({ value, label, description }))}
+                    menuWidth={280}
+                  />
+                  <Toggle checked={s.enabled} onChange={(enabled) => patch(s.id, { enabled })} label={`Use ${s.name}`} />
+                  <IconButton label={`Remove ${s.name}`} onClick={() => setPendingDelete(s)}>
+                    <Trash2 />
+                  </IconButton>
+                </SettingsRow>
+              ))}
+            </SettingsSection>
           </>
         )}
 
-        {tab === "audit" && (
-          <div>
-            {audit.length === 0 ? (
-              <p className="text-sm text-gray-400">No tool calls recorded yet.</p>
-            ) : (
-              <ul className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+        {tab === "activity" && (
+          <SettingsSection title="Recent tool calls" description="Every call the AI made to an MCP server.">
+            {audit === null && <p className="text-sm text-ink-tertiary">Loading…</p>}
+            {audit?.length === 0 && <p className="text-sm text-ink-secondary">No tool calls yet.</p>}
+            {audit && audit.length > 0 && (
+              <ul className="-mt-2 divide-y divide-line">
                 {audit.map((e) => (
-                  <li key={e.id} className="flex items-center gap-3 px-4 py-2.5 bg-white text-xs">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${
-                      e.result_code === "ok" ? "bg-green-400" : e.result_code === "error" ? "bg-red-400" : "bg-yellow-400"
-                    }`} />
-                    <span className="font-mono text-gray-600 flex-1 truncate">
-                      {e.server_name}.{e.tool_name}
-                    </span>
-                    <span className="text-gray-400 shrink-0">
-                      {new Date(e.created_at).toLocaleTimeString()}
+                  <li key={e.id} className="flex items-center gap-3 py-2 text-[13px]">
+                    <span
+                      aria-label={e.result_code}
+                      className={`size-2 shrink-0 rounded-full ${
+                        e.result_code === "ok" ? "bg-emerald-500" : e.result_code === "error" ? "bg-rose-500" : "bg-amber-500"
+                      }`}
+                    />
+                    <span className="min-w-0 flex-1 truncate font-mono text-ink">{e.server_name}.{e.tool_name}</span>
+                    <span className="shrink-0 text-ink-tertiary">
+                      {new Date(e.created_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
                     </span>
                   </li>
                 ))}
               </ul>
             )}
-          </div>
+          </SettingsSection>
         )}
-      </div>
+      </SettingsPage>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={`Remove ${pendingDelete?.name ?? "this server"}?`}
+        description="The AI stops using its tools. You can add it again later."
+        confirmLabel="Remove"
+        danger
+        onConfirm={confirmRemove}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
+  );
+}
+
+function ServerStatus({ enabled, probe, onRetry }: { enabled: boolean; probe?: Probe; onRetry: () => void }) {
+  if (!enabled) return <span className="text-ink-tertiary">Off: the AI doesn&apos;t use it</span>;
+  if (!probe || probe.state === "checking") {
+    return (
+      <span className="inline-flex items-center gap-1 text-ink-tertiary">
+        <Loader2 size={11} className="animate-spin" /> Connecting…
+      </span>
+    );
+  }
+  if (probe.state === "error") {
+    return (
+      <span className="text-ink-danger [overflow-wrap:anywhere]">
+        Can&apos;t connect: {probe.error}{" "}
+        <button type="button" className="underline" onClick={onRetry}>Retry</button>
+      </span>
+    );
+  }
+  return (
+    <span className="text-emerald-600 dark:text-emerald-400 [overflow-wrap:anywhere]">
+      Connected · {probe.tools.length} {probe.tools.length === 1 ? "tool" : "tools"}
+      {probe.tools.length > 0 && <span className="text-ink-tertiary">: {probe.tools.join(", ")}</span>}
+    </span>
   );
 }

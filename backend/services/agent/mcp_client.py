@@ -5,12 +5,15 @@ and dispatches calls. Logs each call to mcp_audit_log.
 """
 from __future__ import annotations
 
+import asyncio
 import time
 
 from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, model_validator
+
+from core.config import settings
 
 
 class McpServerConfig(BaseModel):
@@ -98,6 +101,19 @@ async def discover_tools(config: McpServerConfig,
     return schemas
 
 
+async def probe(config: McpServerConfig) -> tuple[list[McpToolSchema], str | None]:
+    """Settings' "is it working?": the tools, or why there are none. The chat
+    path keeps discover_tools' silent [] — one dead server must not break a turn —
+    but the settings page used to show "no tools" for a typo'd URL with no reason."""
+    try:
+        tools = await _list_tools(config)
+    except Exception as e:
+        return [], _readable(e)
+    schemas = [McpToolSchema.from_mcp_tool(config.name, t) for t in tools]
+    _discovery_cache[_cache_key(config)] = (time.monotonic(), schemas)
+    return schemas, None
+
+
 async def call_tool(
     config: McpServerConfig,
     tool_name: str,         # bare name (without mcp.<server>. prefix)
@@ -108,72 +124,100 @@ async def call_tool(
         result = await _call_tool(config, tool_name, arguments)
         return {"content": result, "error": None}
     except Exception as e:
-        return {"content": None, "error": str(e)}
+        return {"content": None, "error": _readable(e)}
 
 
 # ── Transport implementations ──────────────────────────────────────────────
 
+#: A server that never answers must not hold a chat turn (or the settings page) open.
+_CONNECT_TIMEOUT_SECONDS = 30
+
+
+class StdioNotAllowed(PermissionError):
+    pass
+
+
+def _readable(e: BaseException) -> str:
+    """The SDK runs transports in anyio task groups, so the real error arrives
+    wrapped in (nested) ExceptionGroups; show the innermost one."""
+    while isinstance(e, BaseExceptionGroup) and e.exceptions:
+        e = e.exceptions[0]
+    if isinstance(e, TimeoutError):
+        return f"No answer within {_CONNECT_TIMEOUT_SECONDS} s"
+    return str(e) or type(e).__name__
+
+
+async def _with_session(config: McpServerConfig, use):
+    """Open a session over the server's transport and return `await use(session)`.
+
+    URL servers: Streamable HTTP at the URL as given (what current servers speak),
+    or SSE when the transport is "sse" or the URL ends in /sse. Older configs saved
+    a base URL and this client appended "/sse"; when Streamable HTTP fails such a
+    URL still gets that legacy SSE attempt, so nothing that worked stops working.
+    """
+    if config.transport == "stdio":
+        if not settings.mcp_allow_stdio:
+            raise StdioNotAllowed(
+                "stdio servers run a command on the server, so they only work when you run "
+                "Second Brain yourself. Use an http server here.")
+        return await asyncio.wait_for(_stdio(config, use), _CONNECT_TIMEOUT_SECONDS)
+
+    url = (config.url or "").strip()
+    if config.transport == "sse" or url.rstrip("/").endswith("/sse"):
+        return await asyncio.wait_for(_sse(url, use), _CONNECT_TIMEOUT_SECONDS)
+    try:
+        return await asyncio.wait_for(_streamable(url, use), _CONNECT_TIMEOUT_SECONDS)
+    except Exception as first:
+        try:
+            return await asyncio.wait_for(_sse(url.rstrip("/") + "/sse", use),
+                                          _CONNECT_TIMEOUT_SECONDS)
+        except Exception:
+            raise first from None
+
+
+async def _stdio(config: McpServerConfig, use):
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+
+    parts = (config.command or "").split()
+    params = StdioServerParameters(command=parts[0], args=parts[1:])
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            return await use(session)
+
+
+async def _sse(url: str, use):
+    from mcp import ClientSession
+    from mcp.client.sse import sse_client
+
+    async with sse_client(url) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            return await use(session)
+
+
+async def _streamable(url: str, use):
+    from mcp import ClientSession
+    from mcp.client.streamable_http import streamablehttp_client
+
+    async with streamablehttp_client(url) as (read, write, _session_id):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            return await use(session)
+
 
 async def _list_tools(config: McpServerConfig):
-    if config.transport == "stdio":
-        return await _stdio_list_tools(config)
-    return await _http_list_tools(config)
+    async def use(session):
+        return (await session.list_tools()).tools
+    return await _with_session(config, use)
 
 
 async def _call_tool(config: McpServerConfig, name: str, args: dict):
-    if config.transport == "stdio":
-        return await _stdio_call_tool(config, name, args)
-    return await _http_call_tool(config, name, args)
-
-
-async def _stdio_list_tools(config: McpServerConfig):
-    from mcp.client.stdio import stdio_client, StdioServerParameters
-    from mcp import ClientSession
-
-    parts = (config.command or "").split()
-    params = StdioServerParameters(command=parts[0], args=parts[1:])
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.list_tools()
-            return result.tools
-
-
-async def _stdio_call_tool(config: McpServerConfig, name: str, args: dict):
-    from mcp.client.stdio import stdio_client, StdioServerParameters
-    from mcp import ClientSession
-
-    parts = (config.command or "").split()
-    params = StdioServerParameters(command=parts[0], args=parts[1:])
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.call_tool(name, arguments=args)
-            return [c.text if hasattr(c, "text") else str(c) for c in result.content]
-
-
-async def _http_list_tools(config: McpServerConfig):
-    from mcp.client.sse import sse_client
-    from mcp import ClientSession
-
-    url = (config.url or "").rstrip("/") + "/sse"
-    async with sse_client(url) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.list_tools()
-            return result.tools
-
-
-async def _http_call_tool(config: McpServerConfig, name: str, args: dict):
-    from mcp.client.sse import sse_client
-    from mcp import ClientSession
-
-    url = (config.url or "").rstrip("/") + "/sse"
-    async with sse_client(url) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.call_tool(name, arguments=args)
-            return [c.text if hasattr(c, "text") else str(c) for c in result.content]
+    async def use(session):
+        result = await session.call_tool(name, arguments=args)
+        return [c.text if hasattr(c, "text") else str(c) for c in result.content]
+    return await _with_session(config, use)
 
 
 # ── Audit log ─────────────────────────────────────────────────────────────
