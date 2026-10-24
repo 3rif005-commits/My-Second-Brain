@@ -114,6 +114,7 @@ async def create_row_core(
     properties: dict[str, Any] | None = None,
     content: list[Any] | None = None,
     trigger_automations: bool = True,
+    recompute_computed: bool = True,
 ) -> RowResponse:
     """Create one row (a `notes` row + its `db_row_props` companion, spec Q2: "a database
     row IS a note") in one transaction, then recompute its formula/rollup properties inside
@@ -175,8 +176,12 @@ async def create_row_core(
         )
         # Milestone 8 (task-28-brief.md §3): "row write (update_row_property, create_row)
         # -> incremental recompute of that row" -- inside the same transaction as the
-        # insert. If recompute raises, the write rolls back.
-        await recompute.recompute_row(conn, user_id, data_source_id, str(row["note_id"]))
+        # insert. If recompute raises, the write rolls back. `recompute_computed=False`
+        # is for a caller that knows there is nothing to compute: CSV import, writing
+        # rows into a database it created moments ago (no formula/rollup properties,
+        # no relations pointing at it). Each recompute is several pooler round trips.
+        if recompute_computed:
+            await recompute.recompute_row(conn, user_id, data_source_id, str(row["note_id"]))
 
         # Milestone 12 (task-38-brief.md decision 4): `page_added` automations fire
         # synchronously, inside this same transaction, right after this row's own

@@ -30,7 +30,10 @@ def test_import_answers_201_with_select_names_and_indexes_rows_after_the_respons
     rows_written, indexed = [], []
     keys = iter(["k1", "k2", "k3"])
 
-    async def fake_row(conn, user_id, ds, properties, trigger_automations):
+    async def fake_row(conn, user_id, ds, properties, trigger_automations, recompute_computed):
+        # a brand-new database has nothing to recompute; doing it anyway made a
+        # 3-row import take ~7 s on the deployed site
+        assert trigger_automations is False and recompute_computed is False
         rows_written.append(properties)
         return SimpleNamespace(id=f"note{len(rows_written)}")
 

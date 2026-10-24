@@ -516,8 +516,12 @@ async def _run_import(
             # very likely not what a user importing hundreds of rows wants -- a
             # deliberate choice, distinct from the ordinary "+ New row" button, which
             # keeps trigger_automations=True (create_row_core's existing default).
+            # No recompute either: this database was created above, so it has no
+            # formula/rollup properties and nothing relates to it yet. Recomputing
+            # anyway cost several pooler round trips per row (3 rows took ~7 s live).
             result = await create_row_core(
-                conn, user_id, data_source_id, properties=properties, trigger_automations=False
+                conn, user_id, data_source_id, properties=properties,
+                trigger_automations=False, recompute_computed=False,
             )
             created_note_ids.append(result.id)
             row_count += 1
