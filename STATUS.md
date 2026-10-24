@@ -19,6 +19,13 @@ code, tables, task lists kept; 63f40af4). CSV import writes every row in one sta
 would have timed out); the 20 queries left are database/column setup. Full backend suite run
 against the local Postgres harness (`docker start sb-pgtest`): 2,870 passed, 0 errors.
 
+**Code block, Notion-style (2026-10-24, 39d4f771 · 80fc0f79 · adb802f3):** syntax colours
+(Shiki, Notion's Prism colours as CSS variables, light + dark; `lib/codeHighlight.ts`), hover
+pill with language / Copy / Wrap (`components/editor/codeBlock.ts`), new per-block prop `wrap`.
+Also fixed two older BlockNote bugs: ```` ```lang ```` left the caret in the block below, and long
+lines always wrapped. Live-checked on the deployed site (test note, cleaned up). **Next: the
+interactive (HTML) block** — the user's actual complaint; they want it closer to Notion's blocks.
+
 Live check 2026-10-23 (older features on the deployed site): see "Live check of older features" below.
 
 ---
