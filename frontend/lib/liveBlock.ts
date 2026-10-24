@@ -65,8 +65,10 @@ export function useFrameHeight(frame: RefObject<HTMLIFrameElement | null>, initi
 /** What the AI is asked. A block that already has code is EDITED, not rewritten from zero. */
 export function liveBlockRequest(title: string, prompt: string, currentCode: string | null): string {
   const ask = prompt.trim();
-  if (!currentCode || !currentCode.trim()) return `Title: "${title}"\n\n${ask}`;
-  return `Title: "${title}"\n\nThis is the block's current code:\n\n\`\`\`html\n${currentCode}\n\`\`\`\n\n` +
+  // An untitled block says nothing about a title rather than send an empty one.
+  const head = title.trim() ? `Title: "${title.trim()}"\n\n` : "";
+  if (!currentCode || !currentCode.trim()) return `${head}${ask}`;
+  return `${head}This is the block's current code:\n\n\`\`\`html\n${currentCode}\n\`\`\`\n\n` +
     `Change it as follows, keeping everything else the same, and return the complete updated ` +
     `document:\n${ask}`;
 }
@@ -77,9 +79,24 @@ export function stripFences(text: string): string {
   return (fenced ? fenced[1] : text).trim();
 }
 
-/** True for a block nobody has filled yet (the placeholder it is created with). */
+/** The page the slash menu used to insert ("⚡ Interactive Block — switch to AI…"). Notes
+ *  saved with it still hold it; it counts as empty like the one above. */
+export const LEGACY_SLASH_PLACEHOLDER_HTML = `<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;
+  height:100vh;background:#f8fafc;color:#64748b;font-size:14px;text-align:center;padding:24px}
+</style>
+<div>
+  <div style="font-size:32px;margin-bottom:12px">⚡</div>
+  <strong style="color:#6366f1">Interactive Block</strong><br/>
+  Switch to <strong>AI</strong> to generate content, or <strong>Code</strong> to paste your own HTML.
+</div>`;
+
+/** True for a block nobody has filled yet: no code, or one of the placeholder pages blocks
+ *  used to be created with. Such a block shows the "Ask AI to build something" row. */
 export function isPlaceholderHtml(html: string): boolean {
-  return !html.trim() || html.trim() === DEFAULT_INTERACTIVE_HTML.trim();
+  const h = html.trim();
+  return !h || h === DEFAULT_INTERACTIVE_HTML.trim() || h === LEGACY_SLASH_PLACEHOLDER_HTML.trim();
 }
 
 /** The first image in a paste/drop, if any (a photo of a diagram for the AI). */

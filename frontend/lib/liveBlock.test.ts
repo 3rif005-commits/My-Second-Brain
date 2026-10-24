@@ -27,6 +27,10 @@ describe("liveBlockRequest", () => {
   it("a new block is a plain request", () => {
     expect(liveBlockRequest("Quiz", "a quiz on entropy", null)).toBe('Title: "Quiz"\n\na quiz on entropy');
   });
+  it("an untitled block sends no title line", () => {
+    expect(liveBlockRequest("  ", "a quiz on entropy", null)).toBe("a quiz on entropy");
+    expect(liveBlockRequest("", "bigger", "<p>old</p>")).toMatch(/^This is the block's current code/);
+  });
   it("a filled block sends its code and asks for an edit", () => {
     const r = liveBlockRequest("Quiz", "make the labels bigger", "<p>old</p>");
     expect(r).toContain("<p>old</p>");

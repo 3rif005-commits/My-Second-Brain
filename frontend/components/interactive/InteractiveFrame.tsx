@@ -1,5 +1,8 @@
 "use client";
 
+// A live block shown read-only (in a chat answer): the same rounded frame and caption as the
+// note's live block (InteractiveBlockCard, app/liveBlock.css), without the editing pill.
+
 import { useMemo, useRef } from "react";
 import { useFrameHeight } from "@/lib/liveBlock";
 import { assetOrigin, buildSrcDoc } from "@/lib/liveRuntime";
@@ -15,18 +18,17 @@ export function InteractiveFrame({ title = "Interactive", html, height = 300 }: 
   const frameHeight = useFrameHeight(frameRef, height);
   const srcDoc = useMemo(() => buildSrcDoc(html, { assetOrigin: assetOrigin() }), [html]);
   return (
-    <div className="my-4 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-accent-600 text-white text-xs font-semibold">
-        <span>⚡</span><span>{title}</span>
+    <div className="sb-live my-2">
+      <div className="sb-live-frame">
+        <iframe
+          ref={frameRef}
+          srcDoc={srcDoc}
+          sandbox="allow-scripts"
+          style={{ height: frameHeight }}
+          title={title}
+        />
       </div>
-      <iframe
-        ref={frameRef}
-        srcDoc={srcDoc}
-        sandbox="allow-scripts"
-        className="w-full border-none block bg-white dark:bg-gray-900"
-        style={{ height: frameHeight }}
-        title={title}
-      />
+      {title ? <div className="sb-live-caption">{title}</div> : null}
     </div>
   );
 }

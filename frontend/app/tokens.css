@@ -256,3 +256,29 @@
 [data-accent="orange"] { --accent-50: 252 245 238; --accent-100: 249 234 219; --accent-200: 244 213 182; --accent-300: 236 185 134; --accent-400: 228 157 86; --accent-500: 222 133 44; --accent-600: 217 115 13; --accent-700: 187 99 11; --accent-800: 148 78 9; --accent-900: 113 60 7; --accent-950: 78 41 5; }
 [data-accent="pink"] { --accent-50: 251 242 247; --accent-100: 246 228 237; --accent-200: 236 201 220; --accent-300: 224 166 197; --accent-400: 212 130 173; --accent-500: 201 99 153; --accent-600: 193 76 138; --accent-700: 166 65 119; --accent-800: 131 52 94; --accent-900: 100 40 72; --accent-950: 69 27 50; }
 [data-accent="gray"] { --accent-50: 244 244 243; --accent-100: 231 231 230; --accent-200: 207 207 206; --accent-300: 176 175 173; --accent-400: 144 142 140; --accent-500: 117 115 111; --accent-600: 96 94 90; --accent-700: 83 81 77; --accent-800: 65 64 61; --accent-900: 50 49 47; --accent-950: 35 34 32; }
+
+/* Code syntax colours (lib/codeHighlight.ts) and the floating hover pill (code block, live
+ * block). Light = Prism's default theme, which is Notion's: keyword/function/string/punctuation
+ * measured in Notion, the rest Prism's. Dark: the four measured, the rest picked to sit with them. */
+:root {
+  --code-fg: var(--c-text);
+  --code-comment: rgb(112, 128, 144);
+  --code-punctuation: rgb(153, 153, 153);
+  --code-tag: rgb(153, 0, 85);
+  --code-string: rgb(102, 153, 0);
+  --code-operator: rgb(154, 110, 58);
+  --code-keyword: rgb(0, 119, 170);
+  --code-function: rgb(221, 74, 104);
+  --code-regex: rgb(238, 153, 0);
+  --c-bg-pill: rgb(255, 255, 255);
+}
+.dark {
+  --code-comment: rgb(128, 128, 128);
+  --code-tag: rgb(237, 128, 156);
+  --code-operator: rgb(212, 172, 120);
+  --code-keyword: rgb(102, 162, 204);
+  --code-function: rgb(236, 236, 147);
+  --code-string: rgb(189, 224, 82);
+  --code-regex: rgb(240, 170, 80);
+  --c-bg-pill: rgb(32, 32, 32);
+}

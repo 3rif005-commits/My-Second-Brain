@@ -1,10 +1,18 @@
 "use client";
 
-import { useContext, useMemo, useRef, useState } from "react";
+// The live (interactive) block, laid out like Notion's media blocks (image block in
+// docs/notion-reference/surfaces/blocks.md): the content in a 10px-rounded frame with no
+// header, a small pill top-right on hover — Ask AI | Code, save as image, ⋯ — and the title
+// as a caption under the frame. Ask AI opens a prompt card under the block; Code swaps the
+// frame for a code view coloured like the note's code blocks. Styles: app/liveBlock.css.
+
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUp, CodeXml, Copy, Download, Ellipsis, LoaderCircle, Sparkles, Trash2 } from "lucide-react";
 import { NoteIdContext } from "./noteIdContext";
 import { diagramFromImage, imageFromTransfer, isPlaceholderHtml, liveBlockRequest, stripFences, useFrameHeight } from "@/lib/liveBlock";
 import { assetOrigin, buildSrcDoc, detectKind, preflightWarnings } from "@/lib/liveRuntime";
 import { exportFrameImage, MAX_SNAPSHOT_CHARS } from "@/lib/liveExport";
+import { LiveCodeEditor } from "@/components/interactive/LiveCodeEditor";
 import type { InteractiveBlock } from "./BlockEditor";
 
 interface Props {
@@ -14,23 +22,84 @@ interface Props {
   onRemove: (index: number) => void;
 }
 
-type Mode = "preview" | "edit" | "ai";
+/** The code view's language: Mermaid source is coloured as Mermaid, a model link is plain. */
+export function codeLanguage(code: string): string {
+  const kind = detectKind(code);
+  return kind === "mermaid" ? "mermaid" : kind === "model" ? "text" : "html";
+}
+
+/** Whether the block shows something ⤓ can save (a diagram, chart, canvas or 3D view). */
+export function canExportImage(code: string): boolean {
+  return detectKind(code) !== "html" || /<canvas|<svg|sbScene/.test(code);
+}
 
 export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props) {
-  const [mode, setMode] = useState<Mode>("preview");
+  const [showCode, setShowCode] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [title, setTitle] = useState(block.title);
   const [code, setCode] = useState(block.html);
+  const [draft, setDraft] = useState(block.html);
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const frameHeight = useFrameHeight(frameRef);
   const srcDoc = useMemo(() => buildSrcDoc(code, { assetOrigin: assetOrigin() }), [code]);
   const warnings = useMemo(() => preflightWarnings(code), [code]);
-  const [exporting, setExporting] = useState(false);
+  const empty = isPlaceholderHtml(code);
+  const noteId = useContext(NoteIdContext);
+
+  // The block changed from outside (undo, another device, the AI elsewhere): show that.
+  useEffect(() => { setCode(block.html); }, [block.html]);
+  useEffect(() => { setTitle(block.title); }, [block.title]);
+
+  useEffect(() => {
+    if (asking) promptRef.current?.focus({ preventScroll: true });
+  }, [asking]);
+
+  // ⋯ menu: outside click or Escape closes it.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("mousedown", onDown, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  function openCode() {
+    setDraft(empty ? "" : code);
+    setShowCode(true);
+    setAsking(false);
+    setError("");
+  }
+
+  function applyCode() {
+    const next = draft.trim() ? draft : code;
+    setCode(next);
+    onUpdate(index, { title, html: next });
+    setShowCode(false);
+  }
+
+  function toggleAsk() {
+    setAsking((a) => !a);
+    setShowCode(false);
+    setError("");
+  }
 
   async function exportImage() {
     if (!frameRef.current) return;
+    setMenuOpen(false);
     setExporting(true);
     setError("");
     try {
@@ -47,12 +116,13 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
     }
   }
 
-  function save() {
-    onUpdate(index, { title, html: code });
-    setMode("preview");
+  function copyCode() {
+    setMenuOpen(false);
+    navigator.clipboard?.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }, () => {});
   }
-
-  const noteId = useContext(NoteIdContext);
 
   // A photo pasted or dropped into the AI box: the vision model writes it as a diagram.
   async function fromPhoto(image: File) {
@@ -63,7 +133,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
       const next = await diagramFromImage(noteId, image);
       setCode(next);
       onUpdate(index, { title, html: next });
-      setMode("preview");
+      setAsking(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not read the photo");
     } finally {
@@ -81,7 +151,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   }
 
   async function generate() {
-    if (!prompt.trim()) return;
+    if (!prompt.trim() || generating) return;
     setGenerating(true);
     setError("");
     try {
@@ -89,7 +159,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [{ role: "user", content: liveBlockRequest(title, prompt, isPlaceholderHtml(code) ? null : code) }],
+          messages: [{ role: "user", content: liveBlockRequest(title, prompt, empty ? null : code) }],
           query: prompt.trim(),
           surface: "interactive",
           mode: "api",
@@ -127,7 +197,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
       setCode(next);
       onUpdate(index, { title, html: next });
       setPrompt("");
-      setMode("preview");
+      setAsking(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generation failed");
     } finally {
@@ -135,134 +205,181 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
     }
   }
 
+  const exportable = !empty && canExportImage(code);
+  const pinned = asking || showCode || menuOpen;
+
   return (
-    <div className="mt-6 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 no-print">
-      {/* Title bar */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-accent-600 text-white">
-        <span className="text-base">⚡</span>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => onUpdate(index, { title, html: code })}
-          className="flex-1 bg-transparent text-sm font-semibold outline-none placeholder-accent-300 min-w-0"
-          placeholder="Block title"
-        />
-        {/* Mode tabs */}
-        <div className="flex gap-1 ml-auto shrink-0">
-          {(["preview", "edit", "ai"] as Mode[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => { setMode(m); setError(""); }}
-              className={`text-xs px-2 py-0.5 rounded-md font-medium transition-colors ${
-                mode === m
-                  ? "bg-white text-accent-700"
-                  : "text-accent-200 hover:text-white hover:bg-accent-500"
-              }`}
-            >
-              {m === "preview" ? "Preview" : m === "edit" ? "Code" : "AI"}
+    <div className="sb-live no-print">
+      <div className="sb-live-stage">
+        {showCode ? (
+          <div className="sb-live-code">
+            <LiveCodeEditor
+              value={draft}
+              onChange={setDraft}
+              lang={codeLanguage(draft)}
+              placeholder="Paste any self-contained HTML / CSS / JS, Mermaid source, or a link to a .glb / .stl model…"
+              onSubmit={applyCode}
+              onCancel={() => setShowCode(false)}
+              autoFocus
+            />
+            <div className="sb-live-code-foot">
+              <span className="sb-live-hint">Ctrl+Enter to apply · Esc to cancel</span>
+              <button type="button" className="sb-btn sb-btn-quiet" onClick={() => setShowCode(false)}>Cancel</button>
+              <button type="button" className="sb-btn sb-btn-primary" onClick={applyCode}>Apply</button>
+            </div>
+          </div>
+        ) : empty ? (
+          <div className="sb-live-empty">
+            <button type="button" className="sb-live-empty-main" onClick={toggleAsk}>
+              <Sparkles size={18} aria-hidden="true" />
+              <span>Ask AI to build something here: a quiz, chart, simulation or diagram</span>
             </button>
-          ))}
-          {mode === "preview" && (detectKind(code) !== "html" || /<canvas|<svg|sbScene/.test(code)) ? (
+            <button type="button" className="sb-live-empty-side" onClick={openCode}>Paste code</button>
+          </div>
+        ) : (
+          <div className="sb-live-frame">
+            <iframe
+              ref={frameRef}
+              srcDoc={srcDoc}
+              sandbox="allow-scripts"
+              style={{ height: frameHeight }}
+              title={title || "Interactive block"}
+            />
+          </div>
+        )}
+
+        {!empty || showCode ? (
+          <div className="sb-live-pill" data-pinned={pinned ? "true" : undefined}>
             <button
-              onClick={exportImage}
-              disabled={exporting}
-              className="ml-1 text-accent-200 hover:text-white text-xs px-1 disabled:opacity-50"
-              title="Save as image"
+              type="button"
+              className="sb-pill-btn sb-pill-text"
+              aria-pressed={asking}
+              onClick={toggleAsk}
             >
-              ⤓
+              <Sparkles size={13} aria-hidden="true" />
+              Ask AI
             </button>
-          ) : null}
-          <button
-            onClick={() => onRemove(index)}
-            className="ml-1 text-accent-300 hover:text-white text-xs px-1"
-            title="Remove block"
-          >
-            ✕
-          </button>
-        </div>
+            <span className="sb-pill-divider" aria-hidden="true" />
+            <button
+              type="button"
+              className="sb-pill-btn"
+              aria-pressed={showCode}
+              aria-label={showCode ? "Show the block" : "Edit code"}
+              title={showCode ? "Show the block" : "Edit code"}
+              onClick={() => (showCode ? setShowCode(false) : openCode())}
+            >
+              <CodeXml size={16} aria-hidden="true" />
+            </button>
+            {exportable && !showCode ? (
+              <button
+                type="button"
+                className="sb-pill-btn"
+                aria-label="Save as image"
+                title="Save as image"
+                disabled={exporting}
+                onClick={exportImage}
+              >
+                <Download size={15} aria-hidden="true" />
+              </button>
+            ) : null}
+            <div className="sb-live-menu-anchor" ref={menuRef}>
+              <button
+                type="button"
+                className="sb-pill-btn"
+                aria-label="More actions"
+                title="More actions"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((o) => !o)}
+              >
+                <Ellipsis size={16} aria-hidden="true" />
+              </button>
+              {menuOpen ? (
+                <div className="sb-menu sb-live-menu" role="menu">
+                  <button type="button" role="menuitem" className="sb-menu-row" onClick={copyCode}>
+                    <Copy size={16} aria-hidden="true" /> Copy code
+                  </button>
+                  {exportable ? (
+                    <button type="button" role="menuitem" className="sb-menu-row" onClick={exportImage}>
+                      <Download size={16} aria-hidden="true" /> Save as image
+                    </button>
+                  ) : null}
+                  <div className="sb-menu-divider" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="sb-menu-row sb-menu-danger"
+                    onClick={() => { setMenuOpen(false); onRemove(index); }}
+                  >
+                    <Trash2 size={16} aria-hidden="true" /> Delete
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
 
-      {/* Preview */}
-      {mode === "preview" && (
-        <iframe
-          ref={frameRef}
-          srcDoc={srcDoc}
-          sandbox="allow-scripts"
-          className="w-full border-none block bg-gray-50 dark:bg-gray-900"
-          style={{ height: frameHeight }}
-          title={title}
-        />
-      )}
-      {mode === "preview" && (warnings.length > 0 || error) && (
-        <div className="px-3 py-1.5 text-[11px] text-amber-700 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-300 border-t border-amber-100 dark:border-amber-900/40">
-          {[...warnings, ...(error ? [error] : [])].join(" ")}
-        </div>
-      )}
-
-      {/* Code editor */}
-      {mode === "edit" && (
-        <div className="flex flex-col bg-gray-950">
-          <textarea
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="w-full font-mono text-xs text-green-300 bg-gray-950 p-4 resize-none outline-none"
-            style={{ height: 260 }}
-            placeholder="Paste any self-contained HTML / CSS / JS here…"
-            spellCheck={false}
-          />
-          <div className="flex justify-end gap-2 px-3 py-2 border-t border-gray-800">
+      {asking ? (
+        <div className="sb-live-ask">
+          <div className="sb-live-ask-row">
+            <Sparkles size={16} className="sb-live-ask-icon" aria-hidden="true" />
+            <textarea
+              ref={promptRef}
+              value={prompt}
+              rows={1}
+              disabled={generating}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                e.target.style.height = "auto";
+                e.target.style.height = `${Math.min(120, e.target.scrollHeight)}px`;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void generate(); }
+                else if (e.key === "Escape") { e.preventDefault(); setAsking(false); }
+              }}
+              onPaste={(e) => onPhotoTransfer(e, e.clipboardData)}
+              onDrop={(e) => onPhotoTransfer(e, e.dataTransfer)}
+              aria-label="Ask AI"
+              placeholder={empty
+                ? "e.g. a bar chart comparing sorting algorithms, or a pendulum simulator with sliders"
+                : "Describe a change, e.g. make the labels bigger"}
+            />
             <button
-              onClick={() => setMode("preview")}
-              className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={save}
-              className="text-xs px-3 py-1.5 rounded-lg bg-accent-600 hover:bg-accent-500 text-white font-medium transition-colors"
-            >
-              Apply
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* AI generation */}
-      {mode === "ai" && (
-        <div className="p-4 bg-white dark:bg-gray-900 flex flex-col gap-3">
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {isPlaceholderHtml(code)
-              ? "Describe what this block should do — simulation, quiz, chart, timeline, calculator…"
-              : "Describe a change — the AI edits this block rather than starting over."}
-            {" "}Or paste a photo of a diagram.
-          </p>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={3}
-            onPaste={(e) => onPhotoTransfer(e, e.clipboardData)}
-            onDrop={(e) => onPhotoTransfer(e, e.dataTransfer)}
-            className="w-full text-sm border border-gray-200 dark:border-gray-700 rounded-lg p-3 outline-none focus:ring-2 focus:ring-accent-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none"
-            placeholder="e.g. A bar chart comparing bubble sort vs merge sort complexity, or a Newton's law simulator with sliders…"
-          />
-          {error && <p className="text-xs text-red-500">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={() => setMode("preview")}
-              className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={generate}
+              type="button"
+              className="sb-live-send"
+              aria-label="Send"
               disabled={generating || !prompt.trim()}
-              className="text-xs px-4 py-1.5 rounded-lg bg-accent-600 hover:bg-accent-500 disabled:opacity-50 text-white font-medium transition-colors flex items-center gap-1.5"
+              onClick={() => void generate()}
             >
-              {generating ? "Working…" : "Generate"}
+              {generating ? <LoaderCircle size={16} className="sb-spin" aria-hidden="true" /> : <ArrowUp size={16} aria-hidden="true" />}
             </button>
           </div>
+          <p className="sb-live-hint sb-live-ask-hint">
+            {generating
+              ? "Writing the block…"
+              : empty
+                ? "Enter to send · paste a photo of a diagram to turn it into one · Esc to close"
+                : "The AI edits this block rather than starting over · paste a photo for a diagram · Esc to close"}
+          </p>
         </div>
-      )}
+      ) : null}
+
+      {warnings.length > 0 || error || copied ? (
+        <p className={`sb-live-note${error ? " sb-live-error" : ""}`} role={error ? "alert" : undefined}>
+          {copied ? "Code copied." : [...warnings, ...(error ? [error] : [])].join(" ")}
+        </p>
+      ) : null}
+
+      <input
+        className="sb-live-caption"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onBlur={() => { if (title !== block.title) onUpdate(index, { title, html: code }); }}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+        placeholder="Add a caption…"
+        aria-label="Block title"
+      />
     </div>
   );
 }

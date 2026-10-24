@@ -16,6 +16,7 @@ import { en as coreEn } from "@blocknote/core/locales";
 import { en as aiEn } from "@blocknote/xl-ai/locales";
 import { withMultiColumn, multiColumnDropCursor, getMultiColumnSlashMenuItems, locales as multiColumnLocales } from "@blocknote/xl-multi-column";
 import { useTheme } from "@/app/providers";
+import { Sparkles } from "lucide-react";
 import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec, UnknownBlockSpec, InlineMathSpec, insertMathBlock, insertCalloutBlock } from "./customBlocks";
 import { wrapUnknown, restoreUnknown } from "./unknownBlocks";
 import { createNotionCodeBlockSpec } from "./codeBlock";
@@ -222,16 +223,6 @@ export interface BlockEditorHandle {
 
 export interface InteractiveBlock { title: string; html: string; /** exported picture, data URL */ snapshot?: string }
 
-const DEFAULT_BLOCK_HTML = `<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;
-  height:100vh;background:#f8fafc;color:#64748b;font-size:14px;text-align:center;padding:24px}
-</style>
-<div>
-  <div style="font-size:32px;margin-bottom:12px">⚡</div>
-  <strong style="color:#6366f1">Interactive Block</strong><br/>
-  Switch to <strong>AI</strong> to generate content, or <strong>Code</strong> to paste your own HTML.
-</div>`;
 
 interface BlockEditorProps {
   noteId: string;
@@ -632,7 +623,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           {/* Inline toolbar — BlockNote's items + inline code + inline math */}
           <NoteFormattingToolbar />
 
-          {/* Slash menu — default items + Knowledge Check */}
+          {/* Slash menu — default items + Interactive block */}
           <SuggestionMenuController
             triggerCharacter="/"
             getItems={async (query) => {
@@ -651,16 +642,17 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                 onItemClick: item.onItemClick,
               }));
               const custom = [{
-                title: "Knowledge Check",
+                title: "Interactive block",
                 group: "Interactive",
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                icon: <span style={{ fontSize: 18 }}>⚡</span> as any,
-                subtext: "Sandboxed interactive quiz block",
-                aliases: ["quiz", "interactive", "disco"],
-                onItemClick: () => insertInteractiveBlock(editor, editor.getTextCursorPosition()?.block?.id, { title: "Knowledge Check", html: DEFAULT_BLOCK_HTML }),
+                icon: <Sparkles size={18} /> as any,
+                subtext: "Ask AI for a quiz, chart, simulation or diagram",
+                aliases: ["quiz", "knowledge check", "interactive", "live", "chart", "diagram", "simulation", "disco"],
+                // Starts empty and untitled: the block shows its "Ask AI to build something" row.
+                onItemClick: () => insertInteractiveBlock(editor, editor.getTextCursorPosition()?.block?.id, { title: "", html: "" }),
               }];
               // Own "Databases" group (rather than folding into "Interactive",
-              // which is really about the Knowledge Check quiz block above) —
+              // which is really about the interactive block above) —
               // a database is a distinct kind of thing from an interactive
               // block, and Notion's own slash menu gives databases their own
               // section too. Plural, deliberately distinct from the item's own

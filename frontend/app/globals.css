@@ -3,6 +3,7 @@
 @import "@blocknote/xl-ai/style.css";
 @import "./tokens.css";
 @import "./editor.css";
+@import "./liveBlock.css";
 
 @tailwind base;
 @tailwind components;

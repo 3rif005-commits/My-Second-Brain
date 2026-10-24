@@ -116,29 +116,8 @@
   background: var(--c-bg-code);
   border-radius: var(--radius-card);
   margin: 4px 0;
-  /* Syntax colours (lib/codeHighlight.ts). Light = Prism's default theme, which is what
-   * Notion uses; keyword/function/string/punctuation are measured, the rest are Prism's. */
+  /* Syntax colours: --code-* in tokens.css (shared with the interactive block's code view). */
   --code-fg: var(--c-text);
-  --code-comment: rgb(112, 128, 144);
-  --code-punctuation: rgb(153, 153, 153);
-  --code-tag: rgb(153, 0, 85);
-  --code-string: rgb(102, 153, 0);
-  --code-operator: rgb(154, 110, 58);
-  --code-keyword: rgb(0, 119, 170);
-  --code-function: rgb(221, 74, 104);
-  --code-regex: rgb(238, 153, 0);
-  --code-pill-bg: rgb(255, 255, 255);
-}
-/* Dark: keyword/function/string/punctuation measured in Notion; the rest picked to sit with them. */
-.dark .notion-editor .bn-block-content[data-content-type="codeBlock"] {
-  --code-comment: rgb(128, 128, 128);
-  --code-tag: rgb(237, 128, 156);
-  --code-operator: rgb(212, 172, 120);
-  --code-keyword: rgb(102, 162, 204);
-  --code-function: rgb(236, 236, 147);
-  --code-string: rgb(189, 224, 82);
-  --code-regex: rgb(240, 170, 80);
-  --code-pill-bg: rgb(32, 32, 32);
 }
 .notion-editor .bn-block-content[data-content-type="codeBlock"] > pre {
   padding: 24px 22px;
@@ -172,7 +151,7 @@
   height: 28px;
   padding: 2px;
   border-radius: 6px;
-  background: var(--code-pill-bg);
+  background: var(--c-bg-pill);
   box-shadow: var(--shadow-float);
   opacity: 0;
   pointer-events: none;
