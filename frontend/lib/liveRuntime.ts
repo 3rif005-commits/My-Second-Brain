@@ -68,7 +68,32 @@ c.setAttribute("xmlns","http://www.w3.org/2000/svg");c.removeAttribute("style");
 c.setAttribute("height",Math.ceil(bb.height+2*m));out="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(new XMLSerializer().serializeToString(c));kind="svg";}}catch(err){}
 parent.postMessage({"sb-live-image":out,"sb-live-kind":kind},"*");});</script>`;
 
-const BASE_STYLE = `<style>html,body{margin:0}body{font-family:system-ui,sans-serif;background:#fff;color:#1f2937}</style>`;
+export type LiveTheme = "light" | "dark";
+
+/** The note's colours, for content to use (`var(--sb-text)` …) so it sits in the note in light
+ *  and dark like Notion's previews do. The page itself is transparent: the block's own box
+ *  (the code-block fill) shows through. Values are the app's tokens (tokens.css). */
+export const THEME_VARS: Record<LiveTheme, Record<string, string>> = {
+  light: {
+    "--sb-text": "rgb(44,44,43)", "--sb-muted": "rgb(125,122,117)", "--sb-border": "rgba(28,19,1,0.11)",
+    "--sb-surface": "#ffffff", "--sb-hover": "rgba(33,27,23,0.051)", "--sb-accent": "rgb(39,131,222)",
+    "--sb-ok": "rgb(68,131,97)", "--sb-ok-bg": "rgb(237,243,236)", "--sb-bad": "rgb(207,81,72)", "--sb-bad-bg": "rgb(252,233,231)",
+    "--sb-scene": "#f5f5f4",
+  },
+  dark: {
+    "--sb-text": "rgb(240,239,237)", "--sb-muted": "rgb(173,169,163)", "--sb-border": "rgba(255,255,235,0.1)",
+    "--sb-surface": "rgb(37,37,37)", "--sb-hover": "rgba(255,255,255,0.055)", "--sb-accent": "rgb(61,144,225)",
+    "--sb-ok": "rgb(82,158,114)", "--sb-ok-bg": "rgba(82,158,114,0.18)", "--sb-bad": "rgb(230,91,80)", "--sb-bad-bg": "rgba(230,91,80,0.18)",
+    "--sb-scene": "#252525",
+  },
+};
+
+function baseStyle(theme: LiveTheme): string {
+  const vars = Object.entries(THEME_VARS[theme]).map(([k, v]) => `${k}:${v}`).join(";");
+  // color-scheme matches the note's, or Chrome paints an opaque backdrop behind the frame.
+  return `<style>:root{color-scheme:${theme};${vars}}html,body{margin:0;background:transparent}` +
+    `body{font-family:system-ui,sans-serif;color:var(--sb-text)}</style>`;
+}
 
 // Where the camera goes for a model of size (sx, sy, sz) standing on the origin: far enough
 // that the whole bounding sphere fits the vertical field of view (seen from a corner a box is
@@ -110,7 +135,7 @@ function makeScene(el) {
   renderer.domElement.style.display = "block";
   el.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf5f5f4);
+  scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue("--sb-scene").trim() || "#f5f5f4");
   const camera = new THREE.PerspectiveCamera(FOV, w / h, 0.01, 1000);
   camera.position.set(3, 2, 3);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -150,7 +175,7 @@ window.__sbResolve({ THREE, makeScene });
 function modelBody(url: string): string {
   const ext = (url.split("?")[0].split(".").pop() || "").toLowerCase();
   const safe = jsonInScript(url);
-  return `<div id="sb-model"></div><p id="sb-msg" style="font-size:12px;color:#6b7280;margin:6px 8px"></p>
+  return `<div id="sb-model"></div><p id="sb-msg" style="font-size:12px;color:var(--sb-muted);margin:6px 8px"></p>
 <script type="module">
 const s = await sbScene(document.getElementById("sb-model"));
 const { THREE } = s;
@@ -179,24 +204,25 @@ try {
 </script>`;
 }
 
-function mermaidBody(code: string): string {
-  return `<pre class="mermaid" style="margin:0;padding:12px;display:flex;justify-content:center">${escapeHtml(code.trim())}</pre>
-<p id="sb-msg" style="font-size:12px;color:#b91c1c;margin:6px 8px"></p>
+function mermaidBody(code: string, theme: LiveTheme): string {
+  return `<pre class="mermaid" style="margin:0;padding:0;display:flex;justify-content:center">${escapeHtml(code.trim())}</pre>
+<p id="sb-msg" style="font-size:12px;color:var(--sb-bad);margin:6px 8px"></p>
 <script type="module">
 import mermaid from "${MERMAID_URL}";
-mermaid.initialize({ startOnLoad: false, theme: "neutral", securityLevel: "strict" });
+mermaid.initialize({ startOnLoad: false, theme: ${JSON.stringify(theme === "dark" ? "dark" : "neutral")}, securityLevel: "strict" });
 try { await mermaid.run({ querySelector: ".mermaid" }); }
 catch (e) { document.getElementById("sb-msg").textContent = "This diagram has a syntax error: " + (e && e.message ? e.message.split("\\n")[0] : ""); }
 </script>`;
 }
 
-function head(origins: string[], withScene: boolean): string {
+function head(origins: string[], withScene: boolean, theme: LiveTheme): string {
   return `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp(origins)}">` +
-    BASE_STYLE + (withScene ? SCENE_RUNTIME : "");
+    baseStyle(theme) + (withScene ? SCENE_RUNTIME : "");
 }
 
 /** The complete document for a live block's frame. */
-export function buildSrcDoc(code: string, opts: { assetOrigin?: string } = {}): string {
+export function buildSrcDoc(code: string, opts: { assetOrigin?: string; theme?: LiveTheme } = {}): string {
+  const theme = opts.theme ?? "light";
   const kind = detectKind(code);
   const origins = opts.assetOrigin ? [opts.assetOrigin] : [];
   if (kind === "model") {
@@ -205,12 +231,12 @@ export function buildSrcDoc(code: string, opts: { assetOrigin?: string } = {}): 
   }
   let doc: string;
   if (kind === "mermaid") {
-    doc = `<!doctype html><html><head>${head(origins, false)}</head><body>${mermaidBody(code)}</body></html>`;
+    doc = `<!doctype html><html><head>${head(origins, false, theme)}</head><body>${mermaidBody(code, theme)}</body></html>`;
   } else if (kind === "model") {
-    doc = `<!doctype html><html><head>${head(origins, true)}</head><body>${modelBody(code.trim())}</body></html>`;
+    doc = `<!doctype html><html><head>${head(origins, true, theme)}</head><body>${modelBody(code.trim())}</body></html>`;
   } else {
     const wantsScene = /\bsbScene\s*\(|from\s+["']three["']/.test(code);
-    const injected = head(origins, wantsScene);
+    const injected = head(origins, wantsScene, theme);
     const i = code.search(/<head[^>]*>/i);
     doc = i >= 0
       ? code.replace(/<head[^>]*>/i, (m) => m + injected)

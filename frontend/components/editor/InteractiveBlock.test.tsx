@@ -26,7 +26,7 @@ describe("insertInteractiveBlock", () => {
 });
 
 describe("InteractiveBlockSpec in a real editor", () => {
-  it("is registered, holds title/html/snapshot props and round-trips through the document", async () => {
+  it("is registered, holds title/html/snapshot/view/wrap props and round-trips through the document", async () => {
     const { BlockNoteSchema, defaultBlockSpecs, BlockNoteEditor } = await import("@blocknote/core");
     const { InteractiveBlockSpec } = await import("./InteractiveBlock");
     const schema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, interactive: InteractiveBlockSpec() } });
@@ -34,7 +34,7 @@ describe("InteractiveBlockSpec in a real editor", () => {
     editor.mount(document.createElement("div"));
     editor.replaceBlocks(editor.document, [{ type: "interactive", props: { title: "Q", html: "<b>x</b>" } }] as never);
     const b = editor.document.find((x) => x.type === "interactive") as { props: { title: string; html: string } } | undefined;
-    expect(b?.props).toEqual({ title: "Q", html: "<b>x</b>", snapshot: "" });
+    expect(b?.props).toEqual({ title: "Q", html: "<b>x</b>", snapshot: "", view: "preview", wrap: false });
     insertInteractiveBlock(editor, undefined);
     expect(editor.document.filter((x) => x.type === "interactive")).toHaveLength(2);
     expect((editor.document.find((x) => x.type === "interactive") as { props: { html: string } }).props.html).toBe("<b>x</b>");

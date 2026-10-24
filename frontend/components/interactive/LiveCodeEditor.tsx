@@ -1,9 +1,10 @@
 "use client";
 
-// The live block's code view, styled like the note's code block: the same faint fill, mono
-// type and Notion syntax colours (lib/codeHighlight.ts). A plain <textarea> does the editing;
-// a coloured copy of the same text sits exactly behind it, with the textarea's own text made
-// transparent, so the caret, selection, undo and paste are the browser's own.
+// The live block's code, styled like the note's code block: mono 13.6/20.4, Notion syntax
+// colours (lib/codeHighlight.ts). A plain <textarea> does the editing; a coloured copy of the
+// same text sits exactly behind it, with the textarea's own text made transparent, so the
+// caret, selection, undo and paste are the browser's own. It grows with its content, like
+// Notion's code block, instead of scrolling inside.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createCodeHighlighter } from "@/lib/codeHighlight";
@@ -40,12 +41,13 @@ interface Props {
   /** A Shiki language id ("html", "mermaid", "text"). */
   lang: string;
   placeholder?: string;
-  onSubmit?: () => void;
-  onCancel?: () => void;
+  /** Long lines wrap instead of scrolling sideways (Notion's "Wrap code"). */
+  wrap?: boolean;
+  onBlur?: () => void;
   autoFocus?: boolean;
 }
 
-export function LiveCodeEditor({ value, onChange, lang, placeholder, onSubmit, onCancel, autoFocus }: Props) {
+export function LiveCodeEditor({ value, onChange, lang, placeholder, wrap, onBlur, autoFocus }: Props) {
   const area = useRef<HTMLTextAreaElement>(null);
   const back = useRef<HTMLPreElement>(null);
   const h = useGrammar(lang);
@@ -64,10 +66,16 @@ export function LiveCodeEditor({ value, onChange, lang, placeholder, onSubmit, o
     if (autoFocus) area.current?.focus({ preventScroll: true });
   }, [autoFocus]);
 
-  const rows = Math.min(24, Math.max(6, value.split("\n").length + 1));
+  // Grow with the content (wrapped lines included) instead of scrolling inside.
+  useEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    el.style.height = "0px";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value, wrap]);
 
   return (
-    <div className="sb-live-code-editor">
+    <div className="sb-live-code-editor" data-wrap={wrap ? "true" : undefined}>
       <pre ref={back} className="sb-live-code-back" aria-hidden="true">
         {coloured
           ? coloured.map((line, i) => (
@@ -83,22 +91,20 @@ export function LiveCodeEditor({ value, onChange, lang, placeholder, onSubmit, o
         className="sb-live-code-input"
         data-coloured={coloured ? "true" : "false"}
         value={value}
-        rows={rows}
-        wrap="off"
+        rows={1}
+        wrap={wrap ? "soft" : "off"}
         spellCheck={false}
         autoCapitalize="off"
         autoCorrect="off"
         placeholder={placeholder}
         aria-label="Block code"
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         onScroll={(e) => {
-          if (!back.current) return;
-          back.current.scrollTop = e.currentTarget.scrollTop;
-          back.current.scrollLeft = e.currentTarget.scrollLeft;
+          if (back.current) back.current.scrollLeft = e.currentTarget.scrollLeft;
         }}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onSubmit?.(); }
-          else if (e.key === "Escape") { e.preventDefault(); onCancel?.(); }
+          if (e.key === "Escape") { e.preventDefault(); e.currentTarget.blur(); }
           else if (e.key === "Tab" && !e.shiftKey) {
             // Two spaces, like the code block, instead of leaving the editor.
             e.preventDefault();

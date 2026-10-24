@@ -1,19 +1,26 @@
 "use client";
 
-// The live (interactive) block, laid out like Notion's media blocks (image block in
-// docs/notion-reference/surfaces/blocks.md): the content in a 10px-rounded frame with no
-// header, a small pill top-right on hover — Ask AI | Code, save as image, ⋯ — and the title
-// as a caption under the frame. Ask AI opens a prompt card under the block; Code swaps the
-// frame for a code view coloured like the note's code blocks. Styles: app/liveBlock.css.
+// The live (interactive) block, built like Notion's Mermaid code block (measured live in
+// Notion, 2026-10-24): ONE box in the code-block fill — no frame, no header — showing the
+// result ("Preview"), the code ("Code") or both ("Split"), chosen per block. The code is
+// edited in place and the preview follows. A pill top-right on hover, in Notion's order:
+// Ask AI | view | Expand | Download | Copy | Wrap | ⋯ (Caption, Copy code, Wrap code, Save as
+// image, Delete). Caption under the box. The content takes the note's light/dark colours.
+// Styles: app/liveBlock.css.
 
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Captions, CodeXml, Copy, Download, Ellipsis, LoaderCircle, Sparkles, Trash2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import {
+  ArrowUp, Captions, Check, CodeXml, Copy, CornerDownLeft, Download, Ellipsis, Eye,
+  LoaderCircle, Rows2, Sparkles, Trash2, ZoomIn,
+} from "lucide-react";
 import { NoteIdContext } from "./noteIdContext";
 import { diagramFromImage, imageFromTransfer, isPlaceholderHtml, liveBlockRequest, stripFences, useFrameHeight } from "@/lib/liveBlock";
-import { assetOrigin, buildSrcDoc, detectKind, preflightWarnings } from "@/lib/liveRuntime";
+import { assetOrigin, buildSrcDoc, detectKind, preflightWarnings, type LiveTheme } from "@/lib/liveRuntime";
 import { exportFrameImage, MAX_SNAPSHOT_CHARS } from "@/lib/liveExport";
 import { LiveCodeEditor } from "@/components/interactive/LiveCodeEditor";
-import type { InteractiveBlock } from "./BlockEditor";
+import { useTheme } from "@/app/providers";
+import type { InteractiveBlock, InteractiveView } from "./BlockEditor";
 
 interface Props {
   block: InteractiveBlock;
@@ -21,6 +28,9 @@ interface Props {
   onUpdate: (index: number, block: InteractiveBlock) => void;
   onRemove: (index: number) => void;
 }
+
+/** How long typing pauses before the code is saved and the preview redrawn. */
+export const COMMIT_DELAY_MS = 600;
 
 /** The code view's language: Mermaid source is coloured as Mermaid, a model link is plain. */
 export function codeLanguage(code: string): string {
@@ -33,75 +43,122 @@ export function canExportImage(code: string): boolean {
   return detectKind(code) !== "html" || /<canvas|<svg|sbScene/.test(code);
 }
 
-export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props) {
-  const [showCode, setShowCode] = useState(false);
-  const [asking, setAsking] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [title, setTitle] = useState(block.title);
-  const [code, setCode] = useState(block.html);
-  const [draft, setDraft] = useState(block.html);
-  const [prompt, setPrompt] = useState("");
-  const [generating, setGenerating] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
-  // Like Notion's caption: only there once there is one, or while you are adding it.
-  const [captioning, setCaptioning] = useState(false);
-  const captionRef = useRef<HTMLInputElement>(null);
-  const frameRef = useRef<HTMLIFrameElement>(null);
-  const promptRef = useRef<HTMLTextAreaElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const frameHeight = useFrameHeight(frameRef);
-  const srcDoc = useMemo(() => buildSrcDoc(code, { assetOrigin: assetOrigin() }), [code]);
-  const warnings = useMemo(() => preflightWarnings(code), [code]);
-  const empty = isPlaceholderHtml(code);
-  const noteId = useContext(NoteIdContext);
+// Notion's labels (aria-labels read off its code block).
+const VIEWS: { id: InteractiveView; label: string; Icon: typeof Eye }[] = [
+  { id: "code", label: "Show only code and hide preview", Icon: CodeXml },
+  { id: "preview", label: "Show only preview and hide code", Icon: Eye },
+  { id: "split", label: "Show code and preview", Icon: Rows2 },
+];
 
-  // The block changed from outside (undo, another device, the AI elsewhere): show that.
-  useEffect(() => { setCode(block.html); }, [block.html]);
-  useEffect(() => { setTitle(block.title); }, [block.title]);
-
+function useOutsideClose(open: boolean, ref: React.RefObject<HTMLElement | null>, close: () => void) {
   useEffect(() => {
-    if (asking) promptRef.current?.focus({ preventScroll: true });
-  }, [asking]);
-
-  useEffect(() => {
-    if (captioning) captionRef.current?.focus({ preventScroll: true });
-  }, [captioning]);
-
-  // ⋯ menu: outside click or Escape closes it.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) close(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     document.addEventListener("mousedown", onDown, true);
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onDown, true);
       document.removeEventListener("keydown", onKey);
     };
-  }, [menuOpen]);
+  }, [open, ref, close]);
+}
 
-  function openCode() {
-    setDraft(empty ? "" : code);
-    setShowCode(true);
-    setAsking(false);
-    setError("");
+export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props) {
+  const { resolvedTheme } = useTheme();
+  const theme: LiveTheme = resolvedTheme === "dark" ? "dark" : "light";
+  const [view, setView] = useState<InteractiveView>(block.view ?? "preview");
+  const [wrap, setWrap] = useState(!!block.wrap);
+  const [title, setTitle] = useState(block.title);
+  const [code, setCode] = useState(block.html);
+  const [asking, setAsking] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [captioning, setCaptioning] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const captionRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
+  const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sent = useRef(block.html);
+  const noteId = useContext(NoteIdContext);
+
+  // The preview shows the SAVED code: it redraws when typing pauses, not on every key.
+  const saved = block.html;
+  const frameHeight = useFrameHeight(frameRef);
+  const srcDoc = useMemo(() => buildSrcDoc(saved, { assetOrigin: assetOrigin(), theme }), [saved, theme]);
+  const warnings = useMemo(() => preflightWarnings(saved), [saved]);
+  const empty = isPlaceholderHtml(code);
+  const showCode = view === "code" || view === "split";
+  const showPreview = view === "preview" || view === "split";
+
+  // The block changed from outside (undo, another device, the AI): show it — unless it is
+  // just our own save coming back while we type on.
+  useEffect(() => {
+    if (block.html !== sent.current) { setCode(block.html); sent.current = block.html; }
+  }, [block.html]);
+  useEffect(() => { setTitle(block.title); }, [block.title]);
+  useEffect(() => { if (block.view) setView(block.view); }, [block.view]);
+  useEffect(() => { setWrap(!!block.wrap); }, [block.wrap]);
+
+  useEffect(() => { if (asking) promptRef.current?.focus({ preventScroll: true }); }, [asking]);
+  useEffect(() => { if (captioning) captionRef.current?.focus({ preventScroll: true }); }, [captioning]);
+  useEffect(() => () => { if (commitTimer.current) clearTimeout(commitTimer.current); }, []);
+
+  useOutsideClose(menuOpen, menuRef, () => setMenuOpen(false));
+  useOutsideClose(viewMenuOpen, viewMenuRef, () => setViewMenuOpen(false));
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [expanded]);
+
+  function save(patch: Partial<InteractiveBlock>) {
+    const next = { title, html: code, view, wrap, ...patch };
+    sent.current = next.html;
+    onUpdate(index, next);
   }
 
-  function applyCode() {
-    const next = draft.trim() ? draft : code;
+  function edit(next: string) {
     setCode(next);
-    onUpdate(index, { title, html: next });
-    setShowCode(false);
+    if (commitTimer.current) clearTimeout(commitTimer.current);
+    commitTimer.current = setTimeout(() => {
+      commitTimer.current = null;
+      save({ html: next });
+    }, COMMIT_DELAY_MS);
   }
 
-  function toggleAsk() {
-    setAsking((a) => !a);
-    setShowCode(false);
-    setError("");
+  function flush() {
+    if (!commitTimer.current) return;
+    clearTimeout(commitTimer.current);
+    commitTimer.current = null;
+    save({ html: code });
+  }
+
+  function chooseView(v: InteractiveView) {
+    setViewMenuOpen(false);
+    setView(v);
+    setAsking(false);
+    save({ view: v });
+  }
+
+  function toggleWrap() {
+    const next = !wrap;
+    setWrap(next);
+    save({ wrap: next });
+  }
+
+  function writeCode() {
+    if (isPlaceholderHtml(code)) setCode("");
+    chooseView(view === "preview" ? "split" : view);
   }
 
   async function exportImage() {
@@ -117,7 +174,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
       a.download = `${(title || "block").replace(/[^\w-]+/g, "_")}.${img.kind}`;
       a.click();
       // Keep the picture with the block: it is what prints and what shows where scripts can't run.
-      if (img.dataUrl.length <= MAX_SNAPSHOT_CHARS) onUpdate(index, { title, html: code, snapshot: img.dataUrl });
+      if (img.dataUrl.length <= MAX_SNAPSHOT_CHARS) save({ snapshot: img.dataUrl });
     } finally {
       setExporting(false);
     }
@@ -139,6 +196,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
     try {
       const next = await diagramFromImage(noteId, image);
       setCode(next);
+      sent.current = next;
       onUpdate(index, { title, html: next });
       setAsking(false);
     } catch (e) {
@@ -159,6 +217,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
 
   async function generate() {
     if (!prompt.trim() || generating) return;
+    flush();
     setGenerating(true);
     setError("");
     try {
@@ -200,9 +259,11 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
 
       const next = stripFences(html);
       if (!next) throw new Error("The model returned nothing");
-      // Show the result straight away and keep it; Code is one click if it needs a tweak.
+      // Show the result straight away and keep it.
       setCode(next);
-      onUpdate(index, { title, html: next });
+      sent.current = next;
+      onUpdate(index, { title, html: next, view: view === "code" ? "split" : view, wrap });
+      if (view === "code") setView("split");
       setPrompt("");
       setAsking(false);
     } catch (e) {
@@ -212,130 +273,186 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
     }
   }
 
-  const exportable = !empty && canExportImage(code);
-  const pinned = asking || showCode || menuOpen;
+  const savedEmpty = isPlaceholderHtml(saved);
+  const exportable = !savedEmpty && canExportImage(saved);
+  const pinned = asking || menuOpen || viewMenuOpen;
+  const current = VIEWS.find((v) => v.id === view) ?? VIEWS[1];
+  const emptyRow = empty && !showCode;
 
   return (
-    <div className="sb-live no-print">
-      <div className="sb-live-stage">
-        {showCode ? (
-          <div className="sb-live-code">
-            <LiveCodeEditor
-              value={draft}
-              onChange={setDraft}
-              lang={codeLanguage(draft)}
-              placeholder="Paste any self-contained HTML / CSS / JS, Mermaid source, or a link to a .glb / .stl model…"
-              onSubmit={applyCode}
-              onCancel={() => setShowCode(false)}
-              autoFocus
-            />
-            <div className="sb-live-code-foot">
-              <span className="sb-live-hint">Ctrl+Enter to apply · Esc to cancel</span>
-              <button type="button" className="sb-btn sb-btn-quiet" onClick={() => setShowCode(false)}>Cancel</button>
-              <button type="button" className="sb-btn sb-btn-primary" onClick={applyCode}>Apply</button>
-            </div>
-          </div>
-        ) : empty ? (
+    <div className="sb-live no-print" data-view={view}>
+      <div className={`sb-live-box${emptyRow ? " sb-live-box-empty" : ""}`}>
+        {emptyRow ? (
           <div className="sb-live-empty">
-            <button type="button" className="sb-live-empty-main" onClick={toggleAsk}>
+            <button type="button" className="sb-live-empty-main" onClick={() => setAsking(true)}>
               <Sparkles size={18} aria-hidden="true" />
               <span>Ask AI to build something here: a quiz, chart, simulation or diagram</span>
             </button>
-            <button type="button" className="sb-live-empty-side" onClick={openCode}>Paste code</button>
+            <button type="button" className="sb-live-empty-side" onClick={writeCode}>Write code</button>
           </div>
         ) : (
-          <div className="sb-live-frame">
-            <iframe
-              ref={frameRef}
-              srcDoc={srcDoc}
-              sandbox="allow-scripts"
-              style={{ height: frameHeight }}
-              // aria-label, not title: a title shows as the browser's own tooltip on hover.
-              aria-label={title || "Interactive block"}
-            />
-          </div>
+          <>
+            {showCode ? (
+              <div className="sb-live-code">
+                <LiveCodeEditor
+                  value={empty ? "" : code}
+                  onChange={edit}
+                  onBlur={flush}
+                  lang={codeLanguage(code)}
+                  wrap={wrap}
+                  placeholder="HTML / CSS / JS, Mermaid source, or a link to a .glb / .stl model"
+                  autoFocus={empty}
+                />
+              </div>
+            ) : null}
+            {showPreview && !savedEmpty ? (
+              <div className="sb-live-preview">
+                <iframe
+                  ref={frameRef}
+                  srcDoc={srcDoc}
+                  sandbox="allow-scripts"
+                  // colorScheme matches the page inside, or Chrome paints an opaque backdrop.
+                  style={{ height: frameHeight, colorScheme: theme }}
+                  // aria-label, not title: a title shows as the browser's own tooltip on hover.
+                  aria-label={title || "Interactive block"}
+                />
+              </div>
+            ) : null}
+          </>
         )}
 
-        {!empty || showCode ? (
-          <div className="sb-live-pill" data-pinned={pinned ? "true" : undefined}>
-            <button
-              type="button"
-              className="sb-pill-btn sb-pill-text"
-              aria-pressed={asking}
-              onClick={toggleAsk}
-            >
-              <Sparkles size={13} aria-hidden="true" />
-              Ask AI
-            </button>
-            <span className="sb-pill-divider" aria-hidden="true" />
+        <div className="sb-live-pill" data-pinned={pinned ? "true" : undefined}>
+          <button type="button" className="sb-pill-btn sb-pill-text" aria-pressed={asking} onClick={() => setAsking((a) => !a)}>
+            <Sparkles size={13} aria-hidden="true" />
+            Ask AI
+          </button>
+          {!emptyRow ? (
+            <>
+              <span className="sb-pill-divider" aria-hidden="true" />
+              <div className="sb-pill-anchor" ref={viewMenuRef}>
+                <button
+                  type="button"
+                  className="sb-pill-btn"
+                  aria-label="Open preview format menu"
+                  title={current.label}
+                  aria-haspopup="menu"
+                  aria-expanded={viewMenuOpen}
+                  onClick={() => setViewMenuOpen((o) => !o)}
+                >
+                  <current.Icon size={15} aria-hidden="true" />
+                </button>
+                {viewMenuOpen ? (
+                  <div className="sb-view-menu" role="menu">
+                    {VIEWS.map(({ id, label, Icon }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={view === id}
+                        aria-label={label}
+                        title={label}
+                        className="sb-pill-btn"
+                        onClick={() => chooseView(id)}
+                      >
+                        <Icon size={15} aria-hidden="true" />
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              {showPreview && !savedEmpty ? (
+                <button type="button" className="sb-pill-btn" aria-label="Expand" title="Expand" onClick={() => setExpanded(true)}>
+                  <ZoomIn size={15} aria-hidden="true" />
+                </button>
+              ) : null}
+              {exportable && showPreview ? (
+                <button
+                  type="button"
+                  className="sb-pill-btn"
+                  aria-label="Save as image"
+                  title="Save as image"
+                  disabled={exporting}
+                  onClick={exportImage}
+                >
+                  <Download size={15} aria-hidden="true" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="sb-pill-btn"
+                aria-label="Copy code to clipboard"
+                title={copied ? "Copied" : "Copy code"}
+                onClick={copyCode}
+              >
+                {copied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
+              </button>
+              {showCode ? (
+                <button
+                  type="button"
+                  className="sb-pill-btn"
+                  aria-label="Wrap code"
+                  title="Wrap code"
+                  aria-pressed={wrap}
+                  onClick={toggleWrap}
+                >
+                  <CornerDownLeft size={15} aria-hidden="true" />
+                </button>
+              ) : null}
+            </>
+          ) : null}
+          <div className="sb-pill-anchor" ref={menuRef}>
             <button
               type="button"
               className="sb-pill-btn"
-              aria-pressed={showCode}
-              aria-label={showCode ? "Show the block" : "Edit code"}
-              title={showCode ? "Show the block" : "Edit code"}
-              onClick={() => (showCode ? setShowCode(false) : openCode())}
+              aria-label="Open block actions menu"
+              title="More actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}
             >
-              <CodeXml size={16} aria-hidden="true" />
+              <Ellipsis size={16} aria-hidden="true" />
             </button>
-            {exportable && !showCode ? (
-              <button
-                type="button"
-                className="sb-pill-btn"
-                aria-label="Save as image"
-                title="Save as image"
-                disabled={exporting}
-                onClick={exportImage}
-              >
-                <Download size={15} aria-hidden="true" />
-              </button>
+            {menuOpen ? (
+              <div className="sb-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="sb-menu-row"
+                  onClick={() => { setMenuOpen(false); setCaptioning(true); }}
+                >
+                  <Captions size={16} aria-hidden="true" /> Caption
+                </button>
+                <button type="button" role="menuitem" className="sb-menu-row" onClick={copyCode} disabled={empty}>
+                  <Copy size={16} aria-hidden="true" /> Copy code
+                </button>
+                <button
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={wrap}
+                  className="sb-menu-row"
+                  onClick={toggleWrap}
+                >
+                  <CornerDownLeft size={16} aria-hidden="true" /> Wrap code
+                  <span className="sb-switch" data-on={wrap ? "true" : undefined} aria-hidden="true" />
+                </button>
+                {exportable ? (
+                  <button type="button" role="menuitem" className="sb-menu-row" onClick={exportImage}>
+                    <Download size={16} aria-hidden="true" /> Save as image
+                  </button>
+                ) : null}
+                <div className="sb-menu-divider" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="sb-menu-row sb-menu-danger"
+                  onClick={() => { setMenuOpen(false); onRemove(index); }}
+                >
+                  <Trash2 size={16} aria-hidden="true" /> Delete
+                </button>
+              </div>
             ) : null}
-            <div className="sb-live-menu-anchor" ref={menuRef}>
-              <button
-                type="button"
-                className="sb-pill-btn"
-                aria-label="More actions"
-                title="More actions"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen((o) => !o)}
-              >
-                <Ellipsis size={16} aria-hidden="true" />
-              </button>
-              {menuOpen ? (
-                <div className="sb-menu sb-live-menu" role="menu">
-                  {!title.trim() ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="sb-menu-row"
-                      onClick={() => { setMenuOpen(false); setCaptioning(true); }}
-                    >
-                      <Captions size={16} aria-hidden="true" /> Add caption
-                    </button>
-                  ) : null}
-                  <button type="button" role="menuitem" className="sb-menu-row" onClick={copyCode}>
-                    <Copy size={16} aria-hidden="true" /> Copy code
-                  </button>
-                  {exportable ? (
-                    <button type="button" role="menuitem" className="sb-menu-row" onClick={exportImage}>
-                      <Download size={16} aria-hidden="true" /> Save as image
-                    </button>
-                  ) : null}
-                  <div className="sb-menu-divider" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="sb-menu-row sb-menu-danger"
-                    onClick={() => { setMenuOpen(false); onRemove(index); }}
-                  >
-                    <Trash2 size={16} aria-hidden="true" /> Delete
-                  </button>
-                </div>
-              ) : null}
-            </div>
           </div>
-        ) : null}
+        </div>
       </div>
 
       {asking ? (
@@ -383,9 +500,9 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
         </div>
       ) : null}
 
-      {warnings.length > 0 || error || copied ? (
+      {(warnings.length > 0 || error) && !emptyRow ? (
         <p className={`sb-live-note${error ? " sb-live-error" : ""}`} role={error ? "alert" : undefined}>
-          {copied ? "Code copied." : [...warnings, ...(error ? [error] : [])].join(" ")}
+          {[...warnings, ...(error ? [error] : [])].join(" ")}
         </p>
       ) : null}
 
@@ -397,13 +514,24 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
           onChange={(e) => setTitle(e.target.value)}
           onBlur={() => {
             setCaptioning(false);
-            if (title !== block.title) onUpdate(index, { title, html: code });
+            if (title !== block.title) save({ title });
           }}
           onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
           placeholder="Write a caption…"
           aria-label="Block title"
         />
       ) : null}
+
+      {expanded && typeof document !== "undefined"
+        ? createPortal(
+            <div className="sb-lightbox" role="dialog" aria-modal="true" aria-label={title || "Interactive block"} onMouseDown={() => setExpanded(false)}>
+              <div className="sb-lightbox-panel" onMouseDown={(e) => e.stopPropagation()}>
+                <iframe srcDoc={srcDoc} sandbox="allow-scripts" style={{ colorScheme: theme }} aria-label={title || "Interactive block"} />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

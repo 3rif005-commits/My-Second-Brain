@@ -1,44 +1,43 @@
-/* Live (interactive) block, laid out like Notion's media blocks. Values from
- * docs/notion-reference (ui-audit/notion-reference branch): image block (blocks.md §2:
- * 8px block padding, 10px clipped radius, hover pill top-right 4px in), the pill = the code
- * block's (28px, padding 2px, radius 6px, shadow.floatButton, 24px buttons rgb(142,139,134)),
- * menu primitive and buttons (menus-overlays.md §1, §4). Global: the block also renders
- * outside the editor (chat answers, components/interactive/InteractiveFrame.tsx). */
+/* Live (interactive) block, built like Notion's Mermaid code block, measured live in Notion
+ * (2026-10-24, dark): block padding 8px; ONE box = the code-block fill, radius 10px, no
+ * border; Preview padding 32px 22px (result centred), Split = code (24px 22px) with the
+ * result straight under it, no divider; hover pill top-right 4px in (28px, padding 2px,
+ * radius 6px, shadow.floatButton, 24px buttons rgb(142,139,134) radius 4px); view menu a
+ * 28px pill under its button; caption 14px/19.6px, padding 6px 0 6px 2px, secondary grey;
+ * Expand = lightbox over rgba(15,15,15,.6/.8). Menu/buttons/switch: docs/notion-reference
+ * menus-overlays.md. Global: the block also renders in chat answers (InteractiveFrame.tsx). */
 
 .sb-live {
   position: relative;
   width: 100%;
-  padding: 8px 0 4px;
+  padding: 8px 0 0;
   color: var(--c-text);
 }
-.sb-live-stage { position: relative; }
 
-/* The content. The block's own HTML paints its own (light) page, so the frame is a light card
- * in dark mode too, like Notion's embeds; a hairline ring keeps a white page from melting into
- * a white note. */
-.sb-live-frame {
+.sb-live-box {
+  position: relative;
   border-radius: 10px;
-  overflow: hidden;
-  background: #fff;
-  box-shadow: 0 0 0 1px var(--c-border);
+  background: var(--c-bg-code);
 }
-.sb-live-frame > iframe {
+
+/* The result. Its page is transparent and uses the note's colours (lib/liveRuntime.ts). */
+.sb-live-preview { padding: 32px 22px; }
+.sb-live[data-view="split"] .sb-live-preview { padding: 0 22px 24px; }
+.sb-live-preview > iframe {
   display: block;
   width: 100%;
   border: 0;
-  background: #fff;
+  background: transparent;
 }
 
-/* Empty block: Notion's "add a …" placeholder row instead of a placeholder page. */
+/* Empty block: Notion's grey "add a …" row. */
+.sb-live-box-empty { overflow: hidden; }
 .sb-live-empty {
   display: flex;
   align-items: stretch;
-  border-radius: 10px;
-  background: var(--c-bg-code);
   color: var(--c-text-secondary);
   font-size: 14px;
   line-height: 20px;
-  overflow: hidden;
 }
 .sb-live-empty button {
   border: 0;
@@ -56,7 +55,8 @@
   padding: 12px;
   text-align: left;
 }
-.sb-live-empty-side { padding: 0 14px; white-space: nowrap; }
+/* Room for the pill's Ask AI + ⋯ on the right. */
+.sb-live-empty-side { padding: 0 120px 0 14px; white-space: nowrap; }
 .sb-live-empty button:hover { background: var(--c-bg-hover); }
 
 /* Hover pill, top-right 4px in. */
@@ -76,7 +76,7 @@
   pointer-events: none;
   transition: opacity 0.2s ease;
 }
-.sb-live-stage:hover > .sb-live-pill,
+.sb-live-box:hover > .sb-live-pill,
 .sb-live-pill:focus-within,
 .sb-live-pill[data-pinned] {
   opacity: 1;
@@ -106,7 +106,8 @@
 .sb-pill-btn.sb-pill-text { padding: 0 6px; }
 .sb-pill-btn:hover,
 .sb-pill-btn[aria-pressed="true"],
-.sb-pill-btn[aria-expanded="true"] {
+.sb-pill-btn[aria-expanded="true"],
+.sb-pill-btn[aria-checked="true"] {
   background: var(--c-bg-hover);
 }
 .sb-pill-btn[aria-pressed="true"] { color: var(--c-text); }
@@ -117,15 +118,31 @@
   margin: 0 4px;
   background: var(--c-border-strong, var(--c-border));
 }
+.sb-pill-anchor { position: relative; display: flex; }
 
-/* ⋯ menu: the menu primitive, right-aligned 4px under the button. */
-.sb-live-menu-anchor { position: relative; display: flex; }
+/* View menu: a small pill centred under its button (Notion: 94×28, radius 6, menu shadow). */
+.sb-view-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+  height: 28px;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--c-bg-elevated);
+  box-shadow: var(--shadow-menu);
+}
+
+/* ⋯ menu: the menu primitive, right-aligned under its button. */
 .sb-menu {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 8px);
   right: -2px;
   z-index: 20;
-  min-width: 200px;
+  min-width: 220px;
   padding: 4px;
   border-radius: 10px;
   background: var(--c-bg-elevated);
@@ -152,16 +169,37 @@
 }
 .sb-menu-row > svg { flex: none; color: var(--c-text-secondary); }
 .sb-menu-row:hover { background: var(--c-bg-hover); }
+.sb-menu-row:disabled { opacity: 0.4; cursor: default; }
 .sb-menu-danger:hover,
 .sb-menu-danger:hover > svg { color: rgb(229, 100, 88); }
 .sb-menu-divider { height: 1px; margin: 4px 8px; background: var(--c-border); }
 
-/* Code view: the note's code block look (bg, radius, 24px 22px, 13.6/20.4 mono). */
-.sb-live-code {
-  border-radius: 10px;
-  background: var(--c-bg-code);
-  overflow: hidden;
+/* Toggle switch (menus-overlays.md §2): 30×18 track, 14px knob. */
+.sb-switch {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  margin-left: auto;
+  border-radius: 44px;
+  background: var(--c-toggle-off);
+  transition: background 200ms;
 }
+.sb-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 200ms ease-out;
+}
+.sb-switch[data-on] { background: rgb(39, 131, 222); }
+.sb-switch[data-on]::after { transform: translateX(12px); }
+
+/* Code: the note's code block look (24px 22px, 13.6/20.4 mono). */
 .sb-live-code-editor {
   position: relative;
   font-family: var(--font-code);
@@ -172,7 +210,6 @@
 .sb-live-code-back,
 .sb-live-code-input {
   margin: 0;
-  /* Room on the right for the pill over the first line. */
   padding: 24px 22px;
   border: 0;
   font: inherit;
@@ -180,6 +217,13 @@
   white-space: pre;
   overflow-wrap: normal;
   tab-size: 2;
+}
+.sb-live[data-view="split"] .sb-live-code-back,
+.sb-live[data-view="split"] .sb-live-code-input { padding-bottom: 12px; }
+.sb-live-code-editor[data-wrap] .sb-live-code-back,
+.sb-live-code-editor[data-wrap] .sb-live-code-input {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .sb-live-code-back {
   position: absolute;
@@ -192,9 +236,10 @@
   position: relative;
   display: block;
   width: 100%;
-  min-height: 160px;
-  resize: vertical;
-  overflow: auto;
+  min-height: 68px;
+  resize: none;
+  overflow-x: auto;
+  overflow-y: hidden;
   background: transparent;
   color: var(--code-fg);
   caret-color: var(--c-text);
@@ -204,14 +249,6 @@
 .sb-live-code-input[data-coloured="true"] { color: transparent; }
 .sb-live-code-input[data-coloured="true"]::selection { color: transparent; background: rgba(35, 131, 226, 0.28); }
 .sb-live-code-input::placeholder { color: var(--c-text-tertiary); }
-.sb-live-code-foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 0 12px 12px;
-}
-.sb-live-code-foot .sb-live-hint { margin-right: auto; padding-left: 10px; }
 
 /* Buttons (menus-overlays.md §4). */
 .sb-btn {
@@ -288,39 +325,68 @@
 }
 .sb-live-note.sb-live-error { color: var(--blk-red-text); }
 
-/* The title, as a caption under the block. */
+/* Caption (Notion: 14px/19.6px, padding 6px 0 6px 2px, secondary grey). */
 .sb-live-caption {
   display: block;
   width: 100%;
-  padding: 6px 2px 2px;
+  padding: 6px 0 6px 2px;
   border: 0;
   outline: none;
   background: transparent;
   color: var(--c-text-secondary);
   font: inherit;
   font-size: 14px;
-  line-height: 20px;
+  line-height: 19.6px;
 }
 .sb-live-caption::placeholder { color: var(--c-text-tertiary); }
-div.sb-live-caption { cursor: default; }
 
-.sb-spin { animation: sb-spin 0.8s linear infinite; }
-@keyframes sb-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) {
-  .sb-spin { animation-duration: 2.4s; }
+/* Expand: the result large over a dimmed page (Notion's modal underlay). */
+.sb-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 15, 15, 0.6);
+}
+.dark .sb-lightbox { background: rgba(15, 15, 15, 0.8); }
+.sb-lightbox-panel {
+  width: min(92vw, 1100px);
+  height: min(88vh, 820px);
+  padding: 32px;
+  border-radius: 10px;
+  background: var(--c-bg-elevated);
+  box-shadow: var(--shadow-modal);
+}
+.sb-lightbox-panel > iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
 }
 
-/* Selected as a whole (click beside it, Esc from inside): Notion's soft blue tint over the
- * block (blocks.md §4, rgba(35,131,226,0.14)) instead of BlockNote's 4px outline. */
+/* Selected as a whole: Notion's soft blue tint over the block (blocks.md §4), instead of
+ * BlockNote's 4px outline. */
 .ProseMirror-selectednode > .bn-block-content[data-content-type="interactive"] > * {
   outline: none;
 }
 .ProseMirror-selectednode > .bn-block-content[data-content-type="interactive"] .sb-live::after {
   content: "";
   position: absolute;
-  inset: 4px 0 0;
+  inset: 0;
   border-radius: 10px;
   background: rgba(35, 131, 226, 0.14);
   pointer-events: none;
   z-index: 3;
+}
+
+/* Read-only frame (chat answers): same box, no pill. */
+.sb-live-static .sb-live-box { overflow: hidden; }
+
+.sb-spin { animation: sb-spin 0.8s linear infinite; }
+@keyframes sb-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .sb-spin { animation-duration: 2.4s; }
 }

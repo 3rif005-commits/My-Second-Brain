@@ -39,7 +39,16 @@ Hard constraints:
   body height, no inner scrollbars.
 - When the request includes the block's current code, return the complete updated
   document with only the asked-for change; keep the rest as it is.
-- Use `system-ui, sans-serif` for typography. Clean colors, rounded corners.
+- **Colours: use the note's, so the block fits light and dark mode.** The page
+  background is the note's own: never set a background on `html`/`body`. Use these
+  CSS variables (already defined) instead of fixed colours: `var(--sb-text)` text,
+  `var(--sb-muted)` secondary text, `var(--sb-border)` lines, `var(--sb-surface)` cards
+  and buttons, `var(--sb-hover)` hover, `var(--sb-accent)` highlights,
+  `var(--sb-ok)`/`var(--sb-ok-bg)` right, `var(--sb-bad)`/`var(--sb-bad-bg)` wrong.
+  Canvas drawing can read them with
+  `getComputedStyle(document.documentElement).getPropertyValue("--sb-text")`.
+- Use `system-ui, sans-serif` for typography. Rounded corners (6–8px), no shadows.
+- No outer padding on `body`: the block already has its own.
 - For option 3, it must be interactive — not just static HTML. Add at least one
   input, button, or drag handle that does something visible.
 
@@ -54,14 +63,14 @@ Quiz template:
 ```html
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,sans-serif;padding:16px;background:#f8fafc}
-.q{font-weight:600;font-size:15px;margin-bottom:14px;color:#1e293b}
+body{font-family:system-ui,sans-serif}
+.q{font-weight:600;font-size:15px;margin-bottom:14px;color:var(--sb-text)}
 .opts button{display:block;width:100%;text-align:left;padding:9px 13px;margin:5px 0;
-  background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;
-  font-size:14px;transition:.15s}
-.opts button:hover{border-color:#6366f1;background:#eef2ff}
-.opts button.correct{background:#d1fae5;border-color:#10b981;color:#065f46;font-weight:600}
-.opts button.wrong{background:#fee2e2;border-color:#ef4444;color:#7f1d1d}
+  background:var(--sb-surface);color:var(--sb-text);border:1px solid var(--sb-border);
+  border-radius:8px;cursor:pointer;font-size:14px;transition:.15s}
+.opts button:hover{background:var(--sb-hover)}
+.opts button.correct{background:var(--sb-ok-bg);border-color:var(--sb-ok);color:var(--sb-ok);font-weight:600}
+.opts button.wrong{background:var(--sb-bad-bg);border-color:var(--sb-bad);color:var(--sb-bad)}
 #msg{margin-top:10px;font-size:13px;font-weight:500}
 </style>
 <div class="q">[Question]</div>
@@ -78,7 +87,7 @@ function check(btn,ok){
   btn.className=ok?'correct':'wrong';
   var m=document.getElementById('msg');
   m.textContent=ok?'✅ Correct!':'❌ Review the concept above.';
-  m.style.color=ok?'#065f46':'#991b1b';
+  m.style.color=ok?'var(--sb-ok)':'var(--sb-bad)';
 }
 </script>
 ```

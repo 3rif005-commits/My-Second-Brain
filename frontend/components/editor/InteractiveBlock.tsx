@@ -20,6 +20,9 @@ export const InteractiveBlockSpec = createReactBlockSpec(
       title: { default: "Knowledge Check" },
       html: { default: DEFAULT_INTERACTIVE_HTML },
       snapshot: { default: "" },
+      // Like Notion's Mermaid code block: "preview" (the result), "code", or "split" (both).
+      view: { default: "preview" },
+      wrap: { default: false },
     },
     content: "none",
   },
@@ -28,11 +31,16 @@ export const InteractiveBlockSpec = createReactBlockSpec(
       <div contentEditable={false} className="w-full">
         <InteractiveBlockCard
           index={0}
-          block={{ title: block.props.title, html: block.props.html, snapshot: block.props.snapshot }}
+          block={{
+            title: block.props.title, html: block.props.html, snapshot: block.props.snapshot,
+            view: block.props.view, wrap: block.props.wrap,
+          }}
           onUpdate={(_i, updated) => editor.updateBlock(block, { props: {
             title: updated.title, html: updated.html,
             // A changed block's old picture is stale; a new export replaces it.
             snapshot: updated.snapshot ?? (updated.html === block.props.html ? block.props.snapshot : ""),
+            view: updated.view ?? block.props.view,
+            wrap: updated.wrap ?? block.props.wrap,
           } })}
           onRemove={() => editor.removeBlocks([block])}
         />

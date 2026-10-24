@@ -78,6 +78,24 @@ describe("buildSrcDoc", () => {
   });
 });
 
+describe("buildSrcDoc theme (content follows the note's light/dark, like Notion's previews)", () => {
+  it("light by default; dark gives the dark colours, color-scheme and Mermaid's dark theme", () => {
+    const light = buildSrcDoc("flowchart LR\n A-->B");
+    expect(light).toContain("color-scheme:light");
+    expect(light).toContain('theme: "neutral"');
+    const dark = buildSrcDoc("flowchart LR\n A-->B", { theme: "dark" });
+    expect(dark).toContain("color-scheme:dark");
+    expect(dark).toContain("--sb-text:rgb(240,239,237)");
+    expect(dark).toContain('theme: "dark"');
+    allParse(dark);
+  });
+  it("the page is transparent so the block's box shows through; HTML gets the variables too", () => {
+    const doc = buildSrcDoc("<p>x</p>", { theme: "dark" });
+    expect(doc).toContain("background:transparent");
+    expect(doc).toContain("--sb-surface:rgb(37,37,37)");
+  });
+});
+
 describe("preflightWarnings", () => {
   it("flags network, page escapes and foreign files; built-ins are fine", () => {
     expect(preflightWarnings("<script>fetch('https://x')</script>")).toHaveLength(1);

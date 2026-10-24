@@ -221,7 +221,16 @@ export interface BlockEditorHandle {
   replaceDocument: (blocks: AnyBlock[]) => void;
 }
 
-export interface InteractiveBlock { title: string; html: string; /** exported picture, data URL */ snapshot?: string }
+export type InteractiveView = "preview" | "code" | "split";
+export interface InteractiveBlock {
+  title: string;
+  html: string;
+  /** exported picture, data URL */
+  snapshot?: string;
+  /** what the block shows: the result, the code, or both (Notion's Mermaid block) */
+  view?: InteractiveView;
+  wrap?: boolean;
+}
 
 
 interface BlockEditorProps {

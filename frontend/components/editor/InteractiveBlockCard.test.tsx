@@ -1,117 +1,168 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 vi.mock("@/lib/liveBlock", async (orig) => ({
   ...(await orig<typeof import("@/lib/liveBlock")>()),
   diagramFromImage: vi.fn(async () => "flowchart LR\n  A --> B"),
 }));
 
-import { InteractiveBlockCard, canExportImage, codeLanguage } from "./InteractiveBlockCard";
+import { COMMIT_DELAY_MS, InteractiveBlockCard, canExportImage, codeLanguage } from "./InteractiveBlockCard";
 import { NoteIdContext } from "./noteIdContext";
 import { DEFAULT_INTERACTIVE_HTML, LEGACY_SLASH_PLACEHOLDER_HTML } from "@/lib/liveBlock";
+import type { InteractiveBlock } from "./BlockEditor";
 
-function card(html: string, title = "T", onUpdate = vi.fn(), onRemove = vi.fn()) {
+function card(block: Partial<InteractiveBlock> & { html: string }, onUpdate = vi.fn(), onRemove = vi.fn()) {
+  const full: InteractiveBlock = { title: "T", ...block };
   const utils = render(
     <NoteIdContext.Provider value="n1">
-      <InteractiveBlockCard block={{ title, html }} index={0} onUpdate={onUpdate} onRemove={onRemove} />
+      <InteractiveBlockCard block={full} index={0} onUpdate={onUpdate} onRemove={onRemove} />
     </NoteIdContext.Provider>,
   );
   return { ...utils, onUpdate, onRemove };
 }
 
-describe("InteractiveBlockCard layout", () => {
-  it("a filled block: the frame, the pill (Ask AI, code, more) and the title as a caption — no header bar", () => {
-    const { container } = card("<p>hello</p>", "Entropy quiz");
-    expect(container.querySelector(".sb-live-frame iframe")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Ask AI/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Edit code" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "More actions" })).toBeTruthy();
+const btn = (name: string | RegExp) => screen.getByRole("button", { name });
+const noBtn = (name: string | RegExp) => screen.queryByRole("button", { name });
+
+afterEach(() => vi.useRealTimers());
+
+describe("InteractiveBlockCard — Notion's Mermaid code block model", () => {
+  it("preview (the default): one box with the result, Notion's pill; no frame, header or ⚡", () => {
+    const { container } = card({ html: "<p>hello</p>", title: "Entropy quiz" });
+    expect(container.querySelector(".sb-live-box .sb-live-preview iframe")).toBeTruthy();
+    expect(container.querySelector(".sb-live-code-editor")).toBeNull();
+    for (const name of [/Ask AI/, "Open preview format menu", "Expand", "Copy code to clipboard", "Open block actions menu"]) {
+      expect(btn(name)).toBeTruthy();
+    }
+    expect(noBtn("Wrap code")).toBeNull();
     expect((screen.getByLabelText("Block title") as HTMLInputElement).value).toBe("Entropy quiz");
     expect(container.textContent).not.toContain("⚡");
   });
 
-  it("an empty block (no code, or either old placeholder page) shows the Ask AI row, not a frame", () => {
+  it("the view menu offers Notion's three views; each is saved on the block", () => {
+    const { container, onUpdate } = card({ html: "<p>x</p>" });
+    fireEvent.click(btn("Open preview format menu"));
+    const items = screen.getAllByRole("menuitemradio").map((b) => b.getAttribute("aria-label"));
+    expect(items).toEqual(["Show only code and hide preview", "Show only preview and hide code", "Show code and preview"]);
+    expect(screen.getByRole("menuitemradio", { name: "Show only preview and hide code" }).getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Show only code and hide preview" }));
+    expect(container.querySelector(".sb-live-code-editor")).toBeTruthy();
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(onUpdate).toHaveBeenLastCalledWith(0, expect.objectContaining({ view: "code" }));
+
+    fireEvent.click(btn("Open preview format menu"));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Show code and preview" }));
+    expect(container.querySelector(".sb-live-code-editor")).toBeTruthy();
+    expect(container.querySelector("iframe")).toBeTruthy();
+    expect(onUpdate).toHaveBeenLastCalledWith(0, expect.objectContaining({ view: "split" }));
+  });
+
+  it("code is edited in place: saved when typing pauses (no Apply), or at once on blur", () => {
+    vi.useFakeTimers();
+    const { onUpdate } = card({ html: "<p>old</p>", view: "split" });
+    const area = screen.getByLabelText("Block code");
+    fireEvent.change(area, { target: { value: "<p>new</p>" } });
+    expect(onUpdate).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(COMMIT_DELAY_MS); });
+    expect(onUpdate).toHaveBeenLastCalledWith(0, expect.objectContaining({ html: "<p>new</p>", view: "split" }));
+
+    fireEvent.change(area, { target: { value: "<p>newer</p>" } });
+    fireEvent.blur(area);
+    expect(onUpdate).toHaveBeenLastCalledWith(0, expect.objectContaining({ html: "<p>newer</p>" }));
+    expect(screen.queryByText("Apply")).toBeNull();
+  });
+
+  it("our own save coming back doesn't reset the text being typed; an outside change does", () => {
+    const onUpdate = vi.fn();
+    const { rerender } = render(<InteractiveBlockCard block={{ title: "T", html: "<p>a</p>", view: "code" }} index={0} onUpdate={onUpdate} onRemove={() => {}} />);
+    const area = screen.getByLabelText("Block code") as HTMLTextAreaElement;
+    fireEvent.change(area, { target: { value: "<p>ab</p>" } });
+    fireEvent.blur(area);
+    fireEvent.change(area, { target: { value: "<p>abc</p>" } });
+    rerender(<InteractiveBlockCard block={{ title: "T", html: "<p>ab</p>", view: "code" }} index={0} onUpdate={onUpdate} onRemove={() => {}} />);
+    expect(area.value).toBe("<p>abc</p>");
+    rerender(<InteractiveBlockCard block={{ title: "T", html: "<p>from elsewhere</p>", view: "code" }} index={0} onUpdate={onUpdate} onRemove={() => {}} />);
+    expect(area.value).toBe("<p>from elsewhere</p>");
+  });
+
+  it("Wrap code: in the pill while code shows, and as a toggle in ⋯; saved on the block", () => {
+    const { container, onUpdate } = card({ html: "<p>x</p>", view: "code" });
+    fireEvent.click(btn("Wrap code"));
+    expect(onUpdate).toHaveBeenLastCalledWith(0, expect.objectContaining({ wrap: true }));
+    expect(container.querySelector(".sb-live-code-editor")!.getAttribute("data-wrap")).toBe("true");
+    fireEvent.click(btn("Open block actions menu"));
+    const toggle = screen.getByRole("menuitemcheckbox", { name: /Wrap code/ });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(toggle);
+    expect(onUpdate).toHaveBeenLastCalledWith(0, expect.objectContaining({ wrap: false }));
+  });
+
+  it("⋯ → Caption shows the caption field; ⋯ → Delete removes the block", () => {
+    const { onUpdate, onRemove } = card({ html: "<p>x</p>", title: "" });
+    expect(screen.queryByLabelText("Block title")).toBeNull();
+    fireEvent.click(btn("Open block actions menu"));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Caption/ }));
+    const input = screen.getByLabelText("Block title");
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: "Galaxy" } });
+    fireEvent.blur(input);
+    expect(onUpdate).toHaveBeenLastCalledWith(0, expect.objectContaining({ title: "Galaxy" }));
+    fireEvent.click(btn("Open block actions menu"));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Delete/ }));
+    expect(onRemove).toHaveBeenCalledWith(0);
+  });
+
+  it("Expand opens the result large over the page; Escape closes it", () => {
+    card({ html: "<p>x</p>", title: "Big" });
+    fireEvent.click(btn("Expand"));
+    const dialog = screen.getByRole("dialog", { name: "Big" });
+    expect(dialog.parentElement).toBe(document.body);
+    expect(dialog.querySelector("iframe")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("no browser tooltip on the result; it follows the note's theme", () => {
+    const { container } = card({ html: "<p>x</p>", title: "" });
+    const frame = container.querySelector("iframe")!;
+    expect(frame.getAttribute("title")).toBeNull();
+    expect(frame.getAttribute("aria-label")).toBe("Interactive block");
+    expect(frame.getAttribute("srcdoc")).toContain("color-scheme:light");
+  });
+
+  it("an empty block (no code, or either old placeholder page) shows the Ask AI row", () => {
     for (const html of ["", DEFAULT_INTERACTIVE_HTML, LEGACY_SLASH_PLACEHOLDER_HTML]) {
-      const { container, unmount } = card(html, "");
+      const { container, unmount } = card({ html, title: "" });
       expect(container.querySelector("iframe")).toBeNull();
       expect(screen.getByText(/Ask AI to build something here/)).toBeTruthy();
-      // No caption until there is one (Notion).
       expect(screen.queryByLabelText("Block title")).toBeNull();
       unmount();
     }
   });
 
-  it("the empty row opens the AI prompt; Paste code opens an empty code view", () => {
-    card("");
+  it("empty: the row opens the AI prompt; Write code opens an empty code + preview view", () => {
+    const { onUpdate } = card({ html: "" });
     fireEvent.click(screen.getByText(/Ask AI to build something here/));
     expect(screen.getByLabelText("Ask AI")).toBeTruthy();
-    fireEvent.click(screen.getByText("Paste code"));
+    fireEvent.click(screen.getByText("Write code"));
     expect((screen.getByLabelText("Block code") as HTMLTextAreaElement).value).toBe("");
-    expect(screen.queryByLabelText("Ask AI")).toBeNull();
-  });
-
-  it("Code → edit → Apply saves the code and shows the block again; Cancel keeps the old code", () => {
-    const { onUpdate } = card("<p>old</p>");
-    fireEvent.click(screen.getByRole("button", { name: "Edit code" }));
-    const area = screen.getByLabelText("Block code") as HTMLTextAreaElement;
-    expect(area.value).toBe("<p>old</p>");
-    fireEvent.change(area, { target: { value: "<p>new</p>" } });
-    fireEvent.click(screen.getByText("Cancel"));
-    expect(onUpdate).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Edit code" }));
-    fireEvent.change(screen.getByLabelText("Block code"), { target: { value: "<p>new</p>" } });
-    fireEvent.keyDown(screen.getByLabelText("Block code"), { key: "Enter", ctrlKey: true });
-    expect(onUpdate).toHaveBeenCalledWith(0, { title: "T", html: "<p>new</p>" });
-    expect(screen.queryByLabelText("Block code")).toBeNull();
-  });
-
-  it("⋯ → Delete removes the block", () => {
-    const { onRemove } = card("<p>x</p>");
-    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /Delete/ }));
-    expect(onRemove).toHaveBeenCalledWith(0);
-  });
-
-  it("no tooltip on the frame; an untitled block gets its caption from ⋯ → Add caption", () => {
-    const { container, onUpdate } = card("<p>x</p>", "");
-    const frame = container.querySelector("iframe")!;
-    expect(frame.getAttribute("title")).toBeNull();
-    expect(frame.getAttribute("aria-label")).toBe("Interactive block");
-    expect(screen.queryByLabelText("Block title")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /Add caption/ }));
-    const input = screen.getByLabelText("Block title");
-    expect(document.activeElement).toBe(input);
-    fireEvent.change(input, { target: { value: "Galaxy" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    fireEvent.blur(input);
-    expect(onUpdate).toHaveBeenCalledWith(0, { title: "Galaxy", html: "<p>x</p>" });
-  });
-
-  it("the caption saves the title on blur, only when it changed", () => {
-    const { onUpdate } = card("<p>x</p>", "Old");
-    const input = screen.getByLabelText("Block title");
-    fireEvent.blur(input);
-    expect(onUpdate).not.toHaveBeenCalled();
-    fireEvent.change(input, { target: { value: "New" } });
-    fireEvent.blur(input);
-    expect(onUpdate).toHaveBeenCalledWith(0, { title: "New", html: "<p>x</p>" });
+    expect(onUpdate).toHaveBeenLastCalledWith(0, expect.objectContaining({ view: "split" }));
   });
 
   it("Save as image is offered only for pictures (diagram, canvas, svg, 3D)", () => {
     expect(canExportImage("flowchart LR\n A-->B")).toBe(true);
     expect(canExportImage("<canvas></canvas>")).toBe(true);
     expect(canExportImage("<p>text</p>")).toBe(false);
-    const { unmount } = card("<p>text</p>");
-    expect(screen.queryByRole("button", { name: "Save as image" })).toBeNull();
+    const { unmount } = card({ html: "<p>text</p>" });
+    expect(noBtn("Save as image")).toBeNull();
     unmount();
-    card("<svg></svg>");
-    expect(screen.getByRole("button", { name: "Save as image" })).toBeTruthy();
+    card({ html: "<svg></svg>" });
+    expect(btn("Save as image")).toBeTruthy();
   });
 
-  it("the code view colours Mermaid as Mermaid and HTML as HTML", () => {
+  it("the code is coloured as Mermaid or HTML", () => {
     expect(codeLanguage("flowchart LR\n A-->B")).toBe("mermaid");
     expect(codeLanguage("<p>x</p>")).toBe("html");
     expect(codeLanguage("https://x.org/a.glb")).toBe("text");
