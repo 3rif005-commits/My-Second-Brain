@@ -159,10 +159,17 @@ export function openLanguageMenu(
     const width = menu.offsetWidth || 240;
     const height = menu.offsetHeight || 320;
     const below = window.innerHeight - r.bottom;
-    const top = below >= height + 8 || below >= r.top ? r.bottom + 4 : r.top - height - 4;
     const left = Math.min(Math.max(8, r.right - width), window.innerWidth - width - 8);
-    menu.style.top = `${Math.max(8, top)}px`;
     menu.style.left = `${left}px`;
+    if (below >= height + 8 || below >= r.top) {
+      menu.style.top = `${r.bottom + 4}px`;
+      menu.style.bottom = "";
+    } else {
+      // Above the button, pinned by its bottom edge, so a search that shortens the list
+      // shrinks the menu toward the button instead of leaving a gap under it.
+      menu.style.top = "";
+      menu.style.bottom = `${window.innerHeight - r.top + 4}px`;
+    }
   };
 
   // Outside click, page scroll or resize closes it, like Notion's menus.

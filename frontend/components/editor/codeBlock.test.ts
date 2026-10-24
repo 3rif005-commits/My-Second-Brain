@@ -119,6 +119,19 @@ describe("Notion code block", () => {
     expect(root.querySelector("pre")).toBe(pre);
   });
 
+  it("near the bottom of the screen the menu opens above, pinned by its bottom edge", () => {
+    const { root } = makeEditor([html()]);
+    const button = root.querySelector("button.sb-code-lang") as HTMLButtonElement;
+    const bottomOfScreen = window.innerHeight - 20;
+    button.getBoundingClientRect = () =>
+      ({ top: bottomOfScreen - 24, bottom: bottomOfScreen, left: 600, right: 680, width: 80, height: 24 }) as DOMRect;
+    button.click();
+    const menu = document.querySelector(".sb-lang-menu") as HTMLElement;
+    expect(menu.style.top).toBe("");
+    expect(menu.style.bottom).toBe(`${window.innerHeight - (bottomOfScreen - 24) + 4}px`);
+    menu.querySelector("input")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  });
+
   it("filterLanguages matches names, ids and aliases, best first", () => {
     expect(filterLanguages("ts")).toContain("typescript");
     expect(filterLanguages("c")[0]).toBe("c");
