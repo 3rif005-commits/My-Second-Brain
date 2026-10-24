@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  CONTENT_HEIGHT_JS, MAX_FRAME_HEIGHT, MIN_FRAME_HEIGHT, heightFromMessage, liveBlockRequest, stripFences, withAutoHeight,
+  CONTENT_HEIGHT_JS, MAX_FRAME_HEIGHT, MIN_FRAME_HEIGHT, heightFromMessage, isBlockCode, liveBlockRequest, stripFences, withAutoHeight,
 } from "./liveBlock";
 
 describe("withAutoHeight", () => {
@@ -90,5 +90,16 @@ describe("CONTENT_HEIGHT_JS", () => {
   });
   it("ignores script and style tags", () => {
     expect(contentHeight(body(90, [{ tagName: "SCRIPT", bottom: 500 }, { tagName: "STYLE", bottom: 500 }]), 0, css)).toBe(90);
+  });
+});
+
+describe("isBlockCode", () => {
+  it("keeps code, rejects the model talking", () => {
+    expect(isBlockCode("<style>b{}</style><div>x</div>", "html")).toBe(true);
+    expect(isBlockCode("<canvas id=c></canvas><script>1</script>", "html")).toBe(true);
+    expect(isBlockCode("flowchart LR\n A-->B", "mermaid")).toBe(true);
+    expect(isBlockCode("I notice the knowledge context is about **Q-Learning**, not photosynthesis. Could you either: 1. …", "html")).toBe(false);
+    expect(isBlockCode("Use a <b>bold</b> tag? Sorry, I can't.", "html")).toBe(false);
+    expect(isBlockCode("   ", "html")).toBe(false);
   });
 });

@@ -58,8 +58,8 @@
   padding: 12px;
   text-align: left;
 }
-/* Room for the pill's Ask AI + ⋯ on the right. */
-.sb-live-empty-side { padding: 0 120px 0 14px; white-space: nowrap; }
+/* Room for the pill's ⋯ on the right. */
+.sb-live-empty-side { padding: 0 44px 0 14px; white-space: nowrap; }
 .sb-live-empty button:hover { background: var(--c-bg-hover); }
 
 /* Hover pill, top-right 4px in. */

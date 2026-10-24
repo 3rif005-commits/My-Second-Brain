@@ -151,6 +151,30 @@ describe("InteractiveBlockCard — Notion's Mermaid code block model", () => {
     expect(onUpdate).toHaveBeenLastCalledWith(0, expect.objectContaining({ view: "split" }));
   });
 
+  it("an AI reply in words (not code) is shown as a message and never replaces the block", async () => {
+    const reply = "I notice the knowledge context is about **Q-Learning**, not photosynthesis.";
+    const body = new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type: "text", content: reply })}\n\ndata: [DONE]\n\n`));
+        c.close();
+      },
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(body, { status: 200 }));
+    const { onUpdate } = card({ html: "<p>old</p>" });
+    fireEvent.click(btn(/Ask AI/));
+    fireEvent.change(screen.getByLabelText("Ask AI"), { target: { value: "a quiz on photosynthesis" } });
+    fireEvent.keyDown(screen.getByLabelText("Ask AI"), { key: "Enter" });
+    await vi.waitFor(() => expect(screen.getByRole("alert").textContent).toContain("knowledge context is about Q-Learning"));
+    expect(onUpdate).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+
+  it("an empty block's pill holds only ⋯ (the row itself offers Ask AI)", () => {
+    card({ html: "" });
+    expect(noBtn(/^Ask AI$/)).toBeNull();
+    expect(btn("Open block actions menu")).toBeTruthy();
+  });
+
   it("Save as image is offered only for pictures (diagram, canvas, svg, 3D)", () => {
     expect(canExportImage("flowchart LR\n A-->B")).toBe(true);
     expect(canExportImage("<canvas></canvas>")).toBe(true);

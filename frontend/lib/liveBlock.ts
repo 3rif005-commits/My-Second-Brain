@@ -122,3 +122,13 @@ export async function diagramFromImage(noteId: string, image: File): Promise<str
   if (typeof data?.code !== "string" || !data.code.trim()) throw new Error("No diagram came back.");
   return data.code;
 }
+
+/** True when the model's reply is something a block can show: Mermaid source, a model link,
+ *  or HTML. Anything else is the model talking ("I can't make that from your notes…"): it is
+ *  shown to the user as a message and must never replace the block's code. */
+export function isBlockCode(reply: string, kind: "mermaid" | "model" | "html"): boolean {
+  const r = reply.trim();
+  if (!r) return false;
+  if (kind !== "html") return true;
+  return /<\s*(?:!doctype|html|head|body|style|script|div|section|main|canvas|svg|button|input|form|table|p|h[1-6]|ul|ol|span|label|select|textarea|img|figure|details)\b/i.test(r);
+}

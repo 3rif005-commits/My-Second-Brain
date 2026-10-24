@@ -15,7 +15,7 @@ import {
   LoaderCircle, Rows2, Sparkles, Trash2, ZoomIn,
 } from "lucide-react";
 import { NoteIdContext } from "./noteIdContext";
-import { diagramFromImage, imageFromTransfer, isPlaceholderHtml, liveBlockRequest, stripFences, useFrameHeight } from "@/lib/liveBlock";
+import { diagramFromImage, imageFromTransfer, isBlockCode, isPlaceholderHtml, liveBlockRequest, stripFences, useFrameHeight } from "@/lib/liveBlock";
 import { assetOrigin, buildSrcDoc, detectKind, preflightWarnings, type LiveTheme } from "@/lib/liveRuntime";
 import { exportFrameImage, MAX_SNAPSHOT_CHARS } from "@/lib/liveExport";
 import { LiveCodeEditor } from "@/components/interactive/LiveCodeEditor";
@@ -263,6 +263,12 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
 
       const next = stripFences(html);
       if (!next) throw new Error("The model returned nothing");
+      // The model answered in words instead of code (e.g. it couldn't find the topic in your
+      // notes): show what it said, keep the block as it was.
+      if (!isBlockCode(next, detectKind(next))) {
+        setError(next.replace(/\*\*/g, "").slice(0, 600));
+        return;
+      }
       // Show the result straight away and keep it.
       setCode(next);
       sent.current = next;
@@ -326,12 +332,12 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
         )}
 
         <div className="sb-live-pill" data-pinned={pinned ? "true" : undefined}>
-          <button type="button" className="sb-pill-btn sb-pill-text" aria-pressed={asking} onClick={() => setAsking((a) => !a)}>
-            <Sparkles size={13} aria-hidden="true" />
-            Ask AI
-          </button>
           {!emptyRow ? (
             <>
+              <button type="button" className="sb-pill-btn sb-pill-text" aria-pressed={asking} onClick={() => setAsking((a) => !a)}>
+                <Sparkles size={13} aria-hidden="true" />
+                Ask AI
+              </button>
               <span className="sb-pill-divider" aria-hidden="true" />
               <div className="sb-pill-anchor" ref={viewMenuRef}>
                 <button
@@ -505,7 +511,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
         </div>
       ) : null}
 
-      {(warnings.length > 0 || error) && !emptyRow ? (
+      {(warnings.length > 0 && !emptyRow) || error ? (
         <p className={`sb-live-note${error ? " sb-live-error" : ""}`} role={error ? "alert" : undefined}>
           {[...warnings, ...(error ? [error] : [])].join(" ")}
         </p>
