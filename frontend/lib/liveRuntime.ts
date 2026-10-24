@@ -204,14 +204,15 @@ try {
 </script>`;
 }
 
-/** Notion's diagrams (measured 2026-10-24): Mermaid's own "dark" theme in dark mode (nodes
- *  rgb(31,32,32), borders/text rgb(204,204,204), lines rgb(211,211,211), 1px) and its
- *  default theme in light, in Notion's UI font at 16px, on a transparent background. */
+/** Notion's diagrams (measured live 2026-10-24, both themes): Mermaid's own "dark" theme in
+ *  dark mode (nodes rgb(31,32,32), borders/text rgb(204,204,204), lines rgb(211,211,211)) and
+ *  its "neutral" theme in light (nodes #eee, borders #999, text black, lines #666), 1px lines,
+ *  Notion's UI font at 16px, on a transparent background. */
 export function mermaidConfig(theme: LiveTheme) {
   return {
     startOnLoad: false,
     securityLevel: "strict",
-    theme: theme === "dark" ? "dark" : "default",
+    theme: theme === "dark" ? "dark" : "neutral",
     // Notion's diagrams sit 39px apart rank to rank (newer Mermaid defaults to 50).
     flowchart: { rankSpacing: 40 },
     themeVariables: {

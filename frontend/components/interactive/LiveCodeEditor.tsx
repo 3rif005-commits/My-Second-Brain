@@ -7,7 +7,7 @@
 // Notion's code block, instead of scrolling inside.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createCodeHighlighter } from "@/lib/codeHighlight";
+import { createCodeHighlighter, refineMermaidTokens } from "@/lib/codeHighlight";
 
 type Token = { content: string; color?: string };
 type Highlighter = Awaited<ReturnType<typeof createCodeHighlighter>>;
@@ -56,7 +56,8 @@ export function LiveCodeEditor({ value, onChange, lang, placeholder, wrap, onBlu
   const coloured = useMemo<Token[][] | null>(() => {
     if (!h) return null;
     try {
-      return h.codeToTokens(value, { lang: lang as never, theme: "notion" }).tokens;
+      const lines = h.codeToTokens(value, { lang: lang as never, theme: "notion" }).tokens;
+      return lang === "mermaid" ? refineMermaidTokens(lines) : lines;
     } catch {
       return null;
     }

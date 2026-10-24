@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCodeHighlighter, resolveCodeLanguage } from "./codeHighlight";
+import { createCodeHighlighter, refineMermaidTokens, resolveCodeLanguage } from "./codeHighlight";
 
 async function colours(code: string, lang: string) {
   const highlighter = await createCodeHighlighter();
@@ -44,5 +44,15 @@ describe("Notion code theme", () => {
     const c = await colours("graph TD\n  A --> B", "mermaid");
     expect(c["graph"]).toBe("var(--code-keyword)");
     expect(c["TD"]).toBe("var(--code-fg)");
+  });
+
+  it("Mermaid arrows are operators and brackets punctuation, like Notion (refineMermaidTokens)", async () => {
+    const h = await createCodeHighlighter();
+    await h.loadLanguage("mermaid" as never);
+    const lines = refineMermaidTokens(h.codeToTokens("graph TD\n  A[Start] --> B", { lang: "mermaid" as never, theme: "notion" }).tokens);
+    const c = Object.fromEntries(lines.flat().filter((t) => t.content.trim()).map((t) => [t.content.trim(), t.color]));
+    expect(c["graph"]).toBe("var(--code-keyword)");
+    expect(c["-->"]).toBe("var(--code-operator)");
+    expect(c["["]).toBe("var(--code-punctuation)");
   });
 });

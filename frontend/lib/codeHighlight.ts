@@ -185,3 +185,21 @@ const createHighlighter = createBundledHighlighter<string, string>({
 export function createCodeHighlighter() {
   return createHighlighter({ themes: [NOTION_CODE_THEME], langs: [] });
 }
+
+type ColouredToken = { content: string; color?: string };
+
+/** Shiki's Mermaid grammar files the diagram keyword, arrows and brackets under one scope, so
+ *  the theme alone colours them all as keywords. Notion (Prism) colours arrows as operators
+ *  (`-->` brown/tan) and brackets as punctuation; this re-colours those tokens to match. */
+export function refineMermaidTokens<T extends ColouredToken>(lines: T[][]): T[][] {
+  const keyword = "var(--code-keyword)";
+  return lines.map((line) =>
+    line.map((t) => {
+      if (t.color !== keyword) return t;
+      const c = t.content.trim();
+      if (/^[-=.ox<>]{2,}\|?$/.test(c) || /^\|$/.test(c)) return { ...t, color: "var(--code-operator)" };
+      if (/^[[\](){}>]+$/.test(c)) return { ...t, color: "var(--code-punctuation)" };
+      return t;
+    }),
+  );
+}
