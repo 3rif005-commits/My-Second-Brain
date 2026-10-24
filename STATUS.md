@@ -29,12 +29,19 @@ code, tables, task lists kept; 63f40af4). CSV import writes every row in one sta
 would have timed out); the 20 queries left are database/column setup. Full backend suite run
 against the local Postgres harness (`docker start sb-pgtest`): 2,870 passed, 0 errors.
 
-**Code block, Notion-style (2026-10-24, 39d4f771 · 80fc0f79 · adb802f3):** syntax colours
-(Shiki, Notion's Prism colours as CSS variables, light + dark; `lib/codeHighlight.ts`), hover
-pill with language / Copy / Wrap (`components/editor/codeBlock.ts`), new per-block prop `wrap`.
-Also fixed two older BlockNote bugs: ```` ```lang ```` left the caret in the block below, and long
-lines always wrapped. Live-checked on the deployed site (test note, cleaned up). **Next: the
-interactive (HTML) block** — the user's actual complaint; they want it closer to Notion's blocks.
+**Code block + interactive block, Notion-style (2026-10-24):** code block: Shiki colours (Notion's
+Prism colours, light/dark), hover pill (language menu with search, Copy, Wrap), Notion's box geometry
+(8px inset, text 36px/22px in). Interactive block rebuilt on Notion's **Mermaid code block**,
+measured live in Notion (UI Reference page, test blocks removed): one box in the code-block fill,
+views Code / Preview / Split per block (props `view`, `wrap`), code edited in place (saves after
+600 ms), pill Ask AI | view | Expand | Download | Copy | Wrap | ⋯ (Caption, Copy code, Wrap toggle,
+Save as image, Delete), Expand lightbox, caption. Content follows light/dark: frame page transparent
+with `--sb-*` colours, Mermaid dark/default theme like Notion; AI skill writes with those colours.
+Blocks may load libraries from jsDelivr, cdnjs, unpkg, esm.sh (user's choice). Live-checked on the
+deployed site in a throwaway note (now in Trash): split/preview/expand geometry equal to Notion's
+(box 228 / diagram 164), AI quiz in dark mode, no inner scrollbar. Not done: Notion's side resize
+bars; Notion's light-mode diagram colours weren't measured (assumed Mermaid default). An AI reply in
+words is now shown as a message instead of replacing the block.
 
 Live check 2026-10-23 (older features on the deployed site): see "Live check of older features" below.
 
