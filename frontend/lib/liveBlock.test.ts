@@ -4,6 +4,10 @@ import {
 } from "./liveBlock";
 
 describe("withAutoHeight", () => {
+  it("hides the frame's own scrollbar while the content fits the tallest frame", () => {
+    const a = withAutoHeight("<p>x</p>");
+    expect(a).toContain(`overflowY=h<=${MAX_FRAME_HEIGHT}?"hidden":"auto"`);
+  });
   it("adds the reporter before </body>, or at the end", () => {
     const a = withAutoHeight("<html><body><p>x</p></body></html>");
     expect(a.indexOf("sb-live-height")).toBeLessThan(a.indexOf("</body>"));

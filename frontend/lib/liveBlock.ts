@@ -27,8 +27,11 @@ export const CONTENT_HEIGHT_JS = `function contentHeight(b,scrollY,css){if(!b)re
   `low=Math.max(low,c.getBoundingClientRect().bottom+(scrollY||0)+px(c,"marginBottom"));}` +
   `return Math.max(h,low+px(b,"paddingBottom")+px(b,"marginBottom"));}`;
 
+// While the content fits the tallest frame, the frame shows no scrollbar of its own: a 1–2px
+// overflow otherwise brought one in, which narrowed the content, made it taller, and kept it.
 const HEIGHT_SCRIPT = `<script>(function(){${CONTENT_HEIGHT_JS}function s(){` +
   `var h=contentHeight(document.body,window.scrollY,getComputedStyle);` +
+  `document.documentElement.style.overflowY=h<=${MAX_FRAME_HEIGHT}?"hidden":"auto";` +
   `parent.postMessage({"${MESSAGE_KEY}":h},"*");}` +
   `if(window.ResizeObserver){new ResizeObserver(s).observe(document.documentElement);}` +
   `window.addEventListener("load",s);setTimeout(s,50);setTimeout(s,600);})();</script>`;
