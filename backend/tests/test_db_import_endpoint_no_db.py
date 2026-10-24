@@ -54,6 +54,7 @@ def test_import_answers_201_with_select_names_and_indexes_rows_after_the_respons
 
     assert res.status_code == 201, res.text
     assert res.json()["row_count"] == 3
+    assert "total;dur=" in res.headers["Server-Timing"]     # where a slow import's time went
     statuses = [p.get("k1") for p in rows_written]
     assert statuses == [{"type": "select", "select": "Done"}, {"type": "select", "select": "Reading"},
                         {"type": "select", "select": "Done"}]

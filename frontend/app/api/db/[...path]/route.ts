@@ -59,6 +59,9 @@ async function proxy(req: Request, path: string[]) {
   // `exportCsv()` can warn the user instead of handing back a silently partial file.
   const truncated = res.headers.get("X-Export-Truncated");
   if (truncated) respHeaders.set("X-Export-Truncated", truncated);
+  // Where a slow request spent its time (CSV import reports its queries).
+  const timing = res.headers.get("Server-Timing");
+  if (timing) respHeaders.set("Server-Timing", timing);
   return new Response(res.body, { status: res.status, headers: respHeaders });
 }
 

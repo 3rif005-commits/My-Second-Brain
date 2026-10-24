@@ -23,13 +23,14 @@ import csv
 import io
 import math
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import asyncpg
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
 
 from models.database import DatabaseCreate, PropertyCreate, PropertyUpdate
@@ -305,6 +306,7 @@ class CsvImportResponse(BaseModel):
 @router.post("/csv", response_model=CsvImportResponse, status_code=status.HTTP_201_CREATED)
 async def import_csv(
     background: BackgroundTasks,
+    response: Response,
     file: UploadFile = File(...),
     database_title: str | None = Form(None),
     user_id: str = Depends(get_user_id),
@@ -407,12 +409,30 @@ async def import_csv(
     # correctly on any exception propagating out of `async with conn.transaction():`
     # (asyncpg/FastAPI's own behavior, unchanged by this try/except) -- this only
     # changes what *response* the caller sees once that rollback has already happened.
+    #
+    # The Server-Timing header says where the time went: a 3-row import took ~7 s on
+    # the deployed site, and every statement there is a round trip to the pooler.
+    queries = [0, 0.0]
+
+    def count(q) -> None:
+        queries[0] += 1
+        queries[1] += q.elapsed or 0.0
+
+    started = time.perf_counter()
+    conn.add_query_logger(count)
     try:
-        return await _run_import(conn, user_id, title, fieldnames, csv_rows, title_idx, background)
+        result = await _run_import(conn, user_id, title, fieldnames, csv_rows, title_idx, background)
     except asyncpg.PostgresError as exc:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, f"CSV import failed: {exc}"
         ) from exc
+    finally:
+        conn.remove_query_logger(count)
+    response.headers["Server-Timing"] = (
+        f'db;desc="{queries[0]} queries";dur={queries[1] * 1000:.0f}, '
+        f"total;dur={(time.perf_counter() - started) * 1000:.0f}"
+    )
+    return result
 
 
 async def _run_import(
