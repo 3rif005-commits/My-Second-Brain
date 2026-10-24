@@ -18,6 +18,7 @@ import { withMultiColumn, multiColumnDropCursor, getMultiColumnSlashMenuItems, l
 import { useTheme } from "@/app/providers";
 import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec, UnknownBlockSpec, InlineMathSpec, insertMathBlock, insertCalloutBlock } from "./customBlocks";
 import { wrapUnknown, restoreUnknown } from "./unknownBlocks";
+import { createNotionCodeBlockSpec } from "./codeBlock";
 import {
   extractCalloutChildren, attachCalloutChildren, inlineMathInTableCells,
   mergeRedundantToggleHeadings,
@@ -68,6 +69,8 @@ const multiColSchema = withMultiColumn(
   (BlockNoteSchema as any).create({
     blockSpecs: {
       ...defaultBlockSpecs,
+      // Syntax colours + Notion's hover pill (language, Copy, Wrap) — see codeBlock.ts
+      codeBlock: createNotionCodeBlockSpec(),
       // createReactBlockSpec returns a factory — must be invoked to get the BlockSpec
       math: MathBlockSpec(),
       checkpoint: CheckpointBlockSpec(),

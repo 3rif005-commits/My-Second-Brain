@@ -111,19 +111,111 @@
 
 /* Code: warm faint fill, radius 10px, 24px 22px padding, 13.6px mono text. */
 .notion-editor .bn-block-content[data-content-type="codeBlock"] {
+  position: relative;
   color: var(--c-text);
   background: var(--c-bg-code);
   border-radius: var(--radius-card);
   margin: 4px 0;
+  /* Syntax colours (lib/codeHighlight.ts). Light = Prism's default theme, which is what
+   * Notion uses; keyword/function/string/punctuation are measured, the rest are Prism's. */
+  --code-fg: var(--c-text);
+  --code-comment: rgb(112, 128, 144);
+  --code-punctuation: rgb(153, 153, 153);
+  --code-tag: rgb(153, 0, 85);
+  --code-string: rgb(102, 153, 0);
+  --code-operator: rgb(154, 110, 58);
+  --code-keyword: rgb(0, 119, 170);
+  --code-function: rgb(221, 74, 104);
+  --code-regex: rgb(238, 153, 0);
+  --code-pill-bg: rgb(255, 255, 255);
+}
+/* Dark: keyword/function/string/punctuation measured in Notion; the rest picked to sit with them. */
+.dark .notion-editor .bn-block-content[data-content-type="codeBlock"] {
+  --code-comment: rgb(128, 128, 128);
+  --code-tag: rgb(237, 128, 156);
+  --code-operator: rgb(212, 172, 120);
+  --code-keyword: rgb(102, 162, 204);
+  --code-function: rgb(236, 236, 147);
+  --code-string: rgb(189, 224, 82);
+  --code-regex: rgb(240, 170, 80);
+  --code-pill-bg: rgb(32, 32, 32);
 }
 .notion-editor .bn-block-content[data-content-type="codeBlock"] > pre {
   padding: 24px 22px;
   font-family: var(--font-code);
   font-size: 13.6px;
   line-height: 20.4px;
+  white-space: pre;
+  tab-size: 2;
+  overflow-x: auto;
+  /* BlockNote's own code block is dark-on-dark; ours is the page's text on a faint fill. */
+  background: transparent;
+  color: var(--code-fg);
 }
-.notion-editor .bn-block-content[data-content-type="codeBlock"] > div > select {
-  color: var(--c-text-secondary);
+.notion-editor .bn-block-content[data-content-type="codeBlock"] > pre.sb-code-wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Hover pill, top-right 4px in: language ⌄, Copy, Wrap. 28px tall, 2px padding, radius 6px. */
+.notion-editor .sb-code-toolbar {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--code-pill-bg);
+  box-shadow: var(--shadow-float);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) ease;
+}
+.notion-editor .bn-block-content[data-content-type="codeBlock"]:hover > .sb-code-toolbar,
+.notion-editor .sb-code-toolbar:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+.notion-editor .sb-code-lang,
+.notion-editor .sb-code-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: rgb(142, 139, 134);
+  background: transparent;
+  border: 0;
+  font-family: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.notion-editor .sb-code-lang { padding: 0 6px; }
+.notion-editor .sb-code-btn { width: 24px; justify-content: center; padding: 0; }
+.notion-editor .sb-code-lang:hover,
+.notion-editor .sb-code-btn:hover,
+.notion-editor .sb-code-btn[aria-pressed="true"] {
+  background: var(--c-bg-hover);
+}
+.notion-editor .sb-code-btn[aria-pressed="true"] { color: var(--c-text); }
+/* The real <select> covers the label, invisible, so a click opens the OS picker. */
+.notion-editor .sb-code-lang > select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 14px;
+}
+@media (hover: none) {
+  /* Touch (the tablet) has no hover: keep the pill visible. */
+  .notion-editor .sb-code-toolbar { opacity: 1; pointer-events: auto; }
 }
 
 /* Inline styles: code is red on a soft chip, bold is 600, links are the text
