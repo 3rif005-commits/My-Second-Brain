@@ -94,6 +94,10 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   const saved = block.html;
   const frameHeight = useFrameHeight(frameRef);
   const srcDoc = useMemo(() => buildSrcDoc(saved, { assetOrigin: assetOrigin(), theme }), [saved, theme]);
+  const bigDoc = useMemo(
+    () => (expanded ? buildSrcDoc(saved, { assetOrigin: assetOrigin(), theme, fit: true }) : ""),
+    [expanded, saved, theme],
+  );
   const warnings = useMemo(() => preflightWarnings(saved), [saved]);
   const empty = isPlaceholderHtml(code);
   const showCode = view === "code" || view === "split";
@@ -414,6 +418,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
             </button>
             {menuOpen ? (
               <div className="sb-menu" role="menu">
+                <div className="sb-menu-header">Interactive block</div>
                 <button
                   type="button"
                   role="menuitem"
@@ -526,7 +531,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
         ? createPortal(
             <div className="sb-lightbox" role="dialog" aria-modal="true" aria-label={title || "Interactive block"} onMouseDown={() => setExpanded(false)}>
               <div className="sb-lightbox-panel" onMouseDown={(e) => e.stopPropagation()}>
-                <iframe srcDoc={srcDoc} sandbox="allow-scripts" style={{ colorScheme: theme }} aria-label={title || "Interactive block"} />
+                <iframe srcDoc={bigDoc} sandbox="allow-scripts" style={{ colorScheme: theme }} aria-label={title || "Interactive block"} />
               </div>
             </div>,
             document.body,

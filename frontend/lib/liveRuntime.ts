@@ -212,6 +212,8 @@ export function mermaidConfig(theme: LiveTheme) {
     startOnLoad: false,
     securityLevel: "strict",
     theme: theme === "dark" ? "dark" : "default",
+    // Notion's diagrams sit 39px apart rank to rank (newer Mermaid defaults to 50).
+    flowchart: { rankSpacing: 40 },
     themeVariables: {
       fontFamily: NOTION_UI_FONT,
       fontSize: "16px",
@@ -243,7 +245,7 @@ function head(origins: string[], withScene: boolean, theme: LiveTheme): string {
 }
 
 /** The complete document for a live block's frame. */
-export function buildSrcDoc(code: string, opts: { assetOrigin?: string; theme?: LiveTheme } = {}): string {
+export function buildSrcDoc(code: string, opts: { assetOrigin?: string; theme?: LiveTheme; fit?: boolean } = {}): string {
   const theme = opts.theme ?? "light";
   const kind = detectKind(code);
   const origins = opts.assetOrigin ? [opts.assetOrigin] : [];
@@ -253,7 +255,12 @@ export function buildSrcDoc(code: string, opts: { assetOrigin?: string; theme?: 
   }
   let doc: string;
   if (kind === "mermaid") {
-    doc = `<!doctype html><html><head>${head(origins, false, theme)}</head><body>${mermaidBody(code, theme)}</body></html>`;
+    // fit (Expand): the diagram is scaled up to fill the frame, like Notion's enlarged view.
+    const fit = opts.fit
+      ? `<style>html,body{height:100%}pre.mermaid{height:100%;align-items:center}` +
+        `pre.mermaid svg{width:100%!important;height:100%!important;max-width:none!important}</style>`
+      : "";
+    doc = `<!doctype html><html><head>${head(origins, false, theme)}${fit}</head><body>${mermaidBody(code, theme)}</body></html>`;
   } else if (kind === "model") {
     doc = `<!doctype html><html><head>${head(origins, true, theme)}</head><body>${modelBody(code.trim())}</body></html>`;
   } else {

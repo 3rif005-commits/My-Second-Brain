@@ -39,4 +39,10 @@ describe("Notion code theme", () => {
     expect(c["<"]).toBe("var(--code-punctuation)");
     expect(c["Hi"]).toBe("var(--code-fg)");
   });
+
+  it("Mermaid like Notion: graph is a keyword, the direction plain", async () => {
+    const c = await colours("graph TD\n  A --> B", "mermaid");
+    expect(c["graph"]).toBe("var(--code-keyword)");
+    expect(c["TD"]).toBe("var(--code-fg)");
+  });
 });

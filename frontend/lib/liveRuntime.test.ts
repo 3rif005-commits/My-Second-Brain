@@ -90,6 +90,11 @@ describe("buildSrcDoc theme (content follows the note's light/dark, like Notion'
     expect(dark).toContain(`"primaryBorderColor":"#cccccc"`);
     allParse(dark);
   });
+  it("fit (Expand) scales a diagram to fill the frame; Mermaid ranks 40px apart like Notion", () => {
+    expect(buildSrcDoc("flowchart LR\n A-->B", { fit: true })).toContain("pre.mermaid svg{width:100%!important");
+    expect(buildSrcDoc("flowchart LR\n A-->B")).not.toContain("pre.mermaid svg{width:100%!important");
+    expect(buildSrcDoc("flowchart LR\n A-->B")).toContain(`"rankSpacing":40`);
+  });
   it("the page is transparent so the block's box shows through; HTML gets the variables too", () => {
     const doc = buildSrcDoc("<p>x</p>", { theme: "dark" });
     expect(doc).toContain("background:transparent");

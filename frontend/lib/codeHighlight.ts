@@ -167,6 +167,8 @@ export const NOTION_CODE_THEME: ThemeRegistration = {
       scope: ["string.regexp", "keyword.other.important", "variable.parameter.function.language.special"],
       settings: { foreground: v("regex") },
     },
+    // Mermaid's direction (TD, LR…) is plain in Notion (Prism), not a function name.
+    { scope: ["entity.name.function.mermaid"], settings: { foreground: v("fg") } },
     { scope: ["markup.bold"], settings: { fontStyle: "bold" } },
     { scope: ["markup.italic"], settings: { fontStyle: "italic" } },
     { scope: ["markup.heading"], settings: { foreground: v("tag"), fontStyle: "bold" } },

@@ -131,7 +131,7 @@
   transform: translateX(-50%);
   z-index: 20;
   display: flex;
-  gap: 4px;
+  gap: 9px;
   height: 28px;
   padding: 2px;
   border-radius: 6px;
@@ -145,7 +145,7 @@
   top: calc(100% + 8px);
   right: -2px;
   z-index: 20;
-  min-width: 220px;
+  width: 265px;
   padding: 4px;
   border-radius: 10px;
   background: var(--c-bg-elevated);
@@ -175,6 +175,16 @@
 .sb-menu-row:disabled { opacity: 0.4; cursor: default; }
 .sb-menu-danger:hover,
 .sb-menu-danger:hover > svg { color: rgb(229, 100, 88); }
+/* Section label (Notion: 12px / 500, secondary grey, padding 0 8px, margin 6px 0 8px). */
+.sb-menu-header {
+  padding: 0 8px;
+  margin: 6px 0 8px;
+  font-size: 12px;
+  line-height: 14.4px;
+  font-weight: 500;
+  color: var(--c-text-secondary);
+  user-select: none;
+}
 .sb-menu-divider { height: 1px; margin: 4px 8px; background: var(--c-border); }
 
 /* Toggle switch (menus-overlays.md §2): 30×18 track, 14px knob. */
