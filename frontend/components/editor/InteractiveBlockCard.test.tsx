@@ -36,7 +36,8 @@ describe("InteractiveBlockCard layout", () => {
       const { container, unmount } = card(html, "");
       expect(container.querySelector("iframe")).toBeNull();
       expect(screen.getByText(/Ask AI to build something here/)).toBeTruthy();
-      expect((screen.getByLabelText("Block title") as HTMLInputElement).placeholder).toBe("Add a caption…");
+      // No caption until there is one (Notion).
+      expect(screen.queryByLabelText("Block title")).toBeNull();
       unmount();
     }
   });
@@ -71,6 +72,22 @@ describe("InteractiveBlockCard layout", () => {
     fireEvent.click(screen.getByRole("button", { name: "More actions" }));
     fireEvent.click(screen.getByRole("menuitem", { name: /Delete/ }));
     expect(onRemove).toHaveBeenCalledWith(0);
+  });
+
+  it("no tooltip on the frame; an untitled block gets its caption from ⋯ → Add caption", () => {
+    const { container, onUpdate } = card("<p>x</p>", "");
+    const frame = container.querySelector("iframe")!;
+    expect(frame.getAttribute("title")).toBeNull();
+    expect(frame.getAttribute("aria-label")).toBe("Interactive block");
+    expect(screen.queryByLabelText("Block title")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Add caption/ }));
+    const input = screen.getByLabelText("Block title");
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: "Galaxy" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.blur(input);
+    expect(onUpdate).toHaveBeenCalledWith(0, { title: "Galaxy", html: "<p>x</p>" });
   });
 
   it("the caption saves the title on blur, only when it changed", () => {

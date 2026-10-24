@@ -25,7 +25,7 @@ export function InteractiveFrame({ title = "Interactive", html, height = 300 }: 
           srcDoc={srcDoc}
           sandbox="allow-scripts"
           style={{ height: frameHeight }}
-          title={title}
+          aria-label={title}
         />
       </div>
       {title ? <div className="sb-live-caption">{title}</div> : null}

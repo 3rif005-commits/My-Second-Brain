@@ -309,3 +309,18 @@ div.sb-live-caption { cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .sb-spin { animation-duration: 2.4s; }
 }
+
+/* Selected as a whole (click beside it, Esc from inside): Notion's soft blue tint over the
+ * block (blocks.md §4, rgba(35,131,226,0.14)) instead of BlockNote's 4px outline. */
+.ProseMirror-selectednode > .bn-block-content[data-content-type="interactive"] > * {
+  outline: none;
+}
+.ProseMirror-selectednode > .bn-block-content[data-content-type="interactive"] .sb-live::after {
+  content: "";
+  position: absolute;
+  inset: 4px 0 0;
+  border-radius: 10px;
+  background: rgba(35, 131, 226, 0.14);
+  pointer-events: none;
+  z-index: 3;
+}

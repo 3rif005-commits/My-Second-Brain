@@ -27,6 +27,7 @@ import {
   BasicTextStyleButton,
   useBlockNoteEditor,
   useComponentsContext,
+  useSelectedBlocks,
 } from "@blocknote/react";
 import { SelectionKeepingAIButton } from "./selectionSkills";
 
@@ -84,10 +85,21 @@ function InlineMathButton() {
  *  Rendered by BlockEditor, which passes `formattingToolbar={false}` to
  *  BlockNoteView so this replaces the built-in one rather than duplicating it
  *  (the same arrangement `slashMenu={false}` already uses there). */
+/** Blocks that are a frame, not text: BlockNote shows its text toolbar when one is selected
+ *  as a whole (meant for images), and here it only offered text actions that do nothing. */
+const NO_TEXT_TOOLBAR = new Set(["interactive"]);
+
+function TextToolbarOrNothing({ children }: { children: React.ReactNode }) {
+  const blocks = useSelectedBlocks();
+  if (blocks.length > 0 && blocks.every((b) => NO_TEXT_TOOLBAR.has(b.type as string))) return null;
+  return <>{children}</>;
+}
+
 export function NoteFormattingToolbar() {
   return (
     <FormattingToolbarController
       formattingToolbar={() => (
+        <TextToolbarOrNothing>
         <FormattingToolbar>
           {/* First, so selection-surface skills are one click from any
               selection — before this, the AI menu over a selection was
@@ -97,6 +109,7 @@ export function NoteFormattingToolbar() {
           <BasicTextStyleButton basicTextStyle="code" />
           <InlineMathButton />
         </FormattingToolbar>
+        </TextToolbarOrNothing>
       )}
     />
   );

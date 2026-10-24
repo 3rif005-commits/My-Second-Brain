@@ -7,7 +7,7 @@
 // frame for a code view coloured like the note's code blocks. Styles: app/liveBlock.css.
 
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, CodeXml, Copy, Download, Ellipsis, LoaderCircle, Sparkles, Trash2 } from "lucide-react";
+import { ArrowUp, Captions, CodeXml, Copy, Download, Ellipsis, LoaderCircle, Sparkles, Trash2 } from "lucide-react";
 import { NoteIdContext } from "./noteIdContext";
 import { diagramFromImage, imageFromTransfer, isPlaceholderHtml, liveBlockRequest, stripFences, useFrameHeight } from "@/lib/liveBlock";
 import { assetOrigin, buildSrcDoc, detectKind, preflightWarnings } from "@/lib/liveRuntime";
@@ -45,6 +45,9 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  // Like Notion's caption: only there once there is one, or while you are adding it.
+  const [captioning, setCaptioning] = useState(false);
+  const captionRef = useRef<HTMLInputElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -61,6 +64,10 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   useEffect(() => {
     if (asking) promptRef.current?.focus({ preventScroll: true });
   }, [asking]);
+
+  useEffect(() => {
+    if (captioning) captionRef.current?.focus({ preventScroll: true });
+  }, [captioning]);
 
   // ⋯ menu: outside click or Escape closes it.
   useEffect(() => {
@@ -243,7 +250,8 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
               srcDoc={srcDoc}
               sandbox="allow-scripts"
               style={{ height: frameHeight }}
-              title={title || "Interactive block"}
+              // aria-label, not title: a title shows as the browser's own tooltip on hover.
+              aria-label={title || "Interactive block"}
             />
           </div>
         )}
@@ -296,6 +304,16 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
               </button>
               {menuOpen ? (
                 <div className="sb-menu sb-live-menu" role="menu">
+                  {!title.trim() ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="sb-menu-row"
+                      onClick={() => { setMenuOpen(false); setCaptioning(true); }}
+                    >
+                      <Captions size={16} aria-hidden="true" /> Add caption
+                    </button>
+                  ) : null}
                   <button type="button" role="menuitem" className="sb-menu-row" onClick={copyCode}>
                     <Copy size={16} aria-hidden="true" /> Copy code
                   </button>
@@ -371,15 +389,21 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
         </p>
       ) : null}
 
-      <input
-        className="sb-live-caption"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onBlur={() => { if (title !== block.title) onUpdate(index, { title, html: code }); }}
-        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-        placeholder="Add a caption…"
-        aria-label="Block title"
-      />
+      {title.trim() || captioning ? (
+        <input
+          ref={captionRef}
+          className="sb-live-caption"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => {
+            setCaptioning(false);
+            if (title !== block.title) onUpdate(index, { title, html: code });
+          }}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur(); }}
+          placeholder="Write a caption…"
+          aria-label="Block title"
+        />
+      ) : null}
     </div>
   );
 }
