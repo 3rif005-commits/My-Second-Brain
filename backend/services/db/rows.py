@@ -46,6 +46,7 @@ action handlers, so this module cannot import `automations.py` at the top level 
 """
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -114,7 +115,6 @@ async def create_row_core(
     properties: dict[str, Any] | None = None,
     content: list[Any] | None = None,
     trigger_automations: bool = True,
-    recompute_computed: bool = True,
 ) -> RowResponse:
     """Create one row (a `notes` row + its `db_row_props` companion, spec Q2: "a database
     row IS a note") in one transaction, then recompute its formula/rollup properties inside
@@ -176,12 +176,8 @@ async def create_row_core(
         )
         # Milestone 8 (task-28-brief.md §3): "row write (update_row_property, create_row)
         # -> incremental recompute of that row" -- inside the same transaction as the
-        # insert. If recompute raises, the write rolls back. `recompute_computed=False`
-        # is for a caller that knows there is nothing to compute: CSV import, writing
-        # rows into a database it created moments ago (no formula/rollup properties,
-        # no relations pointing at it). Each recompute is several pooler round trips.
-        if recompute_computed:
-            await recompute.recompute_row(conn, user_id, data_source_id, str(row["note_id"]))
+        # insert. If recompute raises, the write rolls back.
+        await recompute.recompute_row(conn, user_id, data_source_id, str(row["note_id"]))
 
         # Milestone 12 (task-38-brief.md decision 4): `page_added` automations fire
         # synchronously, inside this same transaction, right after this row's own
@@ -193,6 +189,58 @@ async def create_row_core(
                 conn, user_id, data_source_id, {"type": "page_added"}, str(row["note_id"])
             )
     return RowResponse(id=str(row["note_id"]), properties=row["properties"])
+
+
+async def create_rows_bulk(
+    conn: asyncpg.Connection,
+    user_id: str,
+    data_source_id: str,
+    rows: list[dict[str, Any]],
+) -> list[str]:
+    """Insert many rows (each a `properties` dict) in ONE statement; returns their
+    note ids in input order.
+
+    For a database the caller has just created (CSV import): it has no formula/rollup
+    properties, no relations pointing at it and no automations, so `create_row_core`'s
+    recompute and automation steps have nothing to do. What they cost is round trips:
+    on the deployed site every statement to the Supabase pooler took ~180 ms, and
+    create_row_core's four per row made a 300-row import outlast the request timeout.
+
+    Ids are minted here so input order is kept without relying on RETURNING order.
+    The title rule is create_row_core's: a title-typed property's value, else
+    "Untitled". Positions continue after any existing rows, in input order.
+    """
+    if not rows:
+        return []
+    items = []
+    for properties in rows:
+        title = "Untitled"
+        for value in properties.values():
+            if isinstance(value, dict) and value.get("type") == "title":
+                title = value.get("title") or title
+                break
+        items.append({"id": str(uuid.uuid4()), "title": title, "properties": properties})
+    await conn.execute(
+        """
+        WITH input AS (
+            SELECT (e->>'id')::uuid AS id, e->>'title' AS title, e->'properties' AS props, ord
+            FROM jsonb_array_elements($3::jsonb) WITH ORDINALITY AS t(e, ord)
+        ), ins AS (
+            INSERT INTO notes (id, user_id, title, content)
+            SELECT id, $1, title, '[]'::jsonb FROM input
+            RETURNING id
+        )
+        INSERT INTO db_row_props (note_id, data_source_id, user_id, properties, position)
+        SELECT input.id, $2, $1, input.props,
+               COALESCE((SELECT MAX(position) + 1 FROM db_row_props
+                         WHERE data_source_id = $2 AND user_id = $1), 0) + input.ord - 1
+        FROM input JOIN ins ON ins.id = input.id
+        """,
+        user_id,
+        data_source_id,
+        items,
+    )
+    return [item["id"] for item in items]
 
 
 async def update_row_property_core(

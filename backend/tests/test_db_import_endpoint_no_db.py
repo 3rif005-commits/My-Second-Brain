@@ -30,12 +30,9 @@ def test_import_answers_201_with_select_names_and_indexes_rows_after_the_respons
     rows_written, indexed = [], []
     keys = iter(["k1", "k2", "k3"])
 
-    async def fake_row(conn, user_id, ds, properties, trigger_automations, recompute_computed):
-        # a brand-new database has nothing to recompute; doing it anyway made a
-        # 3-row import take ~7 s on the deployed site
-        assert trigger_automations is False and recompute_computed is False
-        rows_written.append(properties)
-        return SimpleNamespace(id=f"note{len(rows_written)}")
+    async def fake_bulk(conn, user_id, ds, rows):
+        rows_written.extend(rows)
+        return [f"note{i + 1}" for i in range(len(rows))]
 
     app.dependency_overrides[get_user_id] = lambda: "user-1"
     app.dependency_overrides[get_conn] = _conn
@@ -44,7 +41,7 @@ def test_import_answers_201_with_select_names_and_indexes_rows_after_the_respons
              patch.object(db_import, "update_property", AsyncMock()), \
              patch.object(db_import, "create_property",
                           AsyncMock(side_effect=lambda *a, **k: SimpleNamespace(key=next(keys)))), \
-             patch.object(db_import, "create_row_core", side_effect=fake_row), \
+             patch.object(db_import, "create_rows_bulk", side_effect=fake_bulk), \
              patch.object(db_import, "try_index_note", side_effect=lambda n, u: indexed.append(n)):
             res = TestClient(app).post(
                 "/db/import/csv",

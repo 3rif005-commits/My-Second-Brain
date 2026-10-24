@@ -13,9 +13,9 @@ what's actually inferable from a plain CSV with no prior schema to map onto.
 Kept as its own router (rather than added to the already-3000-line `routers/databases.py`)
 per task-47-brief.md's own "or a new routers/db_import.py if you prefer" — registered in
 `main.py` next to the existing `databases` router include. Reuses `create_database`,
-`create_property`, `update_property` (routers/databases.py) and `create_row_core`
-(services/db/rows.py) *directly*, exactly as the brief specifies, rather than
-reimplementing any of their transactional logic here.
+`create_property`, `update_property` (routers/databases.py) *directly*, exactly as the
+brief specifies. Rows go in through `create_rows_bulk` (services/db/rows.py), one
+statement for the whole file (see `_run_import`).
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ from routers.notes import get_user_id
 from services.db.connection import get_conn
 from services.db.keys import mint_key
 from services.db.properties.choice import SelectConfig, SelectOption
-from services.db.rows import create_row_core
+from services.db.rows import create_rows_bulk
 from services.indexer import try_index_note
 
 router = APIRouter(prefix="/db/import", tags=["db-import"])
@@ -505,8 +505,7 @@ async def _run_import(
                 )
             )
 
-        row_count = 0
-        created_note_ids: list[str] = []
+        row_properties: list[dict[str, Any]] = []
         for row in csv_rows:
             properties: dict[str, Any] = {}
             for header in fieldnames:
@@ -532,19 +531,16 @@ async def _run_import(
                 key = header_to_key[header]
                 ptype = header_to_type[header]
                 properties[key] = _wrap_value(ptype, cell.strip(), header_to_value_map.get(header))
-            # A bulk import firing N page_added automations once per imported row is
-            # very likely not what a user importing hundreds of rows wants -- a
-            # deliberate choice, distinct from the ordinary "+ New row" button, which
-            # keeps trigger_automations=True (create_row_core's existing default).
-            # No recompute either: this database was created above, so it has no
-            # formula/rollup properties and nothing relates to it yet. Recomputing
-            # anyway cost several pooler round trips per row (3 rows took ~7 s live).
-            result = await create_row_core(
-                conn, user_id, data_source_id, properties=properties,
-                trigger_automations=False, recompute_computed=False,
-            )
-            created_note_ids.append(result.id)
-            row_count += 1
+            row_properties.append(properties)
+
+        # One statement for every row, not create_row_core per row: each statement is
+        # a round trip to the pooler (~180 ms on the deployed site), and per-row writes
+        # made 3 rows take ~7 s and a few hundred outlast the request timeout. The new
+        # database has no formulas, relations or automations, so create_row_core's
+        # recompute and page_added steps had nothing to do here anyway -- and a bulk
+        # import firing an automation per row is not what anyone importing wants.
+        created_note_ids = await create_rows_bulk(conn, user_id, data_source_id, row_properties)
+        row_count = len(created_note_ids)
 
     # Fix 4.6 (task-50): index_note() is called AFTER the transaction above has
     # committed, never inside it -- index_note makes external HTTP calls (the embedding

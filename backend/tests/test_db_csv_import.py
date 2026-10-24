@@ -312,7 +312,7 @@ async def test_generic_postgres_error_during_import_returns_400_not_500(client, 
     """Fix 2.4: any other `asyncpg.PostgresError` surfacing from inside the write loop
     (the NaN/Infinity case is one instance of this general class) must be converted to
     a clean 400 -- proven here independent of any specific Postgres error class, by
-    forcing `create_row_core` itself to raise one."""
+    forcing the row write itself to raise one."""
     import asyncpg
 
     import routers.db_import as db_import_module
@@ -320,7 +320,7 @@ async def test_generic_postgres_error_during_import_returns_400_not_500(client, 
     async def boom(*args, **kwargs):
         raise asyncpg.PostgresError("simulated postgres failure")
 
-    monkeypatch.setattr(db_import_module, "create_row_core", boom)
+    monkeypatch.setattr(db_import_module, "create_rows_bulk", boom)
 
     csv_text = "Name,Value\nA,1\n"
     res = await _import(client, csv_text, title="Boom")
@@ -383,7 +383,7 @@ async def test_import_indexes_every_created_row_after_commit(client):
     """Proven via call recording rather than a real `get_supabase()` mock
     (this file's other tests don't stub the embedder/indexer at all) --
     `try_index_note` is `db_import.py`'s own imported name, patched at that
-    call site directly. Confirms every row `create_row_core` actually
+    call site directly. Confirms every row the import actually
     created gets indexed exactly once -- the entire fix's point (previously
     NOTHING called `index_note` from this loop at all)."""
     import routers.db_import as db_import_module
@@ -411,28 +411,37 @@ async def test_import_indexes_every_created_row_after_commit(client):
 # ===========================================================================
 
 
-async def test_import_calls_create_row_core_with_trigger_automations_false(client, monkeypatch):
-    """The real mutation test on the endpoint's own code path (not a same-behaviour
-    proxy): spy on `db_import.create_row_core` and assert every call the import
-    handler makes passes `trigger_automations=False` explicitly. If a future edit
-    dropped the kwarg (reverting to `create_row_core`'s own default of `True`) or
-    flipped it, this fails -- `kwargs.get(...)` returns `None`/`True` instead of the
-    required `False`."""
+async def test_import_writes_every_row_in_one_statement(client, monkeypatch):
+    """Rows go in through one `create_rows_bulk` call, never `create_row_core` per row:
+    each statement is a pooler round trip (~180 ms deployed; 3 rows took ~7 s), and
+    create_row_core's page_added automations must not fire for an import anyway."""
     import routers.db_import as db_import_module
 
-    calls: list[bool | None] = []
-    original = db_import_module.create_row_core
+    calls: list[int] = []
+    original = db_import_module.create_rows_bulk
 
-    async def spy(*args, **kwargs):
-        calls.append(kwargs.get("trigger_automations"))
-        return await original(*args, **kwargs)
+    async def spy(conn, user_id, ds, rows):
+        calls.append(len(rows))
+        return await original(conn, user_id, ds, rows)
 
-    monkeypatch.setattr(db_import_module, "create_row_core", spy)
+    monkeypatch.setattr(db_import_module, "create_rows_bulk", spy)
 
     csv_text = "Name,Value\nA,1\nB,2\nC,3\n"
     res = await _import(client, csv_text, title="Spy")
     assert res.status_code == 201, res.text
-    assert calls == [False, False, False]
+    assert calls == [3]
+    assert not hasattr(db_import_module, "create_row_core")
+
+
+async def test_bulk_rows_keep_csv_order_titles_and_positions(client):
+    csv_text = "Name,Value\nZed,1\n,2\nAmy,3\n"
+    res = await _import(client, csv_text, title="Order")
+    assert res.status_code == 201, res.text
+    props = await _properties_by_name(client, res.json()["database_id"])
+    rows = await _get_rows(client, props["Name"]["data_source_id"])
+    key = props["Name"]["key"]
+    assert [(r["properties"].get(key) or {}).get("title") for r in rows] == ["Zed", None, "Amy"]
+    assert [r["properties"][props["Value"]["key"]]["number"] for r in rows] == [1, 2, 3]
 
 
 async def test_trigger_automations_false_mutation_check_via_direct_call(client, db_conn, test_user):
