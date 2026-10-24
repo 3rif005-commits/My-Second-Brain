@@ -958,4 +958,8 @@ def _summarize_result(tool: str, result: dict[str, Any]) -> str:
         return f"note {result.get('id', '?')} {'created' if 'create' in tool else 'updated'}"
     if tool == "brain.delete_note":
         return f"note {result.get('id', '?')} moved to trash"
+    if tool.startswith("mcp."):
+        # The chip already names the tool; "ask_wiki_question ok" just repeated it.
+        text = " ".join(str(c) for c in result.get("content") or [])
+        return f"answered ({len(text):,} characters)" if text else "answered"
     return tool.split(".")[-1] + " ok"

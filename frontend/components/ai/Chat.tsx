@@ -254,7 +254,19 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   function approve(approvalKey: string) {
     const query = lastQueryRef.current;
     if (!query || loading) return;
-    send(undefined, { query, approvals: [approvalKey] });
+    // No second bubble: going through send() showed the question twice (live
+    // check 2026-10-24, an MCP "Ask me first" confirm).
+    setError(null);
+    setLoading(true);
+    const ctl = new AbortController();
+    abortRef.current = ctl;
+    stream(query, { where: activeScope, approvals: [approvalKey], signal: ctl.signal })
+      .catch((e) => {
+        if (!(e instanceof DOMException && e.name === "AbortError")) {
+          setError(e instanceof Error ? e.message : "Unknown error");
+        }
+      })
+      .finally(() => setLoading(false));
   }
 
   /** Ask a question again without a new bubble: from the privacy prompt or

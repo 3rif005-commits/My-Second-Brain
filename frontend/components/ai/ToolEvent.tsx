@@ -29,8 +29,13 @@ export function ToolEvent({ tool, args, summary, deniedReason,
                             requiresApproval, onApprove }: Props) {
   const [open, setOpen] = useState(false);
   const [sent, setSent] = useState(false);
-  const icon = TOOL_ICONS[tool] ?? "🛠️";
-  const label = tool.split(".").slice(1).join(".").replace(/_/g, " ");
+  const mcp = tool.startsWith("mcp.");
+  const icon = TOOL_ICONS[tool] ?? (mcp ? "🔌" : "🛠️");
+  // mcp.<server>.<tool> reads "server · tool"; brain.<tool> reads "tool".
+  const parts = tool.split(".").slice(1);
+  const label = (mcp && parts.length > 1
+    ? `${parts[0]} · ${parts.slice(1).join(".")}`
+    : parts.join(".")).replace(/_/g, " ");
   const pending = requiresApproval && !sent;
 
   return (
