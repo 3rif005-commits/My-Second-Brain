@@ -71,7 +71,7 @@ export interface Health {
   rate_limit_waits_recent: number; token_problem: boolean;
   canary: { ok: boolean; when: string; api_version: string; failed: string[] } | null;
 }
-export interface BackupStatus { enabled: boolean; folder: string; archives: { name: string; bytes: number }[] }
+export interface BackupStatus { enabled: boolean; folder: string; hosted?: boolean; archives: { name: string; bytes: number }[] }
 export interface BackupResult { path: string; bytes: number; counts: Record<string, number>; problems: unknown[]; pruned: string[] }
 
 async function call<T>(path: string, init?: RequestInit, base = "notion"): Promise<T> {

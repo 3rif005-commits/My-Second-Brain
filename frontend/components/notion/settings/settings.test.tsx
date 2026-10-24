@@ -54,11 +54,14 @@ describe("RulesSection", () => {
       return json({ rules });
     } });
     render(<RulesSection />);
-    const sel = await screen.findByLabelText("Whole brain:");
-    await userEvent.selectOptions(sel, "daily");
+    const pick = async (option: string) => {
+      await userEvent.click(await screen.findByRole("button", { name: "Whole brain auto-sync" }));
+      await userEvent.click(await screen.findByRole("option", { name: new RegExp(option) }));
+    };
+    await pick("Once a day");
     await waitFor(() => expect(calls).toContain("POST notion/rules"));
-    await waitFor(() => expect((screen.getByLabelText("Whole brain:") as HTMLSelectElement).value).toBe("daily"));
-    await userEvent.selectOptions(screen.getByLabelText("Whole brain:"), "off");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Whole brain auto-sync" })).toHaveTextContent("Once a day"));
+    await pick("Off");
     await waitFor(() => expect(calls).toContain("DELETE notion/rules/r1"));
   });
   it("says what auto-sync will never do", async () => {
@@ -108,7 +111,8 @@ describe("HealthSection", () => {
     await userEvent.click(screen.getByRole("button", { name: "Pause all syncing" }));
     await waitFor(() => expect(calls).toContain("POST notion/pause"));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    expect(await screen.findByText(/off \(set BACKUP_ENABLED=true/)).toBeTruthy();
+    expect(await screen.findByText(/Daily backups are off/)).toBeTruthy();
+    expect(screen.queryByText(/BACKUP_ENABLED|python -m/)).toBeNull();     // no developer instructions
   });
   it("backs up now and reports what it saved", async () => {
     route({ "notion/health": () => json(health), "backup/run": () => json({ path: "p", bytes: 5 << 20, counts: { notes: 12, databases: 2, threads: 3 }, problems: [], pruned: [] }),
@@ -117,5 +121,14 @@ describe("HealthSection", () => {
     expect(await screen.findByRole("button", { name: "Resume syncing" })).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Back up now" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Backed up 12 notes, 2 databases, 3 chats (5.0 MB).");
+  });
+  it("on a hosted server, offers the backup as a download (its disk is wiped on deploy)", async () => {
+    route({ "notion/health": () => json(health),
+      "backup": () => json({ enabled: false, hosted: true, folder: "/opt/render/SecondBrainBackups/abc", archives: [{ name: "sb-2026.sbz", bytes: 2048 }] }) });
+    render(<HealthSection paused={false} onChanged={() => {}} />);
+    expect(await screen.findByRole("button", { name: "Make backup" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Download/ })).toHaveAttribute("href", "/api/ws/backup/sb-2026.sbz");
+    expect(screen.queryByText(/opt\/render/)).toBeNull();
+    expect(screen.getByText(/disk is wiped/)).toBeTruthy();
   });
 });

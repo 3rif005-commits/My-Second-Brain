@@ -6,6 +6,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { History, RotateCcw } from "lucide-react";
+import { Tabs } from "@/components/ui";
 import { routingApi, type Policy, type PolicyResponse, type Targets } from "@/lib/routing";
 import { TargetsTab } from "@/components/settings/routing/TargetsTab";
 import { RulesTab } from "@/components/settings/routing/RulesTab";
@@ -105,7 +106,7 @@ function RoutingSettings() {
   }
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto bg-white dark:bg-gray-900">
+    <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="w-full">
         <h1 className="text-[26px] font-semibold leading-8 text-ink">Routing</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -113,18 +114,8 @@ function RoutingSettings() {
           where it runs, and private notes never leave this device unless you say so.
         </p>
 
-        <div className="mt-5 flex items-center gap-1 border-b border-gray-200 dark:border-gray-800 overflow-x-auto"
-          role="tablist" aria-label="Routing settings">
-          {TABS.map((t) => (
-            <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => pick(t.id)}
-              className={`h-9 px-3 -mb-px border-b-2 text-[13px] whitespace-nowrap transition-colors ${
-                tab === t.id
-                  ? "border-accent-500 text-gray-900 dark:text-gray-100 font-medium"
-                  : "border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"}`}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <Tabs label="Routing settings" className="mt-5" value={tab} onChange={pick}
+          items={TABS.map((t) => ({ value: t.id, label: t.label }))} />
 
         {error && (
           <p role="alert" className="mt-4 text-sm text-red-600 bg-red-50 dark:bg-red-950/30 border border-red-200

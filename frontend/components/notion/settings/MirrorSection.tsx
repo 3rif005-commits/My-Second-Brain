@@ -2,7 +2,7 @@
 
 // Mirror status + what "everything" contains (decision D5) + Send all changes.
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, SettingsRow, SettingsSection, Toggle } from "@/components/ui";
 import { useNotion } from "@/context/NotionContext";
 import { announceNotionChange, notionApi, type Include, type MirrorMap } from "@/lib/notion";
 
@@ -38,37 +38,27 @@ export function MirrorSection() {
   }, [inc]);
 
   return (
-    <section id="mirror" aria-label="Mirror status" className="space-y-4">
-      <h2 className="font-semibold">Mirror status</h2>
-      <ul className="flex flex-wrap gap-2 text-[13px]" data-testid="mirror-counts">
-        <li className="rounded-full border px-3 py-1 border-gray-200 dark:border-white/10">{c.synced} in sync</li>
-        <li className="rounded-full border px-3 py-1 border-amber-300 dark:border-amber-500/40">{c.changed} changed</li>
-        <li className="rounded-full border px-3 py-1 border-rose-300 dark:border-rose-500/40">{c.failed} failing</li>
-        <li className="rounded-full border px-3 py-1 border-accent-300 dark:border-accent-500/40">{c.needs_you} need you</li>
-        <li className="rounded-full border px-3 py-1 border-gray-200 dark:border-white/10">{c.private} private (not sent)</li>
-      </ul>
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="primary" onClick={() => notion.open({ all: true }, "whole brain")}>Send all changes…</Button>
-        <span className="text-[12px] text-gray-500 self-center">You see what would be sent before anything is.</span>
-      </div>
-      <div className="space-y-2">
-        <h3 className="text-[13px] font-medium">What “the whole brain” includes</h3>
-        {error && <p role="alert" className="text-[13px] text-rose-600">{error}</p>}
-        <ul className="rounded-lg border border-gray-200 dark:border-white/10 divide-y divide-gray-100 dark:divide-white/10">
-          {SWITCHES.map((s) => (
-            <li key={s.key} className="flex items-center gap-3 px-3 py-2">
-              <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-medium">{s.label}</div>
-                <div className="text-[12px] text-gray-500">{s.help}</div>
-              </div>
-              <button role="switch" aria-checked={!!inc?.[s.key]} aria-label={s.label} disabled={!inc} onClick={() => flip(s.key)}
-                className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-500 ${inc?.[s.key] ? "bg-accent-500" : "bg-gray-300 dark:bg-gray-600"}`}>
-                <span className={`inline-block h-4 w-4 translate-y-0.5 rounded-full bg-white shadow transition-transform ${inc?.[s.key] ? "translate-x-[18px]" : "translate-x-0.5"}`} />
-              </button>
-            </li>
-          ))}
+    <SettingsSection id="mirror" title="What to send">
+      <div className="flex flex-col gap-3">
+        <ul className="flex flex-wrap gap-2 text-[13px] text-ink" data-testid="mirror-counts">
+          <li className="rounded-full border border-line px-3 py-1">{c.synced} in sync</li>
+          <li className="rounded-full border border-amber-500/40 px-3 py-1">{c.changed} changed</li>
+          <li className="rounded-full border border-rose-500/40 px-3 py-1">{c.failed} failing</li>
+          <li className="rounded-full border border-accent-500/40 px-3 py-1">{c.needs_you} need you</li>
+          <li className="rounded-full border border-line px-3 py-1">{c.private} private (not sent)</li>
         </ul>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={() => notion.open({ all: true }, "whole brain")}>Send all changes…</Button>
+          <span className="text-[12px] text-ink-tertiary">You see what would be sent before anything is.</span>
+        </div>
       </div>
-    </section>
+      {error && <p role="alert" className="text-[13px] text-ink-danger">{error}</p>}
+      <p className="-mb-2 text-[13px] font-medium text-ink">What “the whole brain” includes</p>
+      {SWITCHES.map((sw) => (
+        <SettingsRow key={sw.key} label={sw.label} help={sw.help}>
+          <Toggle checked={!!inc?.[sw.key]} disabled={!inc} label={sw.label} onChange={() => flip(sw.key)} />
+        </SettingsRow>
+      ))}
+    </SettingsSection>
   );
 }

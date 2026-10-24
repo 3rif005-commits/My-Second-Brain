@@ -43,8 +43,8 @@ export function SchedulesSection() {
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gray-400">Schedules</h2>
+      <div className="mb-4 flex items-center justify-between gap-4 border-b border-line pb-3">
+        <h2 className="text-base font-medium leading-6 text-ink">Schedules</h2>
         {!adding && (
           <button onClick={() => setAdding(true)} className={`${chip} ring-1 ring-gray-200 dark:ring-white/10`}>
             <Plus size={12} /> New schedule

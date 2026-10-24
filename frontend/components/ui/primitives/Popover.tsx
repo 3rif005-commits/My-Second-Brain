@@ -89,8 +89,10 @@ export function Popover({
           aria-label={label}
           style={style}
           // No border: the 1px edge is the third layer of --menu-shadow, in
-          // both themes. See the design doc §5.
-          className={`z-50 overflow-y-auto overscroll-contain rounded-menu bg-menu-bg shadow-menu ${widthClass} ${className}`}
+          // both themes. See the design doc §5. Layer: above the Settings window
+          // (z-60) and Modal (z-9999), below tooltips (z-10001); at z-50 every
+          // dropdown opened inside Settings or a dialog was hidden behind it.
+          className={`z-[10000] overflow-y-auto overscroll-contain rounded-menu bg-menu-bg shadow-menu ${widthClass} ${className}`}
         >
           {children}
         </RadixPopover.Content>

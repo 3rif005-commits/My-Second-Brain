@@ -36,7 +36,10 @@ export function SettingsSection({
   actions,
   children,
   className,
+  id,
 }: {
+  /** Anchor for deep links (e.g. Settings → Notion ?tab=activity). */
+  id?: string;
   title?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
@@ -44,7 +47,7 @@ export function SettingsSection({
   className?: string;
 }) {
   return (
-    <section className={className}>
+    <section id={id} className={cx(id && "scroll-mt-4", className)}>
       {title && (
         <div className="mb-4 flex items-end justify-between gap-4 border-b border-line pb-3">
           <div>

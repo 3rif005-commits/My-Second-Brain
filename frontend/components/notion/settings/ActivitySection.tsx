@@ -2,8 +2,8 @@
 
 // Activity: the history IS the run rows (DESIGN §6.6). Expand a run for its items; Retry failed.
 import { useCallback, useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronRight, RefreshCw } from "lucide-react";
+import { Button, SettingsSection } from "@/components/ui";
 import { announceNotionChange, notionApi, type RunDetail, type RunSummary } from "@/lib/notion";
 
 const STATUS_WORD: Record<string, string> = {
@@ -11,7 +11,7 @@ const STATUS_WORD: Record<string, string> = {
 };
 const TONE: Record<string, string> = {
   succeeded: "text-emerald-700 dark:text-emerald-300", partial: "text-amber-700 dark:text-amber-300",
-  failed: "text-rose-700 dark:text-rose-300", paused: "text-gray-500", running: "text-accent-600", queued: "text-gray-500",
+  failed: "text-rose-700 dark:text-rose-300", paused: "text-ink-secondary", running: "text-accent-600", queued: "text-ink-secondary",
 };
 
 function when(ts: string | null) {
@@ -44,38 +44,38 @@ export function ActivitySection() {
   }
 
   return (
-    <section id="activity" aria-label="Activity" className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold">Activity</h2>
-        <Button size="sm" variant="ghost" onClick={() => void load()} aria-label="Refresh activity">Refresh</Button>
-      </div>
-      {error && <p role="alert" className="text-[13px] text-rose-600">{error}</p>}
-      {runs === null ? (error ? null : <div className="h-10 rounded-md animate-pulse bg-gray-50 dark:bg-white/5" aria-busy="true" />)
-        : runs.length === 0 ? <p className="text-[13px] text-gray-500" data-testid="activity-empty">Nothing has been sent yet.</p>
+    <SettingsSection
+      id="activity"
+      title="Activity"
+      actions={<Button variant="ghost" icon={<RefreshCw />} onClick={() => void load()} aria-label="Refresh activity">Refresh</Button>}
+    >
+      {error && <p role="alert" className="text-[13px] text-ink-danger">{error}</p>}
+      {runs === null ? (error ? null : <div className="h-10 rounded-md animate-pulse bg-surface-chip" aria-busy="true" />)
+        : runs.length === 0 ? <p className="text-[13px] text-ink-secondary" data-testid="activity-empty">Nothing has been sent yet.</p>
         : (
-          <ul className="rounded-lg border border-gray-200 dark:border-white/10 divide-y divide-gray-100 dark:divide-white/10" data-testid="activity-list">
+          <ul className="-mt-2 rounded-lg border border-line divide-y divide-line text-ink" data-testid="activity-list">
             {runs.map((r) => (
               <li key={r.id}>
                 <button onClick={() => toggle(r.id)} aria-expanded={open === r.id}
-                  className="w-full flex items-center gap-3 px-3 h-10 text-left hover:bg-gray-50 dark:hover:bg-white/5">
+                  className="w-full flex items-center gap-3 px-3 h-10 text-left hover:bg-surface-hover">
                   <ChevronRight size={13} className={`transition-transform ${open === r.id ? "rotate-90" : ""}`} />
                   <span className="text-[13px] w-36 shrink-0">{when(r.started_at ?? r.created_at)}</span>
-                  <span className="text-[12px] w-16 shrink-0 text-gray-500">{r.trigger}</span>
+                  <span className="text-[12px] w-16 shrink-0 text-ink-secondary">{r.trigger}</span>
                   <span className={`text-[13px] font-medium w-24 shrink-0 ${TONE[r.status] ?? ""}`}>{STATUS_WORD[r.status] ?? r.status}</span>
-                  <span className="text-[12px] text-gray-500 truncate">
+                  <span className="text-[12px] text-ink-secondary truncate">
                     {r.counts?.done ?? 0} sent{r.counts?.problems ? ` · ${r.counts.problems} problem(s)` : ""}{r.requests_used ? ` · ${r.requests_used} requests` : ""}
                   </span>
                 </button>
                 {open === r.id && (
                   <div className="px-4 pb-3 space-y-2">
-                    {!detail ? <div className="h-6 animate-pulse bg-gray-50 dark:bg-white/5 rounded" /> : (
+                    {!detail ? <div className="h-6 animate-pulse bg-surface-chip rounded" /> : (
                       <>
                         <ul className="space-y-1 text-[13px]">
                           {detail.items.map((i) => (
                             <li key={i.id} className="flex gap-2">
-                              <span className="w-24 shrink-0 text-gray-500">{i.status.replace(/_/g, " ")}</span>
+                              <span className="w-24 shrink-0 text-ink-secondary">{i.status.replace(/_/g, " ")}</span>
                               <span className="min-w-0 flex-1"><span className="font-medium">{i.title || i.local_id}</span>
-                                {i.message && i.status !== "done" ? <span className="block text-gray-500">{i.message}</span> : null}</span>
+                                {i.message && i.status !== "done" ? <span className="block text-ink-secondary">{i.message}</span> : null}</span>
                             </li>
                           ))}
                         </ul>
@@ -90,6 +90,6 @@ export function ActivitySection() {
             ))}
           </ul>
         )}
-    </section>
+    </SettingsSection>
   );
 }

@@ -2,6 +2,7 @@
 THIS machine (BACKUP_DIR, default ~/SecondBrainBackups); nothing here goes to Notion or any cloud."""
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime, timezone
 
@@ -25,7 +26,11 @@ def status(authorization: str = Header(...)):
     user_id = get_user_id(authorization)
     folder = _folder(user_id)
     files = sorted(folder.glob("*.sbz"), reverse=True) if folder.exists() else []
+    # On a hosted server (Render sets RENDER) the folder is that server's disk, wiped on
+    # every deploy: Settings then offers the file as a download instead of calling it a
+    # backup "on this computer".
     return {"enabled": settings.backup_enabled, "folder": str(folder),
+            "hosted": bool(os.getenv("RENDER")),
             "archives": [{"name": p.name, "bytes": p.stat().st_size} for p in files[:50]]}
 
 
