@@ -202,9 +202,35 @@ def test_the_allow_page_needs_a_second_brain_login(server):
 def test_markdown_becomes_blocks():
     from mcp_remote.blocks import markdown_to_blocks
     blocks = markdown_to_blocks("# Title\n\nSome **bold** text\nmore\n\n1. one\n> quote")
-    assert [(b["type"], b["content"][0]["text"]) for b in blocks] == [
-        ("heading", "Title"), ("paragraph", "Some bold text more"),
-        ("numberedListItem", "one"), ("quote", "quote")]
+    assert [b["type"] for b in blocks] == ["heading", "paragraph", "numberedListItem", "quote"]
+    assert blocks[1]["content"] == [
+        {"type": "text", "text": "Some ", "styles": {}},
+        {"type": "text", "text": "bold", "styles": {"bold": True}},
+        {"type": "text", "text": " text more", "styles": {}}]
+
+
+def test_markdown_keeps_what_the_old_converter_dropped():
+    """Bold, links, code, tables and task lists came through as plain
+    paragraphs; the Markdown now goes through note_html like chat notes."""
+    from mcp_remote.blocks import markdown_to_blocks
+    md = ("Use `a*b` and [docs](https://x.com) ~~old~~\n\n"
+          "- top\n  - nested\n- [x] done\n\n"
+          "| A | B |\n|---|---|\n| 1 | 2 |\n\n"
+          "```python\nx = 1 < 2\n```\n---\n#### Four\n<script>bad()</script>")
+    blocks = markdown_to_blocks(md)
+    assert [b["type"] for b in blocks] == ["paragraph", "bulletListItem", "checkListItem",
+                                           "table", "codeBlock", "divider", "heading", "paragraph"]
+    inline = blocks[0]["content"]
+    assert {"type": "text", "text": "a*b", "styles": {"code": True}} in inline
+    assert any(i["type"] == "link" and i["href"] == "https://x.com" for i in inline)
+    assert {"type": "text", "text": "old", "styles": {"strike": True}} in inline
+    assert blocks[1]["children"][0]["content"][0]["text"] == "nested"
+    assert blocks[2]["props"]["checked"] is True
+    assert blocks[3]["content"]["headerRows"] == 1
+    assert blocks[4]["props"]["language"] == "python"
+    assert blocks[4]["content"][0]["text"] == "x = 1 < 2"
+    assert blocks[6]["props"]["level"] == 4
+    assert blocks[7]["content"][0]["text"] == "<script>bad()</script>"   # shown as text, never run
 
 
 def test_revoking_disconnects_the_app_even_without_a_client_secret(server):
