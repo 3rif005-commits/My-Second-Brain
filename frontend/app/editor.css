@@ -201,22 +201,68 @@
   user-select: none;
 }
 .notion-editor .sb-code-lang { padding: 0 6px; }
+.notion-editor .sb-code-lang.sb-readonly { cursor: default; }
 .notion-editor .sb-code-btn { width: 24px; justify-content: center; padding: 0; }
-.notion-editor .sb-code-lang:hover,
+.notion-editor .sb-code-btn[hidden] { display: none; }
+.notion-editor .sb-code-btn.sb-copied { width: auto; padding: 0 6px 0 4px; gap: 4px; color: var(--c-text); }
+.notion-editor .sb-code-lang:not(.sb-readonly):hover,
+.notion-editor .sb-code-lang[aria-expanded="true"],
 .notion-editor .sb-code-btn:hover,
 .notion-editor .sb-code-btn[aria-pressed="true"] {
   background: var(--c-bg-hover);
 }
 .notion-editor .sb-code-btn[aria-pressed="true"] { color: var(--c-text); }
-/* The real <select> covers the label, invisible, so a click opens the OS picker. */
-.notion-editor .sb-code-lang > select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  opacity: 0;
-  cursor: pointer;
+/* Keep the pill up while its menu is open, even when the pointer is in the menu. */
+.notion-editor .sb-code-toolbar:has([aria-expanded="true"]) { opacity: 1; pointer-events: auto; }
+
+/* Language menu: Notion's menu primitive (menus-overlays.md §1). Lives on <body>, so not
+ * scoped to .notion-editor; takes the page theme from :root / .dark. */
+.sb-lang-menu {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  max-height: min(320px, calc(100vh - 16px));
+  padding: 8px 4px 4px;
+  border-radius: 10px;
+  background: var(--c-bg-elevated);
+  box-shadow: var(--shadow-menu);
+  color: var(--c-text);
   font-size: 14px;
 }
+.sb-lang-search {
+  flex: none;
+  height: 28px;
+  margin: 0 4px 6px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 6px;
+  outline: none;
+  background: var(--c-bg-code);
+  box-shadow: var(--c-border) 0 0 0 1px inset;
+  color: var(--c-text);
+  font: inherit;
+}
+.sb-lang-search:focus { box-shadow: var(--ring-input); }
+.sb-lang-search::placeholder { color: var(--c-text-tertiary); }
+.sb-lang-list { overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.sb-lang-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.02s ease-in;
+}
+.sb-lang-row.sb-active { background: var(--c-bg-hover); }
+.sb-lang-row > svg { flex: none; }
+.sb-lang-empty { padding: 4px 8px; color: var(--c-text-tertiary); }
 @media (hover: none) {
   /* Touch (the tablet) has no hover: keep the pill visible. */
   .notion-editor .sb-code-toolbar { opacity: 1; pointer-events: auto; }

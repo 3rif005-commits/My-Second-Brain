@@ -1,7 +1,8 @@
 // The code block, Notion-style: syntax colours (lib/codeHighlight.ts) and, instead of
 // BlockNote's always-visible <select>, a small pill in the top-right corner that shows on
-// hover with the language, Copy and Wrap. Everything else (parsing pastes, ``` input rule,
-// Tab/Enter keys, the highlighter plugin) is BlockNote's own codeBlock, reused as-is.
+// hover: the language (opens a searchable menu), Copy and, for long lines, Wrap. Parsing
+// pastes, Tab/Enter keys and the highlighter plugin are BlockNote's own codeBlock; the
+// ``` shortcut is ours (codeFenceRule, below).
 //
 // One prop is added: `wrap` (default false), so long lines wrap per block like Notion's
 // "Wrap code". Notes saved before it simply read as not wrapped.
@@ -46,6 +47,156 @@ function iconButton(icon: string, label: string): HTMLButtonElement {
   return button;
 }
 
+// ── Language menu ─────────────────────────────────────────────────────────────
+// Notion's picker, not the OS <select>: a popover (menu primitive in
+// docs/notion-reference/surfaces/menus-overlays.md) with an auto-focused search field, 28px
+// rows and a check on the current language. It lives on <body>, outside ProseMirror, so
+// typing in the search never reaches the note. One open at a time.
+
+let closeOpenMenu: (() => void) | null = null;
+
+const CHECK_SMALL_ICON =
+  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12.53 4.97a.75.75 0 0 1 0 1.06l-5.5 5.5a.75.75 0 0 1-1.06 0l-2.5-2.5a.75.75 0 1 1 1.06-1.06L6.5 9.94l4.97-4.97a.75.75 0 0 1 1.06 0Z"/></svg>';
+
+/** Menu ids matching a search, by name, id or alias; names that start with it come first. */
+export function filterLanguages(query: string): string[] {
+  const q = query.trim().toLowerCase();
+  const ids = Object.keys(CODE_LANGUAGES);
+  if (!q) return ids;
+  const hits = ids.filter((id) => {
+    const { name, aliases } = CODE_LANGUAGES[id];
+    return name.toLowerCase().includes(q) || id.includes(q) || aliases?.some((a) => a.includes(q));
+  });
+  const starts = (id: string) => CODE_LANGUAGES[id].name.toLowerCase().startsWith(q);
+  return [...hits.filter(starts), ...hits.filter((id) => !starts(id))];
+}
+
+export function openLanguageMenu(anchor: HTMLElement, current: string | undefined, onPick: (id: string) => void) {
+  closeOpenMenu?.();
+
+  const menu = document.createElement("div");
+  menu.className = "sb-lang-menu";
+  const search = document.createElement("input");
+  search.className = "sb-lang-search";
+  search.placeholder = "Search for a language…";
+  search.setAttribute("aria-label", "Search for a language");
+  const list = document.createElement("div");
+  list.className = "sb-lang-list";
+  list.setAttribute("role", "listbox");
+  menu.append(search, list);
+
+  let ids: string[] = [];
+  let active = 0;
+
+  const paint = () => {
+    ids = filterLanguages(search.value);
+    active = Math.max(0, Math.min(active, ids.length - 1));
+    list.replaceChildren();
+    if (!ids.length) {
+      const empty = document.createElement("div");
+      empty.className = "sb-lang-empty";
+      empty.textContent = "No results";
+      list.appendChild(empty);
+      return;
+    }
+    ids.forEach((id, i) => {
+      const row = document.createElement("div");
+      row.className = "sb-lang-row";
+      row.setAttribute("role", "option");
+      row.dataset.id = id;
+      row.setAttribute("aria-selected", String(id === current));
+      if (i === active) row.classList.add("sb-active");
+      const label = document.createElement("span");
+      label.textContent = CODE_LANGUAGES[id].name;
+      row.appendChild(label);
+      if (id === current) row.insertAdjacentHTML("beforeend", CHECK_SMALL_ICON);
+      row.addEventListener("mousemove", () => {
+        if (active === i) return;
+        list.querySelector(".sb-active")?.classList.remove("sb-active");
+        row.classList.add("sb-active");
+        active = i;
+      });
+      row.addEventListener("click", () => pick(id));
+      list.appendChild(row);
+    });
+  };
+
+  const scrollActiveIntoView = () =>
+    (list.querySelector(".sb-active") as HTMLElement | null)?.scrollIntoView?.({ block: "nearest" });
+
+  const pick = (id: string) => {
+    close();
+    onPick(id);
+  };
+
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!ids.length) return;
+      active = (active + (e.key === "ArrowDown" ? 1 : -1) + ids.length) % ids.length;
+      paint();
+      scrollActiveIntoView();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (ids[active]) pick(ids[active]);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      close();
+      anchor.focus();
+    }
+  };
+
+  const place = () => {
+    const r = anchor.getBoundingClientRect();
+    const width = menu.offsetWidth || 240;
+    const height = menu.offsetHeight || 320;
+    const below = window.innerHeight - r.bottom;
+    const top = below >= height + 8 || below >= r.top ? r.bottom + 4 : r.top - height - 4;
+    const left = Math.min(Math.max(8, r.right - width), window.innerWidth - width - 8);
+    menu.style.top = `${Math.max(8, top)}px`;
+    menu.style.left = `${left}px`;
+  };
+
+  // Outside click, page scroll or resize closes it, like Notion's menus.
+  const onDown = (e: Event) => {
+    if (!menu.contains(e.target as Node) && !anchor.contains(e.target as Node)) close();
+  };
+  const onScroll = (e: Event) => {
+    if (!menu.contains(e.target as Node)) close();
+  };
+
+  function close() {
+    menu.remove();
+    document.removeEventListener("mousedown", onDown, true);
+    window.removeEventListener("scroll", onScroll, true);
+    window.removeEventListener("resize", close);
+    anchor.setAttribute("aria-expanded", "false");
+    if (closeOpenMenu === close) closeOpenMenu = null;
+  }
+
+  search.addEventListener("input", () => {
+    active = 0;
+    paint();
+  });
+  search.addEventListener("keydown", onKey);
+  document.addEventListener("mousedown", onDown, true);
+  window.addEventListener("scroll", onScroll, true);
+  window.addEventListener("resize", close);
+
+  // Start on the current language, so Enter keeps it and arrows move from there.
+  active = Math.max(0, Object.keys(CODE_LANGUAGES).indexOf(current ?? ""));
+  paint();
+  document.body.appendChild(menu);
+  place();
+  scrollActiveIntoView();
+  search.focus();
+  anchor.setAttribute("aria-expanded", "true");
+  closeOpenMenu = close;
+  return close;
+}
+
+// ── The block ─────────────────────────────────────────────────────────────────
+
 function render(block: AnyBlock, editor: AnyBlock) {
   const fragment = document.createDocumentFragment();
   const pre = document.createElement("pre");
@@ -63,47 +214,54 @@ function render(block: AnyBlock, editor: AnyBlock) {
   const languageId = resolveCodeLanguage(raw);
   const languageName = languageId ? CODE_LANGUAGES[languageId].name : raw;
 
-  const language = document.createElement("label");
-  language.className = "sb-code-lang";
-  const languageText = document.createElement("span");
-  languageText.textContent = languageName;
-  language.appendChild(languageText);
-
   const cleanups: (() => void)[] = [];
-  const on = (el: HTMLElement, type: string, fn: (e: Event) => void) => {
+  const on = (el: EventTarget, type: string, fn: (e: Event) => void) => {
     el.addEventListener(type, fn);
     cleanups.push(() => el.removeEventListener(type, fn));
   };
 
+  let language: HTMLElement;
   if (editor.isEditable) {
-    language.insertAdjacentHTML("beforeend", CHEVRON_ICON);
-    // A native <select> laid invisibly over the label: keyboard- and screen-reader-
-    // friendly, and it opens the OS picker, so no popover of our own to position.
-    const select = document.createElement("select");
-    select.setAttribute("aria-label", "Code language");
-    // A language we don't list (from an import, say) stays selected, not lost.
-    if (!languageId) select.add(new Option(raw, raw));
-    for (const [id, { name }] of Object.entries(CODE_LANGUAGES)) {
-      select.add(new Option(name, id));
-    }
-    select.value = languageId ?? raw;
-    on(select, "change", () => {
-      editor.updateBlock(block.id, { props: { language: select.value } });
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "sb-code-lang";
+    button.setAttribute("aria-haspopup", "listbox");
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-label", `Code language: ${languageName}`);
+    button.textContent = languageName;
+    button.insertAdjacentHTML("beforeend", CHEVRON_ICON);
+    button.addEventListener("mousedown", (e) => e.preventDefault());
+    let closeMenu: (() => void) | null = null;
+    on(button, "click", () => {
+      if (button.getAttribute("aria-expanded") === "true") {
+        closeMenu?.();
+        return;
+      }
+      closeMenu = openLanguageMenu(button, languageId, (id) => {
+        // A language we don't list (from an import, say) is only replaced when you pick one.
+        if (id !== languageId) editor.updateBlock(block.id, { props: { language: id } });
+      });
     });
-    language.appendChild(select);
+    cleanups.push(() => closeMenu?.());
+    language = button;
+  } else {
+    language = document.createElement("span");
+    language.className = "sb-code-lang sb-readonly";
+    language.textContent = languageName;
   }
   toolbar.appendChild(language);
 
-  const copy = iconButton(COPY_ICON, "Copy");
+  // Copy says so in words for a moment: an icon swap alone was too easy to miss.
+  const copy = iconButton(COPY_ICON, "Copy code");
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
   on(copy, "click", () => {
     navigator.clipboard?.writeText(code.textContent ?? "").then(() => {
-      copy.innerHTML = CHECK_ICON;
-      copy.title = "Copied";
+      copy.innerHTML = `${CHECK_ICON}<span>Copied</span>`;
+      copy.classList.add("sb-copied");
       clearTimeout(copiedTimer);
       copiedTimer = setTimeout(() => {
         copy.innerHTML = COPY_ICON;
-        copy.title = "Copy";
+        copy.classList.remove("sb-copied");
       }, 1500);
     }, () => {});
   });
@@ -111,12 +269,34 @@ function render(block: AnyBlock, editor: AnyBlock) {
   toolbar.appendChild(copy);
 
   if (editor.isEditable) {
-    const wrap = iconButton(WRAP_ICON, block.props.wrap ? "Unwrap code" : "Wrap code");
+    const wrap = iconButton(WRAP_ICON, block.props.wrap ? "Unwrap code" : "Wrap long lines");
     wrap.setAttribute("aria-pressed", String(!!block.props.wrap));
     on(wrap, "click", () => {
       const current = editor.getBlock(block.id);
       editor.updateBlock(block.id, { props: { wrap: !current?.props.wrap } });
     });
+    // Only offered when it would change something: a line too long for the box, or wrap
+    // already on (to turn it off). On short code the button did nothing visible.
+    const sync = () => {
+      wrap.hidden = !block.props.wrap && pre.scrollWidth <= pre.clientWidth;
+    };
+    wrap.hidden = !block.props.wrap;
+    on(pre, "pointerenter", sync);
+    on(toolbar, "pointerenter", sync);
+    const frame = requestAnimationFrame(sync);
+    cleanups.push(() => cancelAnimationFrame(frame));
+    if (typeof MutationObserver !== "undefined") {
+      let queued = 0;
+      const observer = new MutationObserver(() => {
+        cancelAnimationFrame(queued);
+        queued = requestAnimationFrame(sync);
+      });
+      observer.observe(code, { childList: true, characterData: true, subtree: true });
+      cleanups.push(() => {
+        observer.disconnect();
+        cancelAnimationFrame(queued);
+      });
+    }
     toolbar.appendChild(wrap);
   }
 

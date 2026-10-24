@@ -2,7 +2,8 @@
 import { describe, it, expect } from "vitest";
 // @ts-ignore — @blocknote/core@0.48.0 ships an empty index.d.ts (upstream bug); runtime exports are fine
 import { BlockNoteSchema, defaultBlockSpecs, BlockNoteEditor } from "@blocknote/core";
-import { createNotionCodeBlockSpec } from "./codeBlock";
+import { createNotionCodeBlockSpec, filterLanguages } from "./codeBlock";
+import { CODE_LANGUAGES } from "@/lib/codeHighlight";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyBlock = any;
@@ -24,48 +25,101 @@ const html = (language = "html", extra: AnyBlock = {}) => ({
 });
 
 describe("Notion code block", () => {
-  it("renders the hover pill with the language name, Copy and Wrap", () => {
+  it("renders the hover pill: language button and Copy; no spell-check in code", () => {
     const { root } = makeEditor([html()]);
     const toolbar = root.querySelector(".sb-code-toolbar")!;
-    expect(toolbar).toBeTruthy();
     expect(toolbar.getAttribute("contenteditable")).toBe("false");
-    expect(toolbar.querySelector(".sb-code-lang span")!.textContent).toBe("HTML");
-    expect(toolbar.querySelector('[aria-label="Copy"]')).toBeTruthy();
-    expect(toolbar.querySelector('[aria-label="Wrap code"]')).toBeTruthy();
+    const lang = toolbar.querySelector("button.sb-code-lang")!;
+    expect(lang.textContent).toBe("HTML");
+    expect(lang.getAttribute("aria-haspopup")).toBe("listbox");
+    expect(toolbar.querySelector("select")).toBeNull();
+    expect(toolbar.querySelector('[aria-label="Copy code"]')).toBeTruthy();
     expect(root.querySelector("pre code")!.textContent).toBe('<div class="card">Hi</div>');
     expect(root.querySelector("pre code")!.getAttribute("spellcheck")).toBe("false");
   });
 
-  it("shows an alias by its proper name and selects its menu entry", () => {
-    const { root } = makeEditor([html("js")]);
-    expect(root.querySelector(".sb-code-lang span")!.textContent).toBe("JavaScript");
-    expect((root.querySelector(".sb-code-lang select") as HTMLSelectElement).value).toBe("javascript");
-  });
-
-  it("keeps a language it doesn't list instead of dropping it", () => {
+  it("shows an alias by its proper name, and an unlisted language as typed", () => {
+    expect(makeEditor([html("js")]).root.querySelector(".sb-code-lang")!.textContent).toBe("JavaScript");
     const { root, editor } = makeEditor([html("brainfuck")]);
-    const select = root.querySelector(".sb-code-lang select") as HTMLSelectElement;
-    expect(select.value).toBe("brainfuck");
+    expect(root.querySelector(".sb-code-lang")!.textContent).toBe("brainfuck");
     expect((editor.document[0].props as AnyBlock).language).toBe("brainfuck");
   });
 
-  it("changing the menu changes the block's language", () => {
+  it("the language menu: search, check on the current one, click to change", () => {
     const { root, editor } = makeEditor([html()]);
-    const select = root.querySelector(".sb-code-lang select") as HTMLSelectElement;
-    select.value = "python";
-    select.dispatchEvent(new Event("change"));
+    (root.querySelector("button.sb-code-lang") as HTMLButtonElement).click();
+    const menu = document.querySelector(".sb-lang-menu")!;
+    expect(menu).toBeTruthy();
+    const search = menu.querySelector("input")!;
+    expect(document.activeElement).toBe(search);
+    expect(menu.querySelector('[aria-selected="true"]')!.textContent).toBe("HTML");
+    search.value = "pyth";
+    search.dispatchEvent(new Event("input"));
+    const rows = [...menu.querySelectorAll(".sb-lang-row")].map((r) => r.textContent);
+    expect(rows).toEqual(["Python"]);
+    (menu.querySelector(".sb-lang-row") as HTMLElement).click();
+    expect(document.querySelector(".sb-lang-menu")).toBeNull();
     expect((editor.document[0].props as AnyBlock).language).toBe("python");
-    expect(root.querySelector(".sb-code-lang span")!.textContent).toBe("Python");
+    expect(root.querySelector(".sb-code-lang")!.textContent).toBe("Python");
   });
 
-  it("Wrap toggles a per-block prop and the wrap class", () => {
+  it("the language menu: arrows + Enter pick, Escape closes, no results says so", () => {
     const { root, editor } = makeEditor([html()]);
-    expect((editor.document[0].props as AnyBlock).wrap).toBe(false);
-    (root.querySelector('[aria-label="Wrap code"]') as HTMLButtonElement).click();
+    (root.querySelector("button.sb-code-lang") as HTMLButtonElement).click();
+    let search = document.querySelector(".sb-lang-menu input") as HTMLInputElement;
+    search.value = "zzz";
+    search.dispatchEvent(new Event("input"));
+    expect(document.querySelector(".sb-lang-empty")!.textContent).toBe("No results");
+    search.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(document.querySelector(".sb-lang-menu")).toBeNull();
+    expect((editor.document[0].props as AnyBlock).language).toBe("html");
+
+    (root.querySelector("button.sb-code-lang") as HTMLButtonElement).click();
+    search = document.querySelector(".sb-lang-menu input") as HTMLInputElement;
+    search.value = "java";  // Java, JavaScript
+    search.dispatchEvent(new Event("input"));
+    search.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+    search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    expect((editor.document[0].props as AnyBlock).language).toBe("javascript");
+  });
+
+  it("filterLanguages matches names, ids and aliases, best first", () => {
+    expect(filterLanguages("ts")).toContain("typescript");
+    expect(filterLanguages("c")[0]).toBe("c");
+    expect(filterLanguages("")).toHaveLength(Object.keys(CODE_LANGUAGES).length);
+  });
+
+  it("Copy writes the code and says Copied", async () => {
+    let copied = "";
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async (t: string) => { copied = t; } },
+    });
+    const { root } = makeEditor([html()]);
+    const copy = root.querySelector('[aria-label="Copy code"]') as HTMLButtonElement;
+    copy.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(copied).toBe('<div class="card">Hi</div>');
+    expect(copy.textContent).toBe("Copied");
+  });
+
+  it("Wrap shows only for lines too long for the box, and toggles the prop", () => {
+    const { root, editor } = makeEditor([html()]);
+    const wrapBtn = () => root.querySelector(".sb-code-btn[aria-pressed]") as HTMLButtonElement;
+    expect(wrapBtn().hidden).toBe(true);
+    const pre = root.querySelector("pre")!;
+    Object.defineProperty(pre, "scrollWidth", { configurable: true, value: 900 });
+    Object.defineProperty(pre, "clientWidth", { configurable: true, value: 400 });
+    pre.dispatchEvent(new Event("pointerenter"));
+    expect(wrapBtn().hidden).toBe(false);
+    wrapBtn().click();
     expect((editor.document[0].props as AnyBlock).wrap).toBe(true);
     expect(root.querySelector("pre")!.classList.contains("sb-code-wrap")).toBe(true);
-    expect(root.querySelector('[aria-label="Unwrap code"]')!.getAttribute("aria-pressed")).toBe("true");
-    (root.querySelector('[aria-label="Unwrap code"]') as HTMLButtonElement).click();
+    // Once on, it stays offered so it can be turned off.
+    expect(wrapBtn().hidden).toBe(false);
+    expect(wrapBtn().getAttribute("aria-label")).toBe("Unwrap code");
+    wrapBtn().click();
     expect((editor.document[0].props as AnyBlock).wrap).toBe(false);
   });
 
@@ -81,7 +135,7 @@ describe("Notion code block", () => {
     expect(md).toContain('<div class="card">Hi</div>');
   });
 
-  it("read-only: language label and Copy, no menu and no Wrap", () => {
+  it("read-only: language as plain text and Copy, no menu and no Wrap", () => {
     const schema = BlockNoteSchema.create({
       blockSpecs: { ...defaultBlockSpecs, codeBlock: createNotionCodeBlockSpec() },
     });
@@ -89,10 +143,10 @@ describe("Notion code block", () => {
     editor.isEditable = false;
     const root = document.createElement("div");
     editor.mount(root);
-    expect(root.querySelector(".sb-code-lang span")!.textContent).toBe("HTML");
-    expect(root.querySelector(".sb-code-lang select")).toBeNull();
-    expect(root.querySelector('[aria-label="Copy"]')).toBeTruthy();
-    expect(root.querySelector('[aria-label="Wrap code"]')).toBeNull();
+    expect(root.querySelector(".sb-code-lang")!.textContent).toBe("HTML");
+    expect(root.querySelector("button.sb-code-lang")).toBeNull();
+    expect(root.querySelector('[aria-label="Copy code"]')).toBeTruthy();
+    expect(root.querySelector(".sb-code-btn[aria-pressed]")).toBeNull();
   });
 
   it("```lang + space makes a code block with the caret inside, even with a block after it", () => {
