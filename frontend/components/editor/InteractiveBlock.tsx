@@ -25,6 +25,9 @@ export const InteractiveBlockSpec = createReactBlockSpec(
       wrap: { default: false },
       // Share of the page column the block takes, 1 = full width (Notion's side resize bars).
       width: { default: 1 },
+      // Height in px for a window-filling block (a 3D app, a full-screen canvas); 0 = the
+      // default from its width. Blocks with a height of their own just fit their content.
+      height: { default: 0 },
     },
     content: "none",
   },
@@ -35,7 +38,7 @@ export const InteractiveBlockSpec = createReactBlockSpec(
           index={0}
           block={{
             title: block.props.title, html: block.props.html, snapshot: block.props.snapshot,
-            view: block.props.view, wrap: block.props.wrap, width: block.props.width,
+            view: block.props.view, wrap: block.props.wrap, width: block.props.width, height: block.props.height,
           }}
           onUpdate={(_i, updated) => editor.updateBlock(block, { props: {
             title: updated.title, html: updated.html,
@@ -44,6 +47,7 @@ export const InteractiveBlockSpec = createReactBlockSpec(
             view: updated.view ?? block.props.view,
             wrap: updated.wrap ?? block.props.wrap,
             width: updated.width ?? block.props.width,
+            height: updated.height ?? block.props.height,
           } })}
           onRemove={() => editor.removeBlocks([block])}
         />

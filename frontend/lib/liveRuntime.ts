@@ -128,7 +128,7 @@ function lights(scene) {
 function makeScene(el) {
   if (!el) { el = document.createElement("div"); document.body.appendChild(el); }
   const w = Math.max(200, el.clientWidth || document.body.clientWidth || 600);
-  const h = Math.min(420, Math.round(w * 0.66));
+  const h = Math.min(640, Math.round(w * 0.66));
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(w, h);
@@ -152,7 +152,7 @@ function makeScene(el) {
     controls.update(); renderer.render(scene, camera);
   });
   new ResizeObserver(() => {
-    const nw = Math.max(200, el.clientWidth || w), nh = Math.min(420, Math.round(nw * 0.66));
+    const nw = Math.max(200, el.clientWidth || w), nh = Math.min(640, Math.round(nw * 0.66));
     renderer.setSize(nw, nh); camera.aspect = nw / nh; camera.updateProjectionMatrix();
   }).observe(el);
   function frame(obj) {

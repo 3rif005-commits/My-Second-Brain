@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  CONTENT_HEIGHT_JS, MAX_FRAME_HEIGHT, MIN_FRAME_HEIGHT, heightFromMessage, isBlockCode, liveBlockRequest, stripFences, withAutoHeight,
+  CONTENT_HEIGHT_JS, MAX_FRAME_HEIGHT, MIN_FRAME_HEIGHT, defaultFillHeight, fillsViewport, heightFromMessage, isBlockCode, liveBlockRequest, stripFences, withAutoHeight,
 } from "./liveBlock";
 
 describe("withAutoHeight", () => {
@@ -105,5 +105,23 @@ describe("isBlockCode", () => {
     expect(isBlockCode("I notice the knowledge context is about **Q-Learning**, not photosynthesis. Could you either: 1. …", "html")).toBe(false);
     expect(isBlockCode("Use a <b>bold</b> tag? Sorry, I can't.", "html")).toBe(false);
     expect(isBlockCode("   ", "html")).toBe(false);
+  });
+});
+
+describe("window-filling content", () => {
+  it("recognises code sized from the window", () => {
+    expect(fillsViewport("renderer.setSize(window.innerWidth, window.innerHeight)")).toBe(true);
+    expect(fillsViewport("<style>#app{height:100vh}</style>")).toBe(true);
+    expect(fillsViewport("<style>html, body { height: 100%; margin:0 }</style>")).toBe(true);
+    expect(fillsViewport("<style>.q{height:100%}</style><div class=q>quiz</div>")).toBe(false);
+    expect(fillsViewport("flowchart LR\n A-->B")).toBe(false);
+  });
+  it("gets 16:10 of its width, at least 420px, at most 900px", () => {
+    expect(defaultFillHeight(660)).toBe(420);
+    expect(defaultFillHeight(1000)).toBe(625);
+    expect(defaultFillHeight(3000)).toBe(900);
+  });
+  it("content with its own height is no longer capped at 900px", () => {
+    expect(MAX_FRAME_HEIGHT).toBeGreaterThanOrEqual(6000);
   });
 });

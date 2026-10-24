@@ -12,7 +12,9 @@ export const DEFAULT_INTERACTIVE_HTML = `<div style="font-family:sans-serif;padd
 </div>`;
 
 export const MIN_FRAME_HEIGHT = 80;
-export const MAX_FRAME_HEIGHT = 900;
+/** Only a guard against runaway content: a block is as tall as what it shows (the user: "the
+ *  block size should adapt to the code"). */
+export const MAX_FRAME_HEIGHT = 6000;
 const MESSAGE_KEY = "sb-live-height";
 
 /** How tall the block's content is. Not documentElement.scrollHeight: that never drops below
@@ -134,4 +136,20 @@ export function isBlockCode(reply: string, kind: "mermaid" | "model" | "html"): 
   if (!r) return false;
   if (kind !== "html") return true;
   return /<\s*(?:!doctype|html|head|body|style|script|div|section|main|canvas|svg|button|input|form|table|p|h[1-6]|ul|ol|span|label|select|textarea|img|figure|details)\b/i.test(r);
+}
+
+/** Code written to fill the window it runs in — canvases sized from window.innerHeight,
+ *  100vh, a full-height html/body — has no height of its own: measured, it just echoes the
+ *  frame's, so auto-height can't size it. Such a block gets a size from its width instead,
+ *  which the user can drag taller or shorter. */
+export function fillsViewport(code: string): boolean {
+  return /\binnerHeight\b|\b100d?vh\b|(?:html|body)[^{}]*\{[^}]*\bheight\s*:\s*100%/i.test(code);
+}
+
+export const MIN_FILL_HEIGHT = 240;
+export const MAX_FILL_HEIGHT = 2000;
+
+/** Default height for a window-filling block of `width` px: 16:10, never under 420px. */
+export function defaultFillHeight(width: number): number {
+  return Math.round(Math.min(900, Math.max(420, width * 0.625)));
 }

@@ -201,6 +201,31 @@ describe("InteractiveBlockCard — Notion's Mermaid code block model", () => {
     expect(clampWidth(0.66666)).toBe(0.667);
   });
 
+  it("window-filling code (3D app, full-screen canvas): big default size, edge to edge, bottom bar", () => {
+    const galaxy = "<canvas id=c></canvas><script>c.width=innerWidth;c.height=window.innerHeight</script>";
+    const { container, onUpdate } = card({ html: galaxy });
+    const preview = container.querySelector(".sb-live-preview")!;
+    expect(preview.classList.contains("sb-live-preview-fill")).toBe(true);
+    expect((preview.querySelector("iframe") as HTMLIFrameElement).style.height).toBe("420px");
+    const bar = container.querySelector(".sb-resize-bottom") as HTMLElement;
+    fireEvent.pointerDown(bar, { pointerId: 1, clientY: 500 });
+    act(() => { bar.dispatchEvent(new MouseEvent("pointermove", { clientY: 700 })); });
+    act(() => { bar.dispatchEvent(new MouseEvent("pointerup")); });
+    expect(onUpdate).toHaveBeenLastCalledWith(0, expect.objectContaining({ height: 620 }));
+    expect((preview.querySelector("iframe") as HTMLIFrameElement).style.height).toBe("620px");
+    fireEvent.doubleClick(bar);
+    expect(onUpdate).toHaveBeenLastCalledWith(0, expect.objectContaining({ height: 0 }));
+  });
+
+  it("a saved height is used; content with its own height just fits it (no bottom bar)", () => {
+    const { container, unmount } = card({ html: "<style>body{height:100vh}</style><div>x</div>", height: 700 });
+    expect((container.querySelector("iframe") as HTMLIFrameElement).style.height).toBe("700px");
+    unmount();
+    const quiz = card({ html: "<div class=q>quiz</div>" });
+    expect(quiz.container.querySelector(".sb-resize-bottom")).toBeNull();
+    expect(quiz.container.querySelector(".sb-live-preview-fill")).toBeNull();
+  });
+
   it("an empty block has no resize bars", () => {
     const { container } = card({ html: "" });
     expect(container.querySelector(".sb-resize-bar")).toBeNull();

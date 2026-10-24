@@ -232,6 +232,8 @@ export interface InteractiveBlock {
   wrap?: boolean;
   /** share of the page column, 1 = full width */
   width?: number;
+  /** px, for window-filling content only; 0 = default from the width */
+  height?: number;
 }
 
 

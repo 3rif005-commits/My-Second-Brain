@@ -50,7 +50,7 @@ describe("InteractiveBlockSpec in a real editor", () => {
     editor.mount(document.createElement("div"));
     editor.replaceBlocks(editor.document, [{ type: "interactive", props: { title: "Q", html: "<b>x</b>" } }] as never);
     const b = editor.document.find((x) => x.type === "interactive") as { props: { title: string; html: string } } | undefined;
-    expect(b?.props).toEqual({ title: "Q", html: "<b>x</b>", snapshot: "", view: "preview", wrap: false, width: 1 });
+    expect(b?.props).toEqual({ title: "Q", html: "<b>x</b>", snapshot: "", view: "preview", wrap: false, width: 1, height: 0 });
     insertInteractiveBlock(editor, undefined);
     expect(editor.document.filter((x) => x.type === "interactive")).toHaveLength(2);
     expect((editor.document.find((x) => x.type === "interactive") as { props: { html: string } }).props.html).toBe("<b>x</b>");

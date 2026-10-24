@@ -15,7 +15,10 @@ import {
   LoaderCircle, Rows2, Sparkles, Trash2, ZoomIn,
 } from "lucide-react";
 import { NoteIdContext } from "./noteIdContext";
-import { diagramFromImage, imageFromTransfer, isBlockCode, isPlaceholderHtml, liveBlockRequest, stripFences, useFrameHeight } from "@/lib/liveBlock";
+import {
+  MAX_FILL_HEIGHT, MIN_FILL_HEIGHT, defaultFillHeight, diagramFromImage, fillsViewport, imageFromTransfer,
+  isBlockCode, isPlaceholderHtml, liveBlockRequest, stripFences, useFrameHeight,
+} from "@/lib/liveBlock";
 import { assetOrigin, buildSrcDoc, detectKind, preflightWarnings, type LiveTheme } from "@/lib/liveRuntime";
 import { exportFrameImage, MAX_SNAPSHOT_CHARS } from "@/lib/liveExport";
 import { LiveCodeEditor } from "@/components/interactive/LiveCodeEditor";
@@ -78,6 +81,9 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   const [view, setView] = useState<InteractiveView>(block.view ?? "preview");
   const [wrap, setWrap] = useState(!!block.wrap);
   const [width, setWidth] = useState(block.width ?? 1);
+  const [fillHeight, setFillHeight] = useState(block.height ?? 0);
+  const [previewWidth, setPreviewWidth] = useState(0);
+  const previewRef = useRef<HTMLDivElement>(null);
   const [resizing, setResizing] = useState(false);
   const liveRef = useRef<HTMLDivElement>(null);
   const [title, setTitle] = useState(block.title);
@@ -113,6 +119,19 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   const empty = isPlaceholderHtml(code);
   const showCode = view === "code" || view === "split";
   const showPreview = view === "preview" || view === "split";
+  // Code that fills the window it runs in has no height of its own: it gets one from its
+  // width (or the user's drag) and runs edge to edge, like an embed.
+  const fill = detectKind(saved) === "html" && fillsViewport(saved);
+  const fillH = fillHeight || defaultFillHeight(previewWidth);
+
+  useEffect(() => {
+    const el = previewRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setPreviewWidth(el.clientWidth));
+    ro.observe(el);
+    setPreviewWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, [view, saved]);
 
   // The block changed from outside (undo, another device, the AI): show it — unless it is
   // just our own save coming back while we type on.
@@ -123,6 +142,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   useEffect(() => { if (block.view) setView(block.view); }, [block.view]);
   useEffect(() => { setWrap(!!block.wrap); }, [block.wrap]);
   useEffect(() => { setWidth(block.width ?? 1); }, [block.width]);
+  useEffect(() => { setFillHeight(block.height ?? 0); }, [block.height]);
 
   useEffect(() => { if (asking) promptRef.current?.focus({ preventScroll: true }); }, [asking]);
   useEffect(() => { if (captioning) captionRef.current?.focus({ preventScroll: true }); }, [captioning]);
@@ -138,7 +158,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   }, [expanded]);
 
   function save(patch: Partial<InteractiveBlock>) {
-    const next = { title, html: code, view, wrap, width, ...patch };
+    const next = { title, html: code, view, wrap, width, height: fillHeight, ...patch };
     sent.current = next.html;
     onUpdate(index, next);
   }
@@ -167,6 +187,33 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
       bar.removeEventListener("pointercancel", up);
       setResizing(false);
       save({ width: w });
+    };
+    bar.addEventListener("pointermove", move);
+    bar.addEventListener("pointerup", up);
+    bar.addEventListener("pointercancel", up);
+  }
+
+  // Bottom bar of a window-filling block: drag to make it taller or shorter; double-click
+  // goes back to the default size.
+  function startHeightResize(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    const bar = e.currentTarget;
+    bar.setPointerCapture?.(e.pointerId);
+    const startY = e.clientY;
+    const startH = fillH;
+    let h = startH;
+    setResizing(true);
+    const move = (ev: PointerEvent) => {
+      h = Math.round(Math.min(MAX_FILL_HEIGHT, Math.max(MIN_FILL_HEIGHT, startH + ev.clientY - startY)));
+      setFillHeight(h);
+    };
+    const up = () => {
+      bar.removeEventListener("pointermove", move);
+      bar.removeEventListener("pointerup", up);
+      bar.removeEventListener("pointercancel", up);
+      setResizing(false);
+      save({ height: h });
     };
     bar.addEventListener("pointermove", move);
     bar.addEventListener("pointerup", up);
@@ -363,16 +410,28 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
               </div>
             ) : null}
             {showPreview && !savedEmpty ? (
-              <div className="sb-live-preview">
+              <div className={`sb-live-preview${fill ? " sb-live-preview-fill" : ""}`} ref={previewRef}>
                 <iframe
                   ref={frameRef}
                   srcDoc={srcDoc}
                   sandbox="allow-scripts"
                   // colorScheme matches the page inside, or Chrome paints an opaque backdrop.
-                  style={{ height: frameHeight, colorScheme: theme }}
+                  style={{ height: fill ? fillH : frameHeight, colorScheme: theme }}
                   // aria-label, not title: a title shows as the browser's own tooltip on hover.
                   aria-label={title || "Interactive block"}
                 />
+                {fill ? (
+                  <div
+                    className="sb-resize-bar sb-resize-bottom"
+                    role="separator"
+                    aria-orientation="horizontal"
+                    aria-label="Drag to change the height"
+                    title="Drag to change the height · double-click for the default"
+                    onPointerDown={startHeightResize}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onDoubleClick={() => { setFillHeight(0); save({ height: 0 }); }}
+                  />
+                ) : null}
               </div>
             ) : null}
           </>
