@@ -1,7 +1,7 @@
 # Second Brain — Project Status
 
 > Source of truth across all conversations. Read at session start, update at session end.
-> Last updated: 2026-10-23
+> Last updated: 2026-10-24
 
 ---
 
@@ -9,10 +9,15 @@
 
 | # | What | Why first |
 |---|------|-----------|
-| 1 | Not checked live: Send to Notion (needs the user's token), MCP servers (needs a server) | the last untested older features |
-| 2 | Editor AI: one Revert (after Simplify) left stray letters in the paragraph ("foronr"); two later Simplify/Fix-spelling reverts restored the text exactly. Watch for it; if it recurs, check xl-ai's revert with large rewrites | couldn't reproduce |
-| 3 | CSV import still ~7 s for 3 rows | slow, not broken |
-| 4 | Connected-apps (MCP) notes: `mcp_remote/blocks.py` markdown converter drops bold, tables, code; could reuse `services/note_html.py` | plainer notes from other apps |
+| 1 | Not checked live: Send to Notion (needs the user's token), MCP servers (needs a server connected in Settings) | the last untested older features |
+| 2 | Every database query from Render to Supabase takes ~180 ms (measured with the CSV import's Server-Timing header); a simple database list takes ~1 s. Likely the two services are in different regions (`render.yaml` sets no region, so Render's default, Oregon). Check the Supabase project's region; co-locating would speed up every database page | the whole app, not one feature |
+| 3 | Editor AI: one Revert (after Simplify) left stray letters in the paragraph ("foronr"); two later Simplify/Fix-spelling reverts restored the text exactly. Watch for it; if it recurs, check xl-ai's revert with large rewrites | couldn't reproduce |
+
+**Done 2026-10-24:** connected-apps Markdown now goes through `services/note_html` (bold, links,
+code, tables, task lists kept; 63f40af4). CSV import writes every row in one statement
+(`create_rows_bulk`, 63491405): live, 3 rows 6.8 s → 4.8 s, 300 rows 6.9 s (was ~1,200 queries,
+would have timed out); the 20 queries left are database/column setup. Full backend suite run
+against the local Postgres harness (`docker start sb-pgtest`): 2,870 passed, 0 errors.
 
 Live check 2026-10-23 (older features on the deployed site): see "Live check of older features" below.
 
