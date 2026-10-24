@@ -93,4 +93,23 @@ describe("Notion code block", () => {
     expect(root.querySelector('[aria-label="Copy"]')).toBeTruthy();
     expect(root.querySelector('[aria-label="Wrap code"]')).toBeNull();
   });
+
+  it("```lang + space makes a code block with the caret inside, even with a block after it", () => {
+    const { editor } = makeEditor([
+      { type: "paragraph", content: "```py" },
+      { type: "paragraph", content: "after" },
+      // The trailing empty block BlockNote would otherwise add (with a late id) on first edit.
+      { type: "paragraph" },
+    ]);
+    editor.setTextCursorPosition(editor.document[0], "end");
+    const view = editor.prosemirrorView!;
+    const { from, to } = view.state.selection;
+    // What a typed space does: every plugin's handleTextInput gets a turn.
+    view.someProp("handleTextInput", (f: AnyBlock) => f(view, from, to, " ", () => view.state.tr.insertText(" ", from, to)));
+    expect(editor.document[0]).toMatchObject({ type: "codeBlock", props: { language: "python" } });
+    expect(editor.getTextCursorPosition().block.id).toBe(editor.document[0].id);
+    view.dispatch(view.state.tr.insertText("x = 1"));
+    expect(editor.document[0].content).toMatchObject([{ text: "x = 1" }]);
+    expect(editor.document[1].content).toMatchObject([{ text: "after" }]);
+  });
 });

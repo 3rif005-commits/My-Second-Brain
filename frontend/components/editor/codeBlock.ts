@@ -5,7 +5,15 @@
 //
 // One prop is added: `wrap` (default false), so long lines wrap per block like Notion's
 // "Wrap code". Notes saved before it simply read as not wrapped.
-import { createBlockSpec, createCodeBlockSpec } from "@blocknote/core";
+import {
+  createBlockSpec,
+  createCodeBlockSpec,
+  createExtension,
+  getBlockInfoFromTransaction,
+  updateBlockTr,
+} from "@blocknote/core";
+import { InputRule, inputRules } from "@handlewithcare/prosemirror-inputrules";
+import { TextSelection } from "prosemirror-state";
 import { CODE_LANGUAGES, createCodeHighlighter, resolveCodeLanguage } from "@/lib/codeHighlight";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -135,10 +143,44 @@ export function createNotionCodeBlockSpec() {
   // remember the prop list they were made with, and that list now has `wrap` in it.
   const base = createCodeBlockSpec(options);
   const { meta, parse, parseContent } = base.implementation;
+  // BlockNote's ``` rule is swapped for ours (codeFenceRule); its keys and highlighter stay.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const extensions = (base.extensions ?? []).map((ext: any) => {
+    const extension = typeof ext === "function" ? ext() : ext;
+    if (!extension?.inputRules) return ext;
+    return createExtension({ ...extension, inputRules: undefined });
+  });
   return createBlockSpec(
     { ...base.config, propSchema: { ...base.config.propSchema, wrap: { default: false } } },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     { meta, parse, parseContent, render, toExternalHTML } as any,
-    base.extensions,
+    [...extensions, codeFenceRule],
   )();
 }
+
+/** "```lang " at the start of a line turns it into a code block. Same as BlockNote's rule,
+ *  except the caret goes INTO the new block: BlockNote's leaves the selection to be mapped,
+ *  and when another block follows, the mapping drops it at the start of that block, so
+ *  whatever you type next lands under the code block. */
+const codeFenceRule = createExtension({
+  key: "code-block-fence",
+  prosemirrorPlugins: [
+    inputRules({
+      rules: [
+        new InputRule(/^```(.*?)\s$/, (state, match, start, end) => {
+          const info = getBlockInfoFromTransaction(state.tr);
+          if (!info.isBlockContainer || info.blockContent.node.type.spec.content !== "inline*") {
+            return null;
+          }
+          const name = match[1].trim();
+          const language = resolveCodeLanguage(name) ?? (name || "text");
+          const tr = state.tr.deleteRange(start, end);
+          updateBlockTr(tr, info.bnBlock.beforePos, { type: "codeBlock", props: { language }, content: [] } as AnyBlock);
+          // beforePos → inside the blockContainer (+1) → inside the codeBlock (+2).
+          tr.setSelection(TextSelection.create(tr.doc, info.bnBlock.beforePos + 2));
+          return tr;
+        }),
+      ],
+    }),
+  ],
+});
