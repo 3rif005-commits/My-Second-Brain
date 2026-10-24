@@ -239,10 +239,14 @@ function render(block: AnyBlock, editor: AnyBlock) {
       }
       closeMenu = openLanguageMenu(button, languageId, (id) => {
         // A language we don't list (from an import, say) is only replaced when you pick one.
-        if (id !== languageId) editor.updateBlock(block.id, { props: { language: id } });
+        if (id !== languageId && editor.getBlock(block.id)) {
+          editor.updateBlock(block.id, { props: { language: id } });
+        }
       });
     });
-    cleanups.push(() => closeMenu?.());
+    // Not closed on destroy: ProseMirror redraws this block whenever its decorations change
+    // (focus moving into the menu's search does it), which would shut the menu at once.
+    // Outside click, Escape and scroll still close it.
     language = button;
   } else {
     language = document.createElement("span");

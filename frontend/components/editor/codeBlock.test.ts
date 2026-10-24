@@ -83,6 +83,20 @@ describe("Notion code block", () => {
     expect((editor.document[0].props as AnyBlock).language).toBe("javascript");
   });
 
+  it("the language menu survives the block being redrawn while it is open", () => {
+    const { root, editor } = makeEditor([html()]);
+    (root.querySelector("button.sb-code-lang") as HTMLButtonElement).click();
+    // Any prop change re-runs render (as a decoration change does in the browser).
+    editor.updateBlock(editor.document[0].id, { props: { wrap: true } });
+    const menu = document.querySelector(".sb-lang-menu")!;
+    expect(menu).toBeTruthy();
+    const search = menu.querySelector("input")!;
+    search.value = "rust";
+    search.dispatchEvent(new Event("input"));
+    (menu.querySelector(".sb-lang-row") as HTMLElement).click();
+    expect((editor.document[0].props as AnyBlock).language).toBe("rust");
+  });
+
   it("filterLanguages matches names, ids and aliases, best first", () => {
     expect(filterLanguages("ts")).toContain("typescript");
     expect(filterLanguages("c")[0]).toBe("c");
