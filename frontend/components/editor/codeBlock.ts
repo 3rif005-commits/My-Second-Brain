@@ -50,6 +50,8 @@ function render(block: AnyBlock, editor: AnyBlock) {
   const fragment = document.createDocumentFragment();
   const pre = document.createElement("pre");
   const code = document.createElement("code");
+  // No red squiggles under `h1`, `const`… (Notion's code blocks don't spell-check either).
+  code.setAttribute("spellcheck", "false");
   pre.appendChild(code);
   if (block.props.wrap) pre.classList.add("sb-code-wrap");
 

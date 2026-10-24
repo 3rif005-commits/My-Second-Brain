@@ -152,6 +152,10 @@
   background: transparent;
   color: var(--code-fg);
 }
+/* BlockNote gives every block's text `pre-wrap`, which would wrap code even with Wrap off. */
+.notion-editor .bn-block-content[data-content-type="codeBlock"] > pre > code {
+  white-space: inherit;
+}
 .notion-editor .bn-block-content[data-content-type="codeBlock"] > pre.sb-code-wrap {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

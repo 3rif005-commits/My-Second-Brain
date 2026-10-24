@@ -33,6 +33,7 @@ describe("Notion code block", () => {
     expect(toolbar.querySelector('[aria-label="Copy"]')).toBeTruthy();
     expect(toolbar.querySelector('[aria-label="Wrap code"]')).toBeTruthy();
     expect(root.querySelector("pre code")!.textContent).toBe('<div class="card">Hi</div>');
+    expect(root.querySelector("pre code")!.getAttribute("spellcheck")).toBe("false");
   });
 
   it("shows an alias by its proper name and selects its menu entry", () => {
