@@ -29,6 +29,14 @@ interface Props {
   onRemove: (index: number) => void;
 }
 
+/** Narrowest a block can be dragged, as a share of the page column. */
+export const MIN_WIDTH = 0.25;
+
+/** A dragged width, kept between MIN_WIDTH and the full column (1), to 3 decimals. */
+export function clampWidth(share: number): number {
+  return Math.round(Math.min(1, Math.max(MIN_WIDTH, share)) * 1000) / 1000;
+}
+
 /** How long typing pauses before the code is saved and the preview redrawn. */
 export const COMMIT_DELAY_MS = 600;
 
@@ -69,6 +77,9 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   const theme: LiveTheme = resolvedTheme === "dark" ? "dark" : "light";
   const [view, setView] = useState<InteractiveView>(block.view ?? "preview");
   const [wrap, setWrap] = useState(!!block.wrap);
+  const [width, setWidth] = useState(block.width ?? 1);
+  const [resizing, setResizing] = useState(false);
+  const liveRef = useRef<HTMLDivElement>(null);
   const [title, setTitle] = useState(block.title);
   const [code, setCode] = useState(block.html);
   const [asking, setAsking] = useState(false);
@@ -111,6 +122,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   useEffect(() => { setTitle(block.title); }, [block.title]);
   useEffect(() => { if (block.view) setView(block.view); }, [block.view]);
   useEffect(() => { setWrap(!!block.wrap); }, [block.wrap]);
+  useEffect(() => { setWidth(block.width ?? 1); }, [block.width]);
 
   useEffect(() => { if (asking) promptRef.current?.focus({ preventScroll: true }); }, [asking]);
   useEffect(() => { if (captioning) captionRef.current?.focus({ preventScroll: true }); }, [captioning]);
@@ -126,9 +138,39 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   }, [expanded]);
 
   function save(patch: Partial<InteractiveBlock>) {
-    const next = { title, html: code, view, wrap, ...patch };
+    const next = { title, html: code, view, wrap, width, ...patch };
     sent.current = next.html;
     onUpdate(index, next);
+  }
+
+  // Notion's side bars: drag either one and the block narrows or widens around its centre.
+  // Pointer capture keeps the drag going over the block's own frame.
+  function startResize(e: React.PointerEvent<HTMLDivElement>) {
+    const live = liveRef.current;
+    if (!live) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const bar = e.currentTarget;
+    bar.setPointerCapture?.(e.pointerId);
+    const rect = live.getBoundingClientRect();
+    const column = Math.max(1, rect.width - 12);
+    const centre = rect.left + rect.width / 2;
+    let w = width;
+    setResizing(true);
+    const move = (ev: PointerEvent) => {
+      w = clampWidth((2 * Math.abs(ev.clientX - centre)) / column);
+      setWidth(w);
+    };
+    const up = () => {
+      bar.removeEventListener("pointermove", move);
+      bar.removeEventListener("pointerup", up);
+      bar.removeEventListener("pointercancel", up);
+      setResizing(false);
+      save({ width: w });
+    };
+    bar.addEventListener("pointermove", move);
+    bar.addEventListener("pointerup", up);
+    bar.addEventListener("pointercancel", up);
   }
 
   function edit(next: string) {
@@ -290,7 +332,12 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   const emptyRow = empty && !showCode;
 
   return (
-    <div className="sb-live no-print" data-view={view}>
+    <div className="sb-live no-print" data-view={view} ref={liveRef}>
+      <div
+        className="sb-live-col"
+        data-resizing={resizing ? "true" : undefined}
+        style={width < 1 ? { width: `calc((100% - 12px) * ${width})`, marginLeft: "auto", marginRight: "auto" } : undefined}
+      >
       <div className={`sb-live-box${emptyRow ? " sb-live-box-empty" : ""}`}>
         {emptyRow ? (
           <div className="sb-live-empty">
@@ -330,6 +377,21 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
             ) : null}
           </>
         )}
+
+        {!emptyRow ? (
+          ["left", "right"].map((side) => (
+            <div
+              key={side}
+              className={`sb-resize-bar sb-resize-${side}`}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Drag to resize"
+              title="Drag to resize"
+              onPointerDown={startResize}
+              onMouseDown={(e) => e.preventDefault()}
+            />
+          ))
+        ) : null}
 
         <div className="sb-live-pill" data-pinned={pinned ? "true" : undefined}>
           {!emptyRow ? (
@@ -532,6 +594,8 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
           aria-label="Block title"
         />
       ) : null}
+
+      </div>
 
       {expanded && typeof document !== "undefined"
         ? createPortal(

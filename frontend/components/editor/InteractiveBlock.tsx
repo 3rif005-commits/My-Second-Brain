@@ -23,6 +23,8 @@ export const InteractiveBlockSpec = createReactBlockSpec(
       // Like Notion's Mermaid code block: "preview" (the result), "code", or "split" (both).
       view: { default: "preview" },
       wrap: { default: false },
+      // Share of the page column the block takes, 1 = full width (Notion's side resize bars).
+      width: { default: 1 },
     },
     content: "none",
   },
@@ -33,7 +35,7 @@ export const InteractiveBlockSpec = createReactBlockSpec(
           index={0}
           block={{
             title: block.props.title, html: block.props.html, snapshot: block.props.snapshot,
-            view: block.props.view, wrap: block.props.wrap,
+            view: block.props.view, wrap: block.props.wrap, width: block.props.width,
           }}
           onUpdate={(_i, updated) => editor.updateBlock(block, { props: {
             title: updated.title, html: updated.html,
@@ -41,6 +43,7 @@ export const InteractiveBlockSpec = createReactBlockSpec(
             snapshot: updated.snapshot ?? (updated.html === block.props.html ? block.props.snapshot : ""),
             view: updated.view ?? block.props.view,
             wrap: updated.wrap ?? block.props.wrap,
+            width: updated.width ?? block.props.width,
           } })}
           onRemove={() => editor.removeBlocks([block])}
         />

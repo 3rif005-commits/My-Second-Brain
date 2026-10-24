@@ -7,7 +7,7 @@ vi.mock("@/lib/liveBlock", async (orig) => ({
   diagramFromImage: vi.fn(async () => "flowchart LR\n  A --> B"),
 }));
 
-import { COMMIT_DELAY_MS, InteractiveBlockCard, canExportImage, codeLanguage } from "./InteractiveBlockCard";
+import { COMMIT_DELAY_MS, InteractiveBlockCard, MIN_WIDTH, canExportImage, clampWidth, codeLanguage } from "./InteractiveBlockCard";
 import { NoteIdContext } from "./noteIdContext";
 import { DEFAULT_INTERACTIVE_HTML, LEGACY_SLASH_PLACEHOLDER_HTML } from "@/lib/liveBlock";
 import type { InteractiveBlock } from "./BlockEditor";
@@ -173,6 +173,37 @@ describe("InteractiveBlockCard — Notion's Mermaid code block model", () => {
     card({ html: "" });
     expect(noBtn(/^Ask AI$/)).toBeNull();
     expect(btn("Open block actions menu")).toBeTruthy();
+  });
+
+  it("resize bars (Notion): drag narrows/widens the block around its centre and saves its width", () => {
+    const { container, onUpdate } = card({ html: "<p>x</p>" });
+    const live = container.querySelector(".sb-live") as HTMLElement;
+    // column 600px wide (612 minus the 6px margins), centred at x = 306
+    live.getBoundingClientRect = () => ({ left: 0, width: 612, top: 0, height: 300, right: 612, bottom: 300 }) as DOMRect;
+    const bars = container.querySelectorAll(".sb-resize-bar");
+    expect(bars).toHaveLength(2);
+    const right = bars[1] as HTMLElement;
+    fireEvent.pointerDown(right, { pointerId: 1, clientX: 606 });
+    expect(container.querySelector(".sb-live-col")!.getAttribute("data-resizing")).toBe("true");
+    act(() => { right.dispatchEvent(new MouseEvent("pointermove", { clientX: 456 })); }); // 150 from the centre → 300 of 600
+    act(() => { right.dispatchEvent(new MouseEvent("pointerup")); });
+    expect(onUpdate).toHaveBeenLastCalledWith(0, expect.objectContaining({ width: 0.5 }));
+    const col = container.querySelector(".sb-live-col") as HTMLElement;
+    expect(col.style.width.replace(/\s/g, "")).toMatch(/0\.5\*\(100%-12px\)|\(100%-12px\)\*0\.5/);
+    expect(col.getAttribute("data-resizing")).toBeNull();
+  });
+
+  it("a block opens at its saved width; the width stays between 25 % and full", () => {
+    const { container } = card({ html: "<p>x</p>", width: 0.6 });
+    expect((container.querySelector(".sb-live-col") as HTMLElement).style.width.replace(/\s/g, "")).toMatch(/0\.6\*\(100%-12px\)|\(100%-12px\)\*0\.6/);
+    expect(clampWidth(0.1)).toBe(MIN_WIDTH);
+    expect(clampWidth(1.4)).toBe(1);
+    expect(clampWidth(0.66666)).toBe(0.667);
+  });
+
+  it("an empty block has no resize bars", () => {
+    const { container } = card({ html: "" });
+    expect(container.querySelector(".sb-resize-bar")).toBeNull();
   });
 
   it("Save as image is offered only for pictures (diagram, canvas, svg, 3D)", () => {

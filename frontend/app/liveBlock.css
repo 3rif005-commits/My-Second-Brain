@@ -14,14 +14,41 @@
 }
 
 /* 8px in from the block on every side, like Notion (the editor's block padding is 8px 2px,
- * so 6px more at the sides). */
+ * so 6px more at the sides). Box, prompt card, notes and caption share this column; a
+ * resized block narrows it, centred (style set from the block's `width`). */
+.sb-live-col { margin: 0 6px; }
+.sb-live-static .sb-live-col,
+.sb-live-static .sb-live-box { margin: 0; }
 .sb-live-box {
   position: relative;
-  margin: 0 6px;
   border-radius: 10px;
   background: var(--c-bg-code);
 }
-.sb-live-static .sb-live-box { margin: 0; }
+
+/* Resize bars (Notion image/media blocks, blocks.md §2): 6×48 at each side, 4px in,
+ * vertically centred, rgba(15,15,15,.6) with a 1px white edge, radius 20px; shown on hover. */
+.sb-resize-bar {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 6px;
+  height: 48px;
+  max-height: calc(100% - 16px);
+  transform: translateY(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 20px;
+  background: rgba(15, 15, 15, 0.6);
+  cursor: col-resize;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+.sb-resize-left { left: 4px; }
+.sb-resize-right { right: 4px; }
+.sb-live-box:hover > .sb-resize-bar,
+.sb-live-col[data-resizing] .sb-resize-bar { opacity: 1; }
+/* While dragging, the frame must not swallow the pointer. */
+.sb-live-col[data-resizing] iframe { pointer-events: none; }
 
 /* The result. Its page is transparent and uses the note's colours (lib/liveRuntime.ts). */
 .sb-live-preview { padding: 32px 22px; }
@@ -285,7 +312,7 @@
 
 /* Ask AI: a prompt card under the block (a popover surface: elevated bg, shadow.menu). */
 .sb-live-ask {
-  margin: 8px 6px 0;
+  margin: 8px 0 0;
   padding: 8px 8px 6px 12px;
   border-radius: 10px;
   background: var(--c-bg-elevated);
@@ -333,7 +360,7 @@
   color: var(--c-text-tertiary);
 }
 .sb-live-note {
-  margin: 6px 8px 0;
+  margin: 6px 2px 0;
   font-size: 12px;
   line-height: 16px;
   color: var(--blk-orange-text);
@@ -343,8 +370,8 @@
 /* Caption (Notion: 14px/19.6px, padding 6px 0 6px 2px, secondary grey). */
 .sb-live-caption {
   display: block;
-  width: calc(100% - 12px);
-  margin: 0 6px;
+  width: 100%;
+  margin: 0;
   padding: 6px 0 6px 2px;
   border: 0;
   outline: none;
@@ -406,4 +433,3 @@
 @media (prefers-reduced-motion: reduce) {
   .sb-spin { animation-duration: 2.4s; }
 }
-.sb-live-static .sb-live-caption { margin: 0; width: 100%; }

@@ -230,6 +230,8 @@ export interface InteractiveBlock {
   /** what the block shows: the result, the code, or both (Notion's Mermaid block) */
   view?: InteractiveView;
   wrap?: boolean;
+  /** share of the page column, 1 = full width */
+  width?: number;
 }
 
 
