@@ -10,13 +10,18 @@
 // 3D uses ArtCraft's recipe (captureModelThumbnail.ts, Apache-2.0/MIT, rewritten here): scale
 // to a 2-unit box standing on the origin, camera on a 45° diagonal fitted to the bounding sphere, a
 // fixed five-light rig, damped orbit controls. Every frame gets a CSP that allows the pinned
-// CDN only (plus `assetOrigin` for model files), the height reporter and an export responder.
+// library sites only (LIBRARY_ORIGINS, plus `assetOrigin` for model files), the height reporter and an export responder.
 
 import { withAutoHeight } from "./liveBlock";
 
 export type LiveKind = "mermaid" | "model" | "html";
 
 export const CDN = "https://cdn.jsdelivr.net";
+/** Public library sites a block may load scripts, styles, fonts and files from. jsDelivr is
+ *  where our own runtime comes from; the others are where pasted examples usually point
+ *  (the user chose to allow them, 2026-10-24). The frame stays sandboxed either way: no
+ *  same-origin, so no access to the note, the account or any other site. */
+export const LIBRARY_ORIGINS = [CDN, "https://cdnjs.cloudflare.com", "https://unpkg.com", "https://esm.sh"];
 export const MERMAID_URL = `${CDN}/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs`;
 export const THREE_URL = `${CDN}/npm/three@0.169.0/build/three.module.js`;
 export const THREE_ADDONS = `${CDN}/npm/three@0.169.0/examples/jsm/`;
@@ -37,15 +42,17 @@ const jsonInScript = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+const LIBS = LIBRARY_ORIGINS.join(" ");
+
 function csp(origins: string[]): string {
   const extra = origins.length ? " " + origins.join(" ") : "";
   return [
     "default-src 'none'",
-    `script-src 'unsafe-inline' ${CDN}`,
-    `style-src 'unsafe-inline' ${CDN}`,
-    `img-src data: blob: ${CDN}${extra}`,
-    `font-src data: ${CDN}`,
-    `connect-src ${CDN}${extra}`,
+    `script-src 'unsafe-inline' ${LIBS}`,
+    `style-src 'unsafe-inline' ${LIBS}`,
+    `img-src data: blob: ${LIBS}${extra}`,
+    `font-src data: ${LIBS}`,
+    `connect-src ${LIBS}${extra}`,
     "media-src data: blob:",
     "worker-src blob:",
   ].join("; ");
@@ -224,8 +231,8 @@ export function preflightWarnings(code: string): string[] {
     out.push("This block tries to reach the page around it; that is blocked here.");
   }
   const srcs = [...code.matchAll(/\b(?:src|href)\s*=\s*["'](https?:\/\/[^"']+)/gi)].map((m) => m[1]);
-  if (srcs.some((u) => !u.startsWith(CDN))) {
-    out.push("This block loads files from other sites; only the built-in libraries are allowed.");
+  if (srcs.some((u) => !LIBRARY_ORIGINS.some((o) => u.startsWith(o + "/")))) {
+    out.push("This block loads files from a site that isn't allowed; only jsDelivr, cdnjs, unpkg and esm.sh are.");
   }
   return out;
 }

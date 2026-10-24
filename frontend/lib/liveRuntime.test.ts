@@ -35,7 +35,8 @@ describe("buildSrcDoc", () => {
     expect(doc).toContain(MERMAID_URL);
     expect(doc).toContain("A[&lt;b&gt;x&lt;/b&gt;]");
     expect(cspOf(doc)).toContain("default-src 'none'");
-    expect(cspOf(doc)).toContain(`connect-src ${CDN}`);
+    expect(cspOf(doc)).toContain(`connect-src ${CDN} https://cdnjs.cloudflare.com https://unpkg.com https://esm.sh`);
+    expect(cspOf(doc)).toContain("script-src 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com");
     expect(doc).toContain("sb-live-export");
     expect(doc).toContain("sb-live-height");
     allParse(doc);
@@ -81,8 +82,13 @@ describe("preflightWarnings", () => {
   it("flags network, page escapes and foreign files; built-ins are fine", () => {
     expect(preflightWarnings("<script>fetch('https://x')</script>")).toHaveLength(1);
     expect(preflightWarnings("<script>parent.document.body</script>")[0]).toMatch(/page around it/);
-    expect(preflightWarnings('<img src="https://evil.com/a.png">')[0]).toMatch(/other sites/);
+    expect(preflightWarnings('<img src="https://evil.com/a.png">')[0]).toMatch(/isn't allowed/);
     expect(preflightWarnings(`<script src="${CDN}/npm/x"></script>`)).toEqual([]);
+    // The other public library sites pasted examples use are allowed too (user's choice).
+    expect(preflightWarnings('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>')).toEqual([]);
+    expect(preflightWarnings('<script type="module">import x from "https://esm.sh/d3"</script><script src="https://unpkg.com/a"></script>')).toEqual([]);
+    // A look-alike host is not one of them.
+    expect(preflightWarnings('<script src="https://unpkg.com.evil.io/a"></script>')[0]).toMatch(/isn't allowed/);
     expect(preflightWarnings("flowchart LR\n A-->B")).toEqual([]);
   });
 });
