@@ -10,15 +10,18 @@
 .sb-live {
   position: relative;
   width: 100%;
-  padding: 8px 0 0;
   color: var(--c-text);
 }
 
+/* 8px in from the block on every side, like Notion (the editor's block padding is 8px 2px,
+ * so 6px more at the sides). */
 .sb-live-box {
   position: relative;
+  margin: 0 6px;
   border-radius: 10px;
   background: var(--c-bg-code);
 }
+.sb-live-static .sb-live-box { margin: 0; }
 
 /* The result. Its page is transparent and uses the note's colours (lib/liveRuntime.ts). */
 .sb-live-preview { padding: 32px 22px; }
@@ -210,7 +213,8 @@
 .sb-live-code-back,
 .sb-live-code-input {
   margin: 0;
-  padding: 24px 22px;
+  /* Notion: 24px box padding + 12px around the code = 36px top and bottom. */
+  padding: 36px 22px;
   border: 0;
   font: inherit;
   letter-spacing: normal;
@@ -220,6 +224,7 @@
 }
 .sb-live[data-view="split"] .sb-live-code-back,
 .sb-live[data-view="split"] .sb-live-code-input { padding-bottom: 12px; }
+/* Split: the result straight under the code (Notion: no divider). */
 .sb-live-code-editor[data-wrap] .sb-live-code-back,
 .sb-live-code-editor[data-wrap] .sb-live-code-input {
   white-space: pre-wrap;
@@ -270,7 +275,7 @@
 
 /* Ask AI: a prompt card under the block (a popover surface: elevated bg, shadow.menu). */
 .sb-live-ask {
-  margin-top: 8px;
+  margin: 8px 6px 0;
   padding: 8px 8px 6px 12px;
   border-radius: 10px;
   background: var(--c-bg-elevated);
@@ -318,7 +323,7 @@
   color: var(--c-text-tertiary);
 }
 .sb-live-note {
-  margin: 6px 2px 0;
+  margin: 6px 8px 0;
   font-size: 12px;
   line-height: 16px;
   color: var(--blk-orange-text);
@@ -328,7 +333,8 @@
 /* Caption (Notion: 14px/19.6px, padding 6px 0 6px 2px, secondary grey). */
 .sb-live-caption {
   display: block;
-  width: 100%;
+  width: calc(100% - 12px);
+  margin: 0 6px;
   padding: 6px 0 6px 2px;
   border: 0;
   outline: none;
@@ -367,12 +373,12 @@
   background: transparent;
 }
 
-/* Selected as a whole: Notion's soft blue tint over the block (blocks.md §4), instead of
- * BlockNote's 4px outline. */
+/* Selected as a whole: Notion's soft blue tint over the box (blocks.md §4), instead of
+ * BlockNote's 4px outline; only while the editor has focus (click away and it goes). */
 .ProseMirror-selectednode > .bn-block-content[data-content-type="interactive"] > * {
   outline: none;
 }
-.ProseMirror-selectednode > .bn-block-content[data-content-type="interactive"] .sb-live::after {
+.ProseMirror-focused .ProseMirror-selectednode > .bn-block-content[data-content-type="interactive"] .sb-live-box::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -390,3 +396,4 @@
 @media (prefers-reduced-motion: reduce) {
   .sb-spin { animation-duration: 2.4s; }
 }
+.sb-live-static .sb-live-caption { margin: 0; width: 100%; }

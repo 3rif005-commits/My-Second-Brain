@@ -92,7 +92,7 @@ function baseStyle(theme: LiveTheme): string {
   const vars = Object.entries(THEME_VARS[theme]).map(([k, v]) => `${k}:${v}`).join(";");
   // color-scheme matches the note's, or Chrome paints an opaque backdrop behind the frame.
   return `<style>:root{color-scheme:${theme};${vars}}html,body{margin:0;background:transparent}` +
-    `body{font-family:system-ui,sans-serif;color:var(--sb-text)}</style>`;
+    `body{font-family:system-ui,sans-serif;color:var(--sb-text)}#sb-msg:empty{display:none}</style>`;
 }
 
 // Where the camera goes for a model of size (sx, sy, sz) standing on the origin: far enough
@@ -204,12 +204,34 @@ try {
 </script>`;
 }
 
+/** Notion's diagrams (measured 2026-10-24): Mermaid's own "dark" theme in dark mode (nodes
+ *  rgb(31,32,32), borders/text rgb(204,204,204), lines rgb(211,211,211), 1px) and its
+ *  default theme in light, in Notion's UI font at 16px, on a transparent background. */
+export function mermaidConfig(theme: LiveTheme) {
+  return {
+    startOnLoad: false,
+    securityLevel: "strict",
+    theme: theme === "dark" ? "dark" : "default",
+    themeVariables: {
+      fontFamily: NOTION_UI_FONT,
+      fontSize: "16px",
+      background: "transparent",
+      ...(theme === "dark"
+        ? { primaryColor: "#1f2020", primaryBorderColor: "#cccccc", primaryTextColor: "#cccccc", lineColor: "#d3d3d3" }
+        : {}),
+    },
+  };
+}
+
+const NOTION_UI_FONT =
+  'ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"';
+
 function mermaidBody(code: string, theme: LiveTheme): string {
   return `<pre class="mermaid" style="margin:0;padding:0;display:flex;justify-content:center">${escapeHtml(code.trim())}</pre>
 <p id="sb-msg" style="font-size:12px;color:var(--sb-bad);margin:6px 8px"></p>
 <script type="module">
 import mermaid from "${MERMAID_URL}";
-mermaid.initialize({ startOnLoad: false, theme: ${JSON.stringify(theme === "dark" ? "dark" : "neutral")}, securityLevel: "strict" });
+mermaid.initialize(${jsonInScript(mermaidConfig(theme))});
 try { await mermaid.run({ querySelector: ".mermaid" }); }
 catch (e) { document.getElementById("sb-msg").textContent = "This diagram has a syntax error: " + (e && e.message ? e.message.split("\\n")[0] : ""); }
 </script>`;

@@ -109,18 +109,22 @@
   font-size: 16px;
 }
 
-/* Code: warm faint fill, radius 10px, 24px 22px padding, 13.6px mono text. */
+/* Code: Notion's box (measured live 2026-10-24): 8px in from the block on every side
+ * (704 of 720), warm faint fill, radius 10px; the text 36px from the top and bottom
+ * (24px box padding + 12px inner) and 22px from the sides; 13.6px mono. */
 .notion-editor .bn-block-content[data-content-type="codeBlock"] {
   position: relative;
   color: var(--c-text);
   background: var(--c-bg-code);
   border-radius: var(--radius-card);
-  margin: 4px 0;
+  margin: 8px;
+  padding: 0;
+  width: calc(100% - 16px);
   /* Syntax colours: --code-* in tokens.css (shared with the interactive block's code view). */
   --code-fg: var(--c-text);
 }
 .notion-editor .bn-block-content[data-content-type="codeBlock"] > pre {
-  padding: 24px 22px;
+  padding: 36px 22px;
   font-family: var(--font-code);
   font-size: 13.6px;
   line-height: 20.4px;

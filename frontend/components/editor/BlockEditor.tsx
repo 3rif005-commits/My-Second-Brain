@@ -658,7 +658,7 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
                 subtext: "Ask AI for a quiz, chart, simulation or diagram",
                 aliases: ["quiz", "knowledge check", "interactive", "live", "chart", "diagram", "simulation", "disco"],
                 // Starts empty and untitled: the block shows its "Ask AI to build something" row.
-                onItemClick: () => insertInteractiveBlock(editor, editor.getTextCursorPosition()?.block?.id, { title: "", html: "" }),
+                onItemClick: () => insertInteractiveBlock(editor, editor.getTextCursorPosition()?.block?.id, { title: "", html: "" }, { replaceEmpty: true }),
               }];
               // Own "Databases" group (rather than folding into "Interactive",
               // which is really about the interactive block above) —

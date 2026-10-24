@@ -25,6 +25,22 @@ describe("insertInteractiveBlock", () => {
   });
 });
 
+describe("insertInteractiveBlock from the slash menu", () => {
+  it("turns the empty line into the block (Notion), but never replaces a line with text", async () => {
+    const { BlockNoteSchema, defaultBlockSpecs, BlockNoteEditor } = await import("@blocknote/core");
+    const { InteractiveBlockSpec } = await import("./InteractiveBlock");
+    const schema = BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, interactive: InteractiveBlockSpec() } });
+    const editor = BlockNoteEditor.create({ schema, initialContent: [{ type: "paragraph", content: "keep" }, { type: "paragraph" }] as never });
+    editor.mount(document.createElement("div"));
+    const [kept, empty] = editor.document;
+    insertInteractiveBlock(editor, empty.id, { title: "", html: "" }, { replaceEmpty: true });
+    expect(editor.document.map((b) => b.type).slice(0, 2)).toEqual(["paragraph", "interactive"]);
+    insertInteractiveBlock(editor, kept.id, { title: "", html: "" }, { replaceEmpty: true });
+    expect(editor.document.map((b) => b.type).slice(0, 3)).toEqual(["paragraph", "interactive", "interactive"]);
+    expect((editor.document[0].content as { text: string }[])[0].text).toBe("keep");
+  });
+});
+
 describe("InteractiveBlockSpec in a real editor", () => {
   it("is registered, holds title/html/snapshot/view/wrap props and round-trips through the document", async () => {
     const { BlockNoteSchema, defaultBlockSpecs, BlockNoteEditor } = await import("@blocknote/core");

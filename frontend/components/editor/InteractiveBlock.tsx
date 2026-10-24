@@ -62,12 +62,22 @@ export const InteractiveBlockSpec = createReactBlockSpec(
   }
 );
 
-/** Insert a new interactive block after `afterBlockId`, or at the end of the document. */
-export function insertInteractiveBlock(editor: AnyBlock, afterBlockId: string | undefined, props?: { title: string; html: string }) {
+/** Insert a new interactive block after `afterBlockId`, or at the end of the document. With
+ *  `replaceEmpty`, an empty paragraph there BECOMES the block (the slash menu: Notion turns
+ *  the "/…" line itself into the block instead of leaving it empty above). */
+export function insertInteractiveBlock(
+  editor: AnyBlock,
+  afterBlockId: string | undefined,
+  props?: { title: string; html: string },
+  { replaceEmpty = false }: { replaceEmpty?: boolean } = {},
+) {
   const nb = { type: "interactive", props: props ?? { title: "Knowledge Check", html: DEFAULT_INTERACTIVE_HTML } };
   const doc = editor.document as AnyBlock[];
   const target = afterBlockId ?? doc[doc.length - 1]?.id;
-  if (target) editor.insertBlocks([nb], target, "after");
+  const block = replaceEmpty && target ? editor.getBlock(target) : undefined;
+  const isEmptyParagraph = block?.type === "paragraph" && !(block.content?.length) && !(block.children?.length);
+  if (replaceEmpty && isEmptyParagraph) editor.replaceBlocks([block], [nb]);
+  else if (target) editor.insertBlocks([nb], target, "after");
   else editor.replaceBlocks(editor.document, [nb]);
 }
 

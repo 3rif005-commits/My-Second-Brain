@@ -82,11 +82,12 @@ describe("buildSrcDoc theme (content follows the note's light/dark, like Notion'
   it("light by default; dark gives the dark colours, color-scheme and Mermaid's dark theme", () => {
     const light = buildSrcDoc("flowchart LR\n A-->B");
     expect(light).toContain("color-scheme:light");
-    expect(light).toContain('theme: "neutral"');
+    expect(light).toContain(`"theme":"default"`);
     const dark = buildSrcDoc("flowchart LR\n A-->B", { theme: "dark" });
     expect(dark).toContain("color-scheme:dark");
     expect(dark).toContain("--sb-text:rgb(240,239,237)");
-    expect(dark).toContain('theme: "dark"');
+    expect(dark).toContain(`"theme":"dark"`);
+    expect(dark).toContain(`"primaryBorderColor":"#cccccc"`);
     allParse(dark);
   });
   it("the page is transparent so the block's box shows through; HTML gets the variables too", () => {
