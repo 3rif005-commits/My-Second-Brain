@@ -103,6 +103,22 @@ describe("Notion code block", () => {
     expect((editor.document[0].props as AnyBlock).language).toBe("rust");
   });
 
+  it("changes inside the pill (Wrap shown, Copied, menu open) don't redraw the block", async () => {
+    const { root } = makeEditor([html()]);
+    const toolbar = root.querySelector(".sb-code-toolbar")!;
+    const pre = root.querySelector("pre")!;
+    // A line too long → Wrap appears; the pill's own DOM changes.
+    Object.defineProperty(pre, "scrollWidth", { configurable: true, value: 900 });
+    Object.defineProperty(pre, "clientWidth", { configurable: true, value: 400 });
+    pre.dispatchEvent(new Event("pointerenter"));
+    (root.querySelector("button.sb-code-lang") as HTMLButtonElement).click();
+    toolbar.querySelector(".sb-code-btn")!.innerHTML = "<span>Copied</span>";
+    // Let ProseMirror's DOM observer see those mutations.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(root.querySelector(".sb-code-toolbar")).toBe(toolbar);
+    expect(root.querySelector("pre")).toBe(pre);
+  });
+
   it("filterLanguages matches names, ids and aliases, best first", () => {
     expect(filterLanguages("ts")).toContain("typescript");
     expect(filterLanguages("c")[0]).toBe("c");

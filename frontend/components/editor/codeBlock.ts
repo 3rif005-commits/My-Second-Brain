@@ -331,6 +331,10 @@ function render(block: AnyBlock, editor: AnyBlock) {
   return {
     dom: fragment,
     contentDOM: code,
+    // The pill is editor chrome. Without this, ProseMirror reads every change in it (Wrap
+    // shown/hidden, "Copied", menu open) as an edit and rebuilds the block — and the rebuilt
+    // pill changes again, so the block kept redrawing: no caret inside, pill gone (live).
+    ignoreMutation: (mutation: { target: Node }) => toolbar.contains(mutation.target),
     destroy: () => cleanups.forEach((fn) => fn()),
   };
 }
