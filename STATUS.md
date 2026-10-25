@@ -94,6 +94,9 @@ delete (deleting is permanent).
   Up to 8 conversation tabs, each a live Chat kept mounted (a running answer survives switching tabs).
   Editor jobs and "Ask AI" on a selection go to the tab shown when they arrive. Old saved layouts drop
   their Ask tab. Live-checked: right ↔ bottom, survives reload, + opens tabs, × closes them.
+  **Float** (third option): a window over the page, moved by its tab bar, sized from any edge or
+  corner, double-click the bar to dock; position remembered (`ai-panel-float`) and kept on screen.
+  Opaque background (the docked tint let a video show through). Phones always get the right sheet.
   Not checked live: sending in two tabs at once. On a 921 px window the right dock leaves room for one
   pane; the bottom dock keeps two.
 - **Source uploads**: the browser writes straight into the user's Storage folder (owner-write policy,
