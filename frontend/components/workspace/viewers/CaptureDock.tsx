@@ -38,7 +38,7 @@
 //    player — no iframe there, so the whole surface reports hover normally.
 import { useCallback, useEffect, useState } from "react";
 import {
-  AudioLines, Bookmark, Camera, Film, Keyboard, Loader2, Maximize2,
+  AudioLines, Bookmark, Camera, ChevronLeft, Film, Keyboard, Loader2, Maximize2,
   Minimize2, Square, X,
 } from "lucide-react";
 import { fmtTime } from "@/lib/workspace";
@@ -76,9 +76,34 @@ interface CaptureDockProps {
   onSeekBy?: (delta: number) => void;
 }
 
-/** One rail button: an icon, its name and key in a label that opens to its left. */
+/** Icons on the rail share one size and a lighter stroke than the app's default. */
+const ICON = { size: 17, strokeWidth: 1.75 } as const;
+
+/** A label beside a rail control: what it does and its key, opening to the left. */
+function RailLabel({ text, shortcut }: { text: string; shortcut?: string }) {
+  return (
+    <span className="ws-media-glass pointer-events-none absolute right-full top-1/2 mr-2.5 flex -translate-y-1/2 translate-x-1.5
+      items-center gap-2 whitespace-nowrap rounded-lg py-1.5 pl-2.5 pr-1.5 text-[12px] font-medium tracking-[0.01em]
+      opacity-0 transition-[opacity,transform] duration-150 ease-out
+      group-hover/btn:translate-x-0 group-hover/btn:opacity-100 group-focus-within/btn:translate-x-0 group-focus-within/btn:opacity-100">
+      <span className="text-white/90">{text}</span>
+      {shortcut && <Kbd>{shortcut}</Kbd>}
+    </span>
+  );
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] border border-white/15
+      bg-white/[0.08] px-1 font-sans text-[10.5px] font-semibold leading-none text-white/80 shadow-[inset_0_-1px_0_rgba(255,255,255,0.06)]">
+      {children}
+    </kbd>
+  );
+}
+
+/** One rail button: a 36 px square with its label opening to the left. */
 function RailButton({
-  icon, label, hint, shortcut, onClick, disabled, tone = "default", caption,
+  icon, label, hint, shortcut, onClick, disabled, tone = "default",
 }: {
   icon: React.ReactNode;
   label: string;
@@ -88,8 +113,6 @@ function RailButton({
   onClick: () => void;
   disabled?: boolean;
   tone?: "default" | "accent" | "danger";
-  /** A line under the icon (Mark shows the time it would mark). */
-  caption?: string;
 }) {
   return (
     <span className="group/btn relative flex">
@@ -99,29 +122,24 @@ function RailButton({
         disabled={disabled}
         aria-label={[hint ?? label, shortcut ? `(shortcut ${shortcut})` : ""].filter(Boolean).join(" ")}
         aria-keyshortcuts={shortcut?.toLowerCase()}
-        className={`flex w-10 flex-col items-center justify-center gap-0.5 rounded-lg ${caption ? "py-1.5" : "h-10"}
-          transition-colors duration-instant disabled:pointer-events-none disabled:opacity-40
-          focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 ${
+        className={`flex size-9 items-center justify-center rounded-[10px] transition-[background-color,color,transform,box-shadow]
+          duration-150 ease-out active:scale-[0.92] disabled:pointer-events-none disabled:opacity-35
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 ${
           tone === "accent"
-            ? "bg-accent text-ink-on-accent hover:bg-accent-hover"
+            ? "bg-accent text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_2px_8px_-2px_rgb(var(--accent-600)/0.7)] hover:brightness-110"
             : tone === "danger"
-              ? "bg-red-500/90 text-white hover:bg-red-500"
-              : "text-white/85 hover:bg-white/15 hover:text-white"
+              ? "bg-red-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_2px_8px_-2px_rgba(239,68,68,0.7)] hover:bg-red-400"
+              : "text-white/75 hover:bg-white/[0.12] hover:text-white"
         }`}
       >
         {icon}
-        {caption && <span className="font-mono text-[10px] leading-none tabular-nums">{caption}</span>}
       </button>
-      {/* The label: to the left, so it never leaves the media's edge. */}
-      <span className="pointer-events-none absolute right-full top-1/2 mr-2 flex -translate-y-1/2 translate-x-1 items-center gap-2
-        whitespace-nowrap rounded-md bg-black/85 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition
-        duration-150 group-hover/btn:translate-x-0 group-hover/btn:opacity-100 group-focus-within/btn:translate-x-0 group-focus-within/btn:opacity-100">
-        {hint ?? label}
-        {shortcut && <kbd className="rounded bg-white/15 px-1.5 font-mono text-[10px] leading-4">{shortcut}</kbd>}
-      </span>
+      <RailLabel text={hint ?? label} shortcut={shortcut} />
     </span>
   );
 }
+
+const Divider = () => <span aria-hidden className="mx-auto my-1 h-px w-5 bg-white/[0.12]" />;
 
 export function CaptureDock({
   containerRef, time, ready = true, busy, clipStart,
@@ -258,20 +276,33 @@ export function CaptureDock({
     onCheckpoint, onFrame, onRange, onCancelRange, onTogglePlay, onSeekBy,
   ]);
 
-  const spin = <Loader2 size={16} className="animate-spin" />;
+  const spin = <Loader2 {...ICON} className="animate-spin" />;
+  const elapsed = recording ? Math.max(0, time - clipStart) : 0;
 
   return (
     <>
-      {/* While a range records: what it covers, and how to throw it away. */}
+      {/* While a range records: how long, what it covers, and how to throw it away. */}
       {recording && (
-        <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full
-          ws-glass-dark py-1 pl-3 pr-1 text-xs text-white">
-          <span className="ws-recording size-2 rounded-full bg-red-500" />
-          <span className="font-mono tabular-nums">{fmtTime(clipStart)} → {fmtTime(Math.max(time, clipStart))}</span>
+        // Centred by the outer box: ws-rise animates `transform`, which would undo a translate here.
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center">
+        <div role="status" className="ws-media-glass ws-rise pointer-events-auto flex items-center
+          gap-2.5 rounded-full py-1 pl-3 pr-1 text-xs">
+          <span className="relative flex size-2">
+            <span className="ws-recording absolute inset-0 rounded-full bg-red-500" />
+            <span className="relative size-2 rounded-full bg-red-500" />
+          </span>
+          <span className="text-[10.5px] font-bold tracking-[0.12em] text-red-400">REC</span>
+          <span className="font-mono text-[13px] font-medium tabular-nums">{fmtTime(elapsed)}</span>
+          <span className="h-3.5 w-px bg-white/15" />
+          <span className="font-mono text-[11px] tabular-nums text-white/55">
+            {fmtTime(clipStart)} – {fmtTime(Math.max(time, clipStart))}
+          </span>
           <button type="button" onClick={onCancelRange} aria-label="Discard this range (Esc)" title="Discard (Esc)"
-            className="flex h-6 items-center gap-1 rounded-full px-2 text-white/80 hover:bg-white/15 hover:text-white">
-            <X size={12} /> Discard
+            className="flex h-6 items-center gap-1 rounded-full bg-white/[0.08] px-2.5 text-[11.5px] font-medium text-white/80
+              transition-colors hover:bg-white/[0.16] hover:text-white">
+            <X size={12} strokeWidth={2} /> Discard
           </button>
+        </div>
         </div>
       )}
 
@@ -281,12 +312,14 @@ export function CaptureDock({
       <div
         onPointerEnter={() => setZoneHover(true)}
         onPointerLeave={() => setZoneHover(false)}
-        className="absolute bottom-16 right-0 top-14 z-20 flex w-16 items-center justify-end pr-2"
+        className="absolute bottom-16 right-0 top-14 z-20 flex w-[72px] items-center justify-end pr-2.5"
       >
-        {/* The pull-tab, while the rail is away. */}
-        {/* Light with a dark ring, so it shows on a bright frame and a dark one alike. */}
-        <span aria-hidden className={`absolute right-1.5 top-1/2 h-12 w-1.5 -translate-y-1/2 rounded-full bg-white/80
-          shadow-[0_0_0_1px_rgba(0,0,0,0.45),0_1px_4px_rgba(0,0,0,0.5)] transition-opacity duration-200 ${shown ? "opacity-0" : "opacity-100"}`} />
+        {/* The handle, while the rail is away: a small glass tab that says "pull". */}
+        <span aria-hidden className={`ws-media-glass absolute right-0 top-1/2 flex h-12 w-4 -translate-y-1/2 items-center
+          justify-center rounded-l-lg transition-[opacity,transform] duration-200 ease-out ${
+          shown ? "translate-x-2 opacity-0" : "translate-x-0 opacity-100"}`}>
+          <ChevronLeft size={12} strokeWidth={2.25} className="text-white/70" />
+        </span>
 
         <div
           role="toolbar"
@@ -294,26 +327,30 @@ export function CaptureDock({
           aria-label="Capture tools"
           onFocus={() => setFocusWithin(true)}
           onBlur={() => setFocusWithin(false)}
-          className={`ws-glass-dark flex flex-col items-center gap-1 rounded-xl p-1 transition-[opacity,transform] duration-200 ${
-            shown ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-3 opacity-0"}`}
+          className={`ws-media-glass flex origin-right flex-col items-center gap-0.5 rounded-2xl p-1.5
+            transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
+            shown ? "translate-x-0 scale-100 opacity-100" : "pointer-events-none translate-x-3 scale-95 opacity-0"}`}
         >
           <RailButton
             tone="accent"
             label="Mark"
             hint="Mark this moment in the note"
-            caption={fmtTime(time)}
             shortcut={KEY.checkpoint}
             disabled={!ready}
-            icon={<Bookmark size={15} />}
+            icon={<Bookmark {...ICON} />}
             onClick={onCheckpoint}
           />
-          <span className="my-0.5 h-px w-6 bg-white/15" />
+          {/* The moment Mark would link to. */}
+          <span className="pb-0.5 pt-1 font-mono text-[10px] font-medium leading-none tabular-nums text-white/60">
+            {fmtTime(time)}
+          </span>
+          <Divider />
           <RailButton
             label="Frame"
             hint="Add this frame to the note"
             shortcut={KEY.frame}
             disabled={locked}
-            icon={busy === "frame" ? spin : <Camera size={17} />}
+            icon={busy === "frame" ? spin : <Camera {...ICON} />}
             onClick={onFrame}
           />
           {/* Clip and Audio keep their places when a range opens (they become its
@@ -322,23 +359,26 @@ export function CaptureDock({
             label={recording ? "End clip" : "Clip"}
             hint={recording ? "End here and add it as a video clip" : "Start a video clip here; press again to end"}
             shortcut={KEY.clip} disabled={locked}
-            icon={busy === "clip" ? spin : recording ? <Square size={13} fill="currentColor" /> : <Film size={17} />}
+            icon={busy === "clip" ? spin : recording ? <Square size={12} fill="currentColor" strokeWidth={0} /> : <Film {...ICON} />}
             onClick={() => onRange("clip")} />
           <RailButton tone={recording ? "danger" : "default"}
             label={recording ? "End audio" : "Audio"}
             hint={recording ? "End here and add it as audio" : "Start an audio excerpt here; press again to end"}
             shortcut={KEY.audio} disabled={locked}
-            icon={busy === "audio" ? spin : <AudioLines size={17} />}
+            icon={busy === "audio" ? spin : <AudioLines {...ICON} />}
             onClick={() => onRange("audio")} />
-          <span className="my-0.5 h-px w-6 bg-white/15" />
+          <Divider />
           <span className="group/keys relative flex">
             <span tabIndex={0} aria-label="Keyboard shortcuts"
-              className="flex size-10 cursor-help items-center justify-center rounded-lg text-white/70 hover:bg-white/15 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400">
-              <Keyboard size={16} />
+              className="flex size-9 cursor-help items-center justify-center rounded-[10px] text-white/55 transition-colors
+                hover:bg-white/[0.12] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60">
+              <Keyboard {...ICON} />
             </span>
-            <span className="pointer-events-none absolute right-full top-1/2 z-40 mr-2 hidden -translate-y-1/2 grid-cols-[auto_auto]
-              items-center gap-x-3 gap-y-1 whitespace-nowrap rounded-lg bg-black/85 px-3 py-2.5 text-[11px] text-white
-              shadow-lg group-hover/keys:grid group-focus-within/keys:grid">
+            <span className="ws-media-glass pointer-events-none absolute right-full top-1/2 z-40 mr-2.5 grid -translate-y-1/2
+              translate-x-1.5 grid-cols-[auto_auto] items-center gap-x-5 gap-y-1.5 whitespace-nowrap rounded-xl px-3.5 py-3
+              text-[12px] opacity-0 transition-[opacity,transform] duration-150 ease-out
+              group-hover/keys:translate-x-0 group-hover/keys:opacity-100 group-focus-within/keys:translate-x-0 group-focus-within/keys:opacity-100">
+              <span className="col-span-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/45">Shortcuts</span>
               {([
                 ["Play / pause", "Space"],
                 ["Back / forward 5s", "← →"],
@@ -349,8 +389,8 @@ export function CaptureDock({
                 ["Fullscreen", KEY.fullscreen],
               ] as const).map(([label, key]) => (
                 <span key={label} className="contents">
-                  <span className="text-white/70">{label}</span>
-                  <kbd className="justify-self-end rounded bg-white/15 px-1.5 py-px font-mono text-[10px] leading-4">{key}</kbd>
+                  <span className="text-white/80">{label}</span>
+                  <span className="justify-self-end"><Kbd>{key}</Kbd></span>
                 </span>
               ))}
             </span>
@@ -358,7 +398,7 @@ export function CaptureDock({
           <RailButton
             label={isFullscreen ? "Leave fullscreen" : "Fullscreen"}
             shortcut={KEY.fullscreen}
-            icon={isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            icon={isFullscreen ? <Minimize2 {...ICON} /> : <Maximize2 {...ICON} />}
             onClick={toggleFullscreen}
           />
         </div>
