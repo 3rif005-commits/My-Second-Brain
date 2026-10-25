@@ -8,15 +8,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft, Check, ExternalLink, PanelLeftClose, PanelLeftOpen,
-  Pencil, Sparkles, Upload,
+  ArrowLeft, Check, FileText, Link2, Pencil, PenLine, Sparkles, Upload,
 } from "lucide-react";
+import { Button, Tabs } from "@/components/ui";
 import { useToast } from "@/app/providers";
 import { formatElapsed, jobTitle, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
 import type { ChatJob, JobRequest } from "@/lib/chatJobs";
 import { DropZone } from "./DropZone";
 import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
-import { SourceRail } from "./SourceRail";
+import { SourceTabs } from "./SourceTabs";
+import { NoteStarters, SessionMenu } from "./SessionChrome";
 import { SourceViewer } from "./SourceViewer";
 import type { Passage } from "./viewers/passageMarks";
 import { useSynthesis } from "./useSynthesis";
@@ -24,17 +25,12 @@ import { useAIPanel } from "@/context/AIPanelContext";
 import { DRAFT_EVENT, UNDO_EVENT, type NoteDraft, type UndoOutcome } from "@/lib/noteDraft";
 
 const SPLIT_KEY = "workspace:splitPct";
-const PANELS_KEY = "workspace:panels";
-function readPanels(): { sources: boolean } {
-  try {
-    const v = JSON.parse(window.localStorage.getItem(PANELS_KEY) ?? "null");
-    return { sources: v?.sources !== false };
-  } catch { return { sources: true }; }
-}
-
-function savePanels(p: { sources: boolean }) {
-  try { window.localStorage.setItem(PANELS_KEY, JSON.stringify(p)); } catch { /* private mode */ }
-}
+/** Below this the source and the note can't both be read side by side. */
+const TWO_PANE_MIN = 700;
+/** From here the note and the AI fit side by side next to the source. */
+const WIDE_MIN = 1180;
+const ASK_WIDTH = 360;
+type Layout = "one" | "two" | "wide";
 
 interface WorkspaceShellProps {
   noteId: string | null;
@@ -124,13 +120,19 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const [savedFlash, setSavedFlash] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  // Not remembered across visits: coming back to a hidden source and an empty
+  // note read as a broken page.
   const [sourcesOpen, setSourcesOpen] = useState(true);
+  // One-pane layout only: which pane shows while the AI is closed.
+  const [pane, setPane] = useState<"source" | "note">("source");
+  const [layoutWidth, setLayoutWidth] = useState(0);
+  const [follow, setFollow] = useState(true);
   const [jobRequest, setJobRequest] = useState<JobRequest | null>(null);
   // The AI is the app's one panel (context/AIPanelContext): the workspace
   // binds it to this note and opens it; it draws no AI of its own.
   const ai = useAIPanel();
-  const chatOpen = ai.isOpen;
-  const [splitPct, setSplitPct] = useState(45);
+  const askOpen = ai.isOpen;
+  const [splitPct, setSplitPct] = useState(50);
 
   const seekRef = useRef<((value: number) => void) | null>(null);
   const actionSinkRef = useRef<((a: SendAction) => void) | null>(null);
@@ -202,6 +204,8 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       if (draft.noteId !== noteId || !applyRef.current) return;
       respond(true);
       insertResult(draft.html, draft.sourceIds, "append");
+      // Show where it landed, unless the note is already beside the AI.
+      if (layoutRef.current !== "wide") { closeAiRef.current(); setPane("note"); }
     }
     function onUndo(e: Event) {
       const { noteId: target, respond } = (e as CustomEvent<{ noteId: string; respond: (o: UndoOutcome) => void }>).detail;
@@ -269,31 +273,35 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   useEffect(() => {
     const stored = Number(window.localStorage.getItem(SPLIT_KEY));
     if (stored >= 25 && stored <= 70) setSplitPct(stored);
-    const p = readPanels();
-    setSourcesOpen(p.sources);
   }, []);
-  useEffect(() => { savePanels({ sources: sourcesOpen }); }, [sourcesOpen]);
 
-  // Three panels need room. When they would leave the note narrower than it
-  // can be read at, the sources step aside (one click brings them back) —
-  // the note in the middle is never the panel that gets squeezed.
-  // Once the user reopens the sources themselves, that choice wins until the
-  // AI panel is opened again.
-  const userWantsSources = useRef(false);
-  useEffect(() => { if (chatOpen) userWantsSources.current = false; }, [chatOpen]);
+  // The layout follows the room the shell actually has (the app sidebar may be
+  // open): one pane at a time, source + note/AI tabs, or all three side by side.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const check = () => {
-      // The AI panel sits outside this container: its width is already gone.
-      if (chatOpen && sourcesOpen && !userWantsSources.current
-          && el.clientWidth < 760) setSourcesOpen(false);
-    };
-    check();
-    const ro = new ResizeObserver(check);
+    const measure = () => setLayoutWidth(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [chatOpen, sourcesOpen, note]);
+  }, [note]);
+  const layout: Layout = layoutWidth >= WIDE_MIN ? "wide" : layoutWidth >= TWO_PANE_MIN || layoutWidth === 0 ? "two" : "one";
+
+  // The Ask tab is where the app's one AI panel docks; "AI open" means "Ask
+  // showing", so ⌘J and every "ask the AI" in the app land on this tab.
+  const dock = ai.dock;
+  const askSlotRef = useCallback((el: HTMLDivElement | null) => dock(el), [dock]);
+  useEffect(() => () => dock(null), [dock]);
+  const closeAi = ai.close;
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  const closeAiRef = useRef(closeAi);
+  closeAiRef.current = closeAi;
+  const showSource = useCallback(() => {
+    if (layout === "one") { closeAi(); setPane("source"); }
+    else setSourcesOpen(true);
+  }, [layout, closeAi]);
 
   useEffect(() => {
     function onMove(e: MouseEvent) {
@@ -465,8 +473,9 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   }, [deepLink, deepLinkKey, sources, activeId, selectAndSeek]);
 
   const handleCitation = useCallback((c: Citation) => {
+    showSource();
     selectAndSeek(c.resource_id, c.anchor_start);
-  }, [selectAndSeek]);
+  }, [selectAndSeek, showSource]);
 
   // ── title ─────────────────────────────────────────────────────────────────
   async function saveTitle() {
@@ -515,149 +524,191 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     );
   }
 
-  return (
-    <div className="ws-canvas relative h-full flex flex-col" {...dragProps}>
-      {/* header */}
-      <header className="flex items-center gap-2 pl-3 pr-3 h-[52px] shrink-0 group-data-[sidebar=collapsed]/shell:pl-12">
-        <button
-          onClick={() => router.push("/brain/workspace")}
-          title="Start a new session"
-          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl text-gray-400
-            hover:text-gray-800 dark:hover:text-gray-100 hover:bg-black/5 dark:hover:bg-white/5
-            transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400"
-        >
-          <ArrowLeft size={16} />
-        </button>
+  const sourcePane = (
+    <section aria-label="Source" className="flex h-full min-w-0 flex-col bg-surface-sidebar">
+      <SourceTabs
+        sources={sources}
+        activeId={activeId}
+        onSelect={setActiveId}
+        onAddFiles={addFiles}
+        onAddUrl={addUrl}
+        onRemove={removeSource}
+        onCollapse={layout === "one" ? undefined : () => setSourcesOpen(false)}
+        busy={busy}
+      />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <SourceViewer
+          source={activeSource}
+          onPosition={(v) => positionSinkRef.current?.(v)}
+          onAction={(a) => actionSinkRef.current?.(a)}
+          seekRef={seekRef}
+          passages={passages}
+          onRetry={retrySource}
+        />
+      </div>
+    </section>
+  );
 
-        <div className="min-w-0 flex-1 flex flex-col justify-center">
+  const notePane = (
+    <NotePane
+      extraSlashItems={slashItems}
+      note={note}
+      sources={sources}
+      activeSourceId={activeId}
+      onJump={(sid, v) => { showSource(); selectAndSeek(sid, v); }}
+      actionSinkRef={actionSinkRef}
+      positionSinkRef={positionSinkRef}
+      applyRef={applyRef}
+      onApplied={syn.markApplied}
+      onSavingChange={setSaving}
+      onPassages={updatePassages}
+      follow={follow}
+      starters={(focusEditor) => (
+        <NoteStarters
+          jobs={chatJobs}
+          sourceCount={sources.length}
+          onJob={askChat}
+          onWrite={focusEditor}
+        />
+      )}
+    />
+  );
+
+  // Note / Ask tabs (two-pane), or Source / Note / Ask (one pane).
+  const rightTab: "note" | "ask" = askOpen ? "ask" : "note";
+  const paneTabs = layout === "one"
+    ? (
+      <Tabs
+        label="Pane"
+        value={askOpen ? "ask" : pane}
+        onChange={(v) => { if (v === "ask") ai.open(); else { closeAi(); setPane(v); } }}
+        items={[
+          { value: "source", label: "Source", icon: <FileText /> },
+          { value: "note", label: "Note", icon: <PenLine /> },
+          { value: "ask", label: "Ask AI", icon: <Sparkles /> },
+        ]}
+      />
+    ) : layout === "two" ? (
+      <Tabs
+        label="Note or AI"
+        value={rightTab}
+        onChange={(v) => (v === "ask" ? ai.open() : closeAi())}
+        items={[
+          { value: "note", label: "Note", icon: <PenLine /> },
+          { value: "ask", label: "Ask AI", icon: <Sparkles /> },
+        ]}
+      />
+    ) : (
+      <span className="flex items-center gap-1.5 px-2 text-sm font-medium text-ink"><PenLine size={15} /> Note</span>
+    );
+
+  const showNote = layout === "wide" || (layout === "two" ? !askOpen : !askOpen && pane === "note");
+  const showAsk = askOpen;
+  const showSourcePane = layout === "one" ? !askOpen && pane === "source" : sourcesOpen;
+
+  return (
+    <div className="relative h-full flex flex-col bg-surface" {...dragProps}>
+      {/* header */}
+      <header className="flex h-11 shrink-0 items-center gap-1 border-b border-line pl-2 pr-2 group-data-[sidebar=collapsed]/shell:pl-11">
+        <Button variant="ghost" icon={<ArrowLeft />} onClick={() => router.push("/brain/workspace")}
+          title="All study sessions">
+          Sessions
+        </Button>
+        <span className="mx-1.5 h-[18px] w-px shrink-0 bg-line" />
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           {titleDraft !== null ? (
             <input
               autoFocus
+              aria-label="Session title"
               value={titleDraft}
               onChange={(e) => setTitleDraft(e.target.value)}
               onBlur={saveTitle}
-              onKeyDown={(e) => { if (e.key === "Enter") saveTitle(); }}
-              className="w-full text-[15px] font-semibold tracking-tight bg-transparent outline-none
-                text-gray-900 dark:text-gray-50 border-b-2 border-accent-500 pb-px"
+              onKeyDown={(e) => { if (e.key === "Enter") saveTitle(); if (e.key === "Escape") setTitleDraft(null); }}
+              className="w-full min-w-0 border-b border-accent bg-transparent text-sm font-semibold text-ink outline-none"
             />
           ) : (
             <button
               onClick={() => setTitleDraft(note.title)}
-              title="Rename this note"
-              className="group/title flex items-center gap-1.5 min-w-0 text-left"
+              title="Rename this session"
+              className="group/title flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-left hover:bg-surface-hover"
             >
-              <span className="truncate text-[15px] font-semibold tracking-tight text-gray-900 dark:text-gray-50">
-                {note.title}
-              </span>
-              <Pencil
-                size={12}
-                className="shrink-0 text-gray-300 dark:text-gray-600 opacity-0 group-hover/title:opacity-100 transition-opacity"
-              />
+              <span className="truncate text-sm font-semibold text-ink">{note.title}</span>
+              <Pencil size={12} className="shrink-0 text-ink-icon opacity-0 group-hover/title:opacity-100" />
             </button>
           )}
-          <div className="flex items-center gap-1.5 text-[11px] text-gray-400 dark:text-gray-500 leading-none mt-0.5">
-            {sources.length > 0 && (
-              <span className="flex items-center -space-x-0.5 shrink-0">
-                {sources.slice(0, 5).map((s) => (
-                  <span
-                    key={s.id}
-                    className="w-2 h-2 rounded-full ring-2 ring-surface dark:ring-surface"
-                    style={{ backgroundColor: sourceColor(s.order_index) }}
-                  />
-                ))}
-              </span>
-            )}
-            <span className="shrink-0">
-              {sources.length} source{sources.length === 1 ? "" : "s"}
-            </span>
+          <span className="shrink-0 text-xs text-ink-tertiary">
             <StatusNote saving={saving} saved={savedFlash} synthesizing={false} />
-          </div>
+          </span>
         </div>
-
-        <a
-          href={`/brain/${note.id}`}
-          title="Open this note on its own page"
-          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl text-gray-400
-            hover:text-gray-800 dark:hover:text-gray-100 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-        >
-          <ExternalLink size={15} />
-        </a>
+        <SessionMenu
+          noteId={noteId}
+          sourcesHidden={layout !== "one" && !sourcesOpen}
+          onShowSources={() => setSourcesOpen(true)}
+        />
       </header>
 
-      {/* body: sources · note · AI */}
-      <div ref={containerRef} className="flex-1 min-h-0 flex px-2 pb-2 gap-0">
-        {sourcesOpen ? (
-          <>
-            <div
-              className="ws-panel flex flex-col min-w-0 rounded-2xl overflow-hidden"
-              // With the AI panel open the note is the middle of three: the
-              // sources give way so it is never the one squeezed.
-              style={{ width: `${splitPct}%`, maxWidth: chatOpen ? "32%" : undefined }}
-            >
-              <div className="flex items-center justify-end px-1.5 pt-1.5 -mb-1 shrink-0">
-                <button onClick={() => setSourcesOpen(false)} title="Collapse the sources panel"
-                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400
-                    hover:text-gray-800 dark:hover:text-gray-100 hover:bg-black/5 dark:hover:bg-white/5">
-                  <PanelLeftClose size={14} />
-                </button>
-              </div>
-              <SourceRail
-                noteId={noteId}
-                sources={sources}
-                activeId={activeId}
-                onSelect={setActiveId}
-                onAddFiles={addFiles}
-                onAddUrl={addUrl}
-                onRemove={removeSource}
-                onRetry={retrySource}
-                busy={busy}
-              />
-              <div className="flex-1 min-h-0 flex flex-col">
-                <SourceViewer
-                  source={activeSource}
-                  onPosition={(v) => positionSinkRef.current?.(v)}
-                  onAction={(a) => actionSinkRef.current?.(a)}
-                  seekRef={seekRef}
-                  passages={passages}
-                />
-              </div>
+      {/* body */}
+      <div ref={containerRef} className="flex min-h-0 flex-1">
+        {layout === "one" ? (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex h-11 shrink-0 items-center border-b border-line px-2">{paneTabs}</div>
+            <div className="relative min-h-0 flex-1">
+              {/* Hidden, never unmounted: a video keeps playing and the note keeps
+                  its editor for the AI's Insert. */}
+              <div className={showSourcePane ? "absolute inset-0" : "hidden"}>{sourcePane}</div>
+              <div className={showNote ? "absolute inset-0" : "hidden"}>{notePane}</div>
+              {showAsk && <div ref={askSlotRef} data-ask-slot className="absolute inset-0" />}
             </div>
-            <div
-              onMouseDown={() => { draggingRef.current = true; document.body.style.cursor = "col-resize"; }}
-              className="group/split w-2 shrink-0 cursor-col-resize flex items-center justify-center"
-              title="Drag to resize"
-            >
-              <span className="w-[3px] h-8 rounded-full bg-gray-300/0 dark:bg-white/0
-                group-hover/split:bg-accent-400 dark:group-hover/split:bg-accent-500 transition-colors" />
-            </div>
-          </>
+          </div>
         ) : (
-          <button onClick={() => { userWantsSources.current = true; setSourcesOpen(true); }} title="Show the sources"
-            className="ws-panel w-10 shrink-0 mr-2 rounded-2xl flex flex-col items-center gap-2 pt-3
-              text-gray-400 hover:text-gray-800 dark:hover:text-gray-100 transition-colors">
-            <PanelLeftOpen size={15} />
-            {sources.slice(0, 8).map((s) => (
-              <span key={s.id} className="w-2 h-2 rounded-full" style={{ backgroundColor: sourceColor(s.order_index) }} />
-            ))}
-          </button>
+          <>
+            <div className={sourcesOpen ? "min-w-0 shrink-0" : "hidden"} style={{ width: `${splitPct}%` }}>{sourcePane}</div>
+            {sourcesOpen ? (
+              <>
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize the source"
+                  onMouseDown={() => { draggingRef.current = true; document.body.style.cursor = "col-resize"; }}
+                  onDoubleClick={() => { setSplitPct(50); window.localStorage.removeItem(SPLIT_KEY); }}
+                  className="group/split relative w-px shrink-0 cursor-col-resize bg-line"
+                  title="Drag to resize · double-click to reset"
+                >
+                  <span className="absolute inset-y-0 -left-1.5 -right-1.5 group-hover/split:bg-accent/30" />
+                </div>
+              </>
+            ) : null}
+
+            <section aria-label="Note" className="flex min-w-0 flex-1 flex-col">
+              <div className="flex h-[38px] shrink-0 items-center gap-1 border-b border-line px-2">
+                {paneTabs}
+                <span className="flex-1" />
+                <Button
+                  variant="ghost"
+                  icon={<Link2 />}
+                  aria-pressed={follow}
+                  className={follow ? "text-accent" : ""}
+                  title={follow ? "Following the source: the note scrolls with the page or video" : "Not following the source"}
+                  onClick={() => setFollow((v) => !v)}
+                >
+                  Follow
+                </Button>
+                {layout === "wide" && !askOpen && (
+                  <Button variant="ghost" icon={<Sparkles />} onClick={() => ai.focus()}>Ask AI</Button>
+                )}
+              </div>
+              <div className="relative min-h-0 flex-1">
+                <div className={showNote ? "absolute inset-0" : "hidden"}>{notePane}</div>
+                {layout === "two" && showAsk && <div ref={askSlotRef} data-ask-slot className="absolute inset-0" />}
+              </div>
+            </section>
+
+            {layout === "wide" && showAsk && (
+              <div ref={askSlotRef} data-ask-slot className="shrink-0 border-l border-line"
+                style={{ width: ASK_WIDTH }} />
+            )}
+          </>
         )}
-
-        <div className="ws-panel relative flex-1 min-w-[320px] rounded-2xl overflow-hidden">
-          <NotePane
-            extraSlashItems={slashItems}
-            note={note}
-            sources={sources}
-            activeSourceId={activeId}
-            onJump={selectAndSeek}
-            actionSinkRef={actionSinkRef}
-            positionSinkRef={positionSinkRef}
-            applyRef={applyRef}
-            onApplied={syn.markApplied}
-            onSavingChange={setSaving}
-            onPassages={updatePassages}
-          />
-        </div>
-
       </div>
 
       <DropOverlay show={dragOver} />

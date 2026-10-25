@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bot } from "lucide-react";
 import { Chat, type WorkspaceBinding } from "./Chat";
 import { useAIThread } from "@/context/AIThreadContext";
@@ -16,9 +16,43 @@ interface SidePanelProps {
   focusNonce?: number;
   /** Text to put in the input (a new nonce each time). */
   prefill?: { text: string; nonce: number } | null;
+  /** In a workspace session the panel never takes the window's edge: it sits
+   *  over `dockEl` (the session's Ask tab) and is hidden while there is none. */
+  docked?: boolean;
+  dockEl?: HTMLElement | null;
 }
 
-export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspace, focusNonce, prefill }: SidePanelProps) {
+/** The dock's box on screen, kept current as it resizes or the window does. */
+function useDockRect(el: HTMLElement | null | undefined) {
+  const [rect, setRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  useEffect(() => {
+    if (!el) { setRect(null); return; }
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setRect((prev) => (prev && prev.left === r.left && prev.top === r.top
+        && prev.width === r.width && prev.height === r.height)
+        ? prev : { left: r.left, top: r.top, width: r.width, height: r.height });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    // The dock can move without resizing (the sidebar sliding in), so also follow
+    // the page's own size and catch the end of any transition.
+    ro.observe(document.body);
+    window.addEventListener("resize", measure);
+    document.addEventListener("transitionend", measure, true);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+      document.removeEventListener("transitionend", measure, true);
+    };
+  }, [el]);
+  return rect;
+}
+
+export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspace, focusNonce, prefill, docked, dockEl }: SidePanelProps) {
+  const dockRect = useDockRect(docked ? dockEl : null);
+  const shown = open && (!docked || dockRect !== null);
   const { activeThreadId, setActiveThreadId } = useAIThread();
   const startX = useRef(0);
   const startWidth = useRef(width);
@@ -50,7 +84,7 @@ export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspac
   return (
     <>
       {/* Mobile backdrop */}
-      {open && (
+      {open && !docked && (
         <div
           className="md:hidden fixed inset-0 z-40 bg-black/40"
           onClick={onToggle}
@@ -60,7 +94,11 @@ export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspac
 
       {/* Panel */}
       <div
-        className={[
+        className={docked ? [
+          // Over the session's Ask tab: no slide, no edge, the page's own surface.
+          "fixed z-30 flex flex-col bg-surface",
+          shown ? "visible" : "invisible",
+        ].join(" ") : [
           "fixed inset-y-0 right-0 z-40 flex flex-col",
           // Distinct background: light lavender in light mode, deep blue-black in dark
           "bg-surface-chip dark:bg-surface-chip",
@@ -69,12 +107,15 @@ export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspac
           // and of screen readers.
           open ? "translate-x-0 visible" : "translate-x-full invisible",
         ].join(" ")}
-        style={{ width }}
+        style={docked
+          ? (dockRect ? { left: dockRect.left, top: dockRect.top, width: dockRect.width, height: dockRect.height }
+                      : { left: 0, top: 0, width: 0, height: 0 })
+          : { width }}
         aria-label="AI assistant panel"
         role="complementary"
       >
         {/* Resize handle — desktop only, on the left edge */}
-        <div
+        {!docked && <div
           onMouseDown={onResizeStart}
           className="absolute left-0 inset-y-0 w-3 cursor-col-resize hidden md:flex items-center justify-center z-10 group"
         >
@@ -86,10 +127,10 @@ export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspac
               <div key={i} className="w-[3px] h-[3px] rounded-full bg-accent-400 dark:bg-accent-500" />
             ))}
           </div>
-        </div>
+        </div>}
 
         {/* Indigo gradient accent at the top */}
-        <div className="h-px w-full bg-line shrink-0" />
+        {!docked && <div className="h-px w-full bg-line shrink-0" />}
 
         {/* Chat — stays mounted while closed, so a running job, its cards and
             the conversation survive closing and reopening the panel. */}

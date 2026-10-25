@@ -9,7 +9,6 @@
 // single note's sections can point at several different sources.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Link2 } from "lucide-react";
 import type { BlockEditorHandle, ExtraSlashItem } from "@/components/editor/BlockEditor";
 import {
   anchorLabel, sourceColor, wsApi,
@@ -70,6 +69,10 @@ interface NotePaneProps {
   extraSlashItems?: ExtraSlashItem[];
   /** The source passages the note quotes, on open and after each save (tinted in the PDF). */
   onPassages?: (passages: Passage[]) => void;
+  /** Scroll the note along with the source's page or playhead. */
+  follow?: boolean;
+  /** Shown under the editor while the note is empty: the session's first steps. */
+  starters?: (focusEditor: () => void) => React.ReactNode;
 }
 
 function getPlainText(blocks: AnyBlock[]): string {
@@ -112,10 +115,12 @@ function markdownTableToBlock(md: string): AnyBlock | null {
 export function NotePane({
   note, sources, activeSourceId, onJump, actionSinkRef,
   positionSinkRef, applyRef, onApplied, onSavingChange, extraSlashItems, onPassages,
+  follow = true, starters,
 }: NotePaneProps) {
   const [anchors, setAnchors] = useState<NoteAnchor[]>([]);
   const [ingestHtml, setIngestHtml] = useState<string | undefined>();
-  const [syncOn, setSyncOn] = useState(true);
+  const syncOn = follow;
+  const [empty, setEmpty] = useState(() => !hasContent(note.content ?? []));
   const editorRef = useRef<BlockEditorHandle>(null);
   const pendingRef = useRef<{ anchors: (PendingAnchor | null)[]; sourceIds: string[] } | null>(null);
   const anchorsRef = useRef<NoteAnchor[]>([]);
@@ -175,6 +180,7 @@ export function NotePane({
 
   const handleSave = useCallback(async (blocks: AnyBlock[], plainText: string) => {
     currentTextRef.current = plainText;
+    setEmpty(!hasContent(blocks));
     passagesRef.current?.(quotedPassages(blocks));
     onSavingChange?.(true);
     // Returns whether the note is durably stored — `persistApplied` below only
@@ -370,70 +376,59 @@ export function NotePane({
   }, [actionSinkRef, handleAction]);
 
   // ── render ────────────────────────────────────────────────────────────────
-  const chips = useMemo(() => {
-    const order = new Map(sources.map((s) => [s.id, s.order_index]));
-    // A source that has been removed takes its chips with it — keeping them would
-    // mean a dead jump target wearing whichever colour order_index 0 happens to be.
-    return [...anchors]
-      .filter((a) => order.has(a.resource_id))
-      .sort((a, b) => (order.get(a.resource_id) ?? 99) - (order.get(b.resource_id) ?? 99)
-        || a.anchor_start - b.anchor_start);
+  // Each anchored heading gets its source's colour as a dot in the margin;
+  // clicking it opens that place in the source. (Was a "Jump to §2 §2 §4" chip
+  // bar, which named nothing.)
+  const dotAnchors = useMemo(() => {
+    const live = new Set(sources.map((s) => s.id));
+    return anchors.filter((a) => live.has(a.resource_id));
   }, [anchors, sources]);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [dots, setDots] = useState<{ a: NoteAnchor; top: number }[]>([]);
+  useEffect(() => {
+    const box = contentRef.current;
+    if (!box) return;
+    const place = () => {
+      const base = box.getBoundingClientRect().top;
+      const next: { a: NoteAnchor; top: number }[] = [];
+      for (const a of dotAnchors) {
+        const el = box.querySelector(`[data-id="${CSS.escape(a.block_id)}"] .bn-inline-content`);
+        if (el) next.push({ a, top: el.getBoundingClientRect().top - base });
+      }
+      setDots((prev) => (JSON.stringify(prev.map((d) => [d.a.block_id, d.top]))
+        === JSON.stringify(next.map((d) => [d.a.block_id, d.top])) ? prev : next));
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [dotAnchors]);
+
+  const focusEditor = useCallback(() => {
+    contentRef.current?.querySelector<HTMLElement>(".bn-editor")?.focus();
+  }, []);
 
   return (
     <div className="h-full min-w-0 flex flex-col">
-      {chips.length > 0 && (
-        <div className="flex items-center gap-2 pl-3.5 pr-2 py-2 border-b border-gray-100 dark:border-white/5 shrink-0">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 shrink-0">
-            Jump to
-          </span>
-          {/* The chips scroll on their own so the sync toggle can never be
-              pushed out of reach by a note with thirty sections. */}
-          <div className="ws-scroll-x flex-1 min-w-0 flex items-center gap-1 overflow-x-auto">
-            {chips.map((a) => {
-              const src = sourceById.get(a.resource_id);
-              const color = sourceColor(src?.order_index ?? 0);
-              return (
-                <button
-                  key={a.block_id}
-                  onClick={() => jumpToAnchor(a)}
-                  title={`${src?.title ?? "source"} — ${anchorLabel(a.anchor_type, a.anchor_start)}`}
-                  className="group shrink-0 inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full
-                    text-[11px] font-medium tabular-nums text-gray-600 dark:text-gray-300
-                    bg-gray-100/80 dark:bg-white/[0.06] ring-1 ring-transparent
-                    hover:ring-accent-400/40 hover:text-accent-600 dark:hover:text-accent-300
-                    hover:-translate-y-px transition-all duration-150
-                    focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400"
-                >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0 transition-transform duration-150 group-hover:scale-125"
-                    style={{ backgroundColor: color }}
-                  />
-                  {anchorLabel(a.anchor_type, a.anchor_start)}
-                </button>
-              );
-            })}
-          </div>
-          <button
-            onClick={() => setSyncOn((v) => !v)}
-            title={syncOn
-              ? "Following the source: the note scrolls as the source plays"
-              : "Not following the source"}
-            className={`shrink-0 inline-flex items-center gap-1 h-6 pl-1.5 pr-2 rounded-full text-[11px]
-              font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 ${
-              syncOn
-                ? "bg-accent-500/10 text-accent-600 dark:text-accent-300 ring-1 ring-accent-500/25"
-                : "text-gray-400 ring-1 ring-gray-200 dark:ring-white/10 hover:text-gray-600 dark:hover:text-gray-300"
-            }`}
-          >
-            <Link2 size={11} className={syncOn ? "" : "opacity-60"} />
-            {syncOn ? "Following" : "Free"}
-          </button>
-        </div>
-      )}
-
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-5 py-5">
+        <div ref={contentRef} className="relative px-6 py-5">
+          {dots.map(({ a, top }) => {
+            const src = sourceById.get(a.resource_id);
+            const where = `${src?.title ?? "source"} · ${anchorLabel(a.anchor_type, a.anchor_start)}`;
+            return (
+              <button
+                key={a.block_id}
+                type="button"
+                onClick={() => jumpToAnchor(a)}
+                aria-label={`Open ${where}`}
+                title={`From ${where}`}
+                className="absolute left-1 flex size-4 items-center justify-center rounded-full hover:bg-surface-hover"
+                style={{ top: top + 4 }}
+              >
+                <span className="size-2 rounded-full" style={{ backgroundColor: sourceColor(src?.order_index ?? 0) }} />
+              </button>
+            );
+          })}
           <BlockEditor
             ref={editorRef}
             noteId={note.id}
@@ -447,6 +442,7 @@ export function NotePane({
             onDirty={markDirty}
             extraSlashItems={extraSlashItems}
           />
+          {empty && starters?.(focusEditor)}
         </div>
       </div>
     </div>

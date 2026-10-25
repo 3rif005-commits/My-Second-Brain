@@ -5,7 +5,8 @@
 // element overlays and send-to-note actions need.
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { AlertCircle, Layers } from "lucide-react";
+import { AlertCircle, Layers, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui";
 import { wsApi, type NoteSource, type SendAction } from "@/lib/workspace";
 import type { Passage } from "./viewers/passageMarks";
 import { YouTubePlayer } from "./viewers/YouTubePlayer";
@@ -35,13 +36,15 @@ interface SourceViewerProps {
   seekRef: React.MutableRefObject<((value: number) => void) | null>;
   /** Passages the note quotes (any source); a PDF tints its own. */
   passages?: Passage[];
+  /** Start reading this source again (failed, or stuck waiting). */
+  onRetry?: (s: NoteSource) => void;
 }
 
 function Message({ icon, children }: { icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-2.5 px-8 text-center">
       {icon}
-      <p className="max-w-xs text-[12.5px] leading-relaxed text-gray-400">{children}</p>
+      <div className="max-w-xs text-[12.5px] leading-relaxed text-ink-secondary">{children}</div>
     </div>
   );
 }
@@ -57,7 +60,7 @@ function Spinner({ tone = "indigo" }: { tone?: "indigo" | "gray" }) {
   );
 }
 
-export function SourceViewer({ source, onPosition, onAction, seekRef, passages }: SourceViewerProps) {
+export function SourceViewer({ source, onPosition, onAction, seekRef, passages, onRetry }: SourceViewerProps) {
   const [detail, setDetail] = useState<NoteSource | null>(null);
   // The playhead also feeds the transcript list. Both callbacks go through refs so this
   // stays one stable function: the YouTube player keeps the first one it is given.
@@ -91,7 +94,7 @@ export function SourceViewer({ source, onPosition, onAction, seekRef, passages }
   if (!source) {
     return (
       <Message icon={<Layers size={22} className="text-gray-300 dark:text-gray-600" />}>
-        Pick a source above to open it here.
+        Add a PDF, a video or a link with the + above.
       </Message>
     );
   }
@@ -103,14 +106,23 @@ export function SourceViewer({ source, onPosition, onAction, seekRef, passages }
         </span>
       }>
         Couldn’t read this one: {source.error ?? "unknown error"}.
-        Use the retry arrow in the rail to try again.
+        {onRetry && (
+          <span className="mt-3 block">
+            <Button variant="secondary" icon={<RefreshCw />} onClick={() => onRetry(source)}>Try again</Button>
+          </span>
+        )}
       </Message>
     );
   }
   if (source.status !== "ready") {
     return (
       <Message icon={<Spinner />}>
-        Reading “{source.title}”…
+        {source.status === "queued" ? `“${source.title}” is waiting to be read.` : `Reading “${source.title}”…`}
+        {source.status === "queued" && onRetry && (
+          <span className="mt-3 block">
+            <Button variant="secondary" onClick={() => onRetry(source)}>Start now</Button>
+          </span>
+        )}
       </Message>
     );
   }

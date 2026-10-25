@@ -49,6 +49,13 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   // the app-wide drop-to-import steps aside there.
   const pathname = usePathname() ?? "";
   const inWorkspace = pathname.startsWith("/brain/workspace");
+  // A study session (/brain/workspace/<note>) needs every pixel for the source,
+  // the note and the AI: the sidebar starts hidden there and remembers its own
+  // open/closed state apart from the rest of the app. The AI panel docks into
+  // the session's Ask tab instead of taking the window's right edge.
+  const inSession = /^\/brain\/workspace\/[^/]+/.test(pathname);
+  const [sessionSidebar, setSessionSidebar] = useState(false);
+  const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
   // Preferences follow the account: on a device with none saved yet, adopt the
   // copy stored in the user's metadata (Settings → Preferences writes it).
   const { updatePreferences } = usePreferences();
@@ -98,6 +105,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const stored = localStorage.getItem("sidebar-open");
     setOpen(stored !== null ? stored === "true" : window.innerWidth >= 768);
+    setSessionSidebar(localStorage.getItem("sidebar-open-session") === "true");
     const sidebarWidth = parseInt(localStorage.getItem("sidebar-width") ?? "");
     if (sidebarWidth >= SIDEBAR_MIN_WIDTH && sidebarWidth <= SIDEBAR_MAX_WIDTH) applySidebarWidth(sidebarWidth);
 
@@ -175,7 +183,16 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const inSessionRef = useRef(inSession);
+  inSessionRef.current = inSession;
   function toggle() {
+    if (inSessionRef.current) {
+      setSessionSidebar((prev) => {
+        localStorage.setItem("sidebar-open-session", String(!prev));
+        return !prev;
+      });
+      return;
+    }
     setOpen((prev) => {
       const next = !prev;
       localStorage.setItem("sidebar-open", String(next));
@@ -238,19 +255,23 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     localStorage.setItem("ai-panel-width", String(clamped));
   }
 
-  const isOpen = open ?? true;
+  const isOpen = inSession ? sessionSidebar : (open ?? true);
   const isAiOpen = aiOpen ?? false;
 
+  // Docked in a session, the panel takes no width from the page.
+  const aiPushes = isAiOpen && isDesktop && !inSession;
   const controls = useMemo<AIPanelControls>(() => ({
     isOpen: isAiOpen,
-    width: isAiOpen && isDesktop ? aiPanelWidth : 0,
+    width: aiPushes ? aiPanelWidth : 0,
     open: openAi,
+    close: closeAi,
     toggle: toggleAi,
     focus: focusAi,
     ask: askAi,
     bindWorkspace: setWorkspaceBinding,
+    dock: setDockEl,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [isAiOpen, isDesktop, aiPanelWidth, openAi, focusAi, askAi]);
+  }), [isAiOpen, aiPushes, aiPanelWidth, openAi, closeAi, focusAi, askAi]);
 
   return (
     <AIThreadProvider>
@@ -309,7 +330,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
           className="print-main group/shell flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden"
           data-sidebar={isOpen ? "open" : "collapsed"}
           style={{
-            marginRight: isAiOpen && isDesktop ? aiPanelWidth : 0,
+            marginRight: aiPushes ? aiPanelWidth : 0,
             transition: "margin-right 200ms ease-in-out",
           }}
         >
@@ -339,10 +360,13 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
             ? { ...workspaceBinding, focusNonce } : undefined}
           focusNonce={focusNonce}
           prefill={prefill}
+          docked={inSession}
+          dockEl={inSession ? dockEl : null}
         />
 
-        {/* The AI button, bottom-right, while the panel is closed */}
-        {!isAiOpen && <SidePanelToggleButton onClick={toggleAi} />}
+        {/* The AI button, bottom-right, while the panel is closed. A session
+            has its own Ask tab instead. */}
+        {!isAiOpen && !inSession && <SidePanelToggleButton onClick={toggleAi} />}
 
         <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
 
