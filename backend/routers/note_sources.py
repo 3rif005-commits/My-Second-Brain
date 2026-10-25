@@ -411,6 +411,29 @@ def list_sources(note_id: str, authorization: str = Header()):
     return [_source_public(r) for r in rows]
 
 
+@router.get("/library/sources")
+def library_sources(authorization: str = Header(), q: str = "", limit: int = 30):
+    """Sources across all the user's notes, newest first, each with the note it
+    belongs to — a workspace session can open one beside its own (read-only:
+    it stays attached to its note)."""
+    user_id = get_user_id(authorization)
+    db = get_supabase()
+    query = (db.table("note_resources").select("id,note_id,kind,title,status,order_index,created_at")
+             .eq("user_id", user_id).eq("status", "ready"))
+    if q.strip():
+        query = query.ilike("title", f"%{q.strip()}%")
+    rows = query.order("created_at", desc=True).limit(max(1, min(limit, 60))).execute().data or []
+    note_ids = list({r["note_id"] for r in rows})
+    notes = {}
+    if note_ids:
+        found = (db.table("notes").select("id,title,deleted_at").in_("id", note_ids)
+                 .execute().data or [])
+        notes = {n["id"]: n for n in found if not n.get("deleted_at")}
+    return [{**{k: r[k] for k in ("id", "note_id", "kind", "title", "status", "order_index")},
+             "note_title": notes[r["note_id"]].get("title") or "Untitled"}
+            for r in rows if r["note_id"] in notes]
+
+
 @router.post("/notes/{note_id}/process-sources")
 def process_queued_sources(note_id: str, background: BackgroundTasks,
                                  authorization: str = Header()):

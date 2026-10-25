@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Link2, Search, Sparkles, Upload } from "lucide-react";
 import { PromptDialog } from "@/components/ui/PromptDialog";
-import { ACCEPTED_WORKSPACE_FILES } from "@/lib/workspace";
+import { ACCEPTED_WORKSPACE_FILES, sourceColor, wsApi, type LibrarySource } from "@/lib/workspace";
 
 export interface PickerItem {
   key: string;
@@ -24,6 +24,8 @@ interface OpenPickerProps {
   session: PickerItem[];
   /** Notes already in the session (left out of "Your notes"). */
   sessionNoteIds: Set<string>;
+  /** Sources already in the session (left out of "Sources in other notes"). */
+  sessionSourceIds: Set<string>;
   onOpen: (key: string, beside: boolean) => void;
   onOpenNote: (id: string, title: string, beside: boolean) => void;
   onAddFiles: (files: File[]) => void;
@@ -42,10 +44,11 @@ interface Row {
 
 const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "");
 
-export function OpenPicker({ session, sessionNoteIds, onOpen, onOpenNote, onAddFiles, onAddUrl, onClose }: OpenPickerProps) {
+export function OpenPicker({ session, sessionNoteIds, sessionSourceIds, onOpen, onOpenNote, onAddFiles, onAddUrl, onClose }: OpenPickerProps) {
   const [query, setQuery] = useState("");
   const [notes, setNotes] = useState<NoteRow[] | null>(null);
   const [sel, setSel] = useState(0);
+  const [library, setLibrary] = useState<LibrarySource[]>([]);
   const [askUrl, setAskUrl] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -54,6 +57,15 @@ export function OpenPicker({ session, sessionNoteIds, onOpen, onOpenNote, onAddF
     fetch("/api/notes").then((r) => (r.ok ? r.json() : [])).then((d) => setNotes(Array.isArray(d) ? d : []))
       .catch(() => setNotes([]));
   }, []);
+
+  // Sources from other notes: newest first, or matching what's typed.
+  useEffect(() => {
+    let live = true;
+    const timer = setTimeout(() => {
+      wsApi.librarySources(query.trim()).then((r) => { if (live) setLibrary(r); }).catch(() => {});
+    }, query ? 200 : 0);
+    return () => { live = false; clearTimeout(timer); };
+  }, [query]);
 
   const rows = useMemo<Row[]>(() => {
     const q = query.trim().toLowerCase();
@@ -79,12 +91,22 @@ export function OpenPicker({ session, sessionNoteIds, onOpen, onOpenNote, onAddF
         run: (beside) => onOpenNote(n.id, n.title || "Untitled", beside),
       });
     }
+    const foreign = library
+      .filter((s) => !sessionSourceIds.has(s.id) && !sessionNoteIds.has(s.note_id))
+      .slice(0, q ? 8 : 4);
+    for (const s of foreign) {
+      out.push({
+        id: `src:${s.id}`, group: "Sources in other notes", label: s.title, hint: `from ${s.note_title}`,
+        icon: <span className="mx-1 size-2 rounded-full" style={{ backgroundColor: sourceColor(s.order_index) }} />,
+        run: (beside) => onOpen(`s:${s.id}`, beside),
+      });
+    }
     out.push({ id: "upload", group: "Add to this session", label: "Upload a file", icon: <Upload size={16} />,
       run: () => fileRef.current?.click() });
     out.push({ id: "link", group: "Add to this session", label: "Paste a link", hint: "web page or YouTube",
       icon: <Link2 size={16} />, run: () => setAskUrl(true) });
     return out;
-  }, [query, session, notes, sessionNoteIds, onOpen, onOpenNote]);
+  }, [query, session, notes, library, sessionNoteIds, sessionSourceIds, onOpen, onOpenNote]);
 
   useEffect(() => { setSel(0); }, [query]);
   useEffect(() => {

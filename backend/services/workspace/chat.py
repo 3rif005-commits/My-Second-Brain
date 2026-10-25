@@ -47,6 +47,8 @@ Rules:
 
 
 def _anchor_label(c: dict) -> str:
+    if c.get("kind") == "note":
+        return "your note"
     if c["anchor_type"] == "time":
         s = int(c["anchor_start"])
         return f"t={s // 60:02d}:{s % 60:02d}"
@@ -62,29 +64,72 @@ _VECTOR_CANDIDATES = 40
 _LEXICAL_CAP = 3000
 
 
-def retrieve_chunks(query: str, note_id: str, user_id: str) -> list[dict]:
-    """The note's best source pieces for this question: the embedding's order
-    fused with word matching (E8, services/hybrid_search.py). The embedding
-    finds paraphrases; the words find the lecture's own terms, and pieces that
-    never got an embedding. If the embedding server is down, words alone still
-    answer instead of the chat losing its sources."""
+#: Other notes a session brings in: at most this many are read per question.
+MAX_SESSION_NOTES = 5
+#: Characters per piece of a brought-in note's own text.
+_NOTE_PIECE = 900
+
+
+def note_text_pieces(note_ids: list[str], user_id: str) -> list[dict]:
+    """Notes brought into a session are reading material too: their own text, in
+    paragraph-sized pieces shaped like source chunks (kind "note"), so word
+    matching can pick the relevant ones and a citation opens the note."""
+    if not note_ids:
+        return []
+    rows = (get_supabase().table("notes").select("id,content_text")
+            .in_("id", note_ids).eq("user_id", user_id).is_("deleted_at", "null")
+            .execute().data or [])
+    pieces: list[dict] = []
+    for n in rows:
+        buf, idx = "", 0
+        paras = [p.strip() for p in (n.get("content_text") or "").split("\n") if p.strip()]
+        for para in paras + [""]:
+            if para and len(buf) + len(para) < _NOTE_PIECE:
+                buf = f"{buf}\n{para}" if buf else para
+                continue
+            if buf:
+                pieces.append({"id": f"note:{n['id']}:{idx}", "resource_id": n["id"], "note_id": n["id"],
+                               "kind": "note", "chunk_text": buf, "anchor_type": "section",
+                               "anchor_start": idx, "anchor_end": idx})
+                idx += 1
+            buf = para[:_NOTE_PIECE]
+    return pieces
+
+
+def retrieve_chunks(query: str, note_id: str, user_id: str,
+                    extra_note_ids: list[str] | tuple = ()) -> list[dict]:
+    """The session's best pieces for this question: the embedding's order fused
+    with word matching (E8, services/hybrid_search.py). The embedding finds
+    paraphrases; the words find the lecture's own terms, and pieces that never
+    got an embedding. If the embedding server is down, words alone still answer
+    instead of the chat losing its sources.
+
+    A session can bring other notes in beside its own (`extra_note_ids`): their
+    sources are searched too, and their own text joins as pieces. Every piece
+    carries the note it belongs to (`note_id`), for the privacy gate."""
     db = get_supabase()
+    extras = [n for n in dict.fromkeys(extra_note_ids) if n and n != note_id][:MAX_SESSION_NOTES]
+    note_ids = [note_id, *extras]
     vector_rows: list[dict] = []
     try:
         embedding = embed(query)
         vec = "[" + ",".join(str(v) for v in embedding) + "]"
-        vector_rows = db.rpc("match_note_source_chunks", {
-            "query_embedding": vec,
-            "match_user_id": user_id,
-            "target_note_id": note_id,
-            "match_count": _VECTOR_CANDIDATES,
-        }).execute().data or []
+        for nid in note_ids:
+            rows_n = db.rpc("match_note_source_chunks", {
+                "query_embedding": vec,
+                "match_user_id": user_id,
+                "target_note_id": nid,
+                "match_count": _VECTOR_CANDIDATES,
+            }).execute().data or []
+            vector_rows += [{**r, "note_id": nid} for r in rows_n]
+        vector_rows.sort(key=lambda r: r.get("similarity") or 0, reverse=True)
     except Exception as e:                          # noqa: BLE001
         logger.warning(f"note {note_id}: embedding search failed, words only: {e}")
-    rows = (db.table("resource_chunks")
-            .select("id,resource_id,chunk_text,anchor_type,anchor_start,anchor_end")
-            .eq("note_id", note_id).eq("user_id", user_id)
-            .limit(_LEXICAL_CAP).execute().data or [])
+    lexical = db.table("resource_chunks").select(
+        "id,resource_id,note_id,chunk_text,anchor_type,anchor_start,anchor_end")
+    lexical = lexical.in_("note_id", note_ids) if extras else lexical.eq("note_id", note_id)
+    rows = (lexical.eq("user_id", user_id).limit(_LEXICAL_CAP).execute().data or [])
+    rows += note_text_pieces(extras, user_id)
     by_id = {str(r["id"]): r for r in rows}
     for r in vector_rows:
         by_id.setdefault(str(r["id"]), r)
@@ -107,15 +152,22 @@ def build_system_prompt(chunks: list[dict], titles: dict[str, str]) -> str:
     return SYSTEM_TEMPLATE.format(sources=source_excerpts(chunks, titles) or "(no sources)")
 
 
-def workspace_chunks(query: str, note_id: str, user_id: str) -> tuple[list[dict], dict[str, str]]:
-    """The open note's excerpts for this question, and their sources' titles."""
-    chunks = retrieve_chunks(query, note_id, user_id)
+def workspace_chunks(query: str, note_id: str, user_id: str,
+                     extra_note_ids: list[str] | tuple = ()) -> tuple[list[dict], dict[str, str]]:
+    """The session's excerpts for this question, and the titles they show under
+    (a source's title, or a brought-in note's)."""
+    chunks = retrieve_chunks(query, note_id, user_id, extra_note_ids)
     titles: dict[str, str] = {}
     if chunks:
-        rids = list({str(c["resource_id"]) for c in chunks})
-        rows = (get_supabase().table("note_resources")
-                .select("id,title").in_("id", rids).execute().data or [])
-        titles = {str(r["id"]): r["title"] for r in rows}
+        db = get_supabase()
+        rids = list({str(c["resource_id"]) for c in chunks if c.get("kind") != "note"})
+        if rids:
+            rows = db.table("note_resources").select("id,title").in_("id", rids).execute().data or []
+            titles = {str(r["id"]): r["title"] for r in rows}
+        nids = list({str(c["note_id"]) for c in chunks if c.get("kind") == "note"})
+        if nids:
+            rows = db.table("notes").select("id,title").in_("id", nids).execute().data or []
+            titles.update({str(r["id"]): r.get("title") or "Untitled" for r in rows})
     return chunks, titles
 
 
@@ -146,6 +198,8 @@ def citations_payload(chunks: list[dict], titles: dict[str, str]) -> list[dict]:
             "anchor_start": c["anchor_start"],
             "anchor_end": c["anchor_end"],
             "snippet": c["chunk_text"][:200],
+            # A brought-in note's own text: the citation opens that note.
+            **({"kind": "note", "note_id": str(c["note_id"])} if c.get("kind") == "note" else {}),
         }
         for i, c in enumerate(chunks, start=1)
     ]

@@ -23,7 +23,7 @@ export function Answer({ content, citations, colorIndex, onCitation }: {
       const idx = colorIndex.get(c.resource_id) ?? 0;
       return (
         <button type="button" onClick={() => onCitation(c)}
-          title={`${c.title} — ${anchorLabel(c.anchor_type, c.anchor_start)}\n${c.snippet ?? ""}`}
+          title={`${c.title} — ${c.kind === "note" ? "your note" : anchorLabel(c.anchor_type, c.anchor_start)}\n${c.snippet ?? ""}`}
           className="inline-flex items-center gap-1 mx-0.5 px-1.5 h-[18px] rounded-md align-baseline
             text-[10.5px] font-semibold bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300
             hover:bg-accent-100 dark:hover:bg-accent-500/20 transition-colors not-prose">

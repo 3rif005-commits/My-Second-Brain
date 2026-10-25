@@ -194,3 +194,48 @@ async def test_titles_come_from_note_resources():
         _ = [ev async for ev in run_note_chat("n1", "u1", [
             {"role": "user", "content": "q"}])]
     db.table.assert_called_with("note_resources")
+
+
+# ── sessions that bring other notes in (redesign 2026-10-25) ────────────────
+
+def test_a_brought_in_notes_text_becomes_note_pieces():
+    from services.workspace.chat import note_text_pieces
+    db = MagicMock()
+    long_para = "x" * 600
+    (db.table.return_value.select.return_value.in_.return_value.eq.return_value.is_.return_value
+     .execute.return_value.data) = [{"id": "n2", "content_text": f"Bellman\n{long_para}\n{long_para}\nend"}]
+    with patch("services.workspace.chat.get_supabase", return_value=db):
+        pieces = note_text_pieces(["n2"], "u1")
+    assert [p["kind"] for p in pieces] == ["note"] * len(pieces)
+    assert all(p["note_id"] == "n2" and p["resource_id"] == "n2" for p in pieces)
+    assert all(len(p["chunk_text"]) <= 900 for p in pieces)
+    assert "".join(p["chunk_text"] for p in pieces).replace("\n", "").count("x") == 1200
+    assert pieces[0]["chunk_text"].startswith("Bellman")
+
+
+def test_retrieval_searches_every_note_in_the_session():
+    db = MagicMock()
+    db.rpc.return_value.execute.return_value.data = [
+        {"id": "c9", "resource_id": "r9", "chunk_text": "value iteration", "anchor_type": "page",
+         "anchor_start": 1, "anchor_end": 1, "similarity": 0.9}]
+    (db.table.return_value.select.return_value.in_.return_value.eq.return_value
+     .limit.return_value.execute.return_value.data) = []
+    with patch("services.workspace.chat.embed", return_value=[0.1] * 768), \
+         patch("services.workspace.chat.get_supabase", return_value=db), \
+         patch("services.workspace.chat.note_text_pieces", return_value=[]) as pieces:
+        out = retrieve_chunks("value iteration", "n1", "u1", ["n2", "n1", "n2"])
+    searched = [c[0][1]["target_note_id"] for c in db.rpc.call_args_list]
+    assert searched == ["n1", "n2"]                  # once each, the session's own first
+    assert db.table.return_value.select.return_value.in_.call_args == (("note_id", ["n1", "n2"]),)
+    pieces.assert_called_once_with(["n2"], "u1")      # only brought-in notes' own text
+    assert out and out[0]["note_id"] in ("n1", "n2")
+
+
+def test_a_note_citation_says_which_note_to_open():
+    from services.workspace.chat import citations_payload, source_excerpts
+    chunk = {"id": "note:n2:0", "resource_id": "n2", "note_id": "n2", "kind": "note",
+             "chunk_text": "An MDP is (S, A, P, R, γ).", "anchor_type": "section",
+             "anchor_start": 0, "anchor_end": 0}
+    cites = citations_payload([chunk], {"n2": "Lecture 9 · MDPs"})
+    assert cites[0]["kind"] == "note" and cites[0]["note_id"] == "n2"
+    assert "(Lecture 9 · MDPs, your note)" in source_excerpts([chunk], {"n2": "Lecture 9 · MDPs"})

@@ -115,6 +115,9 @@ class AgentRequest(BaseModel):
     query: str                          # latest user message text
     mode: Mode = Mode.API
     current_note_id: str | None = None  # set when invoked from inline /ai
+    # Workspace only: other notes the session brought in beside its own. Their
+    # sources and text are read too, each under its own privacy level.
+    session_note_ids: list[str] = Field(default_factory=list)
     surface: Literal["chat", "inline", "ingest", "interactive", "workspace"] = "chat"
     # Approval keys ("<tool>:<target id>") the user granted in the UI after a
     # previous turn asked. Never written by the model — that is the point.

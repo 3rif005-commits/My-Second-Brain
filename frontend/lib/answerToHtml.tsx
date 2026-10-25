@@ -12,7 +12,7 @@ export function resolveCitations(md: string, citations: Citation[]): string {
     const labels = [...run.matchAll(/\[(\d{1,2})\]/g)]
       .map((m) => byN.get(Number(m[1])))
       .filter((c): c is Citation => !!c)
-      .map((c) => `${c.title}, ${anchorLabel(c.anchor_type, c.anchor_start)}`);
+      .map((c) => (c.kind === "note" ? `${c.title} (note)` : `${c.title}, ${anchorLabel(c.anchor_type, c.anchor_start)}`));
     return labels.length ? ` (${[...new Set(labels)].join("; ")})` : "";
   });
 }

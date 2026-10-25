@@ -55,9 +55,23 @@ export interface NoteAnchor {
   anchor_end: number;
 }
 
+export interface LibrarySource {
+  id: string;
+  note_id: string;
+  kind: ResourceKind;
+  title: string;
+  status: string;
+  order_index: number;
+  note_title: string;
+}
+
 export interface Citation {
   n: number;
+  /** A source's id — or, for kind "note", the brought-in note's. */
   resource_id: string;
+  /** "note": the passage is from a note the session brought in (it opens that note). */
+  kind?: "note";
+  note_id?: string;
   title: string;
   anchor_type: AnchorType;
   anchor_start: number;
@@ -233,6 +247,10 @@ export const wsApi = {
   processSources: (noteId: string) =>
     fetch(`/api/ws/notes/${noteId}/process-sources`, { method: "POST" })
       .then((r) => j<{ ok: boolean; queued: number }>(r)),
+  /** Sources across all notes (ready ones), each with its note — to open beside a session. */
+  librarySources: (q = "") =>
+    fetch(`/api/ws/library/sources?q=${encodeURIComponent(q)}`)
+      .then((r) => j<LibrarySource[]>(r)),
   getSource: (sid: string) =>
     fetch(`/api/ws/sources/${sid}`).then((r) => j<NoteSource>(r)),
   sourceFileUrl: (sid: string) =>

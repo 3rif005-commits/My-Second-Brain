@@ -530,7 +530,12 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     if (value !== null && !Number.isNaN(value)) seekWhenReady(sourceId, value);
   }, [closeAi, seekWhenReady]);
 
-  const handleCitation = useCallback((c: Citation) => selectAndSeek(c.resource_id, c.anchor_start), [selectAndSeek]);
+  // A citation to a brought-in note opens that note; to a source, its page or moment.
+  const openNoteRef = useRef<(id: string) => void>(() => {});
+  const handleCitation = useCallback((c: Citation) => {
+    if (c.kind === "note" && c.note_id) openNoteRef.current(c.note_id);
+    else selectAndSeek(c.resource_id, c.anchor_start);
+  }, [selectAndSeek]);
 
   // Deep link: ?source=<id>&t=|p=|s=
   const deepLink = useMemo(() => {
@@ -591,17 +596,27 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const citationRef = useRef<(c: Citation) => void>(() => {});
   const noteTitle = note?.title;
   const insertLabel = `Insert into ${short(targetTitle, 24)}`;
+  const sessionNotesKey = (lay?.notes ?? []).join(",");
   useEffect(() => {
     if (!noteId || !noteTitle) return;
     bindWorkspace({
       noteId, title: noteTitle, jobs: chatJobs, colorIndex: colorIndexRef.current,
       onCitation: (c) => citationRef.current(c), onSourcesAdded: () => void loadSources(),
       request: jobRequest, insertLabel,
+      sessionNoteIds: sessionNotesKey ? sessionNotesKey.split(",") : [],
     });
-  }, [noteId, noteTitle, chatJobs, jobRequest, sources, bindWorkspace, loadSources, insertLabel]);
+  }, [noteId, noteTitle, chatJobs, jobRequest, sources, bindWorkspace, loadSources, insertLabel, sessionNotesKey]);
   useEffect(() => () => bindWorkspace(null), [bindWorkspace]);
   colorIndexRef.current = useMemo(() => new Map(allSources.map((s) => [s.id, s.order_index])), [allSources]);
   citationRef.current = handleCitation;
+
+  openNoteRef.current = (id: string) => {
+    const l = layRef.current;
+    if (!l) return;
+    const at = paneOf(l, noteKey(id));
+    if (at >= 0) { activateTab(noteKey(id), at); return; }
+    openKey(noteKey(id), l.focus, true);
+  };
 
   // Ctrl+K in a session: the picker, on the pane you're in.
   useEffect(() => {
@@ -721,6 +736,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     <OpenPicker
       session={sessionItems}
       sessionNoteIds={sessionNoteIds}
+      sessionSourceIds={new Set(allSources.map((s) => s.id))}
       onOpen={(key, beside) => openKey(key, pane, beside)}
       onOpenNote={(id, _title, beside) => openKey(noteKey(id), pane, beside)}
       onAddFiles={(files) => { newSourcePane.current = pane; addFiles(files); setPickerPane(null); }}

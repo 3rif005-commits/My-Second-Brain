@@ -53,6 +53,8 @@ export interface WorkspaceBinding {
   focusNonce?: number;
   /** What "Insert" says in a session: the note results go to ("Insert into Lecture 10"). */
   insertLabel?: string;
+  /** Notes the session brought in beside its own: the AI reads them too. */
+  sessionNoteIds?: string[];
 }
 
 interface ChatProps {
@@ -113,7 +115,9 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   // list until then — an empty list in between made "/" flicker away.
   const jobs = workspace?.jobs.length ? workspace.jobs : ctx.jobs;
   const ensureJobs = async () => (workspace?.jobs.length ? workspace.jobs : ctx.ensureJobs());
-  const fixedScope: PanelScope | null = workspace ? { noteId: workspace.noteId, title: workspace.title } : null;
+  const fixedScope: PanelScope | null = workspace
+    ? { noteId: workspace.noteId, title: workspace.title, sessionNoteIds: workspace.sessionNoteIds }
+    : null;
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
@@ -362,7 +366,8 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
           ...(opts.route?.override_of ? { override_of: opts.route.override_of } : {}),
           approvals: opts.approvals ?? [],
           messages: history(query, opts.beforeId),
-          ...(opts.where ? { surface: "workspace", current_note_id: opts.where.noteId } : {}),
+          ...(opts.where ? { surface: "workspace", current_note_id: opts.where.noteId,
+                             session_note_ids: opts.where.sessionNoteIds ?? [] } : {}),
           ...(opts.job ? { job: opts.job.skill, focus: opts.job.focus } : {}),
         }),
       });

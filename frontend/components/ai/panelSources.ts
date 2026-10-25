@@ -39,6 +39,8 @@ export function parseLink(text: string): string | null {
 export interface PanelScope {
   noteId: string;
   title: string;
+  /** A workspace session's other notes: the AI reads them too. */
+  sessionNoteIds?: string[];
 }
 
 export interface UploadFile {

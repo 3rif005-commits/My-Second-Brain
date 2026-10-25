@@ -316,10 +316,14 @@ async def run_turn(
     notes: list[dict] = []
     ws_chunks: list[dict] = []
     ws_titles: dict[str, str] = {}
+    session_notes: list[str] = []
     if workspace_note:
+        from services.workspace.chat import MAX_SESSION_NOTES
+        session_notes = [n for n in dict.fromkeys(request.session_note_ids)
+                         if n and n != workspace_note][:MAX_SESSION_NOTES]
         try:
             from services.workspace.chat import workspace_chunks
-            ws_chunks, ws_titles = workspace_chunks(request.query, workspace_note, user_id)
+            ws_chunks, ws_titles = workspace_chunks(request.query, workspace_note, user_id, session_notes)
         except Exception as e:
             yield _ev({"type": "error", "content": f"retrieval failed: {e}"})
     else:
@@ -353,7 +357,7 @@ async def run_turn(
     # 3. Route, then cut the context to what may travel there.
     policy = routing_policy.load(user_id)
     ids = sorted({str(n["id"]) for n in notes if n.get("id")}
-                 | ({workspace_note} if workspace_note else set()))
+                 | ({workspace_note, *session_notes} if workspace_note else set()))
     levels = privacy.fetch_levels(ids, user_id) if ids else {}
     if levels is not None:
         # Known levels ride on the rows, so the gate does not look them up again.
@@ -382,10 +386,15 @@ async def run_turn(
         return
 
     release = set(request.release)
-    candidates = notes + ([{"id": workspace_note, "title": ws_title,
-                            **({"sensitivity": levels[workspace_note]["level"]}
-                               if levels and workspace_note in levels else {})}]
-                          if workspace_note and ws_chunks else [])
+    # Every note a passage comes from goes past the gate: the session's own, and
+    # any brought in beside it.
+    ws_owners = list(dict.fromkeys(str(c.get("note_id") or workspace_note) for c in ws_chunks)) \
+        if workspace_note else []
+    ws_note_titles = {nid: ((levels or {}).get(nid) or {}).get("title") or
+                      (ws_title if nid == workspace_note else "a note") for nid in ws_owners}
+    candidates = notes + [{"id": nid, "title": ws_note_titles[nid],
+                           **({"sensitivity": levels[nid]["level"]} if levels and nid in levels else {})}
+                          for nid in ws_owners]
     with privacy.scope(route.ceiling, user_id, release) as dry:
         privacy.filter_rows(candidates)
     if dry.withheld and not route.is_local and not request.withheld_ok:
@@ -421,7 +430,7 @@ async def run_turn(
                                      policy, signals, scope, notes, ws_chunks,
                                      ws_titles, ws_title, workspace_note,
                                      matched, by_index, tier, thread_id,
-                                     message_id):
+                                     message_id, ws_note_titles):
             yield ev
 
 
@@ -431,7 +440,8 @@ async def _routed_turn(request: AgentRequest, user_id: str,
                        ws_chunks: list[dict], ws_titles: dict[str, str],
                        ws_title: str, workspace_note: str | None, matched,
                        by_index: bool, tier: Tier, thread_id: str,
-                       message_id: str) -> AsyncIterator[dict[str, Any]]:
+                       message_id: str,
+                       ws_note_titles: dict[str, str] | None = None) -> AsyncIterator[dict[str, Any]]:
     """The rest of a chat turn, inside the privacy scope the route chose:
     everything read from here on — the prompt's notes and every tool result —
     is cut to the route's ceiling."""
@@ -439,7 +449,11 @@ async def _routed_turn(request: AgentRequest, user_id: str,
     citations: list[dict] = []
     workspace_sources = ""
     if workspace_note:
-        if ws_chunks and privacy.check_note(workspace_note, ws_title):
+        # Each passage only if the note it belongs to may go on this route.
+        owners = ws_note_titles or {workspace_note: ws_title}
+        allowed = {nid for nid, title in owners.items() if privacy.check_note(nid, title)}
+        ws_chunks = [c for c in ws_chunks if str(c.get("note_id") or workspace_note) in allowed]
+        if ws_chunks:
             from services.workspace.chat import citations_payload, source_excerpts
             citations = citations_payload(ws_chunks, ws_titles)
             workspace_sources = source_excerpts(ws_chunks, ws_titles)

@@ -144,3 +144,35 @@ def test_a_slash_job_through_the_agent_endpoint_runs_without_a_model_turn():
     events = [json.loads(l[6:]) for l in r.text.splitlines() if l.startswith("data: {")]
     assert [e["type"] for e in events] == ["skill_start", "result", "done"]
     assert saved and saved[0].startswith("Flashcards ready")
+
+
+@pytest.mark.asyncio
+async def test_a_session_reads_its_other_notes_each_under_its_own_privacy():
+    """Notes brought into a session are read too (redesign 2026-10-25), but a
+    passage only goes out if the note it came from may go on this route."""
+    chunks = [
+        {"resource_id": "r1", "note_id": NOTE, "chunk_text": "Q-learning samples.",
+         "anchor_type": "page", "anchor_start": 3, "anchor_end": 3},
+        {"resource_id": "note-2", "note_id": "note-2", "kind": "note",
+         "chunk_text": "PRIVATE value iteration notes", "anchor_type": "section",
+         "anchor_start": 0, "anchor_end": 0},
+    ]
+    seen = {}
+
+    async def fake_loop(provider, messages_payload, tool_schemas, **kw):
+        seen["last"] = messages_payload[-1]["content"]
+        yield {"type": "text", "content": "ok [1]."}
+
+    with patch.object(chat, "workspace_chunks", return_value=(chunks, {"r1": "Lecture 10", "note-2": "Lecture 9"})) as wc, \
+         patch.object(skill_run, "chat_skills", return_value=[]), \
+         patch.object(engine.privacy, "check_note", side_effect=lambda nid, title="": nid != "note-2"), \
+         patch.object(engine, "get_provider", return_value=MagicMock(provider="anthropic", model="m")), \
+         patch.object(engine, "_get_mcp_tools_for_user", AsyncMock(return_value=([], []))), \
+         patch.object(engine, "_stream_loop", fake_loop):
+        events = [e async for e in engine.run_turn(
+            _request(session_note_ids=["note-2", NOTE, "note-2"]), "u1", SkillRegistry({}))]
+    assert wc.call_args[0][3] == ["note-2"]         # the session's other notes, once each
+    assert "Q-learning samples" in seen["last"]
+    assert "PRIVATE" not in seen["last"]              # held back with its note
+    ctx = next(e for e in events if e["type"] == "context")
+    assert [c["resource_id"] for c in ctx["citations"]] == ["r1"]
