@@ -110,7 +110,7 @@ export function SourceViewer({ source, onPosition, onAction, seekRef, passages }
   if (source.status !== "ready") {
     return (
       <Message icon={<Spinner />}>
-        Reading “{source.title}” — the note gets written once every source is in.
+        Reading “{source.title}”…
       </Message>
     );
   }

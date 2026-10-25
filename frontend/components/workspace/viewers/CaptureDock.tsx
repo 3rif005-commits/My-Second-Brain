@@ -246,7 +246,7 @@ export function CaptureDock({
     <>
       {/* the open range — never auto-hidden, it is state the user must see */}
       {recording && (
-        <div className="ws-glass-dark ws-rise absolute top-3 right-3 z-40 flex items-center gap-2
+        <div className="ws-glass-dark ws-rise absolute top-3 right-16 z-40 flex items-center gap-2
           h-8 pl-2.5 pr-3 rounded-full text-[12px] text-white">
           <span className="ws-recording w-2 h-2 rounded-full bg-red-500 shrink-0" />
           <span className="font-mono tabular-nums tracking-tight">
@@ -320,14 +320,17 @@ export function CaptureDock({
             icon={busy === "audio" ? spin : <AudioLines size={16} />}
             onClick={() => onRange("audio")}
           />
-          {recording && (
+          {/* always takes its slot: the rail is centred, so adding a button when a
+              range opens would move "End clip" out from under the cursor */}
+          <div className={recording ? "" : "invisible"} aria-hidden={!recording}>
             <RailButton
               label="Discard this range"
               shortcut="Esc"
+              disabled={!recording}
               icon={<X size={16} />}
               onClick={onCancelRange}
             />
-          )}
+          </div>
 
           <span className="w-5 h-px bg-white/12 my-0.5" />
 
