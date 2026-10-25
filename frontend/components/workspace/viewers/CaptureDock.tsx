@@ -283,8 +283,9 @@ export function CaptureDock({
     <>
       {/* While a range records: how long, what it covers, and how to throw it away. */}
       {recording && (
-        // Centred by the outer box: ws-rise animates `transform`, which would undo a translate here.
-        <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center">
+        // Top-right, under the player's own title row and lined up with the rail.
+        // Placed by the outer box: ws-rise animates `transform`, which would undo a translate here.
+        <div className="pointer-events-none absolute right-2.5 top-16 z-30 flex justify-end">
         <div role="status" className="ws-media-glass ws-rise pointer-events-auto flex items-center
           gap-2.5 rounded-full py-1 pl-3 pr-1 text-xs">
           <span className="relative flex size-2">
