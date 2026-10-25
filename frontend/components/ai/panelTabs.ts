@@ -12,8 +12,9 @@ export interface PanelTab {
 
 export interface PanelTabs { tabs: PanelTab[]; active: string }
 
-/** Where the panel sits: down the right edge, or along the bottom under the page. */
-export type DockSide = "right" | "bottom";
+/** Where the panel sits: down the right edge, along the bottom under the page,
+ *  or floating over it as a window you move and size yourself. */
+export type DockSide = "right" | "bottom" | "float";
 
 export const MAX_TABS = 8;
 export const NEW_TAB_TITLE = "New chat";
@@ -83,5 +84,39 @@ export function readPanelTabs(raw: string | null): PanelTabs | null {
 }
 
 export function readDockSide(raw: string | null): DockSide {
-  return raw === "bottom" ? "bottom" : "right";
+  return raw === "bottom" || raw === "float" ? raw : "right";
+}
+
+// ── the floating window ─────────────────────────────────────────────────────
+
+export interface FloatRect { left: number; top: number; width: number; height: number }
+
+export const FLOAT_MIN = { width: 300, height: 240 };
+/** How much of the window's tab bar must stay on screen, so it can always be dragged back. */
+const KEEP_VISIBLE = 80;
+const BAR = 36;
+
+/** Bottom-right, clear of the edges, like a chat window. */
+export function defaultFloat(vw: number, vh: number): FloatRect {
+  const width = Math.min(420, vw - 32), height = Math.min(560, vh - 32);
+  return { left: vw - width - 16, top: vh - height - 16, width, height };
+}
+
+/** Keep the window a usable size and its tab bar reachable inside a vw × vh viewport. */
+export function clampFloat(r: FloatRect, vw: number, vh: number): FloatRect {
+  const width = Math.round(Math.max(FLOAT_MIN.width, Math.min(r.width, vw)));
+  const height = Math.round(Math.max(FLOAT_MIN.height, Math.min(r.height, vh)));
+  const left = Math.round(Math.max(KEEP_VISIBLE - width, Math.min(r.left, vw - KEEP_VISIBLE)));
+  const top = Math.round(Math.max(0, Math.min(r.top, vh - BAR)));
+  return { left, top, width, height };
+}
+
+export function readFloatRect(raw: string | null, vw: number, vh: number): FloatRect {
+  try {
+    const v = JSON.parse(raw ?? "null");
+    if (v && ["left", "top", "width", "height"].every((k) => Number.isFinite(v[k]))) {
+      return clampFloat(v as FloatRect, vw, vh);
+    }
+  } catch { /* fall through */ }
+  return defaultFloat(vw, vh);
 }

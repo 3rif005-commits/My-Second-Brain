@@ -13,7 +13,9 @@ import { Sidebar } from "./Sidebar";
 import { Logo } from "@/components/brand/Logo";
 import { SearchModal } from "@/components/search/SearchModal";
 import { SidePanel, SidePanelToggleButton } from "@/components/ai/SidePanel";
-import { readDockSide, type DockSide } from "@/components/ai/panelTabs";
+import {
+  clampFloat, defaultFloat, readDockSide, readFloatRect, type DockSide, type FloatRect,
+} from "@/components/ai/panelTabs";
 import { AIThreadProvider } from "@/context/AIThreadContext";
 import { NotionProvider } from "@/context/NotionContext";
 import { AIPanelControlsContext, type AIPanelControls } from "@/context/AIPanelContext";
@@ -42,6 +44,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   const [aiPanelWidth, setAiPanelWidth] = useState(AI_PANEL_DEFAULT_WIDTH);
   const [aiPanelHeight, setAiPanelHeight] = useState(AI_PANEL_DEFAULT_HEIGHT);
   const [aiSide, setAiSide] = useState<DockSide>("right");
+  const [aiFloat, setAiFloat] = useState<FloatRect>(() => defaultFloat(1280, 720));
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth >= 768 : true
   );
@@ -124,6 +127,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     const h = parseInt(localStorage.getItem("ai-panel-height") ?? "");
     if (h >= AI_PANEL_MIN_HEIGHT) setAiPanelHeight(Math.min(h, Math.round(window.innerHeight * 0.75)));
     setAiSide(readDockSide(localStorage.getItem("ai-panel-side")));
+    setAiFloat(readFloatRect(localStorage.getItem("ai-panel-float"), window.innerWidth, window.innerHeight));
 
     // ?ai=open in URL → auto-open AI panel and strip the param
     const params = new URLSearchParams(window.location.search);
@@ -275,6 +279,17 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     localStorage.setItem("ai-panel-height", String(clamped));
   }
 
+  function handleAiFloatChange(r: FloatRect) {
+    setAiFloat(r);
+    localStorage.setItem("ai-panel-float", JSON.stringify(r));
+  }
+  // A smaller window keeps the floating panel on screen.
+  useEffect(() => {
+    const onResize = () => setAiFloat((r) => clampFloat(r, window.innerWidth, window.innerHeight));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   function handleAiSideChange(side: DockSide) {
     setAiSide(side);
     localStorage.setItem("ai-panel-side", side);
@@ -283,12 +298,14 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   const isOpen = inSession ? sessionSidebar : (open ?? true);
   const isAiOpen = aiOpen ?? false;
 
-  // On desktop the open panel takes its room from the page (beside it or under
-  // it, across every pane of a session); on a phone it slides over.
-  const aiPushes = isAiOpen && isDesktop;
+  // On desktop a docked panel takes its room from the page (beside it or under
+  // it, across every pane of a session); floating, it sits over the page. On a
+  // phone it always slides over from the right.
+  const aiDock: DockSide = isDesktop ? aiSide : "right";
+  const aiPushes = isAiOpen && isDesktop && aiDock !== "float";
   const controls = useMemo<AIPanelControls>(() => ({
     isOpen: isAiOpen,
-    width: aiPushes && aiSide === "right" ? aiPanelWidth : 0,
+    width: aiPushes && aiDock === "right" ? aiPanelWidth : 0,
     open: openAi,
     close: closeAi,
     toggle: toggleAi,
@@ -296,7 +313,7 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     ask: askAi,
     bindWorkspace: setWorkspaceBinding,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [isAiOpen, aiPushes, aiSide, aiPanelWidth, openAi, closeAi, focusAi, askAi]);
+  }), [isAiOpen, aiPushes, aiDock, aiPanelWidth, openAi, closeAi, focusAi, askAi]);
 
   return (
     <AIThreadProvider>
@@ -355,8 +372,8 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
           className="print-main group/shell flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden"
           data-sidebar={isOpen ? "open" : "collapsed"}
           style={{
-            marginRight: aiPushes && aiSide === "right" ? aiPanelWidth : 0,
-            marginBottom: aiPushes && aiSide === "bottom" ? aiPanelHeight : 0,
+            marginRight: aiPushes && aiDock === "right" ? aiPanelWidth : 0,
+            marginBottom: aiPushes && aiDock === "bottom" ? aiPanelHeight : 0,
             transition: "margin-right 200ms ease-in-out, margin-bottom 200ms ease-in-out",
           }}
         >
@@ -376,16 +393,18 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
           {children}
         </main>
 
-        {/* THE AI panel — fixed right or bottom; the page's margin makes room for it */}
+        {/* THE AI panel — docked right or bottom (the page's margin makes room), or floating over it */}
         <SidePanel
           open={isAiOpen}
           onToggle={toggleAi}
-          side={aiSide}
+          side={aiDock}
           onSideChange={handleAiSideChange}
           width={aiPanelWidth}
           onWidthChange={handleAiWidthChange}
           height={aiPanelHeight}
           onHeightChange={handleAiHeightChange}
+          floatRect={aiFloat}
+          onFloatRectChange={handleAiFloatChange}
           left={isOpen && isDesktop ? "var(--sidebar-width)" : 0}
           workspace={workspaceBinding && pathname.startsWith("/brain/workspace/")
             ? { ...workspaceBinding, focusNonce } : undefined}
