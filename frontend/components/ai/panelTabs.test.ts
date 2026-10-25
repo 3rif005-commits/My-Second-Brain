@@ -100,6 +100,11 @@ describe("the floating AI window", () => {
     expect(left.top).toBe(0);
   });
 
+  it("keeps the input on screen when the window gets shorter", () => {
+    const r = clampFloat({ left: 100, top: 300, width: 400, height: 500 }, 1300, 600);
+    expect(r.top + r.height).toBeLessThanOrEqual(600);
+  });
+
   it("restores a saved spot, clamped to this window, or falls back to the default", () => {
     expect(readFloatRect(JSON.stringify({ left: 100, top: 50, width: 400, height: 500 }), 1300, 650))
       .toEqual({ left: 100, top: 50, width: 400, height: 500 });

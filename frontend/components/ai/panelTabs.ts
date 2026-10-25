@@ -107,7 +107,9 @@ export function clampFloat(r: FloatRect, vw: number, vh: number): FloatRect {
   const width = Math.round(Math.max(FLOAT_MIN.width, Math.min(r.width, vw)));
   const height = Math.round(Math.max(FLOAT_MIN.height, Math.min(r.height, vh)));
   const left = Math.round(Math.max(KEEP_VISIBLE - width, Math.min(r.left, vw - KEEP_VISIBLE)));
-  const top = Math.round(Math.max(0, Math.min(r.top, vh - BAR)));
+  // Its whole height stays on screen (a window hanging off the bottom hid the input);
+  // only a window taller than the screen keeps just its bar reachable.
+  const top = Math.round(Math.max(0, Math.min(r.top, vh - height, vh - BAR)));
   return { left, top, width, height };
 }
 
