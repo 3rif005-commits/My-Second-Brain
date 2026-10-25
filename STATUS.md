@@ -86,6 +86,31 @@ delete (deleting is permanent).
 
 ---
 
+## Workspace redesign — 2026-10-25 (deployed; checked on the live site)
+
+Design: https://claude.ai/artifact/CuAxsUrEqB5J62BP7N9ML6 (review of the old shell, research
+notes, mockups at the user's real 921 × 649 window). Approved with "Build it".
+
+- **Two panes that fit**: the source on the left (its sources as tabs, + to add, × to remove),
+  **Note** and **Ask AI** as tabs on the right. The app's one AI panel docks over the Ask tab
+  (the same always-mounted panel: jobs and the conversation survive switching), so opening the
+  AI no longer hides the source or cuts the note. ⌘J lands on the Ask tab.
+- Full screen (≥1180 px for the shell): Note and Ask side by side. Narrow (<700 px): one pane,
+  Source / Note / Ask. The app sidebar starts hidden in a session (remembered apart).
+- PDFs fit the pane's width; toolbar with page counter, prev/next, zoom, Mark page.
+- Selecting text: **Add to note · Ask AI** (prefills the question with the passage and page).
+- Video: an always-visible capture bar (Mark · Frame · Clip · Audio), icons only below 600 px;
+  Clip/Audio become End clip/End audio in place while a range is open.
+- Empty note: Write a study guide / Make flashcards (real price from the job estimate) /
+  Start writing. Anchored headings get a source-coloured dot in the margin instead of the
+  "Jump to §2 §2" bar. ⋯ menu: open as page, "When I add a source here".
+
+Checked live: docking in all three layouts, ⌘J, narrow switching, PDF fit + selection menu
+(prefill only, nothing sent), a clip through the new bar. Not checked: light mode, a YouTube
+source with the new bar, a real phone. Test session "sb-test-capture" moved to Trash.
+
+---
+
 ## Workspace: last unchecked flows, live on the deployed site — 2026-10-25
 
 Checked in Chrome on Vercel + Render (no local stack): **a 3-file drop** (2 Markdown + 1 video)
