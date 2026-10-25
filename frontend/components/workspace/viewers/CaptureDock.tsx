@@ -1,9 +1,13 @@
 "use client";
 
-// The capture bar — one control surface shared by every time-based viewer
-// (YouTube, uploaded video). A labelled row under the media, always visible
-// (it was a hover-only rail until 2026-10-25), driven by single-key shortcuts,
-// and alive in fullscreen.
+// The capture rail — one control surface shared by every time-based viewer
+// (YouTube, uploaded video): a slim vertical column over the right edge of the
+// media that slides in when the pointer comes near and out when it leaves,
+// driven by single-key shortcuts and alive in fullscreen. History: a hover rail
+// (2026-08), then an always-on labelled bar under the player (2026-10-25 a.m.),
+// then back to a rail on the user's call (2026-10-25 p.m.) — this time centred
+// on the edge, clear of the players' own top and bottom controls, with a
+// pull-tab while hidden and a label beside each button.
 //
 // Three things make that work, and each is load-bearing:
 //
@@ -22,7 +26,7 @@
 //    ours — which is why the rail reimplements the essentials (play/pause,
 //    ±5s). Mouse control of the YouTube UI is untouched.
 //
-// 3. HOVER (historical note: the rail used to be hover-only). A cross-origin iframe eats *every* pointer event, boundary
+// 3. HOVER. A cross-origin iframe eats *every* pointer event, boundary
 //    events included — measured, not assumed: with the YouTube player mounted,
 //    the wrapper's `mouseenter` never fires at all, so a wrapper-hover trigger
 //    leaves the rail permanently invisible. The only slice of the media that
@@ -32,7 +36,7 @@
 //    controls). A thin pull-tab marks the zone while the rail is hidden.
 //    The wrapper is *also* watched, which is what drives the uploaded-video
 //    player — no iframe there, so the whole surface reports hover normally.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   AudioLines, Bookmark, Camera, Film, Keyboard, Loader2, Maximize2,
   Minimize2, Square, X,
@@ -72,44 +76,50 @@ interface CaptureDockProps {
   onSeekBy?: (delta: number) => void;
 }
 
-function BarButton({
-  icon, label, hint, shortcut, onClick, disabled, tone = "default", iconOnly,
+/** One rail button: an icon, its name and key in a label that opens to its left. */
+function RailButton({
+  icon, label, hint, shortcut, onClick, disabled, tone = "default", caption,
 }: {
   icon: React.ReactNode;
   label: string;
-  /** What it does, in the tooltip. */
+  /** What it does, in the label. */
   hint?: string;
   shortcut?: string;
   onClick: () => void;
   disabled?: boolean;
   tone?: "default" | "accent" | "danger";
-  iconOnly?: boolean;
+  /** A line under the icon (Mark shows the time it would mark). */
+  caption?: string;
 }) {
-  const tip = [hint ?? label, shortcut ? `(${shortcut})` : ""].filter(Boolean).join(" ");
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={tip}
-      aria-label={shortcut ? `${label} (shortcut ${shortcut})` : label}
-      aria-keyshortcuts={shortcut?.toLowerCase()}
-      className={`flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md ${iconOnly ? "w-8 justify-center" : "px-2.5"}
-        transition-colors duration-instant disabled:pointer-events-none disabled:opacity-40
-        focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 ${
-        tone === "accent"
-          ? "bg-accent font-medium text-ink-on-accent hover:bg-accent-hover"
-          : tone === "danger"
-            ? "bg-surface-danger-soft text-ink-danger hover:brightness-95"
-            : "text-ink hover:bg-surface-hover"
-      }`}
-    >
-      {icon}
-      {!iconOnly && label}
-      {!iconOnly && shortcut && tone === "default" && (
-        <kbd className="font-sans text-[11px] text-ink-tertiary">{shortcut}</kbd>
-      )}
-    </button>
+    <span className="group/btn relative flex">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={[hint ?? label, shortcut ? `(shortcut ${shortcut})` : ""].filter(Boolean).join(" ")}
+        aria-keyshortcuts={shortcut?.toLowerCase()}
+        className={`flex w-10 flex-col items-center justify-center gap-0.5 rounded-lg ${caption ? "py-1.5" : "h-10"}
+          transition-colors duration-instant disabled:pointer-events-none disabled:opacity-40
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 ${
+          tone === "accent"
+            ? "bg-accent text-ink-on-accent hover:bg-accent-hover"
+            : tone === "danger"
+              ? "bg-red-500/90 text-white hover:bg-red-500"
+              : "text-white/85 hover:bg-white/15 hover:text-white"
+        }`}
+      >
+        {icon}
+        {caption && <span className="font-mono text-[10px] leading-none tabular-nums">{caption}</span>}
+      </button>
+      {/* The label: to the left, so it never leaves the media's edge. */}
+      <span className="pointer-events-none absolute right-full top-1/2 mr-2 flex -translate-y-1/2 translate-x-1 items-center gap-2
+        whitespace-nowrap rounded-md bg-black/85 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition
+        duration-150 group-hover/btn:translate-x-0 group-hover/btn:opacity-100 group-focus-within/btn:translate-x-0 group-focus-within/btn:opacity-100">
+        {hint ?? label}
+        {shortcut && <kbd className="rounded bg-white/15 px-1.5 font-mono text-[10px] leading-4">{shortcut}</kbd>}
+      </span>
+    </span>
   );
 }
 
@@ -125,6 +135,22 @@ export function CaptureDock({
   const recording = clipStart !== null;
   const locked = !ready || busy !== null;
   const hovering = zoneHover || stageHover;
+
+  // Shown briefly when a video opens (so it's found), then whenever the pointer
+  // is near or a key is focused in it, and held while a range records or a
+  // capture runs. Leaving hides it after a beat, so a slip off the edge doesn't.
+  const [intro, setIntro] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setIntro(false), 2500);
+    return () => clearTimeout(t);
+  }, []);
+  const wanted = intro || hovering || focusWithin || recording || busy !== null;
+  const [shown, setShown] = useState(true);
+  useEffect(() => {
+    if (wanted) { setShown(true); return; }
+    const t = setTimeout(() => setShown(false), 700);
+    return () => clearTimeout(t);
+  }, [wanted]);
 
   // ── fullscreen (on the wrapper, so this rail comes along) ──────────────────
   const toggleFullscreen = useCallback(() => {
@@ -232,106 +258,110 @@ export function CaptureDock({
     onCheckpoint, onFrame, onRange, onCancelRange, onTogglePlay, onSeekBy,
   ]);
 
-  const spin = <Loader2 size={15} className="animate-spin" />;
+  const spin = <Loader2 size={16} className="animate-spin" />;
 
-  // A source pane on a 921 px window is ~460 px: labels don't fit there, so the
-  // bar drops to icons (each keeps its tooltip and shortcut) below 600 px.
-  const barRef = useRef<HTMLDivElement>(null);
-  const [compact, setCompact] = useState(false);
-  useEffect(() => {
-    const el = barRef.current;
-    if (!el) return;
-    const measure = () => setCompact(el.clientWidth < 600);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // An always-visible bar under the media (redesign 2026-10-25): the old rail
-  // only appeared on hover, over the player's own controls. It stays inside the
-  // wrapper, so it comes along into fullscreen.
   return (
-    <div ref={barRef} role="toolbar" aria-label="Capture tools"
-      onFocus={() => setFocusWithin(true)}
-      onBlur={() => setFocusWithin(false)}
-      className="flex h-11 shrink-0 items-center gap-1 overflow-hidden border-t border-line bg-surface-sidebar px-2 text-[13px] text-ink">
-      <BarButton
-        tone="accent"
-        label={`Mark ${fmtTime(time)}`}
-        hint="Put a link to this moment in the note"
-        shortcut={KEY.checkpoint}
-        disabled={!ready}
-        icon={<Bookmark size={14} />}
-        onClick={onCheckpoint}
-      />
-      <BarButton
-        label="Frame"
-        iconOnly={compact}
-        hint="Add this frame to the note"
-        shortcut={KEY.frame}
-        disabled={locked}
-        icon={busy === "frame" ? spin : <Camera size={15} />}
-        onClick={onFrame}
-      />
-      {/* Clip and Audio keep their places when a range opens (they become its
-          two ways to end), so the second press lands where the first did. */}
-      <BarButton tone={recording ? "danger" : "default"}
-        label={recording ? "End clip" : "Clip"}
-        iconOnly={compact}
-        hint={recording ? "End the range here and add it as a video clip" : "Start a video clip here; press again to end it"}
-        shortcut={KEY.clip} disabled={locked}
-        icon={busy === "clip" ? spin : recording ? <Square size={12} fill="currentColor" /> : <Film size={15} />}
-        onClick={() => onRange("clip")} />
-      <BarButton tone={recording ? "danger" : "default"}
-        label={recording ? "End audio" : "Audio"}
-        iconOnly={compact}
-        hint={recording ? "End the range here and add it as audio" : "Start an audio excerpt here; press again to end it"}
-        shortcut={KEY.audio} disabled={locked}
-        icon={busy === "audio" ? spin : <AudioLines size={15} />}
-        onClick={() => onRange("audio")} />
+    <>
+      {/* While a range records: what it covers, and how to throw it away. */}
       {recording && (
-        <>
-          <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-1.5 font-mono text-xs tabular-nums text-ink-secondary">
-            <span className="ws-recording size-2 rounded-full bg-red-500" />
-            {fmtTime(clipStart)} → {fmtTime(Math.max(time, clipStart))}
-          </span>
-          <BarButton label="Discard" iconOnly={compact} hint="Throw this range away" shortcut="Esc"
-            icon={<X size={15} />} onClick={onCancelRange} />
-        </>
+        <div className="absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full
+          ws-glass-dark py-1 pl-3 pr-1 text-xs text-white">
+          <span className="ws-recording size-2 rounded-full bg-red-500" />
+          <span className="font-mono tabular-nums">{fmtTime(clipStart)} → {fmtTime(Math.max(time, clipStart))}</span>
+          <button type="button" onClick={onCancelRange} aria-label="Discard this range (Esc)" title="Discard (Esc)"
+            className="flex h-6 items-center gap-1 rounded-full px-2 text-white/80 hover:bg-white/15 hover:text-white">
+            <X size={12} /> Discard
+          </button>
+        </div>
       )}
-      <span className="flex-1" />
-      <span className="group/keys relative shrink-0">
-        <span className="flex size-7 cursor-help items-center justify-center rounded-md text-ink-icon hover:bg-surface-hover"
-          aria-label="Keyboard shortcuts" title="Keyboard shortcuts">
-          <Keyboard size={15} />
-        </span>
-        <span className="pointer-events-none absolute bottom-full right-0 z-40 mb-2 hidden grid-cols-[auto_auto]
-          items-center gap-x-3 gap-y-1 whitespace-nowrap rounded-lg border border-line-strong bg-surface-elevated
-          px-3 py-2.5 text-[11px] text-ink shadow-float group-hover/keys:grid">
-          {([
-            ["Play / pause", "Space"],
-            ["Back / forward 5s", "← →"],
-            ["Mark this moment", KEY.checkpoint],
-            ["Capture frame", KEY.frame],
-            ["Clip start / end", KEY.clip],
-            ["Audio start / end", KEY.audio],
-            ["Fullscreen", KEY.fullscreen],
-          ] as const).map(([label, key]) => (
-            <span key={label} className="contents">
-              <span className="text-ink-secondary">{label}</span>
-              <kbd className="justify-self-end rounded bg-surface-chip px-1.5 py-px font-mono text-[10px] leading-4">{key}</kbd>
+
+      {/* The hover zone: a strip along the right edge, short of the top and the
+          bottom where the players keep their own controls. It's what notices the
+          pointer over a YouTube iframe (see 3. above), and it holds the rail. */}
+      <div
+        onPointerEnter={() => setZoneHover(true)}
+        onPointerLeave={() => setZoneHover(false)}
+        className="absolute bottom-16 right-0 top-14 z-20 flex w-16 items-center justify-end pr-2"
+      >
+        {/* The pull-tab, while the rail is away. */}
+        <span aria-hidden className={`absolute right-1 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-white/50 shadow
+          transition-opacity duration-200 ${shown ? "opacity-0" : "opacity-100"}`} />
+
+        <div
+          role="toolbar"
+          aria-orientation="vertical"
+          aria-label="Capture tools"
+          onFocus={() => setFocusWithin(true)}
+          onBlur={() => setFocusWithin(false)}
+          className={`ws-glass-dark flex flex-col items-center gap-1 rounded-xl p-1 transition-[opacity,transform] duration-200 ${
+            shown ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-3 opacity-0"}`}
+        >
+          <RailButton
+            tone="accent"
+            label="Mark"
+            hint="Mark this moment in the note"
+            caption={fmtTime(time)}
+            shortcut={KEY.checkpoint}
+            disabled={!ready}
+            icon={<Bookmark size={15} />}
+            onClick={onCheckpoint}
+          />
+          <span className="my-0.5 h-px w-6 bg-white/15" />
+          <RailButton
+            label="Frame"
+            hint="Add this frame to the note"
+            shortcut={KEY.frame}
+            disabled={locked}
+            icon={busy === "frame" ? spin : <Camera size={17} />}
+            onClick={onFrame}
+          />
+          {/* Clip and Audio keep their places when a range opens (they become its
+              two ways to end), so the second press lands where the first did. */}
+          <RailButton tone={recording ? "danger" : "default"}
+            label={recording ? "End clip" : "Clip"}
+            hint={recording ? "End here and add it as a video clip" : "Start a video clip here; press again to end"}
+            shortcut={KEY.clip} disabled={locked}
+            icon={busy === "clip" ? spin : recording ? <Square size={13} fill="currentColor" /> : <Film size={17} />}
+            onClick={() => onRange("clip")} />
+          <RailButton tone={recording ? "danger" : "default"}
+            label={recording ? "End audio" : "Audio"}
+            hint={recording ? "End here and add it as audio" : "Start an audio excerpt here; press again to end"}
+            shortcut={KEY.audio} disabled={locked}
+            icon={busy === "audio" ? spin : <AudioLines size={17} />}
+            onClick={() => onRange("audio")} />
+          <span className="my-0.5 h-px w-6 bg-white/15" />
+          <span className="group/keys relative flex">
+            <span tabIndex={0} aria-label="Keyboard shortcuts"
+              className="flex size-10 cursor-help items-center justify-center rounded-lg text-white/70 hover:bg-white/15 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400">
+              <Keyboard size={16} />
             </span>
-          ))}
-        </span>
-      </span>
-      <BarButton
-        label={isFullscreen ? "Leave fullscreen" : "Fullscreen"}
-        iconOnly
-        shortcut={KEY.fullscreen}
-        icon={isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-        onClick={toggleFullscreen}
-      />
-    </div>
+            <span className="pointer-events-none absolute right-full top-1/2 z-40 mr-2 hidden -translate-y-1/2 grid-cols-[auto_auto]
+              items-center gap-x-3 gap-y-1 whitespace-nowrap rounded-lg bg-black/85 px-3 py-2.5 text-[11px] text-white
+              shadow-lg group-hover/keys:grid group-focus-within/keys:grid">
+              {([
+                ["Play / pause", "Space"],
+                ["Back / forward 5s", "← →"],
+                ["Mark this moment", KEY.checkpoint],
+                ["Capture frame", KEY.frame],
+                ["Clip start / end", KEY.clip],
+                ["Audio start / end", KEY.audio],
+                ["Fullscreen", KEY.fullscreen],
+              ] as const).map(([label, key]) => (
+                <span key={label} className="contents">
+                  <span className="text-white/70">{label}</span>
+                  <kbd className="justify-self-end rounded bg-white/15 px-1.5 py-px font-mono text-[10px] leading-4">{key}</kbd>
+                </span>
+              ))}
+            </span>
+          </span>
+          <RailButton
+            label={isFullscreen ? "Leave fullscreen" : "Fullscreen"}
+            shortcut={KEY.fullscreen}
+            icon={isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            onClick={toggleFullscreen}
+          />
+        </div>
+      </div>
+    </>
   );
 }
