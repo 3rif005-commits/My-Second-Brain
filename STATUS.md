@@ -88,6 +88,12 @@ delete (deleting is permanent).
 
 ## AI panel as its own window + faster source uploads — 2026-10-25 (deployed; checked on the live site)
 
+- **Sizing pass** (live-checked right + bottom): one header row (history moved into the tab row,
+  `+` replaces the chat's own new-thread button; e2e helpers now click "New chat tab"). Docked right
+  the tab row is 44 px, level with the session header. Docked bottom: 768 px centred column,
+  one-line empty state, no hint line, default 300 / min 220 px (180 left a sliver). Past
+  conversations: opaque, a 360 px side sheet at the bottom. Tabs not shown (pane + AI) no longer
+  reserve room for their hover buttons, so a narrow pane shows words, not one letter.
 - **AI panel** (`components/ai/SidePanel.tsx`, tabs logic in `panelTabs.ts`): no longer a tab inside a
   session pane. It is the app's one panel on every page, docked **right** (full height) or **bottom**
   (full width, under every pane); the switch is in its tab bar, side/width/height are remembered.
