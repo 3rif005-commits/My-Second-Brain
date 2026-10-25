@@ -123,7 +123,7 @@ export function ThreadHistory({ activeThreadId, onSelect, onClose, onNew }: Prop
       </div>
 
       {/* Thread list */}
-      <div className="flex-1 overflow-y-auto py-2">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-2">
         {loading ? (
           <div className="flex flex-col gap-2 px-3 pt-2">
             {[80, 60, 72, 50].map((w, i) => (
