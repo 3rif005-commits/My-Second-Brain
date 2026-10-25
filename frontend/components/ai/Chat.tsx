@@ -121,7 +121,7 @@ function EmptyState({ inWorkspace, wide, onPick }: { inWorkspace: boolean; wide:
   );
   if (wide) {
     return (
-      <div className="flex h-full flex-col justify-center gap-3 py-4">
+      <div className="flex min-h-full flex-col justify-center gap-3 py-4">
         <div className="flex items-baseline gap-2">
           <Sparkles size={15} className="shrink-0 self-center text-accent" aria-hidden />
           <span className="text-[14px] font-semibold text-ink">{lead}</span>
@@ -132,8 +132,10 @@ function EmptyState({ inWorkspace, wide, onPick }: { inWorkspace: boolean; wide:
     );
   }
   return (
-    <div className="flex h-full flex-col justify-end px-4 pb-3 pt-8">
-      <div className="mb-4 px-2.5">
+    // min-h-full + mt-auto, not justify-end: low in the panel, yet in a short window
+    // the top scrolls into view instead of being cut off.
+    <div className="flex min-h-full flex-col px-4 pb-3 pt-6">
+      <div className="mb-4 mt-auto px-2.5">
         <div className="mb-3 flex size-9 items-center justify-center rounded-xl bg-accent-500/10">
           <Sparkles size={18} className="text-accent" aria-hidden />
         </div>
