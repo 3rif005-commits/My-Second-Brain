@@ -284,8 +284,9 @@ export function CaptureDock({
         className="absolute bottom-16 right-0 top-14 z-20 flex w-16 items-center justify-end pr-2"
       >
         {/* The pull-tab, while the rail is away. */}
-        <span aria-hidden className={`absolute right-1 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-white/50 shadow
-          transition-opacity duration-200 ${shown ? "opacity-0" : "opacity-100"}`} />
+        {/* Light with a dark ring, so it shows on a bright frame and a dark one alike. */}
+        <span aria-hidden className={`absolute right-1.5 top-1/2 h-12 w-1.5 -translate-y-1/2 rounded-full bg-white/80
+          shadow-[0_0_0_1px_rgba(0,0,0,0.45),0_1px_4px_rgba(0,0,0,0.5)] transition-opacity duration-200 ${shown ? "opacity-0" : "opacity-100"}`} />
 
         <div
           role="toolbar"
