@@ -335,12 +335,12 @@
  * Notion's measured card, blocks.md §4 — 265px, radius 10px, 28px rows, radius-6
  * rows, 20px plain icons, a small grey section label, grey shortcut hints. */
 .bn-mantine .bn-notion-menu {
-  width: 265px;
+  width: 265px !important;
   padding: 6px !important;
   border-radius: 10px !important;
 }
 .bn-mantine .bn-table-handle-menu.bn-notion-menu {
-  width: 220px;
+  width: 220px !important;
 }
 .bn-mantine .bn-notion-menu .mantine-Menu-item {
   height: 28px;
@@ -404,11 +404,7 @@
   color: var(--c-text-tertiary);
   white-space: nowrap;
 }
-.bn-notion-chevron {
-  margin-left: auto;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
+.bn-mantine .bn-notion-menu .mantine-Menu-itemSection[data-position="right"] {
   color: var(--c-text-tertiary);
 }
 

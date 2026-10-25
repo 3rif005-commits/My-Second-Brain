@@ -8,7 +8,7 @@
 // 20px icons, grey shortcut hints on the right.
 import type { ReactNode } from "react";
 import {
-  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CheckSquare, ChevronRight, Code, Copy, Eraser,
+  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CheckSquare, Code, Copy, Eraser,
   Heading1, Heading2, Heading3, Link2, List, ListOrdered, ListCollapse, Paintbrush, Quote,
   Repeat2, Rows3, Sparkles, Trash2, Type,
 } from "lucide-react";
@@ -25,14 +25,13 @@ type AnyBlock = any;
 const IS_MAC = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 const MOD = IS_MAC ? "⌘" : "Ctrl+";
 
-/** One row: icon · label · shortcut hint (or a › for a submenu). */
-function Row({ icon, label, hint, sub }: { icon: ReactNode; label: string; hint?: string; sub?: boolean }) {
+/** One row: icon · label · shortcut hint. (A submenu's › is drawn by BlockNote.) */
+function Row({ icon, label, hint }: { icon: ReactNode; label: string; hint?: string; sub?: boolean }) {
   return (
     <span className="bn-notion-row">
       <span className="bn-notion-icon" aria-hidden>{icon}</span>
       <span className="bn-notion-label">{label}</span>
       {hint && <span className="bn-notion-hint">{hint}</span>}
-      {sub && <ChevronRight className="bn-notion-chevron" aria-hidden />}
     </span>
   );
 }
