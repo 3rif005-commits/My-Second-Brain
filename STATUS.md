@@ -99,6 +99,12 @@ delete (deleting is permanent).
   Opaque background (the docked tint let a video show through). Phones always get the right sheet.
   Not checked live: sending in two tabs at once. On a 921 px window the right dock leaves room for one
   pane; the bottom dock keeps two.
+- **Video capture tools** (`viewers/CaptureDock.tsx`): the bar under the player is gone. A vertical
+  glass rail centred on the media's right edge slides in when the pointer reaches that edge (a YouTube
+  iframe hides hover everywhere else), stays while recording/capturing, hides ~0.7 s after leaving,
+  leaves a pull-tab, and shows for 2.5 s when a video opens. Labels + keys open to the left of each
+  button; an open range is a badge at the top with Discard. Live-checked: shows, hides, hover labels.
+  Not checked live: a real capture through the rail.
 - **Source uploads**: the browser writes straight into the user's Storage folder (owner-write policy,
   migration 012) with no backend round trip first, all files upload in parallel, and a cheap request
   wakes Render meanwhile. Fallback: the old signed-link route. Not timed live.
