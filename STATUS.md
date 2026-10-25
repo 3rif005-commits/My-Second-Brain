@@ -86,6 +86,34 @@ delete (deleting is permanent).
 
 ---
 
+## Workspace: any tab on either side — 2026-10-25 (deployed; checked on the live site)
+
+Design: the "Next" row of https://claude.ai/artifact/CuAxsUrEqB5J62BP7N9ML6. A session is a topic:
+its own note (owns the sources) plus other notes and sources brought in beside it.
+
+- Up to 3 panes (2 at 921 px, 1 when narrow), each a row of tabs; any tab (source, note, Ask AI)
+  goes in any pane: drag it, or ⇄; × closes (stays in the session). Logic: `sessionLayout.ts`
+  (16 unit tests). Layout remembered per session in localStorage (`workspace:tabs:<note>`).
+- One picker: + on a pane or Ctrl+K in a session (Ctrl+P stays app-wide search) — this session's
+  closed items, your notes, sources in other notes (`GET /library/sources`), upload/link.
+  Enter = here, Alt+Enter = beside.
+- Writing target = the note last worked in (pen on its tab). Add to note, captures and AI inserts
+  go there and name it ("Add to …", "Insert into …"); a hidden target gets a toast.
+- The AI reads every note and source in the session: one search per note, plus brought-in notes'
+  own text; each passage passes the privacy gate under its own note's level (no migration).
+  A citation to a note opens it.
+- Start page: "Continue a note…" (any note); every note page shows Open in workspace.
+
+Checked live: default layout, picker (all four groups), opening an old note, ⇄ two notes side by
+side, "Add to sb-test-old-note" landing in the hidden target (saved), pen moving on click, Ask AI
+docked beside the note answering from the old note with a citation that opens it, layout restored
+after reload, a PDF from another note opened beside. Found + fixed live: the /api/ws proxy
+blocked /library; tabs overflowed a 460 px pane. Not checked: drag-and-drop of tabs (⇄ used),
+the 3-pane maximised layout, narrow one-pane mode with this build, light mode.
+Test notes sb-test-photosynthesis and sb-test-old-note moved to Trash.
+
+---
+
 ## Workspace redesign — 2026-10-25 (deployed; checked on the live site)
 
 Design: https://claude.ai/artifact/CuAxsUrEqB5J62BP7N9ML6 (review of the old shell, research
