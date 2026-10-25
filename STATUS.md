@@ -103,7 +103,9 @@ delete (deleting is permanent).
   glass rail centred on the media's right edge slides in when the pointer reaches that edge (a YouTube
   iframe hides hover everywhere else), stays while recording/capturing, hides ~0.7 s after leaving,
   leaves a pull-tab, and shows for 2.5 s when a video opens. Labels + keys open to the left of each
-  button; an open range is a badge at the top with Discard. Live-checked: shows, hides, hover labels.
+  button; an open range is a REC badge (running length, range, Discard) top-right under the player's
+  title row. Look: `.ws-media-glass` (globals.css) for anything floating over media. Live-checked: shows,
+  hides, hover labels, shortcut card, REC badge (opened with V, discarded with Esc).
   Not checked live: a real capture through the rail.
 - **Source uploads**: the browser writes straight into the user's Storage folder (owner-write policy,
   migration 012) with no backend round trip first, all files upload in parallel, and a cheap request
