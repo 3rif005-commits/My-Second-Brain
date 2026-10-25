@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AppWindow, Bot, PanelBottom, PanelRight, Plus, X } from "lucide-react";
+import { AppWindow, Bot, PanelBottom, PanelRight, Plus, Sparkles, X } from "lucide-react";
 import { Chat, type WorkspaceBinding } from "./Chat";
 import {
   NEW_TAB_TITLE, addTab, clampFloat, closePanelTab, freshTabs, patchTab, readPanelTabs, showTab,
@@ -197,14 +197,14 @@ export function SidePanel({
           <div className={`${bottom ? "h-px w-full" : "w-px h-full"} bg-accent-200/60 dark:bg-accent-900/40 group-hover:bg-accent-400 dark:group-hover:bg-accent-500 transition-colors duration-150`} />
         </div>}
 
-        {/* Conversation tabs */}
+        {/* Conversation tabs — drawn like a session pane's tabs: no fill, the shown one underlined */}
         <div
           onPointerDown={float ? (e) => onFloatPointerDown(e, "move") : undefined}
           onDoubleClick={float ? (e) => { if (!(e.target as Element).closest("button, [role=tab]")) onSideChange?.("right"); } : undefined}
           title={float ? "Drag to move · double-click to dock" : undefined}
-          className={`flex h-9 shrink-0 items-center gap-0.5 border-b border-line pl-2 pr-1 ${float ? "cursor-grab" : ""}`}
+          className={`flex h-[38px] shrink-0 items-end gap-0.5 border-b border-line pl-1.5 pr-1 ${float ? "cursor-grab" : ""}`}
         >
-          <div role="tablist" aria-label="Conversations" className="ws-scroll-x flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+          <div role="tablist" aria-label="Conversations" className="ws-scroll-x flex min-w-0 flex-1 items-end gap-0.5 overflow-x-auto">
             {tabs.tabs.map((t) => {
               const shown = t.id === tabs.active;
               return (
@@ -217,17 +217,21 @@ export function SidePanel({
                   onClick={() => setTabs((s) => showTab(s, t.id))}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setTabs((s) => showTab(s, t.id)); }}
                   onAuxClick={(e) => { if (e.button === 1) setTabs((s) => closePanelTab(s, t.id)); }}
+                  // Tabs not shown give way first, down to their icon and a few letters.
                   className={[
-                    "group/tab flex h-7 min-w-[72px] max-w-[180px] shrink cursor-pointer items-center gap-1 rounded-md pl-2 pr-0.5 text-xs",
-                    shown ? "bg-surface text-ink shadow-sm" : "text-ink-secondary hover:bg-surface-hover hover:text-ink",
+                    "group/tab flex h-8 cursor-pointer items-center gap-1.5 rounded-t-md pl-2.5 pr-1 text-[13px] transition-colors duration-instant",
+                    shown ? "max-w-[180px] shrink-0 text-ink shadow-[inset_0_-2px_0_var(--c-accent)]"
+                      : "min-w-[56px] max-w-[150px] shrink text-ink-secondary hover:bg-surface-hover hover:text-ink",
                   ].join(" ")}
                 >
+                  <Sparkles size={13} className={`shrink-0 ${shown ? "text-accent" : "text-ink-icon"}`} aria-hidden />
                   <span className="min-w-0 flex-1 truncate">{t.title}</span>
                   <button
                     type="button"
                     aria-label={`Close ${t.title}`}
+                    title="Close tab"
                     onClick={(e) => { e.stopPropagation(); setTabs((s) => closePanelTab(s, t.id)); }}
-                    className={`flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-active hover:text-ink ${shown ? "" : "opacity-0 group-hover/tab:opacity-100"}`}
+                    className={`flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-hover hover:text-ink focus:opacity-100 ${shown ? "" : "opacity-0 group-hover/tab:opacity-100"}`}
                   >
                     <X size={12} />
                   </button>
@@ -235,30 +239,48 @@ export function SidePanel({
               );
             })}
           </div>
-          <button type="button" onClick={() => setTabs(addTab)} aria-label="New chat tab" title="New chat tab" className={iconBtn}>
-            <Plus size={15} />
-          </button>
-          {onSideChange && (
-            <div role="group" aria-label="Where the AI panel sits" className="mx-0.5 hidden items-center rounded-md bg-surface-hover/60 p-0.5 md:flex">
-              {DOCKS.map((d) => (
-                <button
-                  key={d.side}
-                  type="button"
-                  onClick={() => onSideChange(d.side)}
-                  aria-label={d.label}
-                  aria-pressed={side === d.side}
-                  title={d.label}
-                  className={`flex size-6 items-center justify-center rounded transition-colors ${side === d.side
-                    ? "bg-surface text-ink shadow-sm" : "text-ink-icon hover:text-ink"}`}
-                >
-                  {d.icon}
-                </button>
-              ))}
-            </div>
-          )}
-          <button type="button" onClick={onToggle} aria-label="Close AI panel" title="Close (Ctrl+J)" className={iconBtn}>
-            <X size={15} />
-          </button>
+          <div className="flex h-[37px] shrink-0 items-center gap-0.5">
+            <button type="button" onClick={() => setTabs(addTab)} aria-label="New chat tab" title="New chat tab" className={iconBtn}>
+              <Plus size={15} />
+            </button>
+            {onSideChange && (
+              // One button showing where the panel is; pointing at it (or tabbing to it)
+              // opens the other two places to its left. The current one is last, so it
+              // stays under the cursor while the others slide out.
+              <div
+                role="group"
+                aria-label="Where the AI panel sits"
+                className="group/dock hidden items-center rounded-md transition-colors hover:bg-surface-hover focus-within:bg-surface-hover md:flex"
+              >
+                {DOCKS.map((d) => {
+                  const current = side === d.side;
+                  return (
+                    <button
+                      key={d.side}
+                      type="button"
+                      onClick={() => onSideChange(d.side)}
+                      aria-label={current ? `${d.label} (now) — point here for the other places` : d.label}
+                      aria-pressed={current}
+                      title={current ? "Where the panel sits" : d.label}
+                      className={current
+                        ? "order-last flex size-7 shrink-0 items-center justify-center rounded-md text-ink-icon hover:text-ink group-hover/dock:text-ink"
+                        : [
+                          "flex h-7 w-0 shrink-0 items-center justify-center overflow-hidden rounded-md text-ink-icon opacity-0",
+                          "transition-[width,opacity] duration-150 hover:bg-surface-active hover:text-ink",
+                          "pointer-events-none group-hover/dock:pointer-events-auto group-hover/dock:w-7 group-hover/dock:opacity-100",
+                          "group-focus-within/dock:pointer-events-auto group-focus-within/dock:w-7 group-focus-within/dock:opacity-100",
+                        ].join(" ")}
+                    >
+                      {d.icon}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <button type="button" onClick={onToggle} aria-label="Close AI panel" title="Close (Ctrl+J)" className={iconBtn}>
+              <X size={15} />
+            </button>
+          </div>
         </div>
 
         {/* Every tab's Chat stays mounted while closed or hidden, so a running job,
