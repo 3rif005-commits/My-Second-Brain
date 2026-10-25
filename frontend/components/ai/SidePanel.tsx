@@ -228,11 +228,10 @@ export function SidePanel({
                   // Tabs not shown give way first, down to their icon and a few letters.
                   className={[
                     "group/tab relative flex h-8 cursor-pointer items-center gap-1.5 rounded-t-md pl-2.5 text-[13px] transition-colors duration-instant",
-                    // Both give way in a narrow panel, the ones not shown first (four times
-                    // faster, down to their mark and a letter), so the shown one keeps its name
-                    // and the row never cuts a tab in half.
-                    shown ? "min-w-[96px] max-w-[200px] shrink pr-1 text-ink shadow-[inset_0_-2px_0_var(--c-accent)]"
-                      : "min-w-[44px] max-w-[150px] shrink-[4] pr-2.5 text-ink-secondary hover:bg-surface-hover hover:text-ink",
+                    // The shown tab keeps its name (up to 160 px); the others give way, down
+                    // to their mark and a letter, before the row scrolls.
+                    shown ? "max-w-[160px] shrink-0 pr-1 text-ink shadow-[inset_0_-2px_0_var(--c-accent)]"
+                      : "min-w-[44px] max-w-[150px] shrink pr-2.5 text-ink-secondary hover:bg-surface-hover hover:text-ink",
                   ].join(" ")}
                 >
                   <Sparkles size={13} className={`shrink-0 ${shown ? "text-accent" : "text-ink-icon"}`} aria-hidden />
