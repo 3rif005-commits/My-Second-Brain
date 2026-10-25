@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, useMemo } from "react";
-import { useCreateBlockNote, BlockNoteContext, SuggestionMenuController, getDefaultReactSlashMenuItems, useBlockNoteEditor, useExtension } from "@blocknote/react";
+import { useCreateBlockNote, BlockNoteContext, SuggestionMenuController, getDefaultReactSlashMenuItems, useBlockNoteEditor, useExtension, SideMenuController, SideMenu, TableHandlesController, TableHandle } from "@blocknote/react";
+import { NotionBlockMenu, NotionTableHandleMenu } from "./notionMenus";
 import type { DefaultReactSuggestionItem } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { AIExtension, AIMenuController } from "@blocknote/xl-ai";
@@ -629,7 +630,19 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           // own items, and replaces the built-in one rather than sitting
           // alongside it.
           formattingToolbar={false}
+          // Notion's block menu (⋮⋮) and table row/column menus replace
+          // BlockNote's defaults (notionMenus.tsx).
+          sideMenu={false}
+          tableHandles={false}
         >
+          <SideMenuController
+            sideMenu={(props) => (
+              <SideMenu {...props} dragHandleMenu={() => <NotionBlockMenu noteId={_noteId} />} />
+            )}
+          />
+          <TableHandlesController
+            tableHandle={(props) => <TableHandle {...props} tableHandleMenu={NotionTableHandleMenu as never} />}
+          />
           {/* Intercepts Cmd/Ctrl+J to open the inline AI menu */}
           <AIKeyboardHandler />
 

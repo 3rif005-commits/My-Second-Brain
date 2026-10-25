@@ -331,6 +331,87 @@
   box-shadow: var(--shadow-menu) !important;
   background: var(--c-bg-elevated) !important;
 }
+/* Block menu (⋮⋮) and table row/column menus (components/editor/notionMenus.tsx):
+ * Notion's measured card, blocks.md §4 — 265px, radius 10px, 28px rows, radius-6
+ * rows, 20px plain icons, a small grey section label, grey shortcut hints. */
+.bn-mantine .bn-notion-menu {
+  width: 265px;
+  padding: 6px !important;
+  border-radius: 10px !important;
+}
+.bn-mantine .bn-table-handle-menu.bn-notion-menu {
+  width: 220px;
+}
+.bn-mantine .bn-notion-menu .mantine-Menu-item {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--c-text);
+  background: transparent;
+}
+.bn-mantine .bn-notion-menu .mantine-Menu-item[data-hovered],
+.bn-mantine .bn-notion-menu .mantine-Menu-item:hover {
+  background: var(--c-bg-hover);
+}
+.bn-mantine .bn-notion-menu .mantine-Menu-itemLabel {
+  flex: 1;
+  min-width: 0;
+}
+.bn-mantine .bn-notion-menu .mantine-Menu-itemSection {
+  color: var(--c-icon);
+}
+.bn-mantine .bn-notion-menu .mantine-Menu-label {
+  padding: 0 8px;
+  margin: 4px 0 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 14.4px;
+  color: var(--c-text-secondary);
+}
+.bn-mantine .bn-notion-menu .mantine-Menu-divider {
+  margin: 4px 0;
+  border-color: var(--c-border);
+}
+.bn-notion-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+.bn-notion-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--c-icon-strong);
+}
+.bn-notion-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.6;
+}
+.bn-notion-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bn-notion-hint {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 12px;
+  color: var(--c-text-tertiary);
+  white-space: nowrap;
+}
+.bn-notion-chevron {
+  margin-left: auto;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--c-text-tertiary);
+}
+
 /* Slash menu, Notion-style: one compact line per block (icon + title), small
  * group labels, a soft selected row. The description line and the shortcut badges
  * are hidden: they overloaded the list, and the icon already says what it is. */
