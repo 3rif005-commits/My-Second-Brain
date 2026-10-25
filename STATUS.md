@@ -86,6 +86,30 @@ delete (deleting is permanent).
 
 ---
 
+## Workspace: last unchecked flows, live on the deployed site — 2026-10-25
+
+Checked in Chrome on Vercel + Render (no local stack): **a 3-file drop** (2 Markdown + 1 video)
+→ one note, all three read; **frame, clip (4 s) and audio (3 s) capture** from an uploaded video,
+by button and by shortcut; **AI insert into a note that already has content** (the old "append
+branch"; synthesis is now run from the AI panel). Found and fixed, each re-checked live:
+
+- **Insert replaced a note holding only captures**: "is it empty?" read plain text, and frames,
+  clips and audio have none. Now judged by blocks (workspace and the ordinary note page).
+  Undo also drops the removed draft's Jump-to chips.
+- **Every Jump-to chip read "§0"** for Markdown/Word/website sources: the text the AI read was
+  rebuilt from 1,500-char chunks with one section tag per chunk. Now one tag per section; chips
+  count from 1.
+- **Headings never had Notion's sizes** (H1 48 px on a 39 px line, so wrapped titles overlapped;
+  H2 32 px): BlockNote's `font-size: var(--level)` outranked ours. Now 30/24/20 px.
+- The capture dock's End-clip button moved out from under the cursor when a range opened; a
+  stale "the note gets written once every source is in" message.
+
+Not fixed: with the sidebar and AI panel both open in a ~920 px window, the workspace has
+291 px for 376 px of content, and a jump can scroll its header sideways out of view.
+Test note "sb-test-photosynthesis" moved to Trash.
+
+---
+
 ## ArtCraft study build — 2026-10-22 (deployed; core flows live-checked on the deployed site)
 
 Study + plan: `docs/artcraft-study/FINDINGS.md`, `SHORTLIST.md` (build list with per-item state).

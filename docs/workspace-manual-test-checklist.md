@@ -16,6 +16,10 @@
 > re-synthesis actually rewriting the note. Four defects were found and fixed in
 > that pass (see "Known quirks" at the end).
 >
+> **2026-10-25:** frame/clip/audio capture, a multi-file drop (Markdown + video) and
+> inserting into an edited note were checked live on the deployed site (see STATUS.md).
+> Synthesis is now run from the AI panel; nothing auto-writes. Earlier note:
+>
 > **Not yet exercised live:** file upload (PDF / markdown / video), frame / clip /
 > audio capture, the multi-file deferred batch drop, and the append branch of
 > re-synthesis. Those sections below are written but unverified — treat a failure
