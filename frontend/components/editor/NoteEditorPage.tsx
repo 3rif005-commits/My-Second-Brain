@@ -464,15 +464,16 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
           meta={saveStatus === "saving" ? "Saving…" : saveStatus === "failed" ? "Not saved — retrying" : ingestHtml && !lastSaved ? "Applying…" : undefined}
         >
           <NotionChip noteId={note.id} />
-          {sourceCount > 0 && (
-            <TopBarButton
-              text
-              label={`Open this note beside its ${sourceCount} source${sourceCount === 1 ? "" : "s"}`}
-              onClick={() => router.push(`/brain/workspace/${note.id}`)}
-            >
-              <Layers size={16} className="text-ink-icon" /> Open in workspace
-            </TopBarButton>
-          )}
+          {/* Any note can be a study session, sources or not (2026-10-25). */}
+          <TopBarButton
+            text
+            label={sourceCount > 0
+              ? `Open this note beside its ${sourceCount} source${sourceCount === 1 ? "" : "s"}`
+              : "Study this note in the workspace: add sources, open other notes beside it"}
+            onClick={() => router.push(`/brain/workspace/${note.id}`)}
+          >
+            <Layers size={16} className="text-ink-icon" /> Open in workspace
+          </TopBarButton>
           <TopBarButton text label="Share" onClick={() => { void togglePublic().then(() => showToast(isPublic ? "Public link turned off" : "Anyone with the link can view this page", "info")); }}>
             {isPublic ? <Globe size={14} className="text-accent" /> : null}
             Share

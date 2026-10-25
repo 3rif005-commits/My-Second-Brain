@@ -1,11 +1,12 @@
 "use client";
 
-// Empty state of the workspace shell: one drop target, and a recents strip so a
-// session can be resumed without a sidebar section to maintain.
+// Empty state of the workspace shell: one drop target, a recents strip so a
+// session can be resumed without a sidebar section to maintain, and "Continue a
+// note" — any note can become a session, with sources or not (2026-10-25).
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowRight, FileText, FileUp, Globe, Link2, PlaySquare, Sparkles,
+  ArrowRight, FileText, FileUp, Globe, Link2, PlaySquare, Search, Sparkles,
 } from "lucide-react";
 import { PromptDialog } from "@/components/ui/PromptDialog";
 import { ACCEPTED_WORKSPACE_FILES, wsApi, type RecentSession } from "@/lib/workspace";
@@ -20,11 +21,20 @@ export function DropZone({ onAddFiles, onAddUrl, busy }: DropZoneProps) {
   const router = useRouter();
   const [recents, setRecents] = useState<RecentSession[]>([]);
   const [showUrl, setShowUrl] = useState(false);
+  const [notes, setNotes] = useState<{ id: string; title: string | null; updated_at?: string }[]>([]);
+  const [noteQuery, setNoteQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     wsApi.recentSessions().then(setRecents).catch(() => {});
+    fetch("/api/notes").then((r) => (r.ok ? r.json() : [])).then((d) => setNotes(Array.isArray(d) ? d : []))
+      .catch(() => {});
   }, []);
+  const inRecents = new Set(recents.map((r) => r.note_id));
+  const q = noteQuery.trim().toLowerCase();
+  const others = notes
+    .filter((n) => !inRecents.has(n.id) && (!q || (n.title || "Untitled").toLowerCase().includes(q)))
+    .slice(0, q ? 10 : 5);
 
   return (
     <div className="h-full overflow-y-auto flex flex-col items-center justify-center gap-9 px-6 py-12">
@@ -116,6 +126,40 @@ export function DropZone({ onAddFiles, onAddUrl, busy }: DropZoneProps) {
                 />
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {notes.length > 0 && (
+        <div className="w-full max-w-lg">
+          <label className="flex h-9 items-center gap-2 rounded-lg border border-line-strong bg-surface-field px-3 text-ink-secondary">
+            <Search size={14} className="shrink-0" />
+            <span className="sr-only">Continue a note</span>
+            <input
+              value={noteQuery}
+              onChange={(e) => setNoteQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && others[0]) router.push(`/brain/workspace/${others[0].id}`); }}
+              placeholder="Continue a note… (any note, with or without sources)"
+              className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-placeholder"
+            />
+          </label>
+          <div className="mt-1.5 flex flex-col">
+            {others.map((n) => (
+              <button
+                key={n.id}
+                onClick={() => router.push(`/brain/workspace/${n.id}`)}
+                className="flex h-9 items-center gap-2.5 rounded-md px-2 text-left text-sm text-ink hover:bg-surface-hover"
+              >
+                <FileText size={15} className="shrink-0 text-ink-icon" />
+                <span className="min-w-0 flex-1 truncate">{n.title || "Untitled"}</span>
+                {n.updated_at && (
+                  <span className="shrink-0 text-xs text-ink-tertiary">
+                    {new Date(n.updated_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
+                  </span>
+                )}
+              </button>
+            ))}
+            {others.length === 0 && q && <p className="px-2 py-1.5 text-xs text-ink-tertiary">No note matches “{noteQuery}”.</p>}
           </div>
         </div>
       )}
