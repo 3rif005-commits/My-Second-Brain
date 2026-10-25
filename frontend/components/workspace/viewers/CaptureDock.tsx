@@ -234,14 +234,28 @@ export function CaptureDock({
 
   const spin = <Loader2 size={15} className="animate-spin" />;
 
+  // A source pane on a 921 px window is ~460 px: labels don't fit there, so the
+  // bar drops to icons (each keeps its tooltip and shortcut) below 600 px.
+  const barRef = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const measure = () => setCompact(el.clientWidth < 600);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   // An always-visible bar under the media (redesign 2026-10-25): the old rail
   // only appeared on hover, over the player's own controls. It stays inside the
   // wrapper, so it comes along into fullscreen.
   return (
-    <div role="toolbar" aria-label="Capture tools"
+    <div ref={barRef} role="toolbar" aria-label="Capture tools"
       onFocus={() => setFocusWithin(true)}
       onBlur={() => setFocusWithin(false)}
-      className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-t border-line bg-surface-sidebar px-2 text-[13px] text-ink">
+      className="flex h-11 shrink-0 items-center gap-1 overflow-hidden border-t border-line bg-surface-sidebar px-2 text-[13px] text-ink">
       <BarButton
         tone="accent"
         label={`Mark ${fmtTime(time)}`}
@@ -253,6 +267,7 @@ export function CaptureDock({
       />
       <BarButton
         label="Frame"
+        iconOnly={compact}
         hint="Add this frame to the note"
         shortcut={KEY.frame}
         disabled={locked}
@@ -263,12 +278,14 @@ export function CaptureDock({
           two ways to end), so the second press lands where the first did. */}
       <BarButton tone={recording ? "danger" : "default"}
         label={recording ? "End clip" : "Clip"}
+        iconOnly={compact}
         hint={recording ? "End the range here and add it as a video clip" : "Start a video clip here; press again to end it"}
         shortcut={KEY.clip} disabled={locked}
         icon={busy === "clip" ? spin : recording ? <Square size={12} fill="currentColor" /> : <Film size={15} />}
         onClick={() => onRange("clip")} />
       <BarButton tone={recording ? "danger" : "default"}
         label={recording ? "End audio" : "Audio"}
+        iconOnly={compact}
         hint={recording ? "End the range here and add it as audio" : "Start an audio excerpt here; press again to end it"}
         shortcut={KEY.audio} disabled={locked}
         icon={busy === "audio" ? spin : <AudioLines size={15} />}
@@ -279,7 +296,7 @@ export function CaptureDock({
             <span className="ws-recording size-2 rounded-full bg-red-500" />
             {fmtTime(clipStart)} → {fmtTime(Math.max(time, clipStart))}
           </span>
-          <BarButton label="Discard" hint="Throw this range away" shortcut="Esc"
+          <BarButton label="Discard" iconOnly={compact} hint="Throw this range away" shortcut="Esc"
             icon={<X size={15} />} onClick={onCancelRange} />
         </>
       )}
