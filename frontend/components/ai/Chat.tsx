@@ -70,10 +70,20 @@ interface ChatProps {
   onTitle?: (title: string) => void;
   /** False while another tab of the panel is shown: it keeps running but stops polling. */
   active?: boolean;
+  /** The panel draws the top row (its tabs carry history and new chat), so this one doesn't. */
+  bare?: boolean;
+  /** Bumped by the panel's history button: open the list of past conversations. */
+  historyNonce?: number;
+  /** Docked along the bottom: a wide, short space. The conversation keeps a readable
+   *  column in the middle, and the empty state is one line instead of a tall block. */
+  wide?: boolean;
 }
 
 
 
+
+/** Side padding that leaves a 768 px column in the middle of a wide panel (never under 12 px). */
+const COLUMN = "px-[max(0.75rem,calc((100%_-_48rem)/2))]";
 
 const MODEL_OPTIONS: { value: Mode; label: string; desc: string; icon: React.ReactNode }[] = [
   { value: "auto",   label: "Auto",   desc: "Your rules decide · private stays home", icon: <Route size={14} /> },
@@ -84,7 +94,7 @@ const MODEL_OPTIONS: { value: Mode; label: string; desc: string; icon: React.Rea
   { value: "long",   label: "Long",   desc: "Very large context",                     icon: <BookOpen size={14} /> },
 ];
 
-export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, workspace, focusNonce, prefill, onTitle, active = true }: ChatProps = {}) {
+export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, workspace, focusNonce, prefill, onTitle, active = true, bare = false, historyNonce, wide = false }: ChatProps = {}) {
   const { enterForNewLine } = usePreferences().preferences;
   const [items, setItems] = useState<StreamItem[]>([]);
   const [input, setInput] = useState("");
@@ -92,6 +102,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   const [error, setError] = useState<string | null>(null);
   const [internalThreadId, setInternalThreadId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  useEffect(() => { if (historyNonce) setHistoryOpen(true); }, [historyNonce]);
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   // Run later (5.3): the menu beside Send, and a nudge so the panel's list of
   // background jobs shows a new one at once.
@@ -785,8 +796,8 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
         />
       </div>
 
-      {/* Top bar */}
-      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-gray-200/60 dark:border-gray-800 shrink-0">
+      {/* Top bar — the panel draws its own when it hosts this chat */}
+      {!bare && <div className="flex items-center gap-1 px-2 py-1.5 border-b border-gray-200/60 dark:border-gray-800 shrink-0">
         <button
           onClick={() => setHistoryOpen(true)}
           aria-label="Thread history"
@@ -818,10 +829,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             </button>
           )}
         </div>
-      </div>
+      </div>}
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 bg-white/50 dark:bg-white/[0.02]" role="log" aria-live="polite">
+      {/* Messages — wide: padded in to a readable column, centred */}
+      <div ref={scrollRef} className={`flex-1 overflow-y-auto min-h-0 bg-white/50 dark:bg-white/[0.02] ${wide ? COLUMN : ""}`} role="log" aria-live="polite">
         {pageNoteId && active && (
           <BackgroundJobs
             noteId={pageNoteId}
@@ -840,7 +851,17 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             }}
           />
         )}
-        {items.length === 0 ? (
+        {items.length === 0 && wide ? (
+          <div className="flex h-full items-center justify-center gap-3 px-6 py-4">
+            <Sparkles size={18} className="shrink-0 text-ink-icon-strong" aria-hidden />
+            <p className="text-sm text-gray-400 dark:text-gray-500">
+              <span className="font-semibold text-gray-900 dark:text-gray-100">What do you want to know?</span>{" "}
+              {workspace
+                ? "Ask about this note's sources — answers cite the exact page — or anything in your brain."
+                : "Ask anything — answers are grounded in your notes."}
+            </p>
+          </div>
+        ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
             <div className="w-14 h-14 rounded-card bg-surface-chip text-ink flex items-center justify-center mb-4">
               <Sparkles size={28} className="text-ink-icon-strong" aria-hidden />
@@ -927,7 +948,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
       </div>
 
       {/* Input */}
-      <div className="px-3 pb-3 pt-2.5 shrink-0 border-t border-gray-200/60 dark:border-gray-800 relative">
+      <div className={`pb-3 pt-2.5 shrink-0 border-t border-gray-200/60 dark:border-gray-800 relative ${wide ? COLUMN : "px-3"}`}>
         {suggestions.length > 0 && (
           <div role="listbox" aria-label="Skills"
             className="absolute bottom-full left-3 right-3 mb-1 z-20 bg-white dark:bg-gray-800 rounded-xl shadow-xl
@@ -1179,9 +1200,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
               : <Send size={14} strokeWidth={2.5} />}
           </button>
         </form>
-        <p className="text-[10px] text-gray-400 mt-1.5 text-center">
+        {/* Short on height at the bottom: the input's placeholder says it already */}
+        {!wide && <p className="text-[10px] text-gray-400 mt-1.5 text-center">
           Enter to send · / for skills · 📎 files or links
-        </p>
+        </p>}
       </div>
     </div>
   );

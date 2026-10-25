@@ -27,8 +27,10 @@ import type { IngestSource } from "@/components/ingestion/IngestDropzone";
 const AI_PANEL_DEFAULT_WIDTH = 360;
 const AI_PANEL_MIN_WIDTH = 280;
 const AI_PANEL_MAX_WIDTH = 600;
-const AI_PANEL_DEFAULT_HEIGHT = 320;
-const AI_PANEL_MIN_HEIGHT = 180;
+// At the bottom: high enough for a few lines of answer above the input; any lower
+// and the conversation shrank to a sliver between the tabs and the input.
+const AI_PANEL_DEFAULT_HEIGHT = 300;
+const AI_PANEL_MIN_HEIGHT = 220;
 // Notion's sidebar: 270px by default, resizable by dragging its right edge.
 const SIDEBAR_DEFAULT_WIDTH = 270;
 const SIDEBAR_MIN_WIDTH = 220;

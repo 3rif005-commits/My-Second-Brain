@@ -12,7 +12,7 @@ export async function openPanel(page: Page) {
   }
   await expect(box).toBeVisible({ timeout: 30_000 });
   // A fresh conversation: the panel reopens the last thread otherwise.
-  await page.getByRole("button", { name: "New thread" }).click();
+  await page.getByRole("button", { name: "New chat tab" }).click();
   page.on("console", (m) => { if (m.text().includes("[ai-panel]")) console.log(m.text()); });
   return box;
 }

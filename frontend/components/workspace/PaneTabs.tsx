@@ -88,7 +88,7 @@ export function PaneTabs({
               // Tabs not shown give way first (down to their icon and a few
               // letters), so three or four fit a 460 px pane before it scrolls.
               className={`group relative flex h-8 items-center rounded-t-md transition-colors duration-instant ${underline} ${
-                t.shown ? "max-w-[190px] shrink-0 bg-surface text-ink" : "min-w-[56px] max-w-[160px] shrink text-ink-secondary hover:bg-surface-hover"}`}
+                t.shown ? "max-w-[190px] shrink-0 bg-surface text-ink" : "min-w-[64px] max-w-[160px] shrink text-ink-secondary hover:bg-surface-hover"}`}
             >
               <button
                 type="button"
@@ -96,33 +96,35 @@ export function PaneTabs({
                 aria-selected={t.shown}
                 onClick={() => onActivate(t.key, t.pane)}
                 title={t.kind === "note" && t.isTarget ? `${t.title} — you're writing here` : t.title}
-                className="flex h-full min-w-0 items-center gap-2 pl-2.5 pr-1 text-[13px]"
+                className={`flex h-full min-w-0 items-center gap-2 pl-2.5 text-[13px] ${t.shown ? "pr-1" : "pr-2.5"}`}
               >
                 <TabIcon t={t} />
                 <span className="truncate">{t.title}</span>
               </button>
-              {canMove && (
+              {/* A tab not shown keeps its whole width for the title (the buttons used to
+                  hold 40 px of empty room, leaving one letter): they cover its end when pointed at. */}
+              <div className={t.shown ? "contents" : "pointer-events-none absolute inset-y-0 right-0 flex items-center rounded-tr-md bg-surface-hover pl-0.5 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"}>
+                {canMove && (
+                  <button
+                    type="button"
+                    aria-label={`Move ${t.title} to the other side`}
+                    title="Move to the other side (or drag the tab)"
+                    onClick={() => onMove(t.key)}
+                    className="flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-active hover:text-ink"
+                  >
+                    <ArrowLeftRight size={12} />
+                  </button>
+                )}
                 <button
                   type="button"
-                  aria-label={`Move ${t.title} to the other side`}
-                  title="Move to the other side (or drag the tab)"
-                  onClick={() => onMove(t.key)}
-                  className={`flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-hover hover:text-ink focus:opacity-100 ${
-                    t.shown ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                  aria-label={`Close ${t.title}`}
+                  title="Close tab (it stays in this session)"
+                  onClick={() => onClose(t.key)}
+                  className="mr-1 flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-active hover:text-ink"
                 >
-                  <ArrowLeftRight size={12} />
+                  <X size={12} />
                 </button>
-              )}
-              <button
-                type="button"
-                aria-label={`Close ${t.title}`}
-                title="Close tab (it stays in this session)"
-                onClick={() => onClose(t.key)}
-                className={`mr-1 flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-hover hover:text-ink focus:opacity-100 ${
-                  t.shown ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
-              >
-                <X size={12} />
-              </button>
+              </div>
             </div>
           );
         })}

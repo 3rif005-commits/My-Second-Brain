@@ -92,7 +92,7 @@ test("chat: Auto chip, a rule routes on-device, a cloud answer shows its route",
     await ss(page, "07-local-by-rule");
 
     // A real (tiny) cloud answer, with its badge and the why-popover.
-    await page.getByRole("button", { name: "New thread" }).click();
+    await page.getByRole("button", { name: "New chat tab" }).click();
     await box.fill("Reply with exactly one word: pong");
     await page.getByRole("button", { name: "Send" }).click();
     const badge = page.getByRole("button", { name: /^Answered by .*Details$/ }).last();

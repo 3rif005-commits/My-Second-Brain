@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AppWindow, Bot, PanelBottom, PanelRight, Plus, Sparkles, X } from "lucide-react";
+import { AppWindow, Bot, History, PanelBottom, PanelRight, Plus, Sparkles, X } from "lucide-react";
 import { Chat, type WorkspaceBinding } from "./Chat";
 import {
   NEW_TAB_TITLE, addTab, clampFloat, closePanelTab, freshTabs, patchTab, readPanelTabs, showTab,
@@ -75,6 +75,9 @@ export function SidePanel({
   onHeightChange, left = 0, floatRect, onFloatRectChange, workspace, focusNonce, prefill,
 }: SidePanelProps) {
   const [tabs, setTabs] = usePanelTabs();
+  // Past conversations open in the tab shown when asked (its Chat owns the list),
+  // and only there: showing another tab later must not reopen it.
+  const [history, setHistory] = useState<{ nonce: number; tab: string } | null>(null);
   const bottom = side === "bottom";
   const float = side === "float" && !!floatRect;
 
@@ -202,7 +205,10 @@ export function SidePanel({
           onPointerDown={float ? (e) => onFloatPointerDown(e, "move") : undefined}
           onDoubleClick={float ? (e) => { if (!(e.target as Element).closest("button, [role=tab]")) onSideChange?.("right"); } : undefined}
           title={float ? "Drag to move · double-click to dock" : undefined}
-          className={`flex h-[38px] shrink-0 items-end gap-0.5 border-b border-line pl-1.5 pr-1 ${float ? "cursor-grab" : ""}`}
+          // Docked right it runs beside a session's 44 px header: the same height keeps
+          // one unbroken line across the window instead of two steps.
+          className={`flex shrink-0 items-end gap-0.5 border-b border-line pl-1.5 pr-1 ${
+            !float && !bottom ? "h-11" : "h-[38px]"} ${float ? "cursor-grab" : ""}`}
         >
           <div role="tablist" aria-label="Conversations" className="ws-scroll-x flex min-w-0 flex-1 items-end gap-0.5 overflow-x-auto">
             {tabs.tabs.map((t) => {
@@ -219,9 +225,9 @@ export function SidePanel({
                   onAuxClick={(e) => { if (e.button === 1) setTabs((s) => closePanelTab(s, t.id)); }}
                   // Tabs not shown give way first, down to their icon and a few letters.
                   className={[
-                    "group/tab flex h-8 cursor-pointer items-center gap-1.5 rounded-t-md pl-2.5 pr-1 text-[13px] transition-colors duration-instant",
-                    shown ? "max-w-[180px] shrink-0 text-ink shadow-[inset_0_-2px_0_var(--c-accent)]"
-                      : "min-w-[56px] max-w-[150px] shrink text-ink-secondary hover:bg-surface-hover hover:text-ink",
+                    "group/tab relative flex h-8 cursor-pointer items-center gap-1.5 rounded-t-md pl-2.5 text-[13px] transition-colors duration-instant",
+                    shown ? "max-w-[180px] shrink-0 pr-1 text-ink shadow-[inset_0_-2px_0_var(--c-accent)]"
+                      : "min-w-[64px] max-w-[150px] shrink pr-2.5 text-ink-secondary hover:bg-surface-hover hover:text-ink",
                   ].join(" ")}
                 >
                   <Sparkles size={13} className={`shrink-0 ${shown ? "text-accent" : "text-ink-icon"}`} aria-hidden />
@@ -231,7 +237,11 @@ export function SidePanel({
                     aria-label={`Close ${t.title}`}
                     title="Close tab"
                     onClick={(e) => { e.stopPropagation(); setTabs((s) => closePanelTab(s, t.id)); }}
-                    className={`flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-hover hover:text-ink focus:opacity-100 ${shown ? "" : "opacity-0 group-hover/tab:opacity-100"}`}
+                    // A tab not shown keeps its whole width for the title: its × covers
+                    // the title's end while pointed at, instead of holding empty room.
+                    className={`flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:text-ink focus:opacity-100 ${shown
+                      ? "hover:bg-surface-hover"
+                      : "absolute right-1 bg-surface-hover opacity-0 hover:bg-surface-active group-hover/tab:opacity-100"}`}
                   >
                     <X size={12} />
                   </button>
@@ -240,6 +250,9 @@ export function SidePanel({
             })}
           </div>
           <div className="flex h-[37px] shrink-0 items-center gap-0.5">
+            <button type="button" onClick={() => setHistory({ nonce: Date.now(), tab: tabs.active })} aria-label="Past conversations" title="Past conversations" className={iconBtn}>
+              <History size={15} />
+            </button>
             <button type="button" onClick={() => setTabs(addTab)} aria-label="New chat tab" title="New chat tab" className={iconBtn}>
               <Plus size={15} />
             </button>
@@ -295,6 +308,9 @@ export function SidePanel({
                   onThreadIdChange={(id) => setTabs((s) => patchTab(s, t.id, { threadId: id }))}
                   onTitle={(title) => setTabs((s) => patchTab(s, t.id, { title: title.trim() || NEW_TAB_TITLE }))}
                   active={open && shown}
+                  bare
+                  wide={bottom}
+                  historyNonce={history?.tab === t.id ? history.nonce : undefined}
                   workspace={workspace && {
                     ...workspace,
                     request: requestOwner.current?.tab === t.id ? request : null,
