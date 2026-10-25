@@ -37,18 +37,26 @@
   font-weight: 600;
   letter-spacing: normal;
 }
+/* BlockNote sizes headings with `font-size: var(--level)` under a selector more
+ * specific than these, so each rule sets --level too, or only its line-height
+ * applied (H1 rendered 48px on a 39px line, H2 32px). It also leaves data-level
+ * off a level-1 heading (the default), hence :not([data-level]). */
+.notion-editor .bn-block-content[data-content-type="heading"]:not([data-level]),
 .notion-editor .bn-block-content[data-content-type="heading"][data-level="1"] {
   font-size: 30px;
+  --level: 30px;
   line-height: 39px;
   padding: 32px 2px 8px;
 }
 .notion-editor .bn-block-content[data-content-type="heading"][data-level="2"] {
   font-size: 24px;
+  --level: 24px;
   line-height: 31.2px;
   padding: 28px 2px 8px;
 }
 .notion-editor .bn-block-content[data-content-type="heading"][data-level="3"] {
   font-size: 20px;
+  --level: 20px;
   line-height: 26px;
   padding: 24px 2px 8px;
 }
@@ -402,6 +410,8 @@
   font-size: 32px;
   line-height: 38.4px;
 }
+.notion-page[data-small-text="true"] .bn-block-content[data-content-type="heading"]:not([data-level]),
 .notion-page[data-small-text="true"] .bn-block-content[data-content-type="heading"][data-level="1"] {
   font-size: 26.25px;
+  --level: 26.25px;
 }
