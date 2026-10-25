@@ -86,6 +86,20 @@ delete (deleting is permanent).
 
 ---
 
+## AI panel as its own window + faster source uploads — 2026-10-25 (deployed; checked on the live site)
+
+- **AI panel** (`components/ai/SidePanel.tsx`, tabs logic in `panelTabs.ts`): no longer a tab inside a
+  session pane. It is the app's one panel on every page, docked **right** (full height) or **bottom**
+  (full width, under every pane); the switch is in its tab bar, side/width/height are remembered.
+  Up to 8 conversation tabs, each a live Chat kept mounted (a running answer survives switching tabs).
+  Editor jobs and "Ask AI" on a selection go to the tab shown when they arrive. Old saved layouts drop
+  their Ask tab. Live-checked: right ↔ bottom, survives reload, + opens tabs, × closes them.
+  Not checked live: sending in two tabs at once. On a 921 px window the right dock leaves room for one
+  pane; the bottom dock keeps two.
+- **Source uploads**: the browser writes straight into the user's Storage folder (owner-write policy,
+  migration 012) with no backend round trip first, all files upload in parallel, and a cheap request
+  wakes Render meanwhile. Fallback: the old signed-link route. Not timed live.
+
 ## Workspace: any tab on either side — 2026-10-25 (deployed; checked on the live site)
 
 Design: the "Next" row of https://claude.ai/artifact/CuAxsUrEqB5J62BP7N9ML6. A session is a topic:
