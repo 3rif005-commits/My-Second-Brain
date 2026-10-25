@@ -164,9 +164,13 @@ export function YouTubePlayer({ resource, onPosition, onAction, seekRef }: YouTu
     <div
       ref={stageRef}
       tabIndex={-1}
-      className="relative flex-1 min-h-0 bg-black outline-none"
+      className="relative flex-1 min-h-0 flex flex-col bg-black outline-none"
     >
-      <div ref={hostRef} className="w-full h-full" />
+      {/* YT.Player replaces the host with its iframe, so the box that holds the
+          bar's share of the height is this wrapper, not the host itself. */}
+      <div className="relative min-h-0 flex-1 [&>*]:absolute [&>*]:inset-0 [&>*]:h-full [&>*]:w-full">
+        <div ref={hostRef} />
+      </div>
       <CaptureDock
         containerRef={stageRef}
         time={time}

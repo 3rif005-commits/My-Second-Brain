@@ -125,7 +125,7 @@ export function WebsiteViewer({ resource, onPosition, onAction, seekRef }: Websi
               onAction({ type: "text", text: el.content ?? "" });
             }
           }}>
-            <CornerDownRight size={12} /> Send to note
+            <CornerDownRight size={12} /> Add to note
           </ActionButton>
           <ActionButton title="Copy to clipboard" onClick={() => {
             navigator.clipboard.writeText(active.el.content ?? "").catch(() => {});

@@ -87,8 +87,9 @@ export function VideoPlayer({ resource, onPosition, onAction, seekRef }: VideoPl
     <div
       ref={stageRef}
       tabIndex={-1}
-      className="relative flex-1 min-h-0 flex items-center justify-center bg-black outline-none"
+      className="relative flex-1 min-h-0 flex flex-col bg-black outline-none"
     >
+      <div className="flex min-h-0 flex-1 items-center justify-center">
       <video
         ref={videoRef}
         src={src}
@@ -105,6 +106,7 @@ export function VideoPlayer({ resource, onPosition, onAction, seekRef }: VideoPl
           onPosition(t);
         }}
       />
+      </div>
       <CaptureDock
         containerRef={stageRef}
         time={time}

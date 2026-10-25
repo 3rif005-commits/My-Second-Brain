@@ -10,7 +10,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
-import { Bookmark, Check, Copy, CornerDownRight, Sigma, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Copy, CornerDownRight, MapPin, Minus, Plus, Sigma, Sparkles, X } from "lucide-react";
+import { IconButton } from "@/components/ui";
+import { useAIPanel } from "@/context/AIPanelContext";
 import { wsApi, type SendAction, type WsElement, type NoteSource } from "@/lib/workspace";
 import { useToast } from "@/app/providers";
 import { ActionBar, ActionButton, ActionLabel, ActionSeparator } from "./ActionBar";
@@ -22,7 +24,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url
 ).toString();
 
+/** Page width before the pane's own width is known. */
 const PAGE_WIDTH = 680;
+const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 
 interface PdfViewerProps {
   resource: NoteSource;
@@ -53,6 +57,32 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }:
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const currentPage = useRef(1);
+  const [pageNo, setPageNo] = useState(1);
+  const ai = useAIPanel();
+  // Pages fit the pane's width (zoom 1); − and + scale from there. A fixed 680 px
+  // page was cut off on both sides in a 470 px pane.
+  const [zoom, setZoom] = useState(1);
+  const [paneWidth, setPaneWidth] = useState(0);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const measure = () => {
+      if (timer) clearTimeout(timer);
+      // Redrawing every page on each pixel of a divider drag is slow; settle first.
+      timer = setTimeout(() => {
+        const w = Math.round(el.clientWidth / 8) * 8;
+        setPaneWidth((prev) => (Math.abs(prev - w) < 8 ? prev : w));
+      }, 120);
+    };
+    const first = Math.round(el.clientWidth / 8) * 8;
+    if (first) setPaneWidth(first);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => { ro.disconnect(); if (timer) clearTimeout(timer); };
+  }, [fileUrl]);
+  const fitWidth = paneWidth ? Math.max(240, paneWidth - 32) : PAGE_WIDTH;
+  const pageWidth = Math.round(fitWidth * zoom);
   // Pages on screen (IntersectionObserver), and from them the few that get drawn.
   const [visible, setVisible] = useState<number[]>([]);
   const toDraw = useMemo(() => pagesToRender(visible, numPages), [visible, numPages]);
@@ -108,6 +138,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }:
     }
     if (page !== currentPage.current) {
       currentPage.current = page;
+      setPageNo(page);
       onPosition(page);
     }
   }, [onPosition]);
@@ -208,14 +239,40 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }:
     );
   }
 
+  const goTo = (p: number) => seekRef.current?.(Math.min(Math.max(1, p), numPages || 1));
+  const zoomIndex = ZOOMS.indexOf(zoom);
+
   return (
+    <div className="flex min-h-0 flex-1 flex-col">
+    <div role="toolbar" aria-label="Page tools"
+      className="flex h-9 shrink-0 items-center gap-1 border-b border-line px-2 text-xs text-ink-secondary">
+      <IconButton label="Previous page" size={24} onClick={() => goTo(pageNo - 1)} disabled={pageNo <= 1}><ChevronLeft /></IconButton>
+      <span className="tabular-nums"><span className="text-ink">{pageNo}</span> / {numPages || "…"}</span>
+      <IconButton label="Next page" size={24} onClick={() => goTo(pageNo + 1)} disabled={!numPages || pageNo >= numPages}><ChevronRight /></IconButton>
+      <span className="mx-1 h-4 w-px bg-line" />
+      <IconButton label="Zoom out" size={24} onClick={() => setZoom(ZOOMS[Math.max(0, zoomIndex - 1)])} disabled={zoomIndex <= 0}><Minus /></IconButton>
+      <button type="button" onClick={() => setZoom(1)} title="Fit the page to the pane's width"
+        className={`h-6 rounded px-2 tabular-nums ${zoom === 1 ? "bg-surface-active text-ink" : "hover:bg-surface-hover"}`}>
+        {zoom === 1 ? "Fit width" : `${Math.round(zoom * 100)}%`}
+      </button>
+      <IconButton label="Zoom in" size={24} onClick={() => setZoom(ZOOMS[Math.min(ZOOMS.length - 1, zoomIndex + 1)])} disabled={zoomIndex >= ZOOMS.length - 1}><Plus /></IconButton>
+      <span className="flex-1" />
+      <button
+        type="button"
+        className="flex h-6 items-center gap-1.5 rounded px-2 hover:bg-surface-hover hover:text-ink"
+        onClick={() => onAction({ type: "checkpoint", anchorType: "page", value: currentPage.current })}
+        title="Put a link to this page in the note"
+      >
+        <MapPin size={13} /> Mark page
+      </button>
+    </div>
     <div
       ref={containerRef}
-      className="ws-canvas relative flex-1 overflow-y-auto"
+      className="relative flex-1 overflow-auto bg-surface-sidebar"
       onScroll={() => { handleScroll(); setActive(null); }}
       onMouseUp={handleMouseUp}
     >
-      <div className="flex flex-col items-center gap-4 py-6">
+      <div className="flex w-max min-w-full flex-col items-center py-4 px-4">
         <Document
           file={fileUrl}
           onLoadSuccess={({ numPages: n }) => setNumPages(n)}
@@ -225,8 +282,8 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }:
           {Array.from({ length: numPages }, (_, i) => {
             const pno = i + 1;
             const size = pageSizes[i];
-            const scale = size ? PAGE_WIDTH / size[0] : 1;
-            const height = pageHeight(pageSizes, pno, PAGE_WIDTH);
+            const scale = size ? pageWidth / size[0] : 1;
+            const height = pageHeight(pageSizes, pno, pageWidth);
             // Without a known size the box can't hold its place, so the page is always drawn.
             const draw = height === null || toDraw.has(pno);
             return (
@@ -234,10 +291,10 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }:
                 key={pno}
                 data-page={pno}
                 ref={(el) => { pageRefs.current[pno] = el; }}
-                className="relative mb-5 bg-white rounded-lg overflow-hidden ring-1 ring-black/5 shadow-[0_2px_8px_-2px_rgba(16,24,40,0.12),0_18px_40px_-24px_rgba(16,24,40,0.5)]"
-                style={{ width: PAGE_WIDTH, height: height ?? undefined }}
+                className="relative mb-4 bg-white rounded-sm overflow-hidden ring-1 ring-black/5"
+                style={{ width: pageWidth, height: height ?? undefined }}
               >
-                {draw && <Page pageNumber={pno} width={PAGE_WIDTH}
+                {draw && <Page pageNumber={pno} width={pageWidth}
                   renderAnnotationLayer={false}
                   customTextRenderer={quoted.has(pno) ? tintQuoted : undefined} />}
                 {/* element overlays — text/heading stay pointer-events-none so
@@ -276,11 +333,11 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }:
       {active && (
         <ActionBar x={active.x} y={active.y}>
           <ActionLabel>{active.el.element_type}</ActionLabel>
-          <ActionButton primary onClick={() => sendElement(active.el)} title="Send to note">
+          <ActionButton primary onClick={() => sendElement(active.el)} title="Add to note">
             {busy
               ? <span className="w-3 h-3 rounded-full border-2 border-white/50 border-t-transparent animate-spin" />
               : <CornerDownRight size={12} />}
-            Send to note
+            Add to note
           </ActionButton>
           {active.el.element_type === "formula" && (
             <ActionButton onClick={() => sendElement(active.el)} title="Transcribe to LaTeX and insert">
@@ -300,31 +357,24 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }:
 
       {selection && (
         <ActionBar x={selection.x} y={selection.y}>
-          <ActionButton primary title="Send the selected text to the note, with a link back to its page" onClick={() => {
+          <ActionButton primary title="Add the selected text to the note, with a link back to its page" onClick={() => {
             onAction({ type: "text", text: selection.text, page: selection.page ?? currentPage.current });
             setSelection(null);
             window.getSelection()?.removeAllRanges();
           }}>
-            <CornerDownRight size={12} /> Send to note
+            <CornerDownRight size={12} /> Add to note
+          </ActionButton>
+          <ActionButton title="Ask the AI about the selected text" onClick={() => {
+            const p = selection.page ?? currentPage.current;
+            ai.ask(`About this passage (p. ${p}): "${selection.text}"\n\n`);
+            setSelection(null);
+            window.getSelection()?.removeAllRanges();
+          }}>
+            <Sparkles size={12} /> Ask AI
           </ActionButton>
         </ActionBar>
       )}
-
-      {/* persistent checkpoint button */}
-      <button
-        className="ws-glass-dark absolute bottom-4 right-4 z-20 inline-flex items-center gap-1.5 h-9 px-3.5
-          rounded-full text-white text-[12px] font-medium transition-all duration-150
-          hover:bg-black/80 active:scale-[0.97]
-          focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400/70"
-        onClick={() => onAction({
-          type: "checkpoint", anchorType: "page", value: currentPage.current,
-        })}
-        title="Insert a checkpoint for the current page"
-      >
-        <Bookmark size={13} />
-        Checkpoint
-        <span className="tabular-nums text-white/50">p.{currentPage.current}</span>
-      </button>
+    </div>
     </div>
   );
 }
