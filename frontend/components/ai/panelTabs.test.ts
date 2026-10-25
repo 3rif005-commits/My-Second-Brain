@@ -21,11 +21,11 @@ describe("AI panel tabs", () => {
     expect(s.tabs[3]).toMatchObject({ threadId: null, title: NEW_TAB_TITLE });
   });
 
-  it("reuses an untouched new tab instead of piling up blank ones", () => {
+  it("always opens another tab, even beside an empty one (a + that did nothing read as broken)", () => {
     const once = addTab(three());
-    const twice = addTab({ ...once, active: "a" });
-    expect(twice.tabs).toHaveLength(4);
-    expect(twice.active).toBe(once.active);
+    const twice = addTab(once);
+    expect(twice.tabs).toHaveLength(5);
+    expect(twice.active).toBe(twice.tabs[4].id);
   });
 
   it("at the limit drops the oldest tab that isn't shown", () => {

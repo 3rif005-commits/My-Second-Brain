@@ -27,8 +27,6 @@ export function freshTabs(): PanelTabs {
 
 /** A new, empty conversation, shown. At the limit, the oldest tab not shown makes room. */
 export function addTab(s: PanelTabs): PanelTabs {
-  const blank = s.tabs.find((t) => !t.threadId && t.title === NEW_TAB_TITLE);
-  if (blank) return { ...s, active: blank.id };
   let tabs = s.tabs;
   if (tabs.length >= MAX_TABS) {
     const drop = tabs.find((t) => t.id !== s.active);
