@@ -778,22 +778,26 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
           <p className="text-xs text-accent-500/80">then ask, or type /study-guide</p>
         </div>
       )}
-      {/* History drawer — slides in from the left */}
+      {/* History drawer — slides in from the left. Opaque: the panel's chip colour is
+          see-through, and the conversation showed through the list. Wide (docked at the
+          bottom): a sheet down the left side, not a 1,300 px list. */}
       <div
         className={[
-          "absolute inset-0 z-10 flex flex-col",
-          "bg-surface-chip dark:bg-surface-chip",
+          "absolute inset-y-0 left-0 z-10 flex flex-col bg-surface",
+          wide ? "w-[360px] border-r border-line shadow-modal" : "right-0",
           "transition-transform duration-200 ease-in-out",
           historyOpen ? "translate-x-0" : "-translate-x-full",
         ].join(" ")}
         aria-hidden={!historyOpen}
       >
+        <div className="flex min-h-0 flex-1 flex-col bg-surface-chip">
         <ThreadHistory
           activeThreadId={threadId}
           onSelect={(id) => { resetThread(id); setHistoryOpen(false); }}
           onClose={() => setHistoryOpen(false)}
           onNew={() => { resetThread(null); setHistoryOpen(false); }}
         />
+        </div>
       </div>
 
       {/* Top bar — the panel draws its own when it hosts this chat */}
