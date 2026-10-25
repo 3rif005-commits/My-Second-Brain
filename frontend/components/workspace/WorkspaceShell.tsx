@@ -1,40 +1,63 @@
 "use client";
 
-// The workspace: three panels side by side — the sources, the note, and the AI
-// (user decision, 2026-09-24). Sources and AI each collapse to a thin bar and
-// resize by dragging; the note is always there. Jobs (study guide, flashcards,
-// compare sources…) run from the AI panel as /commands or by asking; their
-// results are previewed there and reach the note only on Insert / Replace.
+// The workspace: a study session about one topic. Its own note owns the
+// sources; other notes and sources from other notes can be brought in beside
+// it. Up to three panes (two on a 921 px window, one on a narrow one), each a
+// row of tabs, and any tab — a source, a note, the AI — can sit in any pane
+// (redesign 2026-10-25; layout logic in sessionLayout.ts). The note last worked
+// in is the writing target: captures, "Add to note" and AI results go there.
+// The AI is the app's one panel, docked over whichever pane shows the Ask tab.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  ArrowLeft, Check, FileText, Link2, Pencil, PenLine, Sparkles, Upload,
-} from "lucide-react";
-import { Button, Tabs } from "@/components/ui";
+import { ArrowLeft, Check, Pencil, Sparkles, Upload } from "lucide-react";
 import { useToast } from "@/app/providers";
-import { formatElapsed, jobTitle, sourceColor, takeStagedSources, wsApi, type Citation, type NoteSource, type SendAction } from "@/lib/workspace";
+import { Button } from "@/components/ui";
+import {
+  formatElapsed, jobTitle, sourceColor, takeStagedSources, wsApi,
+  type Citation, type NoteSource, type SendAction,
+} from "@/lib/workspace";
 import type { ChatJob, JobRequest } from "@/lib/chatJobs";
 import { DropZone } from "./DropZone";
 import { NotePane, type NoteApplyApi, type NoteData } from "./NotePane";
-import { SourceTabs } from "./SourceTabs";
-import { NoteStarters, SessionMenu } from "./SessionChrome";
 import { SourceViewer } from "./SourceViewer";
+import { PaneTabs, TAB_MIME, type TabView } from "./PaneTabs";
+import { OpenPicker, type PickerItem } from "./OpenPicker";
+import { NoteStarters, SessionMenu } from "./SessionChrome";
+import { WritingTargetContext } from "./writingTarget";
 import type { Passage } from "./viewers/passageMarks";
 import { useSynthesis } from "./useSynthesis";
+import {
+  ASK, activate, closeTab, defaultLayout, fitPanes, focusPane, moveTab, moveToOtherSide,
+  noteKey, openTab, paneOf, parseKey, readLayout, reconcile, srcKey, type SessionLayout,
+} from "./sessionLayout";
 import { useAIPanel } from "@/context/AIPanelContext";
 import { DRAFT_EVENT, UNDO_EVENT, type NoteDraft, type UndoOutcome } from "@/lib/noteDraft";
 
 const SPLIT_KEY = "workspace:splitPct";
-/** Below this the source and the note can't both be read side by side. */
+/** Below this, one pane at a time. */
 const TWO_PANE_MIN = 700;
-/** From here the note and the AI fit side by side next to the source. */
+/** From here, three panes fit. */
 const WIDE_MIN = 1180;
-const ASK_WIDTH = 360;
-type Layout = "one" | "two" | "wide";
+type Mode = "one" | "two" | "wide";
+/** Ctrl+K inside a session opens the picker (BrainLayoutClient sends it). */
+export const OPEN_PICKER_EVENT = "workspace:open-picker";
 
 interface WorkspaceShellProps {
   noteId: string | null;
 }
+
+interface NoteRefs {
+  apply: MutableRefObject<NoteApplyApi | null>;
+  action: MutableRefObject<((a: SendAction) => void) | null>;
+  position: MutableRefObject<((value: number) => void) | null>;
+}
+
+const KIND_LABEL: Record<string, string> = {
+  pdf: "PDF", youtube: "YouTube", video: "video", website: "web page", document: "document",
+};
+
+const short = (s: string, n = 28) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** What the shell is doing right now, in the header's meta line. */
 function StatusNote({ saving, saved, synthesizing, job, startedAt }: {
@@ -109,57 +132,75 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const router = useRouter();
   const search = useSearchParams();
   const { showToast } = useToast();
+  const ai = useAIPanel();
 
-  const [note, setNote] = useState<NoteData | null>(null);
-  // the note couldn't be loaded (deleted, someone else's, or the API is down)
+  const [note, setNote] = useState<NoteData | null>(null);          // the session's own note
   const [missing, setMissing] = useState(false);
   const [sources, setSources] = useState<NoteSource[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [sourcesLoaded, setSourcesLoaded] = useState(false);
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  // Not remembered across visits: coming back to a hidden source and an empty
-  // note read as a broken page.
-  const [sourcesOpen, setSourcesOpen] = useState(true);
-  // One-pane layout only: which pane shows while the AI is closed.
-  const [pane, setPane] = useState<"source" | "note">("source");
   const [layoutWidth, setLayoutWidth] = useState(0);
   const [follow, setFollow] = useState(true);
   const [jobRequest, setJobRequest] = useState<JobRequest | null>(null);
-  // The AI is the app's one panel (context/AIPanelContext): the workspace
-  // binds it to this note and opens it; it draws no AI of its own.
-  const ai = useAIPanel();
-  const askOpen = ai.isOpen;
   const [splitPct, setSplitPct] = useState(50);
-
-  const seekRef = useRef<((value: number) => void) | null>(null);
-  const actionSinkRef = useRef<((a: SendAction) => void) | null>(null);
-  // Passages the note quotes; the PDF tints them. Kept identical when unchanged so a save
-  // doesn't redraw every text layer.
-  const [passages, setPassages] = useState<Passage[]>([]);
-  const updatePassages = useCallback((next: Passage[]) => {
-    setPassages((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
-  }, []);
-  const positionSinkRef = useRef<((value: number) => void) | null>(null);
-  const applyRef = useRef<NoteApplyApi | null>(null);
+  const [lay, setLay] = useState<SessionLayout | null>(null);
+  const [pickerPane, setPickerPane] = useState<number | null>(null);
+  const [otherNotes, setOtherNotes] = useState<Record<string, NoteData>>({});
+  const [foreignSources, setForeignSources] = useState<Record<string, NoteSource>>({});
+  const [passagesByNote, setPassagesByNote] = useState<Record<string, Passage[]>>({});
+  const [lastSourceId, setLastSourceId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
-  // dragenter/dragleave fire for every child element the pointer crosses, so a
-  // plain boolean makes the drop overlay strobe. Count the depth instead.
+  // dragenter/dragleave fire for every child the pointer crosses: count depth.
   const dragDepth = useRef(0);
 
-  // Kept for the note pane's apply/undo plumbing; the synthesis buttons that
-  // drove it are gone (jobs run from the AI panel now).
-  const syn = useSynthesis({ noteId, sources, applyRef });
+  // ── layout mode from the room the shell has ───────────────────────────────
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = () => setLayoutWidth(el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [note]);
+  const mode: Mode = layoutWidth >= WIDE_MIN ? "wide" : layoutWidth >= TWO_PANE_MIN || layoutWidth === 0 ? "two" : "one";
+  const maxPanes = mode === "wide" ? 3 : mode === "two" ? 2 : 1;
+  // A narrow window still keeps two panes' worth of tabs (it shows one at a time).
+  const stateMax = Math.max(2, maxPanes);
+  const stateMaxRef = useRef(stateMax);
+  stateMaxRef.current = stateMax;
+  const layRef = useRef(lay);
+  layRef.current = lay;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
-  // The jobs the AI panel offers — also the editor's "/" menu, which hands the
-  // chosen job to the AI panel so its result arrives as a preview card too.
-  // Fetched once here and handed to the AI panel (two fetches of the same
-  // list, each thrown away whenever a source finished, took 27 s to show).
-  // A newer answer replaces an older one; no answer is ever discarded unless
-  // the note itself changed.
+  // ── per-note and per-source connections ───────────────────────────────────
+  const noteRefs = useRef(new Map<string, NoteRefs>());
+  const refsFor = useCallback((id: string): NoteRefs => {
+    let r = noteRefs.current.get(id);
+    if (!r) {
+      r = { apply: { current: null }, action: { current: null }, position: { current: null } };
+      noteRefs.current.set(id, r);
+    }
+    return r;
+  }, []);
+  const seekRefs = useRef(new Map<string, MutableRefObject<((v: number) => void) | null>>());
+  const seekRefFor = useCallback((id: string) => {
+    let r = seekRefs.current.get(id);
+    if (!r) { r = { current: null }; seekRefs.current.set(id, r); }
+    return r;
+  }, []);
+
+  const homeApplyRef = useMemo(() => refsFor(noteId ?? "_none").apply, [noteId, refsFor]);
+  // Kept for the note pane's apply/undo plumbing (jobs run from the AI panel).
+  const syn = useSynthesis({ noteId, sources, applyRef: homeApplyRef });
+
+  // ── the AI's jobs (also the editor's "/" skills) ──────────────────────────
   const [chatJobs, setChatJobs] = useState<ChatJob[]>([]);
   const jobsFor = useRef<string | null>(null);
   useEffect(() => { jobsFor.current = noteId; setChatJobs([]); }, [noteId]);
@@ -172,6 +213,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       .catch(() => {});
   }, [noteId, syn.readyKey]);
   const openAi = ai.open;
+  const closeAi = ai.close;
   const askChat = useCallback((skill: string) => {
     openAi();
     setJobRequest({ skill, nonce: Date.now() });
@@ -188,43 +230,12 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     [chatJobs, askChat],
   );
 
-  const insertResult = useCallback((html: string, sourceIds: string[], mode: "append" | "replace") => {
-    const api = applyRef.current;
-    if (!api) return;
-    // "Insert" into an empty note is a replace: appending left an empty line
-    // above the title. A note with anything in it gets the result at the end.
-    api.apply(html, sourceIds, mode === "append" && !api.hasUserEdits() ? "replace" : mode);
-  }, []);
-
-  // The AI panel hands its results over the same events a note page answers
-  // (lib/noteDraft.ts), so one panel works on both.
-  useEffect(() => {
-    function onDraft(e: Event) {
-      const { draft, respond } = (e as CustomEvent<{ draft: NoteDraft; respond: (ok: boolean) => void }>).detail;
-      if (draft.noteId !== noteId || !applyRef.current) return;
-      respond(true);
-      insertResult(draft.html, draft.sourceIds, "append");
-      // Show where it landed, unless the note is already beside the AI.
-      if (layoutRef.current !== "wide") { closeAiRef.current(); setPane("note"); }
-    }
-    function onUndo(e: Event) {
-      const { noteId: target, respond } = (e as CustomEvent<{ noteId: string; respond: (o: UndoOutcome) => void }>).detail;
-      if (target !== noteId) return;
-      respond(applyRef.current?.undoApply() ? "undone" : "edited");
-    }
-    window.addEventListener(DRAFT_EVENT, onDraft);
-    window.addEventListener(UNDO_EVENT, onUndo);
-    return () => {
-      window.removeEventListener(DRAFT_EVENT, onDraft);
-      window.removeEventListener(UNDO_EVENT, onUndo);
-    };
-  }, [noteId, insertResult]);
-
-  // ── load ──────────────────────────────────────────────────────────────────
+  // ── load the session ──────────────────────────────────────────────────────
   const loadSources = useCallback(async () => {
     if (!noteId) return;
     const rows = await wsApi.listSources(noteId).catch(() => null);
     if (rows) setSources(rows);
+    setSourcesLoaded(true);
   }, [noteId]);
 
   useEffect(() => {
@@ -242,7 +253,6 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     return () => { cancelled = true; };
   }, [noteId, loadSources]);
 
-  // poll while any source is still working
   const pending = sources.some((s) => s.status === "queued" || s.status === "processing");
   useEffect(() => {
     if (!pending) return;
@@ -250,15 +260,85 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     return () => clearInterval(timer);
   }, [pending, loadSources]);
 
-  // pick a sensible active source
+  // The layout: as it was left on this device, else sources | note.
+  const storageKey = noteId ? `workspace:tabs:${noteId}` : null;
+  const knownSources = useRef<Set<string> | null>(null);
   useEffect(() => {
-    if (activeId && sources.some((s) => s.id === activeId)) return;
-    const firstReady = sources.find((s) => s.status === "ready") ?? sources[0];
-    setActiveId(firstReady?.id ?? null);
-  }, [sources, activeId]);
+    if (!noteId || !note || !sourcesLoaded || lay) return;
+    let saved: SessionLayout | null = null;
+    try { saved = readLayout(storageKey ? window.localStorage.getItem(storageKey) : null); } catch { /* private mode */ }
+    const ready = [...sources].sort((a, b) => Number(b.status === "ready") - Number(a.status === "ready"));
+    setLay(saved ?? defaultLayout(noteId, ready.map((s) => s.id)));
+    knownSources.current = new Set(sources.map((s) => s.id));
+  }, [noteId, note, sourcesLoaded, sources, lay, storageKey]);
+  useEffect(() => {
+    if (!lay || !storageKey) return;
+    try { window.localStorage.setItem(storageKey, JSON.stringify(lay)); } catch { /* private mode */ }
+  }, [lay, storageKey]);
 
-  // A brief "Saved" after every autosave settles — otherwise the header goes
-  // silent the moment the work finishes and the save reads as never happening.
+  // A source added (here, in the AI panel, by a drop) opens as a tab: in the pane
+  // its + was pressed in, else beside the other sources.
+  const newSourcePane = useRef<number | null>(null);
+  useEffect(() => {
+    if (!lay || !knownSources.current) return;
+    const fresh = sources.filter((s) => !knownSources.current!.has(s.id));
+    if (!fresh.length) return;
+    for (const s of fresh) knownSources.current.add(s.id);
+    setLay((l) => {
+      if (!l) return l;
+      let next = l;
+      for (const s of fresh) {
+        const withSource = next.panes.findIndex((p) => p.tabs.some((t) => parseKey(t).kind === "source"));
+        const where = newSourcePane.current ?? (withSource >= 0 ? withSource : "beside");
+        next = openTab(next, srcKey(s.id), where, stateMaxRef.current);
+      }
+      return next;
+    });
+    newSourcePane.current = null;
+  }, [sources, lay]);
+
+  // Things that went away (a removed source, a trashed note) lose their tabs.
+  useEffect(() => {
+    if (!lay || !noteId || !sourcesLoaded) return;
+    const home = new Set(sources.map((s) => s.id));
+    const valid = (key: string) => {
+      const k = parseKey(key);
+      if (k.kind === "ask") return true;
+      if (k.kind === "source") return home.has(k.id) || lay.foreign.includes(k.id);
+      return k.id === noteId || lay.notes.includes(k.id);
+    };
+    const next = reconcile(lay, valid, noteId);
+    if (JSON.stringify(next) !== JSON.stringify(lay)) setLay(next);
+  }, [sources, lay, noteId, sourcesLoaded]);
+
+  // Fewer panes fit: fold the extra ones in (a narrow window only hides them).
+  useEffect(() => {
+    if (mode === "one") return;
+    setLay((l) => (l && l.panes.length > maxPanes ? fitPanes(l, maxPanes) : l));
+  }, [mode, maxPanes]);
+
+  // Notes and foreign sources brought in: fetch what their tabs need.
+  useEffect(() => {
+    if (!lay) return;
+    for (const id of lay.notes) {
+      if (otherNotes[id]) continue;
+      setOtherNotes((m) => ({ ...m, [id]: { id, title: "…", content: [] } }));
+      fetch(`/api/notes/${id}`).then((r) => (r.ok ? r.json() : null)).then((n) => {
+        if (!n) {
+          setLay((l) => (l ? { ...l, notes: l.notes.filter((x) => x !== id) } : l));
+          return;
+        }
+        setOtherNotes((m) => ({ ...m, [id]: { id: n.id, title: n.title ?? "Untitled", content: n.content ?? [] } }));
+      }).catch(() => {});
+    }
+    for (const id of lay.foreign) {
+      if (foreignSources[id]) continue;
+      wsApi.getSource(id).then((s) => setForeignSources((m) => ({ ...m, [id]: s })))
+        .catch(() => setLay((l) => (l ? { ...l, foreign: l.foreign.filter((x) => x !== id) } : l)));
+    }
+  }, [lay, otherNotes, foreignSources]);
+
+  // "Saved" for a moment after every autosave settles.
   const wasSaving = useRef(false);
   useEffect(() => {
     const settled = wasSaving.current && !saving;
@@ -269,46 +349,303 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     return () => clearTimeout(timer);
   }, [saving]);
 
-  // ── split divider ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    const stored = Number(window.localStorage.getItem(SPLIT_KEY));
-    if (stored >= 25 && stored <= 70) setSplitPct(stored);
-  }, []);
+  // ── lookups ───────────────────────────────────────────────────────────────
+  const sourceById = useMemo(() => {
+    const m = new Map<string, NoteSource>();
+    for (const s of sources) m.set(s.id, s);
+    for (const [id, s] of Object.entries(foreignSources)) if (!m.has(id)) m.set(id, s);
+    return m;
+  }, [sources, foreignSources]);
+  const allSources = useMemo(() => [...sourceById.values()], [sourceById]);
+  const noteById = useCallback((id: string): NoteData | null =>
+    (id === noteId ? note : otherNotes[id] ?? null), [noteId, note, otherNotes]);
+  const target = lay?.target ?? noteId ?? "";
+  const targetTitle = noteById(target)?.title ?? "the note";
+  const allPassages = useMemo(() => Object.values(passagesByNote).flat(), [passagesByNote]);
 
-  // The layout follows the room the shell actually has (the app sidebar may be
-  // open): one pane at a time, source + note/AI tabs, or all three side by side.
+  // ── the AI tab ────────────────────────────────────────────────────────────
+  // "AI open" means "the Ask tab is showing": ⌘J, Ask AI on a selection and the
+  // header button all go through the app's one AI panel.
+  const shownKeys = (l: SessionLayout, m: Mode) =>
+    (m === "one" ? [l.panes[l.focus]?.active] : l.panes.map((p) => p.active));
+  const askShown = !!lay && shownKeys(lay, mode).includes(ASK);
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const measure = () => setLayoutWidth(el.clientWidth);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [note]);
-  const layout: Layout = layoutWidth >= WIDE_MIN ? "wide" : layoutWidth >= TWO_PANE_MIN || layoutWidth === 0 ? "two" : "one";
-
-  // The Ask tab is where the app's one AI panel docks; "AI open" means "Ask
-  // showing", so ⌘J and every "ask the AI" in the app land on this tab.
+    if (!lay) return;
+    if (ai.isOpen && !askShown) {
+      setLay((l) => {
+        if (!l) return l;
+        const at = paneOf(l, ASK);
+        return openTab(l, ASK, at >= 0 ? at : "beside", stateMaxRef.current);
+      });
+    } else if (!ai.isOpen && askShown) {
+      setLay((l) => {
+        if (!l) return l;
+        const at = paneOf(l, ASK);
+        if (at < 0 || l.panes[at].active !== ASK) return l;
+        const other = l.panes[at].tabs.find((t) => t !== ASK);
+        return other ? activate(l, at, other) : closeTab(l, ASK);
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ai.isOpen, askShown, !!lay]);
   const dock = ai.dock;
   const askSlotRef = useCallback((el: HTMLDivElement | null) => dock(el), [dock]);
   useEffect(() => () => dock(null), [dock]);
-  const closeAi = ai.close;
-  const layoutRef = useRef(layout);
-  layoutRef.current = layout;
-  const closeAiRef = useRef(closeAi);
-  closeAiRef.current = closeAi;
-  const showSource = useCallback(() => {
-    if (layout === "one") { closeAi(); setPane("source"); }
-    else setSourcesOpen(true);
-  }, [layout, closeAi]);
 
+  // ── user actions on tabs ──────────────────────────────────────────────────
+  const activateTab = useCallback((key: string, pane: number) => {
+    const l = layRef.current;
+    if (!l) return;
+    if (key === ASK) openAi();
+    else if (l.panes[pane]?.active === ASK || (modeRef.current === "one" && shownKeys(l, "one").includes(ASK))) closeAi();
+    if (parseKey(key).kind === "source") setLastSourceId(parseKey(key).id);
+    setLay((x) => (x ? activate(x, pane, key) : x));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openAi, closeAi]);
+
+  const closeTabUser = useCallback((key: string) => {
+    if (key === ASK) closeAi();
+    setLay((l) => (l ? closeTab(l, key) : l));
+  }, [closeAi]);
+
+  const moveTabUser = useCallback((key: string) => {
+    setLay((l) => (l ? moveToOtherSide(l, key, stateMaxRef.current) : l));
+  }, []);
+
+  const dropTab = useCallback((key: string, pane: number) => {
+    setLay((l) => (l ? moveTab(l, key, pane, stateMaxRef.current) : l));
+  }, []);
+
+  /** Open a session item (or a note from anywhere) from the picker. */
+  const openKey = useCallback((key: string, pane: number, beside: boolean) => {
+    setPickerPane(null);
+    const k = parseKey(key);
+    if (k.kind === "ask") { openAi(); return; }
+    if (k.kind === "source") setLastSourceId(k.id);
+    setLay((l) => {
+      if (!l) return l;
+      let next = l;
+      if (k.kind === "note" && k.id !== noteId && !l.notes.includes(k.id)) next = { ...next, notes: [...next.notes, k.id] };
+      if (k.kind === "source" && !sourceById.has(k.id) && !l.foreign.includes(k.id)) next = { ...next, foreign: [...next.foreign, k.id] };
+      return openTab(next, key, beside ? "beside" : pane, stateMaxRef.current);
+    });
+    // The pane the AI was showing in now shows this: the AI closes.
+    const l = layRef.current;
+    if (l && !beside && l.panes[pane]?.active === ASK) closeAi();
+  }, [noteId, sourceById, openAi, closeAi]);
+
+  // ── where things go: the writing target ───────────────────────────────────
+  /** Run `fn` with a note's editor connections, opening the note first when no
+   *  pane holds it (only the target and shown notes are mounted). */
+  const withNote = useCallback((id: string, fn: (r: NoteRefs) => void) => {
+    const r = refsFor(id);
+    if (r.action.current && r.apply.current) { fn(r); return; }
+    setLay((l) => (l && paneOf(l, noteKey(id)) < 0 ? openTab(l, noteKey(id), "beside", stateMaxRef.current) : l));
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (r.action.current && r.apply.current) { clearInterval(timer); fn(r); }
+      else if (Date.now() - started > 10000) clearInterval(timer);
+    }, 100);
+  }, [refsFor]);
+
+  /** Bring a note's tab to the front (after an insert lands in it). */
+  const revealNote = useCallback((id: string) => {
+    const l = layRef.current;
+    if (!l) return;
+    const key = noteKey(id);
+    const p = paneOf(l, key);
+    if (p < 0) return;
+    const visible = l.panes[p].active === key && (modeRef.current !== "one" || p === l.focus);
+    if (visible) return;
+    if (l.panes[p].active === ASK || modeRef.current === "one") closeAi();
+    setLay((x) => (x ? activate(x, p, key) : x));
+  }, [closeAi]);
+
+  const sendToTarget = useCallback((a: SendAction) => {
+    const id = layRef.current?.target ?? noteId;
+    if (!id) return;
+    withNote(id, (r) => r.action.current?.(a));
+    const l = layRef.current;
+    const shown = l && l.panes.some((p, i) => p.active === noteKey(id) && (modeRef.current !== "one" || i === l.focus));
+    if (!shown) showToast(`Added to ${short(noteById(id)?.title ?? "the note")}`, "info");
+  }, [noteId, withNote, showToast, noteById]);
+
+  // AI results go to the writing target too (the panel says which).
+  const lastInserted = useRef<string | null>(null);
+  useEffect(() => {
+    function onDraft(e: Event) {
+      const { draft, respond } = (e as CustomEvent<{ draft: NoteDraft; respond: (ok: boolean) => void }>).detail;
+      if (draft.noteId !== noteId) return;
+      respond(true);
+      const id = layRef.current?.target ?? noteId!;
+      withNote(id, (r) => {
+        const api = r.apply.current;
+        if (!api) return;
+        // Into an empty note it's a replace (appending left an empty line above the title).
+        api.apply(draft.html, draft.sourceIds, api.hasUserEdits() ? "append" : "replace");
+        lastInserted.current = id;
+        if (modeRef.current !== "wide") revealNote(id);
+      });
+    }
+    function onUndo(e: Event) {
+      const { noteId: t, respond } = (e as CustomEvent<{ noteId: string; respond: (o: UndoOutcome) => void }>).detail;
+      if (t !== noteId) return;
+      respond(refsFor(lastInserted.current ?? noteId!).apply.current?.undoApply() ? "undone" : "edited");
+    }
+    window.addEventListener(DRAFT_EVENT, onDraft);
+    window.addEventListener(UNDO_EVENT, onUndo);
+    return () => {
+      window.removeEventListener(DRAFT_EVENT, onDraft);
+      window.removeEventListener(UNDO_EVENT, onUndo);
+    };
+  }, [noteId, withNote, revealNote, refsFor]);
+
+  // ── sources: open, seek ───────────────────────────────────────────────────
+  const seekWhenReady = useCallback((sourceId: string, value: number) => {
+    const ref = seekRefFor(sourceId);
+    if (ref.current) { ref.current(value); return; }
+    const timer = setInterval(() => {
+      if (ref.current) { ref.current(value); clearInterval(timer); }
+    }, 200);
+    // Long enough for a sleeping free-plan backend (~1 min) to serve the source.
+    setTimeout(() => clearInterval(timer), 60000);
+  }, [seekRefFor]);
+
+  /** Show a source (opening it if needed, never over the note being written or
+   *  the AI when another pane will do) and seek it once its viewer is ready. */
+  const selectAndSeek = useCallback((sourceId: string, value: number | null) => {
+    const l = layRef.current;
+    if (!l) return;
+    const key = srcKey(sourceId);
+    let pane = paneOf(l, key);
+    if (pane < 0) {
+      const tgt = noteKey(l.target);
+      pane = l.panes.findIndex((p) => p.active && parseKey(p.active).kind === "source");
+      if (pane < 0) pane = l.panes.findIndex((p) => p.active !== ASK && p.active !== tgt);
+      if (pane < 0) pane = l.panes.findIndex((p) => p.active !== ASK);
+    }
+    if (modeRef.current === "one" || (pane >= 0 && l.panes[pane]?.active === ASK)) closeAi();
+    setLastSourceId(sourceId);
+    setLay((x) => (x ? openTab(x, key, pane >= 0 ? pane : "beside", stateMaxRef.current) : x));
+    if (value !== null && !Number.isNaN(value)) seekWhenReady(sourceId, value);
+  }, [closeAi, seekWhenReady]);
+
+  const handleCitation = useCallback((c: Citation) => selectAndSeek(c.resource_id, c.anchor_start), [selectAndSeek]);
+
+  // Deep link: ?source=<id>&t=|p=|s=
+  const deepLink = useMemo(() => {
+    const sid = search.get("source");
+    if (!sid) return null;
+    const t = search.get("t"), p = search.get("p"), s = search.get("s");
+    const raw = t ?? p ?? s;
+    return { sid, value: raw !== null ? parseFloat(raw) : null };
+  }, [search]);
+  const deepLinkKey = deepLink ? `${deepLink.sid}:${deepLink.value ?? ""}` : null;
+  const handledDeepLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!lay || !deepLink || !deepLinkKey || handledDeepLink.current === deepLinkKey) return;
+    if (!sources.some((s) => s.id === deepLink.sid)) return;
+    handledDeepLink.current = deepLinkKey;
+    selectAndSeek(deepLink.sid, deepLink.value);
+  }, [lay, deepLink, deepLinkKey, sources, selectAndSeek]);
+
+  // ── add / remove sources ──────────────────────────────────────────────────
+  const addInputs = useCallback(async (items: { file?: File; url?: string }[]) => {
+    setBusy(true);
+    const defer = items.length > 1;
+    let landed = noteId;
+    for (const item of items) {
+      try {
+        const r = await wsApi.addSource({ ...item, noteId: landed, defer });
+        landed = r.note_id;
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : `Could not add ${item.file?.name ?? item.url ?? "source"}`);
+      }
+    }
+    // Deferred attaches are inert until this call.
+    if (defer && landed) {
+      try { await wsApi.processSources(landed); }
+      catch { showToast("Sources attached, but reading didn’t start — open one and press Start now."); }
+    }
+    setBusy(false);
+    if (!noteId && landed) router.replace(`/brain/workspace/${landed}`);
+    else await loadSources();
+  }, [noteId, router, loadSources, showToast]);
+  const addFiles = useCallback((files: File[]) => addInputs(files.map((file) => ({ file }))), [addInputs]);
+  const addUrl = useCallback((url: string) => addInputs([{ url }]), [addInputs]);
+
+  // Files picked by /brain's Import button before this shell existed.
+  useEffect(() => {
+    const staged = takeStagedSources();
+    if (staged.length) addFiles(staged);
+  }, [addFiles]);
+
+  const retrySource = useCallback(async (s: NoteSource) => {
+    await wsApi.reprocessSource(s.id).catch(() => {});
+    await loadSources();
+  }, [loadSources]);
+
+  // ── the one AI panel, bound to this session ───────────────────────────────
+  const bindWorkspace = ai.bindWorkspace;
+  const colorIndexRef = useRef<Map<string, number>>(new Map());
+  const citationRef = useRef<(c: Citation) => void>(() => {});
+  const noteTitle = note?.title;
+  const insertLabel = `Insert into ${short(targetTitle, 24)}`;
+  useEffect(() => {
+    if (!noteId || !noteTitle) return;
+    bindWorkspace({
+      noteId, title: noteTitle, jobs: chatJobs, colorIndex: colorIndexRef.current,
+      onCitation: (c) => citationRef.current(c), onSourcesAdded: () => void loadSources(),
+      request: jobRequest, insertLabel,
+    });
+  }, [noteId, noteTitle, chatJobs, jobRequest, sources, bindWorkspace, loadSources, insertLabel]);
+  useEffect(() => () => bindWorkspace(null), [bindWorkspace]);
+  colorIndexRef.current = useMemo(() => new Map(allSources.map((s) => [s.id, s.order_index])), [allSources]);
+  citationRef.current = handleCitation;
+
+  // Ctrl+K in a session: the picker, on the pane you're in.
+  useEffect(() => {
+    const open = () => setPickerPane(layRef.current?.focus ?? 0);
+    window.addEventListener(OPEN_PICKER_EVENT, open);
+    return () => window.removeEventListener(OPEN_PICKER_EVENT, open);
+  }, []);
+
+  // ── whole-shell drag & drop of files and links ────────────────────────────
+  const isTabDrag = (e: React.DragEvent) => e.dataTransfer.types.includes(TAB_MIME);
+  const onDrop = useCallback((e: React.DragEvent) => {
+    if (e.defaultPrevented || e.dataTransfer.types.includes(TAB_MIME)) return;
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files ?? []);
+    if (files.length) { addFiles(files); return; }
+    const text = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
+    if (text?.startsWith("http")) addUrl(text.trim());
+  }, [addFiles, addUrl]);
+  const dragProps = useMemo(() => ({
+    onDragEnter: (e: React.DragEvent) => {
+      if (isTabDrag(e) || (e.target as Element).closest?.("[data-ai-panel]")) return;
+      dragDepth.current += 1; setDragOver(true);
+    },
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); },
+    onDragLeave: (e: React.DragEvent) => {
+      if (isTabDrag(e) || (e.target as Element).closest?.("[data-ai-panel]")) return;
+      dragDepth.current = Math.max(0, dragDepth.current - 1);
+      if (dragDepth.current === 0) setDragOver(false);
+    },
+    // Capture phase: runs even when the note takes the drop itself.
+    onDropCapture: () => { dragDepth.current = 0; setDragOver(false); },
+    onDrop,
+  }), [onDrop]);
+
+  // ── the divider between two panes ─────────────────────────────────────────
+  useEffect(() => {
+    const stored = Number(window.localStorage.getItem(SPLIT_KEY));
+    if (stored >= 25 && stored <= 75) setSplitPct(stored);
+  }, []);
   useEffect(() => {
     function onMove(e: MouseEvent) {
       if (!draggingRef.current || !containerRef.current) return;
       const box = containerRef.current.getBoundingClientRect();
-      const pct = ((e.clientX - box.left) / box.width) * 100;
-      setSplitPct(Math.min(70, Math.max(25, pct)));
+      setSplitPct(Math.min(75, Math.max(25, ((e.clientX - box.left) / box.width) * 100)));
     }
     function onUp() {
       if (!draggingRef.current) return;
@@ -318,164 +655,8 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     }
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
   }, []);
-
-  // ── add / remove sources ──────────────────────────────────────────────────
-  const addInputs = useCallback(async (
-    items: { file?: File; url?: string }[]
-  ) => {
-    setBusy(true);
-    const defer = items.length > 1;
-    let landed = noteId;
-    for (const item of items) {
-      try {
-        const r = await wsApi.addSource({ ...item, noteId: landed, defer });
-        landed = r.note_id;
-      } catch (e) {
-        showToast(e instanceof Error ? e.message
-          : `Could not add ${item.file?.name ?? item.url ?? "source"}`);
-      }
-    }
-    // Deferred attaches are inert until this call. If it fails, the sources are
-    // safely attached but idle, so say so and leave the rail's retry to restart them.
-    if (defer && landed) {
-      try {
-        await wsApi.processSources(landed);
-      } catch {
-        showToast("Sources attached, but processing didn’t start — use the retry "
-                  + "arrow on a source to begin.");
-      }
-    }
-    setBusy(false);
-    if (!noteId && landed) router.replace(`/brain/workspace/${landed}`);
-    else await loadSources();
-  }, [noteId, router, loadSources, showToast]);
-
-  const addFiles = useCallback((files: File[]) =>
-    addInputs(files.map((file) => ({ file }))), [addInputs]);
-  const addUrl = useCallback((url: string) =>
-    addInputs([{ url }]), [addInputs]);
-
-  // Files picked by /brain's Import button before this shell existed. Claimed
-  // once on mount — takeStagedSources() clears them, so React's double-invoked
-  // effects in development cannot upload the same file twice.
-  useEffect(() => {
-    const staged = takeStagedSources();
-    if (staged.length) addFiles(staged);
-  }, [addFiles]);
-
-  const removeSource = useCallback(async (s: NoteSource) => {
-    await wsApi.deleteSource(s.id).catch((e) =>
-      showToast(e instanceof Error ? e.message : "Could not remove that source"));
-    if (activeId === s.id) setActiveId(null);
-    await loadSources();
-  }, [activeId, loadSources, showToast]);
-
-  const retrySource = useCallback(async (s: NoteSource) => {
-    await wsApi.reprocessSource(s.id).catch(() => {});
-    await loadSources();
-  }, [loadSources]);
-
-  // ── the one AI panel, bound to this note ─────────────────────────────────
-  const bindWorkspace = ai.bindWorkspace;
-  // Read at bind time; set during render below, where they are defined.
-  const colorIndexRef = useRef<Map<string, number>>(new Map());
-  const citationRef = useRef<(c: Citation) => void>(() => {});
-  const noteTitle = note?.title;
-  useEffect(() => {
-    if (!noteId || !noteTitle) return;
-    bindWorkspace({
-      noteId, title: noteTitle, jobs: chatJobs, colorIndex: colorIndexRef.current,
-      onCitation: (c) => citationRef.current(c), onSourcesAdded: () => void loadSources(),
-      request: jobRequest,
-    });
-  }, [noteId, noteTitle, chatJobs, jobRequest, sources, bindWorkspace, loadSources]);
-  useEffect(() => () => bindWorkspace(null), [bindWorkspace]);
-
-  // ── whole-shell drag & drop ───────────────────────────────────────────────
-  const onDrop = useCallback((e: React.DragEvent) => {
-    if (e.defaultPrevented) return;   // already taken inside the note (photo into a live block)
-    e.preventDefault();
-    const files = Array.from(e.dataTransfer.files ?? []);
-    if (files.length) { addFiles(files); return; }
-    const text = e.dataTransfer.getData("text/uri-list")
-      || e.dataTransfer.getData("text/plain");
-    if (text?.startsWith("http")) addUrl(text.trim());
-  }, [addFiles, addUrl]);
-
-  const dragProps = useMemo(() => ({
-    // Over the AI panel a drop attaches to the conversation instead.
-    onDragEnter: (e: React.DragEvent) => {
-      if ((e.target as Element).closest?.("[data-ai-panel]")) return;
-      dragDepth.current += 1; setDragOver(true);
-    },
-    onDragOver: (e: React.DragEvent) => { e.preventDefault(); },
-    onDragLeave: (e: React.DragEvent) => {
-      if ((e.target as Element).closest?.("[data-ai-panel]")) return;
-      dragDepth.current = Math.max(0, dragDepth.current - 1);
-      if (dragDepth.current === 0) setDragOver(false);
-    },
-    // Capture phase: runs even when the note takes the drop itself and stops it there
-    // (a .glb into the editor, a photo into a live block), so the overlay never sticks.
-    onDropCapture: () => { dragDepth.current = 0; setDragOver(false); },
-    onDrop,
-  }), [onDrop]);
-
-  // ── deep link: ?source=<id>&t=|p=|s= ──────────────────────────────────────
-  const deepLink = useMemo(() => {
-    const sid = search.get("source");
-    if (!sid) return null;
-    const t = search.get("t"), p = search.get("p"), s = search.get("s");
-    const raw = t ?? p ?? s;
-    return { sid, value: raw !== null ? parseFloat(raw) : null };
-  }, [search]);
-
-  const deepLinkKey = deepLink ? `${deepLink.sid}:${deepLink.value ?? ""}` : null;
-  const handledDeepLink = useRef<string | null>(null);
-
-  // Switching sources swaps the viewer, and the outgoing viewer's seek function
-  // is still in the ref at that instant — so a naive setActiveId-then-seek either
-  // seeks the pane that is unmounting or is lost. Clear the ref at the switch and
-  // wait for the incoming viewer to register its own.
-  const seekWhenReady = useCallback((value: number) => {
-    if (seekRef.current) { seekRef.current(value); return; }
-    const timer = setInterval(() => {
-      if (seekRef.current) { seekRef.current(value); clearInterval(timer); }
-    }, 200);
-    // Long enough for a sleeping free-plan backend (~1 min to wake) to serve the source.
-    setTimeout(() => clearInterval(timer), 60000);
-  }, []);
-
-  const selectAndSeek = useCallback((sourceId: string, value: number) => {
-    if (sourceId !== activeId) {
-      seekRef.current = null;
-      setActiveId(sourceId);
-    }
-    seekWhenReady(value);
-  }, [activeId, seekWhenReady]);
-
-  // Not a timer owned by this effect: setActiveId changes activeId and the 2 s source poll
-  // changes `sources`, both re-run the effect, and its cleanup used to kill the wait for the
-  // viewer while the "handled" guard stopped a new one, so a cold ?p=150 opened on page 1.
-  useEffect(() => {
-    if (!deepLink || !deepLinkKey || handledDeepLink.current === deepLinkKey) return;
-    if (!sources.some((s) => s.id === deepLink.sid)) return;
-    handledDeepLink.current = deepLinkKey;
-    if (deepLink.value === null || Number.isNaN(deepLink.value)) {
-      if (deepLink.sid !== activeId) { seekRef.current = null; setActiveId(deepLink.sid); }
-      return;
-    }
-    selectAndSeek(deepLink.sid, deepLink.value);
-  }, [deepLink, deepLinkKey, sources, activeId, selectAndSeek]);
-
-  const handleCitation = useCallback((c: Citation) => {
-    showSource();
-    selectAndSeek(c.resource_id, c.anchor_start);
-  }, [selectAndSeek, showSource]);
 
   // ── title ─────────────────────────────────────────────────────────────────
   async function saveTitle() {
@@ -484,36 +665,22 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     if (!note || !next || next === note.title) return;
     setNote({ ...note, title: next });
     await fetch(`/api/notes/${note.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: next }),
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: next }),
     }).catch(() => {});
   }
-
-  const activeSource = sources.find((s) => s.id === activeId) ?? null;
-  const colorIndex = useMemo(
-    () => new Map(sources.map((s) => [s.id, s.order_index])), [sources]);
-  colorIndexRef.current = colorIndex;
-  citationRef.current = handleCitation;
 
   // ── empty shell ───────────────────────────────────────────────────────────
   if (!noteId || !note) {
     return (
       <div className="ws-canvas relative h-full" {...dragProps}>
         {noteId && missing ? (
-          <div className="h-full flex flex-col items-center justify-center gap-3 text-sm text-gray-400">
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-ink-secondary">
             This session couldn&apos;t be opened. It may have been deleted.
-            <button
-              onClick={() => router.push("/brain/workspace")}
-              className="px-3 py-1.5 rounded-lg text-gray-700 dark:text-gray-200 bg-black/5 dark:bg-white/10
-                hover:bg-black/10 dark:hover:bg-white/15 transition-colors"
-            >
-              Start a new session
-            </button>
+            <Button variant="secondary" onClick={() => router.push("/brain/workspace")}>Start a new session</Button>
           </div>
         ) : noteId ? (
-          <div className="h-full flex flex-col items-center justify-center gap-3 text-sm text-gray-400">
-            <span className="w-5 h-5 rounded-full border-2 border-accent-400 border-t-transparent animate-spin" />
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-ink-secondary">
+            <span className="size-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
             Opening your session…
           </div>
         ) : (
@@ -524,98 +691,106 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     );
   }
 
-  const sourcePane = (
-    <section aria-label="Source" className="flex h-full min-w-0 flex-col bg-surface-sidebar">
-      <SourceTabs
-        sources={sources}
-        activeId={activeId}
-        onSelect={setActiveId}
-        onAddFiles={addFiles}
-        onAddUrl={addUrl}
-        onRemove={removeSource}
-        onCollapse={layout === "one" ? undefined : () => setSourcesOpen(false)}
-        busy={busy}
-      />
-      <div className="flex min-h-0 flex-1 flex-col">
-        <SourceViewer
-          source={activeSource}
-          onPosition={(v) => positionSinkRef.current?.(v)}
-          onAction={(a) => actionSinkRef.current?.(a)}
-          seekRef={seekRef}
-          passages={passages}
-          onRetry={retrySource}
-        />
-      </div>
-    </section>
-  );
+  // ── tab views and pane contents ───────────────────────────────────────────
+  const tabView = (key: string, pane: number, shown: boolean): TabView => {
+    const k = parseKey(key);
+    if (k.kind === "ask") return { key, pane, shown, kind: "ask", title: "Ask AI" };
+    if (k.kind === "note") {
+      return { key, pane, shown, kind: "note", title: noteById(k.id)?.title || "Untitled", isTarget: k.id === target };
+    }
+    const s = sourceById.get(k.id);
+    return {
+      key, pane, shown, kind: "source", title: s?.title ?? "…", color: sourceColor(s?.order_index ?? 0),
+      status: !s ? "working" : s.status === "failed" ? "failed" : s.status === "ready" ? null : "working",
+    };
+  };
 
-  const notePane = (
-    <NotePane
-      extraSlashItems={slashItems}
-      note={note}
-      sources={sources}
-      activeSourceId={activeId}
-      onJump={(sid, v) => { showSource(); selectAndSeek(sid, v); }}
-      actionSinkRef={actionSinkRef}
-      positionSinkRef={positionSinkRef}
-      applyRef={applyRef}
-      onApplied={syn.markApplied}
-      onSavingChange={setSaving}
-      onPassages={updatePassages}
-      follow={follow}
-      starters={(focusEditor) => (
-        <NoteStarters
-          jobs={chatJobs}
-          sourceCount={sources.length}
-          onJob={askChat}
-          onWrite={focusEditor}
-        />
-      )}
+  const openKeys = new Set(lay?.panes.flatMap((p) => p.tabs) ?? []);
+  const sessionItems: PickerItem[] = lay ? [
+    ...[noteId, ...lay.notes].filter((id) => !openKeys.has(noteKey(id)))
+      .map((id) => ({ key: noteKey(id), kind: "note" as const, title: noteById(id)?.title || "Untitled",
+        hint: id === noteId ? "this session's note" : "note" })),
+    ...allSources.filter((s) => !openKeys.has(srcKey(s.id)))
+      .map((s) => ({ key: srcKey(s.id), kind: "source" as const, title: s.title, color: sourceColor(s.order_index),
+        hint: lay.foreign.includes(s.id) ? "from another note" : KIND_LABEL[s.kind] ?? "source" })),
+    ...(openKeys.has(ASK) ? [] : [{ key: ASK, kind: "ask" as const, title: "Ask AI", hint: "Ctrl+J" }]),
+  ] : [];
+  const sessionNoteIds = new Set([noteId, ...(lay?.notes ?? [])]);
+
+  const picker = (pane: number) => (
+    <OpenPicker
+      session={sessionItems}
+      sessionNoteIds={sessionNoteIds}
+      onOpen={(key, beside) => openKey(key, pane, beside)}
+      onOpenNote={(id, _title, beside) => openKey(noteKey(id), pane, beside)}
+      onAddFiles={(files) => { newSourcePane.current = pane; addFiles(files); setPickerPane(null); }}
+      onAddUrl={(url) => { newSourcePane.current = pane; addUrl(url); setPickerPane(null); }}
+      onClose={() => setPickerPane(null)}
     />
   );
 
-  // Note / Ask tabs (two-pane), or Source / Note / Ask (one pane).
-  const rightTab: "note" | "ask" = askOpen ? "ask" : "note";
-  const paneTabs = layout === "one"
-    ? (
-      <Tabs
-        label="Pane"
-        value={askOpen ? "ask" : pane}
-        onChange={(v) => { if (v === "ask") ai.open(); else { closeAi(); setPane(v); } }}
-        items={[
-          { value: "source", label: "Source", icon: <FileText /> },
-          { value: "note", label: "Note", icon: <PenLine /> },
-          { value: "ask", label: "Ask AI", icon: <Sparkles /> },
-        ]}
-      />
-    ) : layout === "two" ? (
-      <Tabs
-        label="Note or AI"
-        value={rightTab}
-        onChange={(v) => (v === "ask" ? ai.open() : closeAi())}
-        items={[
-          { value: "note", label: "Note", icon: <PenLine /> },
-          { value: "ask", label: "Ask AI", icon: <Sparkles /> },
-        ]}
-      />
-    ) : (
-      <span className="flex items-center gap-1.5 px-2 text-sm font-medium text-ink"><PenLine size={15} /> Note</span>
+  const renderTab = (key: string, shown: boolean) => {
+    const k = parseKey(key);
+    if (k.kind === "ask") {
+      return shown ? <div key={key} ref={askSlotRef} data-ask-slot className="absolute inset-0" /> : null;
+    }
+    if (k.kind === "source") {
+      if (!shown) return null;
+      const s = sourceById.get(k.id);
+      return (
+        <section key={key} aria-label="Source" className="absolute inset-0 flex min-w-0 flex-col bg-surface-sidebar">
+          <SourceViewer
+            source={s ?? null}
+            onPosition={(v) => { if (follow) refsFor(target).position.current?.(v); }}
+            onAction={sendToTarget}
+            seekRef={seekRefFor(k.id)}
+            passages={allPassages}
+            onRetry={sources.some((x) => x.id === k.id) ? retrySource : undefined}
+          />
+        </section>
+      );
+    }
+    // Every open note stays mounted, hidden when not shown: captures and AI results
+    // need the target's editor, and unmounting a note just typed in could cut its
+    // ~2 s autosave short.
+    const n = noteById(k.id);
+    if (!n || n.title === "…") return null;
+    const refs = refsFor(k.id);
+    const home = k.id === noteId;
+    return (
+      <div key={key} className={shown ? "absolute inset-0" : "hidden"}>
+        <NotePane
+          extraSlashItems={slashItems}
+          note={n}
+          sources={allSources}
+          activeSourceId={lastSourceId}
+          onJump={(sid, v) => selectAndSeek(sid, v)}
+          actionSinkRef={refs.action}
+          positionSinkRef={refs.position}
+          applyRef={refs.apply}
+          onApplied={home ? syn.markApplied : () => {}}
+          onSavingChange={setSaving}
+          onPassages={(p) => setPassagesByNote((m) => (JSON.stringify(m[k.id]) === JSON.stringify(p) ? m : { ...m, [k.id]: p }))}
+          follow={follow}
+          starters={home ? (focusEditor) => (
+            <NoteStarters jobs={chatJobs} sourceCount={sources.length} onJob={askChat} onWrite={focusEditor} />
+          ) : undefined}
+        />
+      </div>
     );
+  };
 
-  // With the AI beside it, the note keeps at least a readable column.
-  const sourceWidth = layout === "wide" && askOpen
-    ? Math.min((splitPct / 100) * layoutWidth, layoutWidth - ASK_WIDTH - 440)
-    : `${splitPct}%`;
-  const showNote = layout === "wide" || (layout === "two" ? !askOpen : !askOpen && pane === "note");
-  const showAsk = askOpen;
-  const showSourcePane = layout === "one" ? !askOpen && pane === "source" : sourcesOpen;
+  const panes = lay?.panes ?? [];
+  const visibleCount = mode === "one" ? 1 : panes.length;
+  const paneWidth = (i: number): React.CSSProperties =>
+    visibleCount === 2 ? (i === 0 ? { width: `${splitPct}%` } : { flex: 1 }) : { flex: 1 };
 
   return (
-    <div className="relative h-full flex flex-col bg-surface" {...dragProps}>
+    <WritingTargetContext.Provider value={{ title: targetTitle }}>
+    <div className="relative flex h-full flex-col bg-surface" {...dragProps}>
       {/* header */}
       <header className="flex h-11 shrink-0 items-center gap-1 border-b border-line pl-2 pr-2 group-data-[sidebar=collapsed]/shell:pl-11">
-        <Button variant="ghost" icon={<ArrowLeft />} onClick={() => router.push("/brain/workspace")}
-          title="All study sessions">
+        <Button variant="ghost" icon={<ArrowLeft />} onClick={() => router.push("/brain/workspace")} title="All study sessions">
           Sessions
         </Button>
         <span className="mx-1.5 h-[18px] w-px shrink-0 bg-line" />
@@ -631,92 +806,110 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
               className="w-full min-w-0 border-b border-accent bg-transparent text-sm font-semibold text-ink outline-none"
             />
           ) : (
-            <button
-              onClick={() => setTitleDraft(note.title)}
-              title="Rename this session"
-              className="group/title flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-left hover:bg-surface-hover"
-            >
+            <button onClick={() => setTitleDraft(note.title)} title="Rename this session"
+              className="group/title flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-left hover:bg-surface-hover">
               <span className="truncate text-sm font-semibold text-ink">{note.title}</span>
               <Pencil size={12} className="shrink-0 text-ink-icon opacity-0 group-hover/title:opacity-100" />
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setPickerPane(lay?.focus ?? 0)}
+            title="Everything in this session (Ctrl+K)"
+            className="hidden h-6 shrink-0 items-center rounded-full bg-surface-chip px-2.5 text-xs text-ink-secondary hover:text-ink sm:flex"
+          >
+            {allSources.length} source{allSources.length === 1 ? "" : "s"} · {1 + (lay?.notes.length ?? 0)} note{lay?.notes.length ? "s" : ""}
+          </button>
           <span className="shrink-0 text-xs text-ink-tertiary">
             <StatusNote saving={saving} saved={savedFlash} synthesizing={false} />
           </span>
         </div>
-        <SessionMenu
-          noteId={noteId}
-          sourcesHidden={layout !== "one" && !sourcesOpen}
-          onShowSources={() => setSourcesOpen(true)}
-        />
+        <Button variant="ghost" icon={<Sparkles />} onClick={() => (askShown ? closeAi() : openAi())}
+          className={askShown ? "text-accent" : ""} title="Ask AI (Ctrl+J)">
+          Ask AI
+        </Button>
+        <SessionMenu noteId={noteId} follow={follow} onFollowChange={setFollow} />
       </header>
 
+      {lay && mode === "one" && (
+        <div className="shrink-0">
+          <PaneTabs
+            tabs={panes.flatMap((p, i) => p.tabs.map((t) => tabView(t, i, i === lay.focus && p.active === t)))}
+            focused
+            canMove={false}
+            onActivate={activateTab}
+            onClose={closeTabUser}
+            onMove={moveTabUser}
+            onDropTab={(key) => dropTab(key, lay.focus)}
+            pickerOpen={pickerPane !== null}
+            onPickerOpenChange={(o) => setPickerPane(o ? lay.focus : null)}
+            picker={picker(lay.focus)}
+          />
+        </div>
+      )}
       {/* body */}
       <div ref={containerRef} className="flex min-h-0 flex-1">
-        {layout === "one" ? (
-          <div className="flex min-w-0 flex-1 flex-col">
-            <div className="flex h-11 shrink-0 items-center border-b border-line px-2">{paneTabs}</div>
-            <div className="relative min-h-0 flex-1">
-              {/* Hidden, never unmounted: a video keeps playing and the note keeps
-                  its editor for the AI's Insert. */}
-              <div className={showSourcePane ? "absolute inset-0" : "hidden"}>{sourcePane}</div>
-              <div className={showNote ? "absolute inset-0" : "hidden"}>{notePane}</div>
-              {showAsk && <div ref={askSlotRef} data-ask-slot className="absolute inset-0" />}
-            </div>
-          </div>
+        {!lay ? (
+          <div className="flex flex-1 items-center justify-center text-sm text-ink-secondary">Opening…</div>
         ) : (
           <>
-            <div className={sourcesOpen ? "min-w-0 shrink-0" : "hidden"} style={{ width: sourceWidth }}>{sourcePane}</div>
-            {sourcesOpen ? (
-              <>
-                <div
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="Resize the source"
-                  onMouseDown={() => { draggingRef.current = true; document.body.style.cursor = "col-resize"; }}
-                  onDoubleClick={() => { setSplitPct(50); window.localStorage.removeItem(SPLIT_KEY); }}
-                  className="group/split relative w-px shrink-0 cursor-col-resize bg-line"
-                  title="Drag to resize · double-click to reset"
-                >
-                  <span className="absolute inset-y-0 -left-1.5 -right-1.5 group-hover/split:bg-accent/30" />
+            {panes.map((p, i) => {
+              const hiddenPane = mode === "one" && i !== lay.focus;
+              return (
+                <div key={i} className={hiddenPane ? "hidden" : "flex min-w-0"} style={hiddenPane ? undefined : paneWidth(i)}>
+                  {i > 0 && mode !== "one" && (
+                    <div
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label="Resize the panes"
+                      onMouseDown={() => { if (visibleCount === 2) { draggingRef.current = true; document.body.style.cursor = "col-resize"; } }}
+                      onDoubleClick={() => { setSplitPct(50); window.localStorage.removeItem(SPLIT_KEY); }}
+                      className={`group/split relative w-px shrink-0 bg-line ${visibleCount === 2 ? "cursor-col-resize" : ""}`}
+                      title={visibleCount === 2 ? "Drag to resize · double-click to reset" : undefined}
+                    >
+                      <span className="absolute inset-y-0 -left-1.5 -right-1.5 group-hover/split:bg-accent/30" />
+                    </div>
+                  )}
+                  <section
+                    aria-label={`Pane ${i + 1}`}
+                    onPointerDownCapture={() => { if (lay.focus !== i) setLay((x) => (x ? focusPane(x, i) : x)); }}
+                    onDragOver={(e) => { if (isTabDrag(e)) e.preventDefault(); }}
+                    onDrop={(e) => {
+                      if (!isTabDrag(e)) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const key = e.dataTransfer.getData(TAB_MIME);
+                      if (key) dropTab(key, i);
+                    }}
+                    className="flex min-w-0 flex-1 flex-col"
+                  >
+                    {mode !== "one" && (
+                      <PaneTabs
+                        tabs={p.tabs.map((t) => tabView(t, i, p.active === t))}
+                        focused={i === lay.focus}
+                        canMove={maxPanes > 1}
+                        onActivate={activateTab}
+                        onClose={closeTabUser}
+                        onMove={moveTabUser}
+                        onDropTab={(key) => dropTab(key, i)}
+                        pickerOpen={pickerPane === i}
+                        onPickerOpenChange={(o) => setPickerPane(o ? i : null)}
+                        picker={picker(i)}
+                      />
+                    )}
+                    <div className="relative min-h-0 flex-1">
+                      {p.tabs.map((t) => renderTab(t, p.active === t))}
+                    </div>
+                  </section>
                 </div>
-              </>
-            ) : null}
-
-            <section aria-label="Note" className="flex min-w-0 flex-1 flex-col">
-              <div className="flex h-[38px] shrink-0 items-center gap-1 border-b border-line px-2">
-                {paneTabs}
-                <span className="flex-1" />
-                <Button
-                  variant="ghost"
-                  icon={<Link2 />}
-                  aria-pressed={follow}
-                  className={follow ? "text-accent" : ""}
-                  title={follow ? "Following the source: the note scrolls with the page or video" : "Not following the source"}
-                  onClick={() => setFollow((v) => !v)}
-                >
-                  Follow
-                </Button>
-                {layout === "wide" && !askOpen && (
-                  <Button variant="ghost" icon={<Sparkles />} onClick={() => ai.focus()}>Ask AI</Button>
-                )}
-              </div>
-              <div className="relative min-h-0 flex-1">
-                <div className={showNote ? "absolute inset-0" : "hidden"}>{notePane}</div>
-                {layout === "two" && showAsk && <div ref={askSlotRef} data-ask-slot className="absolute inset-0" />}
-              </div>
-            </section>
-
-            {layout === "wide" && showAsk && (
-              <div ref={askSlotRef} data-ask-slot className="shrink-0 border-l border-line"
-                style={{ width: ASK_WIDTH }} />
-            )}
+              );
+            })}
           </>
         )}
       </div>
 
       <DropOverlay show={dragOver} />
-
     </div>
+    </WritingTargetContext.Provider>
   );
 }

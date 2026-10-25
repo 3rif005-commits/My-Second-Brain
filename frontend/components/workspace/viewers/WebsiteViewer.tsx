@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Bookmark, Copy, CornerDownRight, ExternalLink, X } from "lucide-react";
 import type { SendAction, WsElement, NoteSource } from "@/lib/workspace";
 import { ActionBar, ActionButton, ActionSeparator } from "./ActionBar";
+import { useAddLabel } from "../writingTarget";
 import { Markdown } from "@/lib/markdown/Markdown";
 import { needsMarkdown } from "./sectionMarkup";
 
@@ -17,6 +18,7 @@ interface WebsiteViewerProps {
 }
 
 export function WebsiteViewer({ resource, onPosition, onAction, seekRef }: WebsiteViewerProps) {
+  const addLabel = useAddLabel();
   const containerRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [active, setActive] = useState<{ el: WsElement; x: number; y: number } | null>(null);
@@ -125,7 +127,7 @@ export function WebsiteViewer({ resource, onPosition, onAction, seekRef }: Websi
               onAction({ type: "text", text: el.content ?? "" });
             }
           }}>
-            <CornerDownRight size={12} /> Add to note
+            <CornerDownRight size={12} /> {addLabel}
           </ActionButton>
           <ActionButton title="Copy to clipboard" onClick={() => {
             navigator.clipboard.writeText(active.el.content ?? "").catch(() => {});

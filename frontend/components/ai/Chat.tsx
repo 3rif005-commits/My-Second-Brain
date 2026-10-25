@@ -51,6 +51,8 @@ export interface WorkspaceBinding {
   request?: JobRequest | null;
   /** Bumped by ⌘K: focus the input. */
   focusNonce?: number;
+  /** What "Insert" says in a session: the note results go to ("Insert into Lecture 10"). */
+  insertLabel?: string;
 }
 
 interface ChatProps {
@@ -861,6 +863,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
               <PanelJobCard
                 job={it.job}
                 pageNoteId={pageNoteId}
+                insertLabel={workspace?.insertLabel}
                 inWorkspace={!!workspace}
                 busy={loading}
                 onApply={(noteId) => void applyJob(it.id, it.job, noteId)}
@@ -895,7 +898,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                   onClick={() => void insertAnswer(it, to)}
                   className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] text-gray-400 hover:text-accent-500"
                 >
-                  <FileText size={11} /> {pageNoteId ? "Insert into this note" : "Put in note"}
+                  <FileText size={11} /> {pageNoteId ? (workspace?.insertLabel ?? "Insert into this note") : "Put in note"}
                 </button>
               );
             }}

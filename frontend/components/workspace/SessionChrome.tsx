@@ -3,7 +3,7 @@
 // The session's small pieces of chrome: the ⋯ menu in the header, and the first
 // steps an empty note offers. Kept apart from WorkspaceShell, which is long enough.
 import { useState } from "react";
-import { BookOpen, ExternalLink, Layers, MoreHorizontal, PanelLeftOpen, PenLine, Sparkles } from "lucide-react";
+import { BookOpen, Check, ExternalLink, Layers, Link2, MoreHorizontal, PenLine, Sparkles } from "lucide-react";
 import { usdText } from "@/lib/backgroundJobs";
 import type { ChatJob } from "@/lib/chatJobs";
 import { Popover } from "@/components/ui/primitives/Popover";
@@ -12,10 +12,11 @@ import { SourceTrigger } from "./SourceTrigger";
 const rowClass = "flex w-full items-center gap-2.5 rounded-md px-2 h-8 text-left text-sm text-ink hover:bg-surface-hover [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-ink-icon";
 
 /** ⋯ in the header: the things a session needs now and then, not all the time. */
-export function SessionMenu({ noteId, sourcesHidden, onShowSources }: {
+export function SessionMenu({ noteId, follow, onFollowChange }: {
   noteId: string;
-  sourcesHidden: boolean;
-  onShowSources: () => void;
+  /** The note scrolls along with the source being read or played. */
+  follow: boolean;
+  onFollowChange: (on: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -37,11 +38,11 @@ export function SessionMenu({ noteId, sourcesHidden, onShowSources }: {
       }
     >
       <div className="flex flex-col p-1">
-        {sourcesHidden && (
-          <button type="button" className={rowClass} onClick={() => { setOpen(false); onShowSources(); }}>
-            <PanelLeftOpen /> Show the source
-          </button>
-        )}
+        <button type="button" className={rowClass} role="menuitemcheckbox" aria-checked={follow}
+          onClick={() => onFollowChange(!follow)}>
+          <Link2 /> <span className="flex-1">Note follows the source</span>
+          {follow && <Check className="!text-accent" />}
+        </button>
         <a href={`/brain/${noteId}`} className={rowClass} onClick={() => setOpen(false)}>
           <ExternalLink /> Open the note as a page
         </a>

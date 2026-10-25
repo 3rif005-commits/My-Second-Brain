@@ -151,6 +151,12 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
       // ⌘K (Notion's quick find), and ⌘P kept for existing muscle memory.
       if (mod && !e.shiftKey && (e.key.toLowerCase() === "k" || e.key.toLowerCase() === "p")) {
         e.preventDefault();
+        // In a study session Ctrl+K opens its own picker (any note or source, here
+        // or beside); Ctrl+P is still the app-wide quick find.
+        if (inSessionRef.current && e.key.toLowerCase() === "k") {
+          window.dispatchEvent(new Event("workspace:open-picker"));
+          return;
+        }
         setSearchOpen((v) => !v);
       }
       // Ctrl/⌘+\ folds the sidebar, as in Notion.

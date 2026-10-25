@@ -13,6 +13,7 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import { Check, ChevronLeft, ChevronRight, Copy, CornerDownRight, MapPin, Minus, Plus, Sigma, Sparkles, X } from "lucide-react";
 import { IconButton } from "@/components/ui";
 import { useAIPanel } from "@/context/AIPanelContext";
+import { useAddLabel } from "../writingTarget";
 import { wsApi, type SendAction, type WsElement, type NoteSource } from "@/lib/workspace";
 import { useToast } from "@/app/providers";
 import { ActionBar, ActionButton, ActionLabel, ActionSeparator } from "./ActionBar";
@@ -59,6 +60,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }:
   const currentPage = useRef(1);
   const [pageNo, setPageNo] = useState(1);
   const ai = useAIPanel();
+  const addLabel = useAddLabel();
   // Pages fit the pane's width (zoom 1); − and + scale from there. A fixed 680 px
   // page was cut off on both sides in a 470 px pane.
   const [zoom, setZoom] = useState(1);
@@ -337,7 +339,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }:
             {busy
               ? <span className="w-3 h-3 rounded-full border-2 border-white/50 border-t-transparent animate-spin" />
               : <CornerDownRight size={12} />}
-            Add to note
+            {addLabel}
           </ActionButton>
           {active.el.element_type === "formula" && (
             <ActionButton onClick={() => sendElement(active.el)} title="Transcribe to LaTeX and insert">
@@ -362,7 +364,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }:
             setSelection(null);
             window.getSelection()?.removeAllRanges();
           }}>
-            <CornerDownRight size={12} /> Add to note
+            <CornerDownRight size={12} /> {addLabel}
           </ActionButton>
           <ActionButton title="Ask the AI about the selected text" onClick={() => {
             const p = selection.page ?? currentPage.current;

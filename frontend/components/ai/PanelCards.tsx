@@ -90,10 +90,12 @@ export function GuideCheckLine({ result, busy, onRetryDeep }: {
   );
 }
 
-export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, badge, warning, onApply, onUndo, onRetry, onRetryDeep, onDiscard, onOpen }: {
+export function PanelJobCard({ job, pageNoteId, insertLabel, inWorkspace, busy, badge, warning, onApply, onUndo, onRetry, onRetryDeep, onDiscard, onOpen }: {
   job: PanelJob;
   /** The note open behind the panel, if any. */
   pageNoteId: string | null;
+  /** A session's own wording for Insert ("Insert into Lecture 10"). */
+  insertLabel?: string;
   /** Shown inside the workspace — no need to offer the way there. */
   inWorkspace?: boolean;
   /** Another turn is running: actions that start one wait. */
@@ -176,7 +178,7 @@ export function PanelJobCard({ job, pageNoteId, inWorkspace, busy, badge, warnin
               <button onClick={() => onApply(job.noteId)}
                 title={onItsNote ? "Add it to the note that is open" : `Write it into "${job.noteTitle}" and open it`}
                 className={`${chip} font-medium bg-accent-600 text-white hover:bg-accent-500`}>
-                <FileText size={12} /> {onItsNote ? "Insert into this note" : "Put in note"}
+                <FileText size={12} /> {onItsNote ? (insertLabel ?? "Insert into this note") : "Put in note"}
               </button>
               {elsewhere && (
                 <button onClick={() => onApply(elsewhere)} title="Add it at the end of the note that is open"
