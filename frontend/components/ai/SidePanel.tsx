@@ -155,7 +155,8 @@ export function SidePanel({
       <div
         className={float ? [
           // Over the page, where you put it; the page keeps its full size.
-          "fixed z-40 flex flex-col overflow-hidden rounded-xl border border-line bg-surface-chip shadow-float",
+          // Opaque: the docked panel's tinted chip colour lets a video show through.
+          "fixed z-40 flex flex-col overflow-hidden rounded-xl border border-line bg-surface-elevated shadow-modal",
           "transition-[opacity,visibility] duration-150",
           open ? "visible opacity-100" : "invisible opacity-0",
         ].join(" ") : [
