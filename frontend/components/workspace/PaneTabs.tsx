@@ -85,8 +85,10 @@ export function PaneTabs({
               key={t.key}
               draggable
               onDragStart={(e) => { e.dataTransfer.setData(TAB_MIME, t.key); e.dataTransfer.effectAllowed = "move"; }}
-              className={`group relative flex h-8 max-w-[190px] shrink-0 items-center rounded-t-md transition-colors duration-instant ${underline} ${
-                t.shown ? "bg-surface text-ink" : "text-ink-secondary hover:bg-surface-hover"}`}
+              // Tabs not shown give way first (down to their icon and a few
+              // letters), so three or four fit a 460 px pane before it scrolls.
+              className={`group relative flex h-8 items-center rounded-t-md transition-colors duration-instant ${underline} ${
+                t.shown ? "max-w-[190px] shrink-0 bg-surface text-ink" : "min-w-[56px] max-w-[160px] shrink text-ink-secondary hover:bg-surface-hover"}`}
             >
               <button
                 type="button"
