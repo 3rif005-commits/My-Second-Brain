@@ -32,6 +32,7 @@ from services.workspace.dbretry import with_retry
 from services.workspace.figures import figure_parts
 from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML, markdown_to_html
 from services.workspace.anchors import repair_anchors
+from services.workspace.sections import tag_sections
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +70,26 @@ def source_text_from_chunks(source_id: str) -> str:
     `[page N]` / `[mm:ss]` / `[section N]` tagging the prompt relies on is
     reconstructed from anchor_type + anchor_start.
     """
-    rows = (get_supabase().table("resource_chunks")
+    db = get_supabase()
+    rows = (db.table("resource_chunks")
             .select("chunk_text,anchor_type,anchor_start")
             .eq("resource_id", source_id).order("chunk_index")
             .execute().data or [])
+    if rows and all(r["anchor_type"] == "section" for r in rows):
+        # A chunk packs ~1,500 characters of sections but carries only its first
+        # section's index, so tagging by chunk left the model one `[section N]`
+        # per chunk — a short Markdown file came back with every anchor at §0.
+        # The source's sections are stored one per element row; tag each.
+        els = (db.table("resource_elements")
+               .select("element_type,order_index,content")
+               .eq("resource_id", source_id).order("order_index")
+               .execute().data or [])
+        sections = [{"index": e["order_index"], "content": e.get("content") or "",
+                     "kind": "heading" if e["element_type"] == "heading"
+                     else "image" if e["element_type"] == "image" else "text"}
+                    for e in els]
+        if any(s["kind"] != "image" for s in sections):
+            return tag_sections(sections)
     parts: list[str] = []
     last_tag: str | None = None
     for r in rows:

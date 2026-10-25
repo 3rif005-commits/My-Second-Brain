@@ -375,5 +375,5 @@ export function fmtTime(seconds: number): string {
 export function anchorLabel(type: AnchorType, value: number): string {
   if (type === "time") return fmtTime(value);
   if (type === "page") return `p. ${Math.round(value)}`;
-  return `§${Math.round(value)}`;
+  return `§${Math.round(value) + 1}`;   // sections are stored 0-based; people count from 1
 }

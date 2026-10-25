@@ -148,6 +148,27 @@ def test_source_text_is_reassembled_with_anchor_tags():
     assert text == "[page 1]\nintro\nmore intro\n[page 2]\nchapter two"
 
 
+def test_section_sources_are_tagged_per_section_not_per_chunk():
+    chunks = [{"chunk_text": "Title\nIntro\nSub\nBody", "anchor_type": "section", "anchor_start": 0}]
+    elements = [
+        {"element_type": "heading", "order_index": 0, "content": "Title"},
+        {"element_type": "text", "order_index": 1, "content": "Intro"},
+        {"element_type": "image", "order_index": 2, "content": "https://x/y.png"},
+        {"element_type": "heading", "order_index": 3, "content": "Sub"},
+    ]
+    db = MagicMock()
+
+    def table(name):
+        t = MagicMock()
+        (t.select.return_value.eq.return_value.order.return_value
+         .execute.return_value.data) = chunks if name == "resource_chunks" else elements
+        return t
+    db.table.side_effect = table
+    with patch.object(synthesis, "get_supabase", return_value=db):
+        text = synthesis.source_text_from_chunks("s1")
+    assert text == "[section 0] ## Title\n[section 1] Intro\n[section 3] ## Sub"
+
+
 def test_time_anchored_chunks_get_mmss_tags():
     db = MagicMock()
     (db.table.return_value.select.return_value.eq.return_value.order.return_value
