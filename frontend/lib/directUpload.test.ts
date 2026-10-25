@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const uploadToSignedUrl = vi.fn();
+const upload = vi.fn();
+const getSession = vi.fn();
 vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({ storage: { from: () => ({ uploadToSignedUrl }) } }),
+  createClient: () => ({ auth: { getSession }, storage: { from: () => ({ uploadToSignedUrl, upload }) } }),
 }));
 
 import { wsApi } from "./workspace";
@@ -12,12 +14,77 @@ const PATH = "user-1/3f2b8c1e-1111-4222-8333-444455556666/source.pdf";
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-describe("wsApi.addSource with a file", () => {
+const signedIn = { data: { session: { user: { id: "user-1" } } } };
+
+describe("wsApi.addSource straight into the user's own folder", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   beforeEach(() => {
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     uploadToSignedUrl.mockReset();
+    upload.mockReset();
+    getSession.mockResolvedValue(signedIn);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("uploads before any backend call, so a sleeping backend doesn't hold the bytes back", async () => {
+    upload.mockResolvedValue({ data: {}, error: null });
+    fetchMock.mockResolvedValueOnce(json({ note_id: "n1", source: { id: "s1" }, deferred: false }));
+    const file = new File([new Uint8Array(10)], "Lecture 10.PDF", { type: "application/pdf" });
+
+    await wsApi.addSource({ file, noteId: "n1" });
+
+    const path = upload.mock.calls[0][0] as string;
+    expect(path).toMatch(/^user-1\/[0-9a-f-]{36}\/source\.pdf$/);   // the shape /sources checks
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/ws/sources");
+    expect((fetchMock.mock.calls[0][1].body as FormData).get("upload_path")).toBe(path);
+  });
+
+  it("asks the backend for a link when the bucket refuses the write", async () => {
+    upload.mockResolvedValue({ data: null, error: { message: "new row violates row-level security policy" } });
+    uploadToSignedUrl.mockResolvedValue({ data: { path: PATH }, error: null });
+    fetchMock
+      .mockResolvedValueOnce(json({ upload_path: PATH, token: "tok", signed_url: "https://s" }))
+      .mockResolvedValueOnce(json({ note_id: "n1", source: { id: "s1" }, deferred: false }));
+
+    await wsApi.addSource({ file: new File(["x"], "a.pdf"), noteId: "n1" });
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/ws/sources/upload-url");
+    expect((fetchMock.mock.calls[1][1].body as FormData).get("upload_path")).toBe(PATH);
+  });
+
+  it("stops with a plain message when the file is over the storage limit", async () => {
+    upload.mockResolvedValue({ data: null, error: { message: "The object exceeded the maximum allowed size" } });
+    await expect(wsApi.addSource({ file: new File(["x"], "huge.mp4") }))
+      .rejects.toThrow('"huge.mp4" is larger than your storage allows.');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("startUploads runs every upload at once and wakes the backend meanwhile", async () => {
+    const pending: (() => void)[] = [];
+    upload.mockImplementation(() => new Promise((res) => pending.push(() => res({ data: {}, error: null }))));
+    fetchMock.mockResolvedValue(json([]));
+    const uploads = wsApi.startUploads([
+      { file: new File(["a"], "a.pdf") }, {}, { file: new File(["b"], "b.mp4") },
+    ]);
+    await vi.waitFor(() => expect(upload).toHaveBeenCalledTimes(2));   // both started, none done
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/ws/sessions/recent?limit=1");
+    pending.forEach((done) => done());
+    const paths = await Promise.all(uploads);
+    expect(paths[0]).toMatch(/source\.pdf$/);
+    expect(paths[1]).toBeNull();
+    expect(paths[2]).toMatch(/source\.mp4$/);
+  });
+});
+
+describe("wsApi.addSource with a file, through a backend link", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    uploadToSignedUrl.mockReset();
+    getSession.mockResolvedValue({ data: { session: null } });
   });
   afterEach(() => vi.unstubAllGlobals());
 

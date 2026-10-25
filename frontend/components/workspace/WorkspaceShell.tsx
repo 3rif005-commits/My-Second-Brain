@@ -559,9 +559,10 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     setBusy(true);
     const defer = items.length > 1;
     let landed = noteId;
-    for (const item of items) {
+    const uploads = wsApi.startUploads(items);
+    for (const [i, item] of items.entries()) {
       try {
-        const r = await wsApi.addSource({ ...item, noteId: landed, defer });
+        const r = await wsApi.attachSource({ ...item, uploaded: await uploads[i], noteId: landed, defer });
         landed = r.note_id;
       } catch (e) {
         showToast(e instanceof Error ? e.message : `Could not add ${item.file?.name ?? item.url ?? "source"}`);

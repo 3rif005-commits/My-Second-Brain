@@ -151,11 +151,13 @@ export async function attachAndProcess(
   const emit = () => onChange(noteId, state.map((s) => ({ ...s })));
   emit();
 
+  const uploads = wsApi.startUploads(files.map((a) => (a.kind === "file" ? { file: a.file } : {})));
   for (let i = 0; i < files.length; i++) {
     if (signal?.aborted) throw new DOMException("aborted", "AbortError");
     try {
       const a = files[i];
-      const r = await wsApi.addSource(a.kind === "file" ? { file: a.file, noteId } : { url: a.url, noteId });
+      const r = await wsApi.attachSource(a.kind === "file"
+        ? { file: a.file, uploaded: await uploads[i], noteId } : { url: a.url, noteId });
       noteId = r.note_id;
       state[i].sourceId = r.source.id;
       state[i].status = r.source.status === "ready" ? "ready"

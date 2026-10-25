@@ -2,7 +2,7 @@
 // One note, many sources: sources attach directly to a note and one AI
 // synthesis comes out. No workspaces, no pages, no canvas positions.
 
-import { directUpload } from "@/lib/directUpload";
+import { directUpload, uploadSourceToOwnFolder } from "@/lib/directUpload";
 
 export type ResourceKind = "pdf" | "document" | "youtube" | "video" | "website";
 export type ResourceStatus = "queued" | "processing" | "ready" | "failed";
@@ -224,24 +224,38 @@ async function j<T>(res: Response): Promise<T> {
   return res.json();
 }
 
+/** Step 1 of adding a file: put it in Storage. Needs no backend, so several can run at once
+ *  while the backend wakes. → the Storage path, or null (send the file itself in step 2). */
+async function uploadSourceFile(file: File): Promise<string | null> {
+  return (await uploadSourceToOwnFolder(file)) ?? directUpload("/api/ws/sources/upload-url", file);
+}
+
+/** Step 2: attach the file uploaded in step 1 (or a URL) to a note. */
+async function attachSource(input: {
+  file?: File; uploaded?: string | null; url?: string; noteId?: string | null; defer?: boolean;
+}) {
+  const fd = new FormData();
+  const uploaded = input.uploaded ?? null;
+  if (input.file && uploaded) {
+    fd.set("upload_path", uploaded);
+    fd.set("filename", input.file.name);
+    if (input.file.type) fd.set("mime_type", input.file.type);
+  } else if (input.file) {
+    fd.set("file", input.file);
+  }
+  if (input.url) fd.set("url", input.url);
+  if (input.noteId) fd.set("note_id", input.noteId);
+  if (input.defer) fd.set("defer", "true");
+  return fetch("/api/ws/sources", { method: "POST", body: fd })
+    .then((r) => j<{ note_id: string; source: NoteSource; deferred: boolean }>(r));
+}
+
 export const wsApi = {
   /** Attach a file or URL. Without noteId the backend creates the note first. */
-  addSource: async (input: { file?: File; url?: string; noteId?: string | null; defer?: boolean }) => {
-    const fd = new FormData();
-    const uploaded = input.file ? await directUpload("/api/ws/sources/upload-url", input.file) : null;
-    if (input.file && uploaded) {
-      fd.set("upload_path", uploaded);
-      fd.set("filename", input.file.name);
-      if (input.file.type) fd.set("mime_type", input.file.type);
-    } else if (input.file) {
-      fd.set("file", input.file);
-    }
-    if (input.url) fd.set("url", input.url);
-    if (input.noteId) fd.set("note_id", input.noteId);
-    if (input.defer) fd.set("defer", "true");
-    return fetch("/api/ws/sources", { method: "POST", body: fd })
-      .then((r) => j<{ note_id: string; source: NoteSource; deferred: boolean }>(r));
-  },
+  addSource: async (input: { file?: File; url?: string; noteId?: string | null; defer?: boolean }) =>
+    attachSource({ ...input, uploaded: input.file ? await uploadSourceFile(input.file) : null }),
+  uploadSourceFile,
+  attachSource,
   listSources: (noteId: string) =>
     fetch(`/api/ws/notes/${noteId}/sources`).then((r) => j<NoteSource[]>(r)),
   processSources: (noteId: string) =>
@@ -303,6 +317,17 @@ export const wsApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(anchors),
     }).then((r) => j(r)),
+
+  /** Start every file's upload at once; await `uploads[i]` in order to attach them in order.
+   *  Also wakes the backend (Render's free plan sleeps when idle) with a cheap request, so
+   *  attaching doesn't wait out its start-up after the uploads finish. */
+  startUploads: (items: { file?: File }[]) => {
+    fetch("/api/ws/sessions/recent?limit=1").catch(() => {});
+    const uploads = items.map((it) =>
+      it.file ? uploadSourceFile(it.file) : Promise.resolve<string | null>(null));
+    uploads.forEach((p) => p.catch(() => {}));  // each failure is reported when it is awaited
+    return uploads;
+  },
 
   recentSessions: () =>
     fetch("/api/ws/sessions/recent").then((r) => j<RecentSession[]>(r)),
