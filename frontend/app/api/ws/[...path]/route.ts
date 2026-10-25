@@ -7,6 +7,7 @@ const ALLOWED_PREFIXES = [
   "sources",
   "notes",   // /notes/{id}/{sources,synthesis,synthesize,anchors,chat}
   "sessions",
+  "library",         // sources across all notes, to open beside a session
   "ai-providers",
   "connected-apps",  // Settings → Connected apps (remote MCP, 5.4)
   "jobs",            // background jobs: queue, list, cancel, apply (5.3)
