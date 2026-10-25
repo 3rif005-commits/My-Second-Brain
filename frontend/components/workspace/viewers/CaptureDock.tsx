@@ -259,33 +259,28 @@ export function CaptureDock({
         icon={busy === "frame" ? spin : <Camera size={15} />}
         onClick={onFrame}
       />
-      {recording ? (
+      {/* Clip and Audio keep their places when a range opens (they become its
+          two ways to end), so the second press lands where the first did. */}
+      <BarButton tone={recording ? "danger" : "default"}
+        label={recording ? "End clip" : "Clip"}
+        hint={recording ? "End the range here and add it as a video clip" : "Start a video clip here; press again to end it"}
+        shortcut={KEY.clip} disabled={locked}
+        icon={busy === "clip" ? spin : recording ? <Square size={12} fill="currentColor" /> : <Film size={15} />}
+        onClick={() => onRange("clip")} />
+      <BarButton tone={recording ? "danger" : "default"}
+        label={recording ? "End audio" : "Audio"}
+        hint={recording ? "End the range here and add it as audio" : "Start an audio excerpt here; press again to end it"}
+        shortcut={KEY.audio} disabled={locked}
+        icon={busy === "audio" ? spin : <AudioLines size={15} />}
+        onClick={() => onRange("audio")} />
+      {recording && (
         <>
-          <span className="flex items-center gap-1.5 px-1.5 font-mono text-xs tabular-nums text-ink-secondary">
+          <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-1.5 font-mono text-xs tabular-nums text-ink-secondary">
             <span className="ws-recording size-2 rounded-full bg-red-500" />
             {fmtTime(clipStart)} → {fmtTime(Math.max(time, clipStart))}
           </span>
-          <BarButton tone="danger" label="End clip" hint="End the range here and add it as a video clip"
-            shortcut={KEY.clip} disabled={locked}
-            icon={busy === "clip" ? spin : <Square size={12} fill="currentColor" />}
-            onClick={() => onRange("clip")} />
-          <BarButton tone="danger" label="End audio" hint="End the range here and add it as audio"
-            shortcut={KEY.audio} disabled={locked}
-            icon={busy === "audio" ? spin : <AudioLines size={15} />}
-            onClick={() => onRange("audio")} />
           <BarButton label="Discard" hint="Throw this range away" shortcut="Esc"
             icon={<X size={15} />} onClick={onCancelRange} />
-        </>
-      ) : (
-        <>
-          <BarButton label="Clip" hint="Start a video clip here; press again to end it"
-            shortcut={KEY.clip} disabled={locked}
-            icon={busy === "clip" ? spin : <Film size={15} />}
-            onClick={() => onRange("clip")} />
-          <BarButton label="Audio" hint="Start an audio excerpt here; press again to end it"
-            shortcut={KEY.audio} disabled={locked}
-            icon={busy === "audio" ? spin : <AudioLines size={15} />}
-            onClick={() => onRange("audio")} />
         </>
       )}
       <span className="flex-1" />

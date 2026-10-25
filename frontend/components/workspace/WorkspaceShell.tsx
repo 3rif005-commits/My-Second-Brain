@@ -602,6 +602,10 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       <span className="flex items-center gap-1.5 px-2 text-sm font-medium text-ink"><PenLine size={15} /> Note</span>
     );
 
+  // With the AI beside it, the note keeps at least a readable column.
+  const sourceWidth = layout === "wide" && askOpen
+    ? Math.min((splitPct / 100) * layoutWidth, layoutWidth - ASK_WIDTH - 440)
+    : `${splitPct}%`;
   const showNote = layout === "wide" || (layout === "two" ? !askOpen : !askOpen && pane === "note");
   const showAsk = askOpen;
   const showSourcePane = layout === "one" ? !askOpen && pane === "source" : sourcesOpen;
@@ -662,7 +666,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
           </div>
         ) : (
           <>
-            <div className={sourcesOpen ? "min-w-0 shrink-0" : "hidden"} style={{ width: `${splitPct}%` }}>{sourcePane}</div>
+            <div className={sourcesOpen ? "min-w-0 shrink-0" : "hidden"} style={{ width: sourceWidth }}>{sourcePane}</div>
             {sourcesOpen ? (
               <>
                 <div

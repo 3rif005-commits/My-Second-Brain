@@ -366,7 +366,7 @@ export function PdfViewer({ resource, onPosition, onAction, seekRef, passages }:
           </ActionButton>
           <ActionButton title="Ask the AI about the selected text" onClick={() => {
             const p = selection.page ?? currentPage.current;
-            ai.ask(`About this passage (p. ${p}): "${selection.text}"\n\n`);
+            ai.ask(`About this passage (p. ${p}): "${selection.text}" — `);
             setSelection(null);
             window.getSelection()?.removeAllRanges();
           }}>
