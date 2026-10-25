@@ -16,7 +16,7 @@ import {
   type NoteAnchor, type NoteSource, type SendAction,
 } from "@/lib/workspace";
 import { anchorRows, findLevelHeadings, readDraftAnchors, type DraftAnchor } from "./anchorHeadings";
-import { textBlocks } from "./sendBlocks";
+import { hasContent, textBlocks } from "./sendBlocks";
 import { quotedPassages, type Passage } from "./viewers/passageMarks";
 
 const BlockEditor = dynamic(
@@ -256,19 +256,30 @@ export function NotePane({
         applyingRef.current = true;           // not the user's typing
         editorRef.current.replaceDocument(before);
         setTimeout(() => { applyingRef.current = false; }, 400);
+        // The draft's section anchors went with its blocks; left in place they
+        // stayed as "Jump to" chips pointing at nothing.
+        const live = new Set(editorRef.current.blockIds());
+        const kept = anchorsRef.current.filter((a) => live.has(a.block_id));
+        if (kept.length !== anchorsRef.current.length) {
+          anchorsRef.current = kept;
+          setAnchors(kept);
+          wsApi.putAnchors(note.id, kept).catch(() => {});
+        }
         const blocks = editorRef.current.getDocument();
         void handleSave(blocks, getPlainText(blocks));
         return true;
       },
       hasUserEdits: () => {
         // Without a draft applied in this session we cannot prove where the
-        // note's content came from, so treat any content as the user's.
-        if (!appliedOnceRef.current) return normalize(currentTextRef.current).length > 0;
-        return userEditedRef.current;
+        // note's content came from, so treat any content as the user's —
+        // judged by blocks, not text: captured frames and clips have no text.
+        if (userEditedRef.current) return true;
+        if (!appliedOnceRef.current) return hasContent(editorRef.current?.getDocument() ?? []);
+        return false;
       },
     };
     return () => { applyRef.current = null; };
-  }, [applyRef, collect, registerAnchors, persistApplied, finishApply, handleSave]);
+  }, [applyRef, collect, registerAnchors, persistApplied, finishApply, handleSave, note.id]);
 
   const handleBlocksApplied = useCallback((blocks: AnyBlock[]) => {
     registerAnchors(blocks, "replace");

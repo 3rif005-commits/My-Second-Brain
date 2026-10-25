@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pageOfNode, textBlocks } from "./sendBlocks";
+import { hasContent, pageOfNode, textBlocks } from "./sendBlocks";
 
 const ctx = { noteId: "n1", resourceId: "r1" };
 
@@ -25,5 +25,23 @@ describe("pageOfNode", () => {
     expect(pageOfNode(document.getElementById("t")!.firstChild)).toBe(7);
     expect(pageOfNode(document.body)).toBeUndefined();
     expect(pageOfNode(null)).toBeUndefined();
+  });
+});
+
+describe("hasContent", () => {
+  const empty = { type: "paragraph", content: [], children: [] };
+  it("treats blank paragraphs as empty", () => {
+    expect(hasContent([])).toBe(false);
+    expect(hasContent([empty, { ...empty, content: [{ type: "text", text: "  " }] }])).toBe(false);
+  });
+  it("counts captured media with no text as content", () => {
+    expect(hasContent([empty, { type: "image", props: { url: "u", caption: "" }, children: [] }])).toBe(true);
+    expect(hasContent([{ type: "video", props: {}, children: [] }])).toBe(true);
+    expect(hasContent([{ type: "audio", props: {}, children: [] }])).toBe(true);
+  });
+  it("counts text, inline links and nested children", () => {
+    expect(hasContent([{ ...empty, content: [{ type: "text", text: "hi" }] }])).toBe(true);
+    expect(hasContent([{ ...empty, content: [{ type: "link", content: [] }] }])).toBe(true);
+    expect(hasContent([{ ...empty, children: [{ type: "image", props: {} }] }])).toBe(true);
   });
 });

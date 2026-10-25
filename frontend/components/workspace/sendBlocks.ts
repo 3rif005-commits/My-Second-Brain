@@ -36,3 +36,15 @@ export function pageOfNode(node: Node | null | undefined): number | undefined {
   const n = Number(box?.dataset.page);
   return Number.isFinite(n) && n >= 1 ? n : undefined;
 }
+
+/** Whether a note holds anything worth keeping. Media and other non-text blocks count:
+ *  a note of nothing but captured frames, clips and audio has no plain text, and judging it
+ *  by text alone let an AI insert replace it as if it were empty. */
+export function hasContent(blocks: AnyBlock[]): boolean {
+  return blocks.some((b) => {
+    if (b.children?.length && hasContent(b.children)) return true;
+    if (b.type !== "paragraph" && b.type !== "heading") return true;
+    const inline = Array.isArray(b.content) ? b.content : [];
+    return inline.some((c: AnyBlock) => c.type !== "text" || (c.text ?? "").trim() !== "");
+  });
+}

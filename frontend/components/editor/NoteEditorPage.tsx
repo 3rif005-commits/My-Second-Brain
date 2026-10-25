@@ -20,6 +20,7 @@ import {
   DRAFT_EVENT, UNDO_EVENT, takeStagedDraft, type NoteDraft, type UndoOutcome,
 } from "@/lib/noteDraft";
 import { anchorRows, readDraftAnchors } from "@/components/workspace/anchorHeadings";
+import { hasContent } from "@/components/workspace/sendBlocks";
 import { NoteProperties } from "./NoteProperties";
 import { DatabaseRowProperties } from "../database/DatabaseRowProperties";
 import { BacklinksPanel } from "./BacklinksPanel";
@@ -166,7 +167,7 @@ export function NoteEditorPage({ note, collectionName }: NoteEditorPageProps) {
     const before = ed.getDocument();
     // "replace" is only for an empty note. Checked again here: the note may
     // have been typed into since the panel looked.
-    const empty = getPlainText(before).trim() === "";
+    const empty = !hasContent(before);
     const blocks = d.mode === "replace" && empty
       ? await ed.replaceWithHtml(d.html)
       : await ed.insertHtmlAtEnd(d.html);
