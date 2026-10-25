@@ -6,7 +6,8 @@
 // row of tabs, and any tab — a source, a note, the AI — can sit in any pane
 // (redesign 2026-10-25; layout logic in sessionLayout.ts). The note last worked
 // in is the writing target: captures, "Add to note" and AI results go there.
-// The AI is the app's one panel, docked over whichever pane shows the Ask tab.
+// The AI is the app's one panel, its own window docked right or bottom across
+// every pane (not a tab in one), with a tab per conversation.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -303,7 +304,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     const home = new Set(sources.map((s) => s.id));
     const valid = (key: string) => {
       const k = parseKey(key);
-      if (k.kind === "ask") return true;
+      if (k.kind === "ask") return false;
       if (k.kind === "source") return home.has(k.id) || lay.foreign.includes(k.id);
       return k.id === noteId || lay.notes.includes(k.id);
     };
@@ -363,50 +364,23 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const targetTitle = noteById(target)?.title ?? "the note";
   const allPassages = useMemo(() => Object.values(passagesByNote).flat(), [passagesByNote]);
 
-  // ── the AI tab ────────────────────────────────────────────────────────────
-  // "AI open" means "the Ask tab is showing": ⌘J, Ask AI on a selection and the
-  // header button all go through the app's one AI panel.
-  const shownKeys = (l: SessionLayout, m: Mode) =>
-    (m === "one" ? [l.panes[l.focus]?.active] : l.panes.map((p) => p.active));
-  const askShown = !!lay && shownKeys(lay, mode).includes(ASK);
-  useEffect(() => {
-    if (!lay) return;
-    if (ai.isOpen && !askShown) {
-      setLay((l) => {
-        if (!l) return l;
-        const at = paneOf(l, ASK);
-        return openTab(l, ASK, at >= 0 ? at : "beside", stateMaxRef.current);
-      });
-    } else if (!ai.isOpen && askShown) {
-      setLay((l) => {
-        if (!l) return l;
-        const at = paneOf(l, ASK);
-        if (at < 0 || l.panes[at].active !== ASK) return l;
-        const other = l.panes[at].tabs.find((t) => t !== ASK);
-        return other ? activate(l, at, other) : closeTab(l, ASK);
-      });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ai.isOpen, askShown, !!lay]);
-  const dock = ai.dock;
-  const askSlotRef = useCallback((el: HTMLDivElement | null) => dock(el), [dock]);
-  useEffect(() => () => dock(null), [dock]);
+  // ── the AI ────────────────────────────────────────────────────────────────
+  // The app's one AI panel, beside or under every pane: ⌘J, Ask AI on a
+  // selection and the header button all open it. Layouts saved before it left
+  // the panes may still hold an Ask tab; reconcile drops it.
+  const aiOpen = ai.isOpen;
 
   // ── user actions on tabs ──────────────────────────────────────────────────
   const activateTab = useCallback((key: string, pane: number) => {
     const l = layRef.current;
     if (!l) return;
-    if (key === ASK) openAi();
-    else if (l.panes[pane]?.active === ASK || (modeRef.current === "one" && shownKeys(l, "one").includes(ASK))) closeAi();
     if (parseKey(key).kind === "source") setLastSourceId(parseKey(key).id);
     setLay((x) => (x ? activate(x, pane, key) : x));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openAi, closeAi]);
+  }, []);
 
   const closeTabUser = useCallback((key: string) => {
-    if (key === ASK) closeAi();
     setLay((l) => (l ? closeTab(l, key) : l));
-  }, [closeAi]);
+  }, []);
 
   const moveTabUser = useCallback((key: string) => {
     setLay((l) => (l ? moveToOtherSide(l, key, stateMaxRef.current) : l));
@@ -429,10 +403,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       if (k.kind === "source" && !sourceById.has(k.id) && !l.foreign.includes(k.id)) next = { ...next, foreign: [...next.foreign, k.id] };
       return openTab(next, key, beside ? "beside" : pane, stateMaxRef.current);
     });
-    // The pane the AI was showing in now shows this: the AI closes.
-    const l = layRef.current;
-    if (l && !beside && l.panes[pane]?.active === ASK) closeAi();
-  }, [noteId, sourceById, openAi, closeAi]);
+  }, [noteId, sourceById, openAi]);
 
   // ── where things go: the writing target ───────────────────────────────────
   /** Run `fn` with a note's editor connections, opening the note first when no
@@ -457,9 +428,8 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     if (p < 0) return;
     const visible = l.panes[p].active === key && (modeRef.current !== "one" || p === l.focus);
     if (visible) return;
-    if (l.panes[p].active === ASK || modeRef.current === "one") closeAi();
     setLay((x) => (x ? activate(x, p, key) : x));
-  }, [closeAi]);
+  }, []);
 
   const sendToTarget = useCallback((a: SendAction) => {
     const id = layRef.current?.target ?? noteId;
@@ -521,14 +491,12 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     if (pane < 0) {
       const tgt = noteKey(l.target);
       pane = l.panes.findIndex((p) => p.active && parseKey(p.active).kind === "source");
-      if (pane < 0) pane = l.panes.findIndex((p) => p.active !== ASK && p.active !== tgt);
-      if (pane < 0) pane = l.panes.findIndex((p) => p.active !== ASK);
+      if (pane < 0) pane = l.panes.findIndex((p) => p.active !== tgt);
     }
-    if (modeRef.current === "one" || (pane >= 0 && l.panes[pane]?.active === ASK)) closeAi();
     setLastSourceId(sourceId);
     setLay((x) => (x ? openTab(x, key, pane >= 0 ? pane : "beside", stateMaxRef.current) : x));
     if (value !== null && !Number.isNaN(value)) seekWhenReady(sourceId, value);
-  }, [closeAi, seekWhenReady]);
+  }, [seekWhenReady]);
 
   // A citation to a brought-in note opens that note; to a source, its page or moment.
   const openNoteRef = useRef<(id: string) => void>(() => {});
@@ -729,7 +697,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     ...allSources.filter((s) => !openKeys.has(srcKey(s.id)))
       .map((s) => ({ key: srcKey(s.id), kind: "source" as const, title: s.title, color: sourceColor(s.order_index),
         hint: lay.foreign.includes(s.id) ? "from another note" : KIND_LABEL[s.kind] ?? "source" })),
-    ...(openKeys.has(ASK) ? [] : [{ key: ASK, kind: "ask" as const, title: "Ask AI", hint: "Ctrl+J" }]),
+    ...(aiOpen ? [] : [{ key: ASK, kind: "ask" as const, title: "Ask AI", hint: "Ctrl+J" }]),
   ] : [];
   const sessionNoteIds = new Set([noteId, ...(lay?.notes ?? [])]);
 
@@ -748,9 +716,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
 
   const renderTab = (key: string, shown: boolean) => {
     const k = parseKey(key);
-    if (k.kind === "ask") {
-      return shown ? <div key={key} ref={askSlotRef} data-ask-slot className="absolute inset-0" /> : null;
-    }
+    if (k.kind === "ask") return null;
     if (k.kind === "source") {
       if (!shown) return null;
       const s = sourceById.get(k.id);
@@ -841,8 +807,8 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
             <StatusNote saving={saving} saved={savedFlash} synthesizing={false} />
           </span>
         </div>
-        <Button variant="ghost" icon={<Sparkles />} onClick={() => (askShown ? closeAi() : openAi())}
-          className={askShown ? "text-accent" : ""} title="Ask AI (Ctrl+J)">
+        <Button variant="ghost" icon={<Sparkles />} onClick={() => (aiOpen ? closeAi() : openAi())}
+          className={aiOpen ? "text-accent" : ""} title="Ask AI (Ctrl+J)">
           Ask AI
         </Button>
         <SessionMenu noteId={noteId} follow={follow} onFollowChange={setFollow} />

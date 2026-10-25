@@ -13,6 +13,7 @@ import { Sidebar } from "./Sidebar";
 import { Logo } from "@/components/brand/Logo";
 import { SearchModal } from "@/components/search/SearchModal";
 import { SidePanel, SidePanelToggleButton } from "@/components/ai/SidePanel";
+import { readDockSide, type DockSide } from "@/components/ai/panelTabs";
 import { AIThreadProvider } from "@/context/AIThreadContext";
 import { NotionProvider } from "@/context/NotionContext";
 import { AIPanelControlsContext, type AIPanelControls } from "@/context/AIPanelContext";
@@ -24,6 +25,8 @@ import type { IngestSource } from "@/components/ingestion/IngestDropzone";
 const AI_PANEL_DEFAULT_WIDTH = 360;
 const AI_PANEL_MIN_WIDTH = 280;
 const AI_PANEL_MAX_WIDTH = 600;
+const AI_PANEL_DEFAULT_HEIGHT = 320;
+const AI_PANEL_MIN_HEIGHT = 180;
 // Notion's sidebar: 270px by default, resizable by dragging its right edge.
 const SIDEBAR_DEFAULT_WIDTH = 270;
 const SIDEBAR_MIN_WIDTH = 220;
@@ -37,6 +40,8 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState<boolean | null>(null);
   const [aiOpen, setAiOpen] = useState<boolean | null>(null);
   const [aiPanelWidth, setAiPanelWidth] = useState(AI_PANEL_DEFAULT_WIDTH);
+  const [aiPanelHeight, setAiPanelHeight] = useState(AI_PANEL_DEFAULT_HEIGHT);
+  const [aiSide, setAiSide] = useState<DockSide>("right");
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth >= 768 : true
   );
@@ -55,7 +60,6 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
   // the session's Ask tab instead of taking the window's right edge.
   const inSession = /^\/brain\/workspace\/[^/]+/.test(pathname);
   const [sessionSidebar, setSessionSidebar] = useState(false);
-  const [dockEl, setDockEl] = useState<HTMLElement | null>(null);
   // Preferences follow the account: on a device with none saved yet, adopt the
   // copy stored in the user's metadata (Settings → Preferences writes it).
   const { updatePreferences } = usePreferences();
@@ -117,6 +121,9 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
       const w = parseInt(widthStored);
       if (w >= AI_PANEL_MIN_WIDTH && w <= AI_PANEL_MAX_WIDTH) setAiPanelWidth(w);
     }
+    const h = parseInt(localStorage.getItem("ai-panel-height") ?? "");
+    if (h >= AI_PANEL_MIN_HEIGHT) setAiPanelHeight(Math.min(h, Math.round(window.innerHeight * 0.75)));
+    setAiSide(readDockSide(localStorage.getItem("ai-panel-side")));
 
     // ?ai=open in URL → auto-open AI panel and strip the param
     const params = new URLSearchParams(window.location.search);
@@ -261,23 +268,35 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
     localStorage.setItem("ai-panel-width", String(clamped));
   }
 
+  function handleAiHeightChange(height: number) {
+    const max = Math.round(window.innerHeight * 0.75);
+    const clamped = Math.max(AI_PANEL_MIN_HEIGHT, Math.min(max, Math.round(height)));
+    setAiPanelHeight(clamped);
+    localStorage.setItem("ai-panel-height", String(clamped));
+  }
+
+  function handleAiSideChange(side: DockSide) {
+    setAiSide(side);
+    localStorage.setItem("ai-panel-side", side);
+  }
+
   const isOpen = inSession ? sessionSidebar : (open ?? true);
   const isAiOpen = aiOpen ?? false;
 
-  // Docked in a session, the panel takes no width from the page.
-  const aiPushes = isAiOpen && isDesktop && !inSession;
+  // On desktop the open panel takes its room from the page (beside it or under
+  // it, across every pane of a session); on a phone it slides over.
+  const aiPushes = isAiOpen && isDesktop;
   const controls = useMemo<AIPanelControls>(() => ({
     isOpen: isAiOpen,
-    width: aiPushes ? aiPanelWidth : 0,
+    width: aiPushes && aiSide === "right" ? aiPanelWidth : 0,
     open: openAi,
     close: closeAi,
     toggle: toggleAi,
     focus: focusAi,
     ask: askAi,
     bindWorkspace: setWorkspaceBinding,
-    dock: setDockEl,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [isAiOpen, aiPushes, aiPanelWidth, openAi, closeAi, focusAi, askAi]);
+  }), [isAiOpen, aiPushes, aiSide, aiPanelWidth, openAi, closeAi, focusAi, askAi]);
 
   return (
     <AIThreadProvider>
@@ -336,8 +355,9 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
           className="print-main group/shell flex-1 min-h-0 flex flex-col min-w-0 overflow-hidden"
           data-sidebar={isOpen ? "open" : "collapsed"}
           style={{
-            marginRight: aiPushes ? aiPanelWidth : 0,
-            transition: "margin-right 200ms ease-in-out",
+            marginRight: aiPushes && aiSide === "right" ? aiPanelWidth : 0,
+            marginBottom: aiPushes && aiSide === "bottom" ? aiPanelHeight : 0,
+            transition: "margin-right 200ms ease-in-out, margin-bottom 200ms ease-in-out",
           }}
         >
           {/* Mobile-only top bar */}
@@ -356,22 +376,25 @@ export function BrainLayoutClient({ children }: { children: React.ReactNode }) {
           {children}
         </main>
 
-        {/* THE AI panel — fixed right, width matches content margin */}
+        {/* THE AI panel — fixed right or bottom; the page's margin makes room for it */}
         <SidePanel
           open={isAiOpen}
           onToggle={toggleAi}
+          side={aiSide}
+          onSideChange={handleAiSideChange}
           width={aiPanelWidth}
           onWidthChange={handleAiWidthChange}
+          height={aiPanelHeight}
+          onHeightChange={handleAiHeightChange}
+          left={isOpen && isDesktop ? "var(--sidebar-width)" : 0}
           workspace={workspaceBinding && pathname.startsWith("/brain/workspace/")
             ? { ...workspaceBinding, focusNonce } : undefined}
           focusNonce={focusNonce}
           prefill={prefill}
-          docked={inSession}
-          dockEl={inSession ? dockEl : null}
         />
 
         {/* The AI button, bottom-right, while the panel is closed. A session
-            has its own Ask tab instead. */}
+            has its own Ask AI button in its header instead. */}
         {!isAiOpen && !inSession && <SidePanelToggleButton onClick={toggleAi} />}
 
         <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />

@@ -1,147 +1,205 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot } from "lucide-react";
+import { Bot, PanelBottom, PanelRight, Plus, X } from "lucide-react";
 import { Chat, type WorkspaceBinding } from "./Chat";
-import { useAIThread } from "@/context/AIThreadContext";
+import {
+  NEW_TAB_TITLE, addTab, closePanelTab, freshTabs, patchTab, readPanelTabs, showTab,
+  type DockSide, type PanelTabs,
+} from "./panelTabs";
+
+const TABS_KEY = "ai-panel-tabs";
 
 interface SidePanelProps {
   open: boolean;
   onToggle: () => void;
+  /** Down the right edge (full height), or along the bottom under the page (full width). */
+  side?: DockSide;
+  onSideChange?: (side: DockSide) => void;
   width?: number;
   onWidthChange?: (w: number) => void;
+  height?: number;
+  onHeightChange?: (h: number) => void;
+  /** At the bottom: where the panel starts, so it sits under the page, not the sidebar. */
+  left?: string | number;
   /** Set on a workspace note: the panel works on that note. */
   workspace?: WorkspaceBinding;
   /** Bumped by ⌘K: focus the input. */
   focusNonce?: number;
   /** Text to put in the input (a new nonce each time). */
   prefill?: { text: string; nonce: number } | null;
-  /** In a workspace session the panel never takes the window's edge: it sits
-   *  over `dockEl` (the session's Ask tab) and is hidden while there is none. */
-  docked?: boolean;
-  dockEl?: HTMLElement | null;
 }
 
-/** The dock's box on screen, kept current as it resizes or the window does. */
-function useDockRect(el: HTMLElement | null | undefined) {
-  const [rect, setRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+/** Conversation tabs, as this device left them. */
+function usePanelTabs() {
+  const [state, setState] = useState<PanelTabs>(freshTabs);
+  const loaded = useRef(false);
   useEffect(() => {
-    if (!el) { setRect(null); return; }
-    const measure = () => {
-      const r = el.getBoundingClientRect();
-      setRect((prev) => (prev && prev.left === r.left && prev.top === r.top
-        && prev.width === r.width && prev.height === r.height)
-        ? prev : { left: r.left, top: r.top, width: r.width, height: r.height });
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    // The dock can move without resizing (the sidebar sliding in), so also follow
-    // the page's own size and catch the end of any transition.
-    ro.observe(document.body);
-    window.addEventListener("resize", measure);
-    document.addEventListener("transitionend", measure, true);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", measure);
-      document.removeEventListener("transitionend", measure, true);
-    };
-  }, [el]);
-  return rect;
+    try {
+      const saved = readPanelTabs(window.localStorage.getItem(TABS_KEY));
+      if (saved) setState(saved);
+    } catch { /* private mode */ }
+    loaded.current = true;
+  }, []);
+  useEffect(() => {
+    if (!loaded.current) return;
+    try { window.localStorage.setItem(TABS_KEY, JSON.stringify(state)); } catch { /* private mode */ }
+  }, [state]);
+  return [state, setState] as const;
 }
 
-export function SidePanel({ open, onToggle, width = 360, onWidthChange, workspace, focusNonce, prefill, docked, dockEl }: SidePanelProps) {
-  const dockRect = useDockRect(docked ? dockEl : null);
-  const shown = open && (!docked || dockRect !== null);
-  const { activeThreadId, setActiveThreadId } = useAIThread();
-  const startX = useRef(0);
-  const startWidth = useRef(width);
+export function SidePanel({
+  open, onToggle, side = "right", onSideChange, width = 360, onWidthChange, height = 320,
+  onHeightChange, left = 0, workspace, focusNonce, prefill,
+}: SidePanelProps) {
+  const [tabs, setTabs] = usePanelTabs();
+  const bottom = side === "bottom";
 
-  function onResizeStart(e: React.MouseEvent) {
+  // A job asked for from the editor and text handed in ("Ask AI" on a selection)
+  // go to the tab shown when they arrive, and only to it: every tab is a live Chat.
+  const requestOwner = useRef<{ nonce: number; tab: string } | null>(null);
+  const request = workspace?.request ?? null;
+  if (request && requestOwner.current?.nonce !== request.nonce) {
+    requestOwner.current = { nonce: request.nonce, tab: tabs.active };
+  }
+  const prefillOwner = useRef<{ nonce: number; tab: string } | null>(null);
+  if (prefill && prefillOwner.current?.nonce !== prefill.nonce) {
+    prefillOwner.current = { nonce: prefill.nonce, tab: tabs.active };
+  }
+
+  function onResizeStart(e: React.PointerEvent) {
     e.preventDefault();
-    startX.current = e.clientX;
-    startWidth.current = width;
-
-    function onMove(e: MouseEvent) {
-      // Dragging LEFT increases panel width (panel is on the right)
-      const delta = startX.current - e.clientX;
-      onWidthChange?.(startWidth.current + delta);
+    const startX = e.clientX, startY = e.clientY;
+    const startW = width, startH = height;
+    function onMove(ev: PointerEvent) {
+      // The panel grows away from its edge: left for the right dock, up for the bottom one.
+      if (bottom) onHeightChange?.(startH + startY - ev.clientY);
+      else onWidthChange?.(startW + startX - ev.clientX);
     }
-
     function onUp() {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     }
-
-    document.body.style.cursor = "col-resize";
+    document.body.style.cursor = bottom ? "row-resize" : "col-resize";
     document.body.style.userSelect = "none";
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   }
+
+  const iconBtn = "flex size-7 shrink-0 items-center justify-center rounded-md text-ink-icon hover:bg-surface-hover hover:text-ink transition-colors";
 
   return (
     <>
       {/* Mobile backdrop */}
-      {open && !docked && (
-        <div
-          className="md:hidden fixed inset-0 z-40 bg-black/40"
-          onClick={onToggle}
-          aria-hidden
-        />
+      {open && (
+        <div className="md:hidden fixed inset-0 z-40 bg-black/40" onClick={onToggle} aria-hidden />
       )}
 
-      {/* Panel */}
       <div
-        className={docked ? [
-          // Over the session's Ask tab: no slide, no edge, the page's own surface.
-          "fixed z-30 flex flex-col bg-surface",
-          shown ? "visible" : "invisible",
-        ].join(" ") : [
-          "fixed inset-y-0 right-0 z-40 flex flex-col",
-          // Distinct background: light lavender in light mode, deep blue-black in dark
-          "bg-surface-chip dark:bg-surface-chip",
-          "transition-[transform,visibility] duration-200 ease-in-out",
+        className={[
+          "fixed z-40 flex flex-col bg-surface-chip",
+          bottom ? "bottom-0 right-0 border-t border-line" : "inset-y-0 right-0",
+          "transition-[transform,visibility,left] duration-200 ease-in-out",
           // Invisible once slid away: still mounted, but out of reach of Tab
           // and of screen readers.
-          open ? "translate-x-0 visible" : "translate-x-full invisible",
+          open ? "translate-x-0 translate-y-0 visible"
+            : bottom ? "translate-y-full invisible" : "translate-x-full invisible",
         ].join(" ")}
-        style={docked
-          ? (dockRect ? { left: dockRect.left, top: dockRect.top, width: dockRect.width, height: dockRect.height }
-                      : { left: 0, top: 0, width: 0, height: 0 })
-          : { width }}
+        style={bottom ? { left, height } : { width }}
         aria-label="AI assistant panel"
         role="complementary"
       >
-        {/* Resize handle — desktop only, on the left edge */}
-        {!docked && <div
-          onMouseDown={onResizeStart}
-          className="absolute left-0 inset-y-0 w-3 cursor-col-resize hidden md:flex items-center justify-center z-10 group"
+        {/* Resize handle on the edge facing the page — desktop only */}
+        <div
+          role="separator"
+          aria-orientation={bottom ? "horizontal" : "vertical"}
+          aria-label="Resize the AI panel"
+          onPointerDown={onResizeStart}
+          className={[
+            "absolute z-10 hidden md:flex items-center justify-center group",
+            bottom ? "inset-x-0 -top-1.5 h-3 cursor-row-resize" : "inset-y-0 left-0 w-3 cursor-col-resize",
+          ].join(" ")}
         >
-          {/* The actual visible line */}
-          <div className="w-px h-full bg-accent-200/60 dark:bg-accent-900/40 group-hover:bg-accent-400 dark:group-hover:bg-accent-500 transition-colors duration-150" />
-          {/* Drag grip dots — appear on hover */}
-          <div className="absolute flex flex-col gap-[3px] opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="w-[3px] h-[3px] rounded-full bg-accent-400 dark:bg-accent-500" />
-            ))}
+          <div className={`${bottom ? "h-px w-full" : "w-px h-full"} bg-accent-200/60 dark:bg-accent-900/40 group-hover:bg-accent-400 dark:group-hover:bg-accent-500 transition-colors duration-150`} />
+        </div>
+
+        {/* Conversation tabs */}
+        <div className="flex h-9 shrink-0 items-center gap-0.5 border-b border-line pl-2 pr-1">
+          <div role="tablist" aria-label="Conversations" className="ws-scroll-x flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
+            {tabs.tabs.map((t) => {
+              const shown = t.id === tabs.active;
+              return (
+                <div
+                  key={t.id}
+                  role="tab"
+                  aria-selected={shown}
+                  tabIndex={0}
+                  title={t.title}
+                  onClick={() => setTabs((s) => showTab(s, t.id))}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setTabs((s) => showTab(s, t.id)); }}
+                  onAuxClick={(e) => { if (e.button === 1) setTabs((s) => closePanelTab(s, t.id)); }}
+                  className={[
+                    "group/tab flex h-7 min-w-[72px] max-w-[180px] shrink cursor-pointer items-center gap-1 rounded-md pl-2 pr-0.5 text-xs",
+                    shown ? "bg-surface text-ink shadow-sm" : "text-ink-secondary hover:bg-surface-hover hover:text-ink",
+                  ].join(" ")}
+                >
+                  <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                  <button
+                    type="button"
+                    aria-label={`Close ${t.title}`}
+                    onClick={(e) => { e.stopPropagation(); setTabs((s) => closePanelTab(s, t.id)); }}
+                    className={`flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-active hover:text-ink ${shown ? "" : "opacity-0 group-hover/tab:opacity-100"}`}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
-        </div>}
+          <button type="button" onClick={() => setTabs(addTab)} aria-label="New chat tab" title="New chat tab" className={iconBtn}>
+            <Plus size={15} />
+          </button>
+          {onSideChange && (
+            <button
+              type="button"
+              onClick={() => onSideChange(bottom ? "right" : "bottom")}
+              aria-label={bottom ? "Dock on the right" : "Dock at the bottom"}
+              title={bottom ? "Dock on the right" : "Dock at the bottom"}
+              className={`${iconBtn} hidden md:flex`}
+            >
+              {bottom ? <PanelRight size={15} /> : <PanelBottom size={15} />}
+            </button>
+          )}
+          <button type="button" onClick={onToggle} aria-label="Close AI panel" title="Close (Ctrl+J)" className={iconBtn}>
+            <X size={15} />
+          </button>
+        </div>
 
-        {/* Indigo gradient accent at the top */}
-        {!docked && <div className="h-px w-full bg-line shrink-0" />}
-
-        {/* Chat — stays mounted while closed, so a running job, its cards and
-            the conversation survive closing and reopening the panel. */}
-        <Chat
-          threadId={activeThreadId}
-          onThreadIdChange={setActiveThreadId}
-          onClose={onToggle}
-          workspace={workspace}
-          focusNonce={focusNonce}
-          prefill={prefill}
-        />
+        {/* Every tab's Chat stays mounted while closed or hidden, so a running job,
+            its cards and the conversation survive switching tabs and closing the panel. */}
+        <div className="relative min-h-0 flex-1">
+          {tabs.tabs.map((t) => {
+            const shown = t.id === tabs.active;
+            return (
+              <div key={t.id} className={shown ? "absolute inset-0 flex flex-col" : "hidden"}>
+                <Chat
+                  threadId={t.threadId}
+                  onThreadIdChange={(id) => setTabs((s) => patchTab(s, t.id, { threadId: id }))}
+                  onTitle={(title) => setTabs((s) => patchTab(s, t.id, { title: title.trim() || NEW_TAB_TITLE }))}
+                  active={open && shown}
+                  workspace={workspace && {
+                    ...workspace,
+                    request: requestOwner.current?.tab === t.id ? request : null,
+                  }}
+                  focusNonce={shown ? focusNonce : undefined}
+                  prefill={prefillOwner.current?.tab === t.id ? prefill : null}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
     </>
   );

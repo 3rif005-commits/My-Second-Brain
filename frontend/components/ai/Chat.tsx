@@ -66,6 +66,10 @@ interface ChatProps {
   focusNonce?: number;
   /** Text to put in the input (a new nonce each time). */
   prefill?: { text: string; nonce: number } | null;
+  /** The conversation's first question, for the panel's tab ("" while there is none). */
+  onTitle?: (title: string) => void;
+  /** False while another tab of the panel is shown: it keeps running but stops polling. */
+  active?: boolean;
 }
 
 
@@ -80,7 +84,7 @@ const MODEL_OPTIONS: { value: Mode; label: string; desc: string; icon: React.Rea
   { value: "long",   label: "Long",   desc: "Very large context",                     icon: <BookOpen size={14} /> },
 ];
 
-export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, workspace, focusNonce, prefill }: ChatProps = {}) {
+export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, workspace, focusNonce, prefill, onTitle, active = true }: ChatProps = {}) {
   const { enterForNewLine } = usePreferences().preferences;
   const [items, setItems] = useState<StreamItem[]>([]);
   const [input, setInput] = useState("");
@@ -233,6 +237,12 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [items]);
+
+  const firstQuestion = items.find((it) => it.kind === "user")?.content ?? "";
+  useEffect(() => {
+    onTitle?.(firstQuestion);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstQuestion]);
 
   // Load thread on switch
   useEffect(() => {
@@ -812,7 +822,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0 bg-white/50 dark:bg-white/[0.02]" role="log" aria-live="polite">
-        {pageNoteId && (
+        {pageNoteId && active && (
           <BackgroundJobs
             noteId={pageNoteId}
             noteTitle={workspace?.title}
