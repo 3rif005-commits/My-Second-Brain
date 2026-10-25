@@ -163,8 +163,9 @@ export function SidePanel({
           "transition-[opacity,visibility] duration-150",
           open ? "visible opacity-100" : "invisible opacity-0",
         ].join(" ") : [
-          "fixed z-40 flex flex-col bg-surface-chip",
-          bottom ? "bottom-0 right-0 border-t border-line" : "inset-y-0 right-0",
+          // The workspace's own surface and hairline: a third pane, not a different app.
+          "fixed z-40 flex flex-col bg-surface",
+          bottom ? "bottom-0 right-0 border-t border-line" : "inset-y-0 right-0 border-l border-line",
           "transition-[transform,visibility,left] duration-200 ease-in-out",
           // Invisible once slid away: still mounted, but out of reach of Tab
           // and of screen readers.
@@ -194,10 +195,11 @@ export function SidePanel({
           onPointerDown={onResizeStart}
           className={[
             "absolute z-10 hidden md:flex items-center justify-center group",
-            bottom ? "inset-x-0 -top-1.5 h-3 cursor-row-resize" : "inset-y-0 left-0 w-3 cursor-col-resize",
+            bottom ? "inset-x-0 -top-1.5 h-3 cursor-row-resize" : "inset-y-0 -left-1.5 w-3 cursor-col-resize",
           ].join(" ")}
         >
-          <div className={`${bottom ? "h-px w-full" : "w-px h-full"} bg-accent-200/60 dark:bg-accent-900/40 group-hover:bg-accent-400 dark:group-hover:bg-accent-500 transition-colors duration-150`} />
+          {/* The border is the hairline; the handle only shows while pointed at, like the split's */}
+          <div className={`${bottom ? "h-0.5 w-full" : "w-0.5 h-full"} bg-transparent group-hover:bg-accent-500/50 transition-colors duration-150`} />
         </div>}
 
         {/* Conversation tabs — drawn like a session pane's tabs: no fill, the shown one underlined */}
@@ -226,8 +228,10 @@ export function SidePanel({
                   // Tabs not shown give way first, down to their icon and a few letters.
                   className={[
                     "group/tab relative flex h-8 cursor-pointer items-center gap-1.5 rounded-t-md pl-2.5 text-[13px] transition-colors duration-instant",
-                    shown ? "max-w-[180px] shrink-0 pr-1 text-ink shadow-[inset_0_-2px_0_var(--c-accent)]"
-                      : "min-w-[64px] max-w-[150px] shrink pr-2.5 text-ink-secondary hover:bg-surface-hover hover:text-ink",
+                    // Both give way in a narrow panel (the one not shown four times faster),
+                    // so the row never runs out and cuts a tab in half.
+                    shown ? "min-w-[96px] max-w-[200px] shrink pr-1 text-ink shadow-[inset_0_-2px_0_var(--c-accent)]"
+                      : "min-w-[64px] max-w-[150px] shrink-[4] pr-2.5 text-ink-secondary hover:bg-surface-hover hover:text-ink",
                   ].join(" ")}
                 >
                   <Sparkles size={13} className={`shrink-0 ${shown ? "text-accent" : "text-ink-icon"}`} aria-hidden />

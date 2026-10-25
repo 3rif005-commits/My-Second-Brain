@@ -55,12 +55,13 @@ interface Props {
 
 export function MessageList({ items, onApprove, renderJob, renderAnswerActions, renderPrivacy, onRerun, busy, onCitation, colorIndex }: Props) {
   return (
-    <div className="px-4 py-5 flex flex-col gap-4">
+    <div className="px-4 py-5 flex flex-col gap-5">
       {items.map((item, i) => {
         if (item.kind === "user") {
           return (
             <div key={item.id} className="flex justify-end">
-              <div className="max-w-[84%] bg-accent-600 text-white rounded-2xl rounded-br-sm px-3.5 py-2.5 text-sm leading-relaxed shadow-sm">
+              {/* Your words: a quiet grey bubble, like a comment in the page, not a chat app's blue */}
+              <div className="max-w-[85%] rounded-xl bg-surface-hover px-3 py-2 text-[14px] leading-relaxed text-ink">
                 <p className="whitespace-pre-wrap">{item.content}</p>
               </div>
             </div>
@@ -81,7 +82,7 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
 
         if (item.kind === "notice") {
           return (
-            <p key={item.id} className="text-[12.5px] leading-relaxed text-gray-500 dark:text-gray-400 px-1">
+            <p key={item.id} className="text-[12.5px] leading-relaxed text-ink-tertiary px-1">
               {item.content}
             </p>
           );
@@ -118,14 +119,13 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
         // assistant
         return (
           <div key={item.id} className="flex gap-2.5 items-start">
-            {/* Avatar */}
-            <div className="mt-0.5 w-6 h-6 rounded-full bg-surface-chip text-ink flex items-center justify-center shrink-0">
-              <Sparkles size={12} className="text-ink-icon-strong" />
+            <div className="mt-[3px] flex size-5 shrink-0 items-center justify-center rounded-md bg-accent-500/10">
+              <Sparkles size={11} className="text-accent" />
             </div>
 
-            {/* Message card */}
-            <div className="flex-1 min-w-0 bg-white dark:bg-gray-800/60 rounded-2xl rounded-tl-sm px-3.5 py-2.5 shadow-sm border border-gray-100 dark:border-gray-700/50">
-              <div className="text-sm text-gray-800 dark:text-gray-100 leading-relaxed prose-sm prose dark:prose-invert max-w-none">
+            {/* The answer reads as text on the page, as a note does: no card around it */}
+            <div className="flex-1 min-w-0">
+              <div className="text-[14px] text-ink leading-relaxed prose-sm prose dark:prose-invert max-w-none prose-p:my-1.5">
                 {onCitation && item.citations?.length
                   ? <Answer content={item.content} citations={item.citations}
                       colorIndex={colorIndex ?? new Map()} onCitation={onCitation} />

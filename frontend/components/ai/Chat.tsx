@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import { usePreferences } from "@/app/providers";
 import {
   Send, History, SquarePen, X, Smartphone, Cloud, Check, Sparkles, Route, Lock, Zap, Brain, Eye, BookOpen,
-  Paperclip, FileText, FilePlus2, Link2, Upload, Settings2, ChevronDown, Clock,
+  Paperclip, FileText, FilePlus2, Link2, Upload, Settings2, ChevronDown, Clock, Lightbulb, ListChecks, Search,
 } from "lucide-react";
 import { MessageList, type StreamItem } from "./MessageList";
 import { ThreadHistory } from "./ThreadHistory";
@@ -84,6 +84,66 @@ interface ChatProps {
 
 /** Side padding that leaves a 768 px column in the middle of a wide panel (never under 12 px). */
 const COLUMN = "px-[max(0.75rem,calc((100%_-_48rem)/2))]";
+
+/** Starting points: a click puts the words in the input to send or edit; nothing runs by itself. */
+const SUGGESTIONS = {
+  workspace: [
+    { icon: <ListChecks size={14} />, text: "Summarise the sources in this session" },
+    { icon: <Lightbulb size={14} />, text: "Explain the hardest idea here simply" },
+    { icon: <Brain size={14} />, text: "Quiz me on the key points" },
+  ],
+  brain: [
+    { icon: <Search size={14} />, text: "What have I written about " },
+    { icon: <ListChecks size={14} />, text: "Summarise what I studied this week" },
+    { icon: <Lightbulb size={14} />, text: "Connect two ideas from my notes" },
+  ],
+};
+
+/** A new conversation: what the AI works on, and three ways to start. Narrow: a calm
+ *  stack low in the panel, near the input. Wide (docked at the bottom): one row. */
+function EmptyState({ inWorkspace, wide, onPick }: { inWorkspace: boolean; wide: boolean; onPick: (text: string) => void }) {
+  const items = inWorkspace ? SUGGESTIONS.workspace : SUGGESTIONS.brain;
+  const lead = inWorkspace ? "Ask about this session" : "Ask your second brain";
+  const sub = inWorkspace
+    ? "Answers come from this note's sources and cite the exact page."
+    : "Answers are grounded in your notes.";
+  const chip = (s: { icon: React.ReactNode; text: string }) => (
+    <button
+      key={s.text}
+      type="button"
+      onClick={() => onPick(s.text)}
+      className={`group/sugg flex items-center gap-2.5 rounded-lg text-left text-[13px] text-ink-secondary transition-colors duration-fast hover:bg-surface-hover hover:text-ink ${
+        wide ? "h-8 shrink-0 border border-line px-3" : "h-9 w-full px-2.5"}`}
+    >
+      <span className="shrink-0 text-ink-icon group-hover/sugg:text-accent">{s.icon}</span>
+      <span className="truncate">{s.text.trim()}{s.text.endsWith(" ") ? "…" : ""}</span>
+    </button>
+  );
+  if (wide) {
+    return (
+      <div className="flex h-full flex-col justify-center gap-3 py-4">
+        <div className="flex items-baseline gap-2">
+          <Sparkles size={15} className="shrink-0 self-center text-accent" aria-hidden />
+          <span className="text-[14px] font-semibold text-ink">{lead}</span>
+          <span className="truncate text-[13px] text-ink-tertiary">{sub}</span>
+        </div>
+        <div className="ws-scroll-x flex gap-2 overflow-x-auto">{items.map(chip)}</div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex h-full flex-col justify-end px-4 pb-3 pt-8">
+      <div className="mb-4 px-2.5">
+        <div className="mb-3 flex size-9 items-center justify-center rounded-xl bg-accent-500/10">
+          <Sparkles size={18} className="text-accent" aria-hidden />
+        </div>
+        <h2 className="text-[16px] font-semibold text-ink">{lead}</h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-ink-secondary">{sub}</p>
+      </div>
+      <div className="flex flex-col gap-0.5">{items.map(chip)}</div>
+    </div>
+  );
+}
 
 const MODEL_OPTIONS: { value: Mode; label: string; desc: string; icon: React.ReactNode }[] = [
   { value: "auto",   label: "Auto",   desc: "Your rules decide · private stays home", icon: <Route size={14} /> },
@@ -790,7 +850,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
         ].join(" ")}
         aria-hidden={!historyOpen}
       >
-        <div className="flex min-h-0 flex-1 flex-col bg-surface-chip">
+        <div className="flex min-h-0 flex-1 flex-col">
         <ThreadHistory
           activeThreadId={threadId}
           onSelect={(id) => { resetThread(id); setHistoryOpen(false); }}
@@ -836,7 +896,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
       </div>}
 
       {/* Messages — wide: padded in to a readable column, centred */}
-      <div ref={scrollRef} className={`flex-1 overflow-y-auto min-h-0 bg-white/50 dark:bg-white/[0.02] ${wide ? COLUMN : ""}`} role="log" aria-live="polite">
+      <div ref={scrollRef} className={`flex-1 overflow-y-auto min-h-0 ${wide ? COLUMN : ""}`} role="log" aria-live="polite">
         {pageNoteId && active && (
           <BackgroundJobs
             noteId={pageNoteId}
@@ -855,30 +915,12 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             }}
           />
         )}
-        {items.length === 0 && wide ? (
-          <div className="flex h-full items-center justify-center gap-3 px-6 py-4">
-            <Sparkles size={18} className="shrink-0 text-ink-icon-strong" aria-hidden />
-            <p className="text-sm text-gray-400 dark:text-gray-500">
-              <span className="font-semibold text-gray-900 dark:text-gray-100">What do you want to know?</span>{" "}
-              {workspace
-                ? "Ask about this note's sources — answers cite the exact page — or anything in your brain."
-                : "Ask anything — answers are grounded in your notes."}
-            </p>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
-            <div className="w-14 h-14 rounded-card bg-surface-chip text-ink flex items-center justify-center mb-4">
-              <Sparkles size={28} className="text-ink-icon-strong" aria-hidden />
-            </div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-1.5">
-              What do you want to know?
-            </h2>
-            <p className="text-sm text-gray-400 dark:text-gray-500 max-w-[260px] leading-relaxed">
-              {workspace
-                ? "Ask about this note's sources — answers cite the exact page — or anything in your brain."
-                : "Ask anything — answers are grounded in your notes."}
-            </p>
-          </div>
+        {items.length === 0 ? (
+          <EmptyState
+            inWorkspace={!!workspace}
+            wide={wide}
+            onPick={(text) => { setInput(text); requestAnimationFrame(() => inputRef.current?.focus()); }}
+          />
         ) : (
           <MessageList
             items={items}
@@ -952,21 +994,19 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
       </div>
 
       {/* Input */}
-      <div className={`pb-3 pt-2.5 shrink-0 border-t border-gray-200/60 dark:border-gray-800 relative ${wide ? COLUMN : "px-3"}`}>
+      <div className={`pb-3 pt-1 shrink-0 relative ${wide ? COLUMN : "px-3"}`}>
         {suggestions.length > 0 && (
           <div role="listbox" aria-label="Skills"
-            className="absolute bottom-full left-3 right-3 mb-1 z-20 bg-white dark:bg-gray-800 rounded-xl shadow-xl
-              border border-gray-200 dark:border-gray-700 overflow-hidden">
+            className="absolute bottom-full left-3 right-3 mb-1 z-20 rounded-menu bg-menu-bg shadow-menu overflow-hidden p-1">
             <p className="px-3 pt-2 pb-1 text-[10.5px] text-gray-400">
               {jobsRunOn ? `Runs on ${jobsRunOn}` : "Attach a file or a link first (📎) — skills run on sources"}
             </p>
             {suggestions.map((j, i) => (
               <button key={j.skill} type="button" role="option" aria-selected={i === menuIndex}
                 onMouseDown={(e) => { e.preventDefault(); completeJob(j.skill); }}
-                className={`w-full text-left px-3 py-2 ${i === menuIndex
-                  ? "bg-accent-50 dark:bg-accent-950/40" : "hover:bg-gray-50 dark:hover:bg-white/5"}`}>
-                <span className="text-[13px] font-medium text-gray-800 dark:text-gray-100">/{j.skill}</span>
-                <span className="block text-[11.5px] text-gray-500 dark:text-gray-400 line-clamp-1">{j.runnable ?? j.description}</span>
+                className={`w-full rounded-md text-left px-2.5 py-1.5 ${i === menuIndex ? "bg-menu-hover" : "hover:bg-menu-hover"}`}>
+                <span className="text-[13px] font-medium text-ink">/{j.skill}</span>
+                <span className="block text-[11.5px] text-ink-tertiary line-clamp-1">{j.runnable ?? j.description}</span>
               </button>
             ))}
             {mode === "local" && (
@@ -1039,9 +1079,11 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
         />
         <form
           onSubmit={send}
-          className="flex items-end gap-2 bg-white dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700/60 rounded-xl px-3 py-2.5 shadow-md shadow-gray-100 dark:shadow-black/20"
+          className="flex items-end gap-1.5 rounded-xl border border-line-strong bg-surface-elevated px-2.5 py-2 shadow-card
+            transition-[border-color,box-shadow] duration-fast
+            focus-within:border-accent-500/50 focus-within:ring-[3px] focus-within:ring-accent-500/15"
         >
-          <div className="relative shrink-0 -ml-1">
+          <div className="relative shrink-0">
             <button
               type="button"
               onClick={() => setAttachMenuOpen((v) => !v)}
@@ -1049,18 +1091,17 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
               aria-label="Attach"
               aria-expanded={attachMenuOpen}
               title="Attach files or a link"
-              className="p-1.5 rounded-lg text-gray-400 hover:text-accent-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+              className="flex size-7 items-center justify-center rounded-md text-ink-icon hover:bg-surface-hover hover:text-ink disabled:opacity-50"
             >
               <Paperclip size={15} />
             </button>
             {attachMenuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setAttachMenuOpen(false)} aria-hidden />
-                <div role="menu" className="absolute bottom-full mb-2 left-0 z-20 w-56 bg-white dark:bg-gray-800 rounded-xl
-                  shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden py-1">
+                <div role="menu" className="absolute bottom-full mb-2 left-0 z-20 w-56 rounded-menu bg-menu-bg shadow-menu overflow-hidden p-1">
                   <button type="button" role="menuitem"
                     onClick={() => { setAttachMenuOpen(false); fileInputRef.current?.click(); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5">
+                    className="w-full flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left hover:bg-menu-hover">
                     <Upload size={14} className="text-accent-500" />
                     <span>
                       <span className="block text-[13px] text-gray-800 dark:text-gray-100">Upload files</span>
@@ -1069,7 +1110,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                   </button>
                   <button type="button" role="menuitem"
                     onClick={() => { setAttachMenuOpen(false); setLinkDraft(""); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5">
+                    className="w-full flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left hover:bg-menu-hover">
                     <Link2 size={14} className="text-emerald-500" />
                     <span>
                       <span className="block text-[13px] text-gray-800 dark:text-gray-100">Add a link</span>
@@ -1099,8 +1140,8 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             disabled={loading}
             aria-label="Message the AI"
             /* the placeholder stays one line in a narrow panel instead of wrapping */
-            className="flex-1 min-w-0 resize-none text-sm bg-transparent border-none outline-none disabled:opacity-50 placeholder-gray-400 placeholder:truncate"
-            style={{ minHeight: "1.5rem" }}
+            className="flex-1 min-w-0 resize-none self-center bg-transparent py-1 text-[14px] leading-5 text-ink border-none outline-none disabled:opacity-50 placeholder:text-ink-placeholder placeholder:truncate"
+            style={{ minHeight: "1.75rem" }}
           />
 
           {/* Model selector */}
@@ -1110,10 +1151,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
               onClick={() => setModeMenuOpen((v) => !v)}
               aria-label={`Where answers run: ${slotLabel(mode === "auto" ? "Auto" : mode)}`}
               aria-haspopup="menu" aria-expanded={modeMenuOpen}
-              className={`inline-flex items-center gap-1 h-7 px-2 rounded-lg text-[11.5px] font-medium transition-colors ${
+              className={`inline-flex items-center gap-1 h-7 px-2 rounded-md text-[12px] transition-colors ${
                 modeMenuOpen
-                  ? "bg-accent-50 dark:bg-accent-950/40 text-accent-500"
-                  : "text-gray-500 hover:text-accent-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  ? "bg-surface-active text-ink"
+                  : "text-ink-secondary hover:bg-surface-hover hover:text-ink"
               }`}
             >
               {mode === "local" ? <Lock size={12} /> : mode === "auto" ? <Route size={12} /> : <Cloud size={12} />}
@@ -1121,8 +1162,8 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             </button>
 
             {modeMenuOpen && (
-              <div className="absolute bottom-full mb-2 right-0 w-60 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden z-20">
-                <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              <div className="absolute bottom-full mb-2 right-0 w-60 rounded-menu bg-menu-bg shadow-menu overflow-hidden z-20 p-1">
+                <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-medium text-ink-tertiary">
                   Where answers run
                 </p>
                 {MODEL_OPTIONS.map((opt) => (
@@ -1130,28 +1171,24 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                     key={opt.value}
                     type="button"
                     onClick={() => { setMode(opt.value); setModeMenuOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${
-                      mode === opt.value
-                        ? "bg-accent-50 dark:bg-accent-950/40"
-                        : "hover:bg-gray-50 dark:hover:bg-gray-750"
-                    }`}
+                    className="w-full flex items-center gap-3 rounded-md px-2.5 py-1.5 text-left transition-colors hover:bg-menu-hover"
                   >
-                    <span className={mode === opt.value ? "text-accent-500" : "text-gray-400"}>
+                    <span className={mode === opt.value ? "text-accent" : "text-ink-icon"}>
                       {opt.icon}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-medium ${mode === opt.value ? "text-accent-600 dark:text-accent-400" : "text-gray-700 dark:text-gray-200"}`}>
+                      <div className="text-[13px] text-ink">
                         {opt.label}
                       </div>
-                      <div className="text-xs text-gray-400 dark:text-gray-500">{opt.desc}</div>
+                      <div className="text-[11.5px] text-ink-tertiary">{opt.desc}</div>
                     </div>
-                    {mode === opt.value && <Check size={13} className="shrink-0 text-accent-500" />}
+                    {mode === opt.value && <Check size={14} className="shrink-0 text-ink" />}
                   </button>
                 ))}
                 <button type="button"
                   onClick={() => { setModeMenuOpen(false); router.push("/brain/settings/routing"); }}
-                  className="w-full flex items-center gap-1.5 px-3 h-8 text-left text-[12px] text-gray-500
-                    hover:text-accent-600 hover:bg-gray-50 dark:hover:bg-white/5 border-t border-gray-100 dark:border-gray-700">
+                  className="mt-1 w-full flex items-center gap-1.5 rounded-md px-2.5 h-7 text-left text-[12px] text-ink-secondary
+                    hover:bg-menu-hover hover:text-ink">
                   <Settings2 size={12} /> Routing settings
                 </button>
               </div>
@@ -1193,10 +1230,11 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             type="submit"
             disabled={loading || (!input.trim() && !attachments.length)}
             aria-label="Send"
-            className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
+            title="Send (Enter)"
+            className={`shrink-0 size-7 rounded-lg flex items-center justify-center transition-colors duration-fast ${
               (input.trim() || attachments.length) && !loading
-                ? "bg-accent-600 text-white hover:bg-accent-500 shadow-sm"
-                : "bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed"
+                ? "bg-accent text-ink-on-accent hover:bg-accent-hover"
+                : "bg-surface-hover text-ink-disabled cursor-not-allowed"
             }`}
           >
             {loading
@@ -1204,10 +1242,6 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
               : <Send size={14} strokeWidth={2.5} />}
           </button>
         </form>
-        {/* Short on height at the bottom: the input's placeholder says it already */}
-        {!wide && <p className="text-[10px] text-gray-400 mt-1.5 text-center">
-          Enter to send · / for skills · 📎 files or links
-        </p>}
       </div>
     </div>
   );
