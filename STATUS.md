@@ -88,6 +88,11 @@ delete (deleting is permanent).
 
 ## AI panel as its own window + faster source uploads — 2026-10-25 (deployed; checked on the live site)
 
+- **Restyle to the workspace's look** (live-checked right, bottom, float): panel on `bg-surface` with a
+  hairline edge (was the lighter chip grey); your messages in a grey bubble, answers as plain text
+  with a small accent mark (no blue bubble, no card); composer card with the app's border and focus
+  ring; menus on the app's menu surface; new chat = short lead + three starting points that only
+  fill the input. Shown chat tab never shrinks; the floating window now stays wholly on screen.
 - **Sizing pass** (live-checked right + bottom): one header row (history moved into the tab row,
   `+` replaces the chat's own new-thread button; e2e helpers now click "New chat tab"). Docked right
   the tab row is 44 px, level with the session header. Docked bottom: 768 px centred column,
