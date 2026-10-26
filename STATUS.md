@@ -86,6 +86,12 @@ delete (deleting is permanent).
 
 ---
 
+## New note from a session — 2026-10-26
+
+- The + on a pane (and Ctrl+K) has a **New note** button beside its search box and a "New note" row
+  (named what you typed; Alt+Enter opens it beside). It POSTs `/api/notes` and opens the empty note as
+  a tab, written in like any other brought-in note. Not live-checked yet.
+
 ## Floating note in a session — 2026-10-26 (deployed; checked on the live site)
 
 - A note or source tab (a YouTube video beside your note) can float. On the shown tab only ⇄ shows;

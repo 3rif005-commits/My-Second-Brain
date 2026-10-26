@@ -2,9 +2,9 @@
 
 // One way to open anything in a session: the + on a pane, or Ctrl+K. Lists what
 // is in the session but closed, then your other notes, then adding a file or a
-// link. Enter opens here; Alt+Enter opens beside.
+// link, or starting a new note (named what you typed). Enter opens here; Alt+Enter opens beside.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Link2, Search, Sparkles, Upload } from "lucide-react";
+import { FilePlus, FileText, Link2, Search, Sparkles, Upload } from "lucide-react";
 import { PromptDialog } from "@/components/ui/PromptDialog";
 import { ACCEPTED_WORKSPACE_FILES, sourceColor, wsApi, type LibrarySource } from "@/lib/workspace";
 
@@ -50,6 +50,7 @@ export function OpenPicker({ session, sessionNoteIds, sessionSourceIds, onOpen, 
   const [sel, setSel] = useState(0);
   const [library, setLibrary] = useState<LibrarySource[]>([]);
   const [askUrl, setAskUrl] = useState(false);
+  const [creating, setCreating] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -66,6 +67,23 @@ export function OpenPicker({ session, sessionNoteIds, sessionSourceIds, onOpen, 
     }, query ? 200 : 0);
     return () => { live = false; clearTimeout(timer); };
   }, [query]);
+
+  /** An empty note, opened as a tab: here, or beside with Alt+Enter. */
+  async function createNote(title: string, beside: boolean) {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const res = await fetch("/api/notes", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(title ? { title } : {}),
+      });
+      if (!res.ok) throw new Error();
+      const n = await res.json();
+      onOpenNote(n.id, n.title || "Untitled", beside);
+    } catch {
+      setCreating(false);
+    }
+  }
 
   const rows = useMemo<Row[]>(() => {
     const q = query.trim().toLowerCase();
@@ -101,12 +119,16 @@ export function OpenPicker({ session, sessionNoteIds, sessionSourceIds, onOpen, 
         run: (beside) => onOpen(`s:${s.id}`, beside),
       });
     }
+    const name = query.trim();
+    out.push({ id: "new-note", group: "New", label: name ? `New note “${name}”` : "New note",
+      hint: creating ? "creating…" : undefined, icon: <FilePlus size={16} />,
+      run: (beside) => void createNote(name, beside) });
     out.push({ id: "upload", group: "Add to this session", label: "Upload a file", icon: <Upload size={16} />,
       run: () => fileRef.current?.click() });
     out.push({ id: "link", group: "Add to this session", label: "Paste a link", hint: "web page or YouTube",
       icon: <Link2 size={16} />, run: () => setAskUrl(true) });
     return out;
-  }, [query, session, notes, library, sessionNoteIds, sessionSourceIds, onOpen, onOpenNote]);
+  }, [query, session, notes, library, sessionNoteIds, sessionSourceIds, onOpen, onOpenNote, creating]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setSel(0); }, [query]);
   useEffect(() => {
@@ -123,17 +145,28 @@ export function OpenPicker({ session, sessionNoteIds, sessionSourceIds, onOpen, 
   let lastGroup = "";
   return (
     <div className="flex flex-col" onKeyDown={onKeyDown}>
-      <label className="m-1 mb-0 flex h-8 items-center gap-2 rounded-md bg-surface-field px-2 text-ink-secondary">
-        <Search size={14} className="shrink-0" />
-        <span className="sr-only">Open a note or a source</span>
-        <input
-          autoFocus
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Open here… any note or source"
-          className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-placeholder"
-        />
-      </label>
+      <div className="m-1 mb-0 flex items-center gap-1">
+        <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md bg-surface-field px-2 text-ink-secondary">
+          <Search size={14} className="shrink-0" />
+          <span className="sr-only">Open a note or a source</span>
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Open here… any note or source"
+            className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-placeholder"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={(e) => void createNote(query.trim(), e.altKey)}
+          aria-label="New note"
+          title={query.trim() ? `New note “${query.trim()}”` : "New note"}
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-ink-icon hover:bg-surface-hover hover:text-ink"
+        >
+          <FilePlus size={16} />
+        </button>
+      </div>
       <div ref={listRef} role="listbox" aria-label="Open" className="max-h-[min(360px,55vh)] overflow-y-auto p-1">
         {rows.map((r, i) => {
           const header = r.group !== lastGroup ? r.group : null;
