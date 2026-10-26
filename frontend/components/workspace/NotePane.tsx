@@ -46,6 +46,9 @@ export interface NoteApplyApi {
    *  nothing changed — when there is no snapshot or the user has typed since:
    *  restoring then would throw their edits away. */
   undoApply: () => boolean;
+  /** What the editor holds right now (null before it is ready), so a note moved
+   *  to another pane or window opens with it rather than with what it opened with. */
+  document: () => AnyBlock[] | null;
 }
 
 type PendingAnchor = DraftAnchor;
@@ -275,6 +278,7 @@ export function NotePane({
         void handleSave(blocks, getPlainText(blocks));
         return true;
       },
+      document: () => editorRef.current?.getDocument() ?? null,
       hasUserEdits: () => {
         // Without a draft applied in this session we cannot prove where the
         // note's content came from, so treat any content as the user's —

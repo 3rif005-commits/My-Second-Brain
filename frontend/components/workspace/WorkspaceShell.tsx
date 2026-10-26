@@ -7,7 +7,8 @@
 // (redesign 2026-10-25; layout logic in sessionLayout.ts). The note last worked
 // in is the writing target: captures, "Add to note" and AI results go there.
 // The AI is the app's one panel, its own window docked right or bottom across
-// every pane (not a tab in one), with a tab per conversation.
+// every pane (not a tab in one), with a tab per conversation. A note can float
+// as a window over the panes too (FloatingNote).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -25,12 +26,14 @@ import { SourceViewer } from "./SourceViewer";
 import { PaneTabs, TAB_MIME, type TabView } from "./PaneTabs";
 import { OpenPicker, type PickerItem } from "./OpenPicker";
 import { NoteStarters, SessionMenu } from "./SessionChrome";
+import { FloatingNote } from "./FloatingNote";
 import { WritingTargetContext } from "./writingTarget";
 import type { Passage } from "./viewers/passageMarks";
 import { useSynthesis } from "./useSynthesis";
 import {
-  ASK, activate, closeTab, defaultLayout, fitPanes, focusPane, moveTab, moveToOtherSide,
-  noteKey, openTab, paneOf, parseKey, readLayout, reconcile, srcKey, type SessionLayout,
+  ASK, activate, canFloat, closeTab, defaultLayout, dockFloat, fitPanes, floatTab, focusFloat, focusPane,
+  moveTab, moveToOtherSide, noteKey, openTab, paneOf, parseKey, readLayout, reconcile, srcKey,
+  type SessionLayout,
 } from "./sessionLayout";
 import { useAIPanel } from "@/context/AIPanelContext";
 import { DRAFT_EVENT, UNDO_EVENT, type NoteDraft, type UndoOutcome } from "@/lib/noteDraft";
@@ -314,9 +317,10 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
 
   // Fewer panes fit: fold the extra ones in (a narrow window only hides them).
   useEffect(() => {
-    if (mode === "one") return;
+    if (mode === "one" || !layRef.current || layRef.current.panes.length <= maxPanes) return;
+    keepNoteContent();
     setLay((l) => (l && l.panes.length > maxPanes ? fitPanes(l, maxPanes) : l));
-  }, [mode, maxPanes]);
+  }, [mode, maxPanes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Notes and foreign sources brought in: fetch what their tabs need.
   useEffect(() => {
@@ -371,6 +375,18 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const aiOpen = ai.isOpen;
 
   // ── user actions on tabs ──────────────────────────────────────────────────
+  /** A note moved to another pane or the floating window opens a new editor there,
+   *  from the content it is handed: hand it what the editor holds now, not what
+   *  the note held when the session opened. */
+  const keepNoteContent = useCallback(() => {
+    for (const [id, r] of noteRefs.current) {
+      const doc = r.apply.current?.document();
+      if (!doc?.length) continue;
+      if (id === noteId) setNote((n) => (n && n.id === id ? { ...n, content: doc } : n));
+      else setOtherNotes((m) => (m[id] ? { ...m, [id]: { ...m[id], content: doc } } : m));
+    }
+  }, [noteId]);
+
   const activateTab = useCallback((key: string, pane: number) => {
     const l = layRef.current;
     if (!l) return;
@@ -383,12 +399,25 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   }, []);
 
   const moveTabUser = useCallback((key: string) => {
+    keepNoteContent();
     setLay((l) => (l ? moveToOtherSide(l, key, stateMaxRef.current) : l));
-  }, []);
+  }, [keepNoteContent]);
 
   const dropTab = useCallback((key: string, pane: number) => {
+    keepNoteContent();
     setLay((l) => (l ? moveTab(l, key, pane, stateMaxRef.current) : l));
-  }, []);
+  }, [keepNoteContent]);
+
+  const floatTabUser = useCallback((key: string) => {
+    keepNoteContent();
+    setLay((l) => (l ? floatTab(l, key) : l));
+  }, [keepNoteContent]);
+
+  /** Back into the pane you're in. */
+  const dockFloatUser = useCallback(() => {
+    keepNoteContent();
+    setLay((l) => (l ? dockFloat(l, l.focus, stateMaxRef.current) : l));
+  }, [keepNoteContent]);
 
   /** Open a session item (or a note from anywhere) from the picker. */
   const openKey = useCallback((key: string, pane: number, beside: boolean) => {
@@ -396,6 +425,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     const k = parseKey(key);
     if (k.kind === "ask") { openAi(); return; }
     if (k.kind === "source") setLastSourceId(k.id);
+    keepNoteContent();
     setLay((l) => {
       if (!l) return l;
       let next = l;
@@ -403,7 +433,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       if (k.kind === "source" && !sourceById.has(k.id) && !l.foreign.includes(k.id)) next = { ...next, foreign: [...next.foreign, k.id] };
       return openTab(next, key, beside ? "beside" : pane, stateMaxRef.current);
     });
-  }, [noteId, sourceById, openAi]);
+  }, [noteId, sourceById, openAi, keepNoteContent]);
 
   // ── where things go: the writing target ───────────────────────────────────
   /** Run `fn` with a note's editor connections, opening the note first when no
@@ -425,7 +455,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     if (!l) return;
     const key = noteKey(id);
     const p = paneOf(l, key);
-    if (p < 0) return;
+    if (p < 0) return;   // floating (in view) or not open
     const visible = l.panes[p].active === key && (modeRef.current !== "one" || p === l.focus);
     if (visible) return;
     setLay((x) => (x ? activate(x, p, key) : x));
@@ -436,7 +466,8 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     if (!id) return;
     withNote(id, (r) => r.action.current?.(a));
     const l = layRef.current;
-    const shown = l && l.panes.some((p, i) => p.active === noteKey(id) && (modeRef.current !== "one" || i === l.focus));
+    const shown = l && (l.floating === noteKey(id)
+      || l.panes.some((p, i) => p.active === noteKey(id) && (modeRef.current !== "one" || i === l.focus)));
     if (!shown) showToast(`Added to ${short(noteById(id)?.title ?? "the note")}`, "info");
   }, [noteId, withNote, showToast, noteById]);
 
@@ -680,7 +711,10 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     const k = parseKey(key);
     if (k.kind === "ask") return { key, pane, shown, kind: "ask", title: "Ask AI" };
     if (k.kind === "note") {
-      return { key, pane, shown, kind: "note", title: noteById(k.id)?.title || "Untitled", isTarget: k.id === target };
+      return {
+        key, pane, shown, kind: "note", title: noteById(k.id)?.title || "Untitled", isTarget: k.id === target,
+        canFloat: !!lay && canFloat(lay, key),
+      };
     }
     const s = sourceById.get(k.id);
     return {
@@ -689,7 +723,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     };
   };
 
-  const openKeys = new Set(lay?.panes.flatMap((p) => p.tabs) ?? []);
+  const openKeys = new Set([...(lay?.panes.flatMap((p) => p.tabs) ?? []), ...(lay?.floating ? [lay.floating] : [])]);
   const sessionItems: PickerItem[] = lay ? [
     ...[noteId, ...lay.notes].filter((id) => !openKeys.has(noteKey(id)))
       .map((id) => ({ key: noteKey(id), kind: "note" as const, title: noteById(id)?.title || "Untitled",
@@ -823,6 +857,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
             onActivate={activateTab}
             onClose={closeTabUser}
             onMove={moveTabUser}
+            onFloat={floatTabUser}
             onDropTab={(key) => dropTab(key, lay.focus)}
             pickerOpen={pickerPane !== null}
             onPickerOpenChange={(o) => setPickerPane(o ? lay.focus : null)}
@@ -874,6 +909,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
                         onActivate={activateTab}
                         onClose={closeTabUser}
                         onMove={moveTabUser}
+                        onFloat={floatTabUser}
                         onDropTab={(key) => dropTab(key, i)}
                         pickerOpen={pickerPane === i}
                         onPickerOpenChange={(o) => setPickerPane(o ? i : null)}
@@ -890,6 +926,18 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
           </>
         )}
       </div>
+
+      {lay?.floating && (
+        <FloatingNote
+          title={noteById(parseKey(lay.floating).id)?.title || "Untitled"}
+          isTarget={parseKey(lay.floating).id === target}
+          onDock={dockFloatUser}
+          onClose={() => closeTabUser(lay.floating!)}
+          onFocus={() => setLay((x) => (x ? focusFloat(x) : x))}
+        >
+          {renderTab(lay.floating, true)}
+        </FloatingNote>
+      )}
 
       <DropOverlay show={dragOver} />
     </div>

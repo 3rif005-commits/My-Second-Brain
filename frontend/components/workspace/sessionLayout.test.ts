@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  ASK, activate, closeTab, defaultLayout, fitPanes, focusPane, moveTab, moveToOtherSide,
-  noteKey, openTab, readLayout, reconcile, srcKey,
+  ASK, activate, canFloat, closeTab, defaultLayout, dockFloat, fitPanes, floatTab, focusFloat, focusPane,
+  moveTab, moveToOtherSide, noteKey, openTab, readLayout, reconcile, srcKey,
 } from "./sessionLayout";
 
 const base = () => defaultLayout("home", ["a", "b"]);
@@ -113,5 +113,67 @@ describe("fitPanes / reconcile / readLayout", () => {
     expect(readLayout(JSON.stringify(l))).toEqual(l);
     expect(readLayout("{nope")).toBeNull();
     expect(readLayout(JSON.stringify({ panes: 3 }))).toBeNull();
+  });
+});
+
+describe("a floating note", () => {
+  // sources | home, other — "other" brought in beside the session's note
+  const two = () => openTab(base(), noteKey("other"), "here", 3);
+
+  it("leaves its pane, and is the one written in", () => {
+    const l = floatTab(two(), noteKey("other"));
+    expect(l.floating).toBe("n:other");
+    expect(l.panes[1]).toEqual({ tabs: ["n:home"], active: "n:home" });
+    expect(l.target).toBe("other");
+  });
+  it("never leaves the panes empty, and only notes float", () => {
+    const one = defaultLayout("home", []);
+    expect(canFloat(one, noteKey("home"))).toBe(false);
+    expect(floatTab(one, noteKey("home"))).toBe(one);
+    expect(canFloat(base(), srcKey("a"))).toBe(false);
+  });
+  it("a pane holding only it goes away", () => {
+    const l = floatTab(base(), noteKey("home"));
+    expect(l.panes).toEqual([{ tabs: ["s:a", "s:b"], active: "s:a" }]);
+    expect(l.floating).toBe("n:home");
+  });
+  it("swaps places with the note floating before it", () => {
+    let l = floatTab(two(), noteKey("other"));
+    l = floatTab(l, noteKey("home"));
+    expect(l.floating).toBe("n:home");
+    expect(l.panes[1]).toEqual({ tabs: ["n:other"], active: "n:other" });
+    expect(l.target).toBe("home");
+  });
+  it("docks back as the shown tab of a pane", () => {
+    const l = dockFloat(floatTab(two(), noteKey("other")), 0, 3);
+    expect(l.floating).toBeNull();
+    expect(l.panes[0]).toEqual({ tabs: ["s:a", "s:b", "n:other"], active: "n:other" });
+    expect(l.focus).toBe(0);
+  });
+  it("opening it again keeps it floating; an explicit pane docks it", () => {
+    const f = { ...floatTab(two(), noteKey("other")), target: "home" };
+    const here = openTab(f, noteKey("other"), "here", 3);
+    expect(here.floating).toBe("n:other");
+    expect(here.target).toBe("other");
+    expect(here.panes.flatMap((p) => p.tabs)).not.toContain("n:other");
+    expect(openTab(f, noteKey("other"), 1, 3).panes[1].active).toBe("n:other");
+  });
+  it("closing it hands writing to an open note; clicking it takes writing back", () => {
+    const f = floatTab(two(), noteKey("other"));
+    const closed = closeTab(f, noteKey("other"));
+    expect(closed.floating).toBeNull();
+    expect(closed.target).toBe("home");
+    expect(focusFloat({ ...f, target: "home" }).target).toBe("other");
+  });
+  it("is dropped when its note is gone, and docked when nothing else is left", () => {
+    const f = floatTab(two(), noteKey("other"));
+    expect(reconcile(f, (k) => k !== "n:other", "home").floating).toBeNull();
+    const only = reconcile(f, (k) => k === "n:other", "home");
+    expect(only.floating).toBeNull();
+    expect(only.panes).toEqual([{ tabs: ["n:other"], active: "n:other" }]);
+  });
+  it("survives a reload", () => {
+    const f = floatTab(two(), noteKey("other"));
+    expect(readLayout(JSON.stringify(f))).toEqual(f);
   });
 });

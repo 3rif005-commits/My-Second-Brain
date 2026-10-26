@@ -1,12 +1,13 @@
 "use client";
 
 // A pane's row of tabs. Any tab — a source, a note, the AI — can be dragged to
-// another pane's row, or sent across with ⇄; × closes it (it stays in the
+// another pane's row, or sent across with ⇄; a note can float as a window over
+// the panes (FloatingNote); × closes it (it stays in the
 // session, the picker lists it). The note being written in carries a pen. The
 // focused pane's shown tab has the blue underline, the others a grey one, so
 // "here" is always visible. Replaced SourceTabs (sources only) on 2026-10-25.
 import { useState } from "react";
-import { AlertCircle, ArrowLeftRight, FileText, PenLine, Plus, Sparkles, X } from "lucide-react";
+import { AlertCircle, AppWindow, ArrowLeftRight, FileText, PenLine, Plus, Sparkles, X } from "lucide-react";
 import { Popover } from "@/components/ui/primitives/Popover";
 
 export const TAB_MIME = "application/x-sb-tab";
@@ -23,6 +24,8 @@ export interface TabView {
   shown: boolean;
   /** Which pane it lives in (the one-pane strip mixes them). */
   pane: number;
+  /** A note that may lift out into a floating window. */
+  canFloat?: boolean;
 }
 
 interface PaneTabsProps {
@@ -32,6 +35,7 @@ interface PaneTabsProps {
   onActivate: (key: string, pane: number) => void;
   onClose: (key: string) => void;
   onMove: (key: string) => void;
+  onFloat: (key: string) => void;
   /** A tab dragged here from anywhere. */
   onDropTab: (key: string) => void;
   pickerOpen: boolean;
@@ -57,7 +61,7 @@ function TabIcon({ t }: { t: TabView }) {
 }
 
 export function PaneTabs({
-  tabs, focused, canMove, onActivate, onClose, onMove, onDropTab, pickerOpen, onPickerOpenChange, picker,
+  tabs, focused, canMove, onActivate, onClose, onMove, onFloat, onDropTab, pickerOpen, onPickerOpenChange, picker,
 }: PaneTabsProps) {
   const [dropping, setDropping] = useState(false);
   const isTabDrag = (e: React.DragEvent) => e.dataTransfer.types.includes(TAB_MIME);
@@ -113,6 +117,17 @@ export function PaneTabs({
                     className="flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-active hover:text-ink"
                   >
                     <ArrowLeftRight size={12} />
+                  </button>
+                )}
+                {t.canFloat && (
+                  <button
+                    type="button"
+                    aria-label={`Float ${t.title} as a window`}
+                    title="Float as a window over the panes"
+                    onClick={() => onFloat(t.key)}
+                    className="flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-active hover:text-ink"
+                  >
+                    <AppWindow size={12} />
                   </button>
                 )}
                 <button
