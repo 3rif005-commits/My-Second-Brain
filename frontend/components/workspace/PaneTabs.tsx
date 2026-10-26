@@ -119,7 +119,8 @@ export function PaneTabs({
                     <ArrowLeftRight size={12} />
                   </button>
                 )}
-                {t.canFloat && (
+                {/* On the shown tab only: a tab behind keeps its title under two buttons, not three. */}
+                {t.canFloat && t.shown && (
                   <button
                     type="button"
                     aria-label={`Float ${t.title} as a window`}
