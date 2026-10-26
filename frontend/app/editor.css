@@ -320,6 +320,27 @@
 .bn-side-menu button {
   color: var(--c-icon-subtle);
 }
+/* BlockNote sizes the handle row for its own spacing (30px; 78/54/42px for headings)
+ * and pins it to the block's top. Our blocks pad 8px above a 24px line, headings
+ * 32/28/24px above their line, so the handle sat above the text. Match its height
+ * and top offset to the first text line instead. */
+.bn-side-menu {
+  height: 24px !important;
+  margin-top: 8px;
+}
+.bn-side-menu[data-block-type="heading"][data-level="1"],
+.bn-side-menu[data-block-type="heading"]:not([data-level]) {
+  height: 39px !important;
+  margin-top: 32px;
+}
+.bn-side-menu[data-block-type="heading"][data-level="2"] {
+  height: 31px !important;
+  margin-top: 28px;
+}
+.bn-side-menu[data-block-type="heading"][data-level="3"] {
+  height: 26px !important;
+  margin-top: 24px;
+}
 
 /* Menus BlockNote draws (slash menu, toolbar, link popovers): Notion's menu card. */
 .bn-mantine .bn-suggestion-menu,
