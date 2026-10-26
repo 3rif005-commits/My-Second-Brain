@@ -116,7 +116,7 @@ describe("fitPanes / reconcile / readLayout", () => {
   });
 });
 
-describe("a floating note", () => {
+describe("a floating tab", () => {
   // sources | home, other — "other" brought in beside the session's note
   const two = () => openTab(base(), noteKey("other"), "here", 3);
 
@@ -126,11 +126,18 @@ describe("a floating note", () => {
     expect(l.panes[1]).toEqual({ tabs: ["n:home"], active: "n:home" });
     expect(l.target).toBe("other");
   });
-  it("never leaves the panes empty, and only notes float", () => {
+  it("never leaves the panes empty, and the AI never floats here", () => {
     const one = defaultLayout("home", []);
     expect(canFloat(one, noteKey("home"))).toBe(false);
     expect(floatTab(one, noteKey("home"))).toBe(one);
-    expect(canFloat(base(), srcKey("a"))).toBe(false);
+    expect(canFloat({ ...base(), panes: [...base().panes, { tabs: [ASK], active: ASK }] }, ASK)).toBe(false);
+  });
+  it("a source floats too, and leaves the writing target alone", () => {
+    const l = floatTab(base(), srcKey("a"));
+    expect(l.floating).toBe("s:a");
+    expect(l.panes[0]).toEqual({ tabs: ["s:b"], active: "s:b" });
+    expect(l.target).toBe("home");
+    expect(focusFloat(l)).toBe(l);
   });
   it("a pane holding only it goes away", () => {
     const l = floatTab(base(), noteKey("home"));

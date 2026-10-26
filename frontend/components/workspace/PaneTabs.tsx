@@ -1,8 +1,8 @@
 "use client";
 
 // A pane's row of tabs. Any tab — a source, a note, the AI — can be dragged to
-// another pane's row, or sent across with ⇄; a note can float as a window over
-// the panes (FloatingNote); × closes it (it stays in the
+// another pane's row, or sent across with ⇄; a note or a source can float as a
+// window over the panes (FloatingTab); × closes it (it stays in the
 // session, the picker lists it). The note being written in carries a pen. The
 // focused pane's shown tab has the blue underline, the others a grey one, so
 // "here" is always visible. Replaced SourceTabs (sources only) on 2026-10-25.
@@ -24,7 +24,7 @@ export interface TabView {
   shown: boolean;
   /** Which pane it lives in (the one-pane strip mixes them). */
   pane: number;
-  /** A note that may lift out into a floating window. */
+  /** May lift out into a floating window. */
   canFloat?: boolean;
 }
 
@@ -43,7 +43,7 @@ interface PaneTabsProps {
   picker: React.ReactNode;
 }
 
-function TabIcon({ t }: { t: TabView }) {
+export function TabIcon({ t }: { t: TabView }) {
   if (t.kind === "ask") return <Sparkles size={13} className="shrink-0" />;
   if (t.kind === "note") {
     return t.isTarget
@@ -108,28 +108,38 @@ export function PaneTabs({
               {/* A tab not shown keeps its whole width for the title (the buttons used to
                   hold 40 px of empty room, leaving one letter): they cover its end when pointed at. */}
               <div className={t.shown ? "contents" : "pointer-events-none absolute inset-y-0 right-0 flex items-center rounded-tr-md bg-surface-hover pl-0.5 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"}>
-                {canMove && (
-                  <button
-                    type="button"
-                    aria-label={`Move ${t.title} to the other side`}
-                    title="Move to the other side (or drag the tab)"
-                    onClick={() => onMove(t.key)}
-                    className="flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-active hover:text-ink"
-                  >
-                    <ArrowLeftRight size={12} />
-                  </button>
-                )}
-                {/* On the shown tab only: a tab behind keeps its title under two buttons, not three. */}
-                {t.canFloat && t.shown && (
-                  <button
-                    type="button"
-                    aria-label={`Float ${t.title} as a window`}
-                    title="Float as a window over the panes"
-                    onClick={() => onFloat(t.key)}
-                    className="flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-active hover:text-ink"
-                  >
-                    <AppWindow size={12} />
-                  </button>
+                {/* Where the tab goes, folded like the AI panel's dock switch: ⇄ shows,
+                    pointing at it slides "float" out to its left. Float only on the shown tab. */}
+                {(canMove || (t.canFloat && t.shown)) && (
+                  <div role="group" aria-label={`Where ${t.title} sits`} className="group/place flex items-center rounded">
+                    {t.canFloat && t.shown && (
+                      <button
+                        type="button"
+                        aria-label={`Float ${t.title} as a window`}
+                        title="Float as a window over the panes"
+                        onClick={() => onFloat(t.key)}
+                        className={canMove ? [
+                          "flex h-5 w-0 shrink-0 items-center justify-center overflow-hidden rounded text-ink-icon opacity-0",
+                          "transition-[width,opacity] duration-150 hover:bg-surface-active hover:text-ink",
+                          "pointer-events-none group-hover/place:pointer-events-auto group-hover/place:w-5 group-hover/place:opacity-100",
+                          "group-focus-within/place:pointer-events-auto group-focus-within/place:w-5 group-focus-within/place:opacity-100",
+                        ].join(" ") : "flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-active hover:text-ink"}
+                      >
+                        <AppWindow size={12} />
+                      </button>
+                    )}
+                    {canMove && (
+                      <button
+                        type="button"
+                        aria-label={`Move ${t.title} to the other side`}
+                        title={t.canFloat && t.shown ? "Move to the other side (or drag the tab) — point here to float it" : "Move to the other side (or drag the tab)"}
+                        onClick={() => onMove(t.key)}
+                        className="flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-active hover:text-ink"
+                      >
+                        <ArrowLeftRight size={12} />
+                      </button>
+                    )}
+                  </div>
                 )}
                 <button
                   type="button"

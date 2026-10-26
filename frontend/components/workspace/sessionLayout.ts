@@ -28,7 +28,7 @@ export interface SessionLayout {
   notes: string[];
   /** Sources from other notes, opened here. */
   foreign: string[];
-  /** A note lifted out of the panes into a window over them (one at a time). */
+  /** A note or source lifted out of the panes into a window over them (one at a time). */
   floating?: TabKey | null;
 }
 
@@ -85,7 +85,7 @@ function besideIndex(l: SessionLayout, maxPanes: number): number {
  * focused pane) or "beside".
  */
 export function openTab(l: SessionLayout, key: TabKey, where: number | "here" | "beside", maxPanes: number): SessionLayout {
-  // The floating note is already in view; only an explicit pane puts it back.
+  // The floating tab is already in view; only an explicit pane puts it back.
   if (key === l.floating) return typeof where === "number" ? dockFloat(l, where, maxPanes) : withTarget(l, key);
   const at = paneOf(l, key);
   if (at >= 0 && (where === "here" || where === "beside")) {
@@ -153,12 +153,12 @@ function retarget(l: SessionLayout, key: TabKey): SessionLayout {
   return other ? { ...l, target: other.id } : l;
 }
 
-/** Can this tab float? A note, and not the last tab in the panes (they'd be empty). */
+/** Can this tab float? A note or a source, and not the last tab in the panes (they'd be empty). */
 export function canFloat(l: SessionLayout, key: TabKey): boolean {
-  return parseKey(key).kind === "note" && paneOf(l, key) >= 0 && l.panes.flatMap((p) => p.tabs).length > 1;
+  return parseKey(key).kind !== "ask" && paneOf(l, key) >= 0 && l.panes.flatMap((p) => p.tabs).length > 1;
 }
 
-/** Lift a note out of its pane into the window. A note already floating swaps
+/** Lift a tab out of its pane into the window. A tab already floating swaps
  *  places with it: it goes into that pane. */
 export function floatTab(l: SessionLayout, key: TabKey): SessionLayout {
   if (!canFloat(l, key)) return l;
@@ -174,7 +174,7 @@ export function floatTab(l: SessionLayout, key: TabKey): SessionLayout {
   return withTarget(tidy({ ...l, panes, floating: key }), key);
 }
 
-/** Put the floating note back as the shown tab of pane `to` (one past the end: a new pane). */
+/** Put the floating tab back as the shown tab of pane `to` (one past the end: a new pane). */
 export function dockFloat(l: SessionLayout, to: number, maxPanes: number): SessionLayout {
   const key = l.floating;
   if (!key) return l;
@@ -186,7 +186,7 @@ export function dockFloat(l: SessionLayout, to: number, maxPanes: number): Sessi
   return withTarget(tidy({ ...l, panes, focus: idx, floating: null }), key);
 }
 
-/** The floating window was clicked: its note is the one being written in. */
+/** The floating window was clicked: a note there is the one being written in. */
 export function focusFloat(l: SessionLayout): SessionLayout {
   return l.floating && noteKey(l.target) !== l.floating ? withTarget(l, l.floating) : l;
 }
@@ -204,7 +204,7 @@ export function fitPanes(l: SessionLayout, maxPanes: number): SessionLayout {
 export function reconcile(l: SessionLayout, valid: (key: TabKey) => boolean, home: string): SessionLayout {
   const panes = l.panes.map((p) => ({ ...p, tabs: p.tabs.filter(valid) }));
   let next = tidy({ ...l, panes, floating: l.floating && valid(l.floating) ? l.floating : null });
-  // Panes emptied under a floating note: it goes back into one.
+  // Panes emptied under a floating tab: it goes back into one.
   if (next.panes.length === 0 && next.floating) next = dockFloat(next, 0, 1);
   if (next.panes.length === 0) next = { ...next, panes: [{ tabs: [noteKey(home)], active: noteKey(home) }], focus: 0 };
   if (!valid(noteKey(next.target))) next = { ...next, target: home };

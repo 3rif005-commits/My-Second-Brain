@@ -8,7 +8,7 @@
 // in is the writing target: captures, "Add to note" and AI results go there.
 // The AI is the app's one panel, its own window docked right or bottom across
 // every pane (not a tab in one), with a tab per conversation. A note can float
-// as a window over the panes too (FloatingNote).
+// or a source can float as a window over the panes too (FloatingTab).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -26,7 +26,7 @@ import { SourceViewer } from "./SourceViewer";
 import { PaneTabs, TAB_MIME, type TabView } from "./PaneTabs";
 import { OpenPicker, type PickerItem } from "./OpenPicker";
 import { NoteStarters, SessionMenu } from "./SessionChrome";
-import { FloatingNote } from "./FloatingNote";
+import { FloatingTab } from "./FloatingTab";
 import { WritingTargetContext } from "./writingTarget";
 import type { Passage } from "./viewers/passageMarks";
 import { useSynthesis } from "./useSynthesis";
@@ -518,13 +518,18 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     const l = layRef.current;
     if (!l) return;
     const key = srcKey(sourceId);
+    setLastSourceId(sourceId);
+    // Floating, it's in view already: just seek it.
+    if (l.floating === key) {
+      if (value !== null && !Number.isNaN(value)) seekWhenReady(sourceId, value);
+      return;
+    }
     let pane = paneOf(l, key);
     if (pane < 0) {
       const tgt = noteKey(l.target);
       pane = l.panes.findIndex((p) => p.active && parseKey(p.active).kind === "source");
       if (pane < 0) pane = l.panes.findIndex((p) => p.active !== tgt);
     }
-    setLastSourceId(sourceId);
     setLay((x) => (x ? openTab(x, key, pane >= 0 ? pane : "beside", stateMaxRef.current) : x));
     if (value !== null && !Number.isNaN(value)) seekWhenReady(sourceId, value);
   }, [seekWhenReady]);
@@ -719,6 +724,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     const s = sourceById.get(k.id);
     return {
       key, pane, shown, kind: "source", title: s?.title ?? "…", color: sourceColor(s?.order_index ?? 0),
+      canFloat: !!lay && canFloat(lay, key),
       status: !s ? "working" : s.status === "failed" ? "failed" : s.status === "ready" ? null : "working",
     };
   };
@@ -928,15 +934,14 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       </div>
 
       {lay?.floating && (
-        <FloatingNote
-          title={noteById(parseKey(lay.floating).id)?.title || "Untitled"}
-          isTarget={parseKey(lay.floating).id === target}
+        <FloatingTab
+          tab={tabView(lay.floating, -1, true)}
           onDock={dockFloatUser}
           onClose={() => closeTabUser(lay.floating!)}
           onFocus={() => setLay((x) => (x ? focusFloat(x) : x))}
         >
           {renderTab(lay.floating, true)}
-        </FloatingNote>
+        </FloatingTab>
       )}
 
       <DropOverlay show={dragOver} />

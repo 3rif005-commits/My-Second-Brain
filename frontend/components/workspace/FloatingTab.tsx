@@ -1,12 +1,14 @@
 "use client";
 
-// A note lifted out of the panes into a window over them, as the AI panel can
-// float (2026-10-26). One at a time; floating another swaps them. Drag the bar
+// A note or a source (a video beside your note) lifted out of the panes into a
+// window over them, as the AI panel can float (2026-10-26). One at a time;
+// floating another swaps them. Drag the bar
 // to move it, any edge or corner to size it; ⇲ or a double-click on the bar
 // puts it back in the pane you're in. Where it sat is remembered on this device.
 import { useEffect, useState } from "react";
-import { FileText, Minimize2, PenLine, X } from "lucide-react";
+import { Minimize2, X } from "lucide-react";
 import { clampFloat, readFloatRect, type FloatRect } from "@/components/ai/panelTabs";
+import { TabIcon, type TabView } from "./PaneTabs";
 
 const RECT_KEY = "workspace:note-float";
 
@@ -28,7 +30,7 @@ function defaultRect(vw: number, vh: number): FloatRect {
   return { left: Math.round((vw - width) / 2), top: 56, width, height };
 }
 
-function useNoteFloatRect() {
+function useFloatRect() {
   const [rect, setRect] = useState<FloatRect | null>(null);
   useEffect(() => {
     const vw = window.innerWidth, vh = window.innerHeight;
@@ -47,19 +49,19 @@ function useNoteFloatRect() {
   return [rect, save] as const;
 }
 
-interface FloatingNoteProps {
-  title: string;
-  /** The note captures and AI results go to. */
-  isTarget: boolean;
+interface FloatingTabProps {
+  /** Drawn as its pane tab is: title, and the icon (pen on the note being written in). */
+  tab: TabView;
   onDock: () => void;
   onClose: () => void;
-  /** A press anywhere inside: this note is the one being written in. */
+  /** A press anywhere inside (a note there becomes the one being written in). */
   onFocus: () => void;
   children: React.ReactNode;
 }
 
-export function FloatingNote({ title, isTarget, onDock, onClose, onFocus, children }: FloatingNoteProps) {
-  const [rect, setRect] = useNoteFloatRect();
+export function FloatingTab({ tab, onDock, onClose, onFocus, children }: FloatingTabProps) {
+  const [rect, setRect] = useFloatRect();
+  const title = tab.title;
   if (!rect) return null;
 
   function onPointerDown(e: React.PointerEvent, edges: Edges | "move") {
@@ -115,9 +117,7 @@ export function FloatingNote({ title, isTarget, onDock, onClose, onFocus, childr
       >
         <div className="flex h-8 min-w-0 flex-1 items-center">
           <span className="flex h-full min-w-0 max-w-full items-center gap-2 rounded-t-md px-2.5 text-[13px] text-ink shadow-[inset_0_-2px_0_var(--c-accent)]">
-            {isTarget
-              ? <PenLine size={13} className="shrink-0 text-accent" aria-label="You're writing here" />
-              : <FileText size={13} className="shrink-0" />}
+            <TabIcon t={tab} />
             <span className="truncate">{title}</span>
           </span>
         </div>
