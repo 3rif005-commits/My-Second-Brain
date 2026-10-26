@@ -46,19 +46,27 @@
   font-size: 30px;
   --level: 30px;
   line-height: 39px;
-  padding: 32px 2px 8px;
+  border-top: 24px solid transparent;
+  padding: 8px 2px;
 }
 .notion-editor .bn-block-content[data-content-type="heading"][data-level="2"] {
   font-size: 24px;
   --level: 24px;
   line-height: 31.2px;
-  padding: 28px 2px 8px;
+  border-top: 20px solid transparent;
+  padding: 8px 2px;
 }
 .notion-editor .bn-block-content[data-content-type="heading"][data-level="3"] {
   font-size: 20px;
   --level: 20px;
   line-height: 26px;
-  padding: 24px 2px 8px;
+  border-top: 16px solid transparent;
+  padding: 8px 2px;
+}
+/* The space above a heading is a transparent border, not padding, so a heading's
+ * background colour paints the text line only and does not spill into that gap. */
+.notion-editor .bn-block-content[data-content-type="heading"] {
+  background-clip: padding-box;
 }
 .notion-editor .bn-block-content[data-content-type="heading"] h1,
 .notion-editor .bn-block-content[data-content-type="heading"] h2,
