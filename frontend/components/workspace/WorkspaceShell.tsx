@@ -414,9 +414,9 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   }, [keepNoteContent]);
 
   /** Back into the pane you're in. */
-  const dockFloatUser = useCallback(() => {
+  const dockFloatUser = useCallback((key: string) => {
     keepNoteContent();
-    setLay((l) => (l ? dockFloat(l, l.focus, stateMaxRef.current) : l));
+    setLay((l) => (l ? dockFloat(l, key, l.focus, stateMaxRef.current) : l));
   }, [keepNoteContent]);
 
   /** Open a session item (or a note from anywhere) from the picker. */
@@ -466,7 +466,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     if (!id) return;
     withNote(id, (r) => r.action.current?.(a));
     const l = layRef.current;
-    const shown = l && (l.floating === noteKey(id)
+    const shown = l && (l.floating.includes(noteKey(id))
       || l.panes.some((p, i) => p.active === noteKey(id) && (modeRef.current !== "one" || i === l.focus)));
     if (!shown) showToast(`Added to ${short(noteById(id)?.title ?? "the note")}`, "info");
   }, [noteId, withNote, showToast, noteById]);
@@ -520,7 +520,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     const key = srcKey(sourceId);
     setLastSourceId(sourceId);
     // Floating, it's in view already: just seek it.
-    if (l.floating === key) {
+    if (l.floating.includes(key)) {
       if (value !== null && !Number.isNaN(value)) seekWhenReady(sourceId, value);
       return;
     }
@@ -729,7 +729,7 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
     };
   };
 
-  const openKeys = new Set([...(lay?.panes.flatMap((p) => p.tabs) ?? []), ...(lay?.floating ? [lay.floating] : [])]);
+  const openKeys = new Set([...(lay?.panes.flatMap((p) => p.tabs) ?? []), ...(lay?.floating ?? [])]);
   const sessionItems: PickerItem[] = lay ? [
     ...[noteId, ...lay.notes].filter((id) => !openKeys.has(noteKey(id)))
       .map((id) => ({ key: noteKey(id), kind: "note" as const, title: noteById(id)?.title || "Untitled",
@@ -933,16 +933,19 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
         )}
       </div>
 
-      {lay?.floating && (
+      {lay?.floating.map((key, i) => (
         <FloatingTab
-          tab={tabView(lay.floating, -1, true)}
-          onDock={dockFloatUser}
-          onClose={() => closeTabUser(lay.floating!)}
-          onFocus={() => setLay((x) => (x ? focusFloat(x) : x))}
+          key={key}
+          tab={tabView(key, -1, true)}
+          storageKey={key}
+          order={i}
+          onDock={() => dockFloatUser(key)}
+          onClose={() => closeTabUser(key)}
+          onFocus={() => setLay((x) => (x ? focusFloat(x, key) : x))}
         >
-          {renderTab(lay.floating, true)}
+          {renderTab(key, true)}
         </FloatingTab>
-      )}
+      ))}
 
       <DropOverlay show={dragOver} />
     </div>

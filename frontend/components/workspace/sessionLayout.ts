@@ -7,6 +7,8 @@
 // other notes and sources from other notes can be brought in beside it.
 
 export type TabKey = string;
+/** How many windows can float at once; one more sends the oldest back to its pane. */
+export const MAX_FLOAT = 4;
 export const ASK: TabKey = "ask";
 export const srcKey = (id: string): TabKey => `s:${id}`;
 export const noteKey = (id: string): TabKey => `n:${id}`;
@@ -28,8 +30,8 @@ export interface SessionLayout {
   notes: string[];
   /** Sources from other notes, opened here. */
   foreign: string[];
-  /** A note or source lifted out of the panes into a window over them (one at a time). */
-  floating?: TabKey | null;
+  /** Notes and sources lifted out of the panes into windows over them, the one in front last. */
+  floating: TabKey[];
 }
 
 export function defaultLayout(home: string, sourceIds: string[]): SessionLayout {
@@ -37,7 +39,7 @@ export function defaultLayout(home: string, sourceIds: string[]): SessionLayout 
     ? [{ tabs: sourceIds.map(srcKey), active: srcKey(sourceIds[0]) },
        { tabs: [noteKey(home)], active: noteKey(home) }]
     : [{ tabs: [noteKey(home)], active: noteKey(home) }];
-  return { panes, focus: panes.length - 1, target: home, notes: [], foreign: [], floating: null };
+  return { panes, focus: panes.length - 1, target: home, notes: [], foreign: [], floating: [] };
 }
 
 export function paneOf(l: SessionLayout, key: TabKey): number {
@@ -85,8 +87,8 @@ function besideIndex(l: SessionLayout, maxPanes: number): number {
  * focused pane) or "beside".
  */
 export function openTab(l: SessionLayout, key: TabKey, where: number | "here" | "beside", maxPanes: number): SessionLayout {
-  // The floating tab is already in view; only an explicit pane puts it back.
-  if (key === l.floating) return typeof where === "number" ? dockFloat(l, where, maxPanes) : withTarget(l, key);
+  // A floating tab is already in view; only an explicit pane puts it back.
+  if (l.floating.includes(key)) return typeof where === "number" ? dockFloat(l, key, where, maxPanes) : focusFloat(l, key);
   const at = paneOf(l, key);
   if (at >= 0 && (where === "here" || where === "beside")) {
     if (where === "here" && at !== l.focus) return moveTab(l, key, l.focus, maxPanes);
@@ -129,7 +131,7 @@ export function moveToOtherSide(l: SessionLayout, key: TabKey, maxPanes: number)
 
 /** Close a tab. It stays in the session (the picker lists it). A pane left empty goes away. */
 export function closeTab(l: SessionLayout, key: TabKey): SessionLayout {
-  if (key === l.floating) return retarget({ ...l, floating: null }, key);
+  if (l.floating.includes(key)) return retarget({ ...l, floating: l.floating.filter((f) => f !== key) }, key);
   const from = paneOf(l, key);
   if (from < 0) return l;
   const panes = l.panes.map((p, j) => {
@@ -147,7 +149,7 @@ export function closeTab(l: SessionLayout, key: TabKey): SessionLayout {
 function retarget(l: SessionLayout, key: TabKey): SessionLayout {
   const k = parseKey(key);
   if (k.kind !== "note" || l.target !== k.id) return l;
-  const open = [...l.panes.flatMap((p) => p.tabs), ...(l.floating ? [l.floating] : [])];
+  const open = [...l.panes.flatMap((p) => p.tabs), ...l.floating];
   const other = open.map(parseKey).find((t) => t.kind === "note");
   // No note open: the target stays, and is reopened when something goes to it.
   return other ? { ...l, target: other.id } : l;
@@ -158,37 +160,43 @@ export function canFloat(l: SessionLayout, key: TabKey): boolean {
   return parseKey(key).kind !== "ask" && paneOf(l, key) >= 0 && l.panes.flatMap((p) => p.tabs).length > 1;
 }
 
-/** Lift a tab out of its pane into the window. A tab already floating swaps
- *  places with it: it goes into that pane. */
+/** Lift a tab out of its pane into a window, in front. With the limit reached,
+ *  the oldest window takes the lifted tab's place in its pane. */
 export function floatTab(l: SessionLayout, key: TabKey): SessionLayout {
   if (!canFloat(l, key)) return l;
   const from = paneOf(l, key);
+  const full = l.floating.length >= MAX_FLOAT;
+  const oldest = full ? l.floating[0] : null;
   const panes = l.panes.map((p, j) => {
     if (j !== from) return p;
     const idx = p.tabs.indexOf(key);
     const tabs = p.tabs.filter((t) => t !== key);
-    if (l.floating) tabs.splice(idx, 0, l.floating);
-    const active = p.active === key ? (l.floating ?? tabs[Math.min(idx, tabs.length - 1)] ?? null) : p.active;
+    if (oldest) tabs.splice(idx, 0, oldest);
+    const active = p.active === key ? (oldest ?? tabs[Math.min(idx, tabs.length - 1)] ?? null) : p.active;
     return { tabs, active };
   });
-  return withTarget(tidy({ ...l, panes, floating: key }), key);
+  const floating = [...l.floating.filter((f) => f !== oldest), key];
+  return withTarget(tidy({ ...l, panes, floating }), key);
 }
 
-/** Put the floating tab back as the shown tab of pane `to` (one past the end: a new pane). */
-export function dockFloat(l: SessionLayout, to: number, maxPanes: number): SessionLayout {
-  const key = l.floating;
-  if (!key) return l;
+/** Put a floating tab back as the shown tab of pane `to` (one past the end: a new pane). */
+export function dockFloat(l: SessionLayout, key: TabKey, to: number, maxPanes: number): SessionLayout {
+  if (!l.floating.includes(key)) return l;
   const panes = l.panes.map((p) => ({ ...p, tabs: [...p.tabs] }));
   const idx = Math.max(0, Math.min(to, panes.length, maxPanes - 1));
   if (!panes[idx]) panes.push({ tabs: [], active: null });
   panes[idx].tabs.push(key);
   panes[idx].active = key;
-  return withTarget(tidy({ ...l, panes, focus: idx, floating: null }), key);
+  return withTarget(tidy({ ...l, panes, focus: idx, floating: l.floating.filter((f) => f !== key) }), key);
 }
 
-/** The floating window was clicked: a note there is the one being written in. */
-export function focusFloat(l: SessionLayout): SessionLayout {
-  return l.floating && noteKey(l.target) !== l.floating ? withTarget(l, l.floating) : l;
+/** A floating window was clicked: it comes to the front, and a note there is the one being written in. */
+export function focusFloat(l: SessionLayout, key: TabKey): SessionLayout {
+  if (!l.floating.includes(key)) return l;
+  const inFront = l.floating[l.floating.length - 1] === key;
+  const noted = parseKey(key).kind !== "note" || noteKey(l.target) === key;
+  if (inFront && noted) return l;
+  return withTarget({ ...l, floating: [...l.floating.filter((f) => f !== key), key] }, key);
 }
 
 /** A narrower window: panes past the limit fold into the last one that fits. */
@@ -203,9 +211,9 @@ export function fitPanes(l: SessionLayout, maxPanes: number): SessionLayout {
 /** Drop tabs whose thing no longer exists (a removed source, a trashed note). */
 export function reconcile(l: SessionLayout, valid: (key: TabKey) => boolean, home: string): SessionLayout {
   const panes = l.panes.map((p) => ({ ...p, tabs: p.tabs.filter(valid) }));
-  let next = tidy({ ...l, panes, floating: l.floating && valid(l.floating) ? l.floating : null });
-  // Panes emptied under a floating tab: it goes back into one.
-  if (next.panes.length === 0 && next.floating) next = dockFloat(next, 0, 1);
+  let next = tidy({ ...l, panes, floating: l.floating.filter(valid) });
+  // Panes emptied under floating tabs: the first goes back into one.
+  if (next.panes.length === 0 && next.floating.length) next = dockFloat(next, next.floating[0], 0, 1);
   if (next.panes.length === 0) next = { ...next, panes: [{ tabs: [noteKey(home)], active: noteKey(home) }], focus: 0 };
   if (!valid(noteKey(next.target))) next = { ...next, target: home };
   return next;
@@ -225,7 +233,11 @@ export function readLayout(raw: string | null): SessionLayout | null {
       target: v.target,
       notes: Array.isArray(v.notes) ? v.notes.filter((x: unknown) => typeof x === "string") : [],
       foreign: Array.isArray(v.foreign) ? v.foreign.filter((x: unknown) => typeof x === "string") : [],
-      floating: typeof v.floating === "string" && !panes.some((p) => p.tabs.includes(v.floating)) ? v.floating : null,
+      // A layout saved with one floating tab held a string.
+      floating: (Array.isArray(v.floating) ? v.floating : typeof v.floating === "string" ? [v.floating] : [])
+        .filter((f: unknown, i: number, all: unknown[]) =>
+          typeof f === "string" && all.indexOf(f) === i && !panes.some((p) => p.tabs.includes(f)))
+        .slice(-MAX_FLOAT),
     });
   } catch {
     return null;

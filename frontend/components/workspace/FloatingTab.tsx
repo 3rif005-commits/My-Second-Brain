@@ -1,8 +1,8 @@
 "use client";
 
 // A note or a source (a video beside your note) lifted out of the panes into a
-// window over them, as the AI panel can float (2026-10-26). One at a time;
-// floating another swaps them. Drag the bar
+// window over them, as the AI panel can float (2026-10-26). Up to MAX_FLOAT at
+// once, a click brings one to the front. Drag the bar
 // to move it, any edge or corner to size it; ⇲ or a double-click on the bar
 // puts it back in the pane you're in. Where it sat is remembered on this device.
 import { useEffect, useState } from "react";
@@ -10,7 +10,7 @@ import { Minimize2, X } from "lucide-react";
 import { clampFloat, readFloatRect, type FloatRect } from "@/components/ai/panelTabs";
 import { TabIcon, type TabView } from "./PaneTabs";
 
-const RECT_KEY = "workspace:note-float";
+const RECT_KEY = "workspace:float:";
 
 type Edges = { n?: boolean; s?: boolean; e?: boolean; w?: boolean };
 const HANDLES: { edges: Edges; className: string; cursor: string }[] = [
@@ -24,27 +24,28 @@ const HANDLES: { edges: Edges; className: string; cursor: string }[] = [
   { edges: { n: true, w: true }, className: "-top-1 -left-1 size-4", cursor: "nwse-resize" },
 ];
 
-/** Upper middle of the screen, under the session header: clear of the AI's corner. */
-function defaultRect(vw: number, vh: number): FloatRect {
+/** Upper middle of the screen, under the session header: clear of the AI's corner.
+ *  Each window opens a step down and right of the one before, so none hides another. */
+function defaultRect(vw: number, vh: number, order: number): FloatRect {
   const width = Math.min(520, vw - 32), height = Math.min(620, vh - 72);
-  return { left: Math.round((vw - width) / 2), top: 56, width, height };
+  return clampFloat({ left: Math.round((vw - width) / 2) + order * 28, top: 56 + order * 28, width, height }, vw, vh);
 }
 
-function useFloatRect() {
+function useFloatRect(key: string, order: number) {
   const [rect, setRect] = useState<FloatRect | null>(null);
   useEffect(() => {
     const vw = window.innerWidth, vh = window.innerHeight;
     let raw: string | null = null;
-    try { raw = window.localStorage.getItem(RECT_KEY); } catch { /* private mode */ }
-    setRect(raw ? readFloatRect(raw, vw, vh) : defaultRect(vw, vh));
+    try { raw = window.localStorage.getItem(RECT_KEY + key); } catch { /* private mode */ }
+    setRect(raw ? readFloatRect(raw, vw, vh) : defaultRect(vw, vh, order));
     // A smaller browser keeps the window on screen.
     const onResize = () => setRect((r) => (r ? clampFloat(r, window.innerWidth, window.innerHeight) : r));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const save = (r: FloatRect) => {
     setRect(r);
-    try { window.localStorage.setItem(RECT_KEY, JSON.stringify(r)); } catch { /* private mode */ }
+    try { window.localStorage.setItem(RECT_KEY + key, JSON.stringify(r)); } catch { /* private mode */ }
   };
   return [rect, save] as const;
 }
@@ -52,6 +53,10 @@ function useFloatRect() {
 interface FloatingTabProps {
   /** Drawn as its pane tab is: title, and the icon (pen on the note being written in). */
   tab: TabView;
+  /** What its place on screen is remembered under. */
+  storageKey: string;
+  /** Its place in the stack: later is in front, and opens further down and right. */
+  order: number;
   onDock: () => void;
   onClose: () => void;
   /** A press anywhere inside (a note there becomes the one being written in). */
@@ -59,8 +64,8 @@ interface FloatingTabProps {
   children: React.ReactNode;
 }
 
-export function FloatingTab({ tab, onDock, onClose, onFocus, children }: FloatingTabProps) {
-  const [rect, setRect] = useFloatRect();
+export function FloatingTab({ tab, storageKey, order, onDock, onClose, onFocus, children }: FloatingTabProps) {
+  const [rect, setRect] = useFloatRect(storageKey, order);
   const title = tab.title;
   if (!rect) return null;
 
@@ -100,9 +105,9 @@ export function FloatingTab({ tab, onDock, onClose, onFocus, children }: Floatin
     <section
       aria-label={`${title} (floating)`}
       onPointerDownCapture={onFocus}
-      // Under the AI's window (z-40), over the panes. Opaque, like the AI's.
-      className="fixed z-30 flex flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-modal"
-      style={rect}
+      // Stacked 30-33: under the AI's window (z-40), over the panes. Opaque, like the AI's.
+      className="fixed flex flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-modal"
+      style={{ ...rect, zIndex: 30 + order }}
     >
       {HANDLES.map((hd, i) => (
         <div key={i} aria-hidden onPointerDown={(e) => onPointerDown(e, hd.edges)}

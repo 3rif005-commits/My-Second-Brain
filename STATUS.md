@@ -91,9 +91,12 @@ delete (deleting is permanent).
 - A note or source tab (a YouTube video beside your note) can float. On the shown tab only ⇄ shows;
   pointing at it slides float out to its left, as the AI panel's dock switch does. A seek or citation
   to a floating source plays it there. Live-checked with the YouTube source.
+- **Several windows can float at once (max 4, `MAX_FLOAT`)**, each a step down/right of the last, a click
+  brings one to the front; a fifth sends the oldest back to the pane the new one left. Each window's
+  position is kept per tab (`workspace:float:<tab>`). A layout saved with one floating tab still loads.
 - The float button lifts the tab into a window over the panes: move by
   its bar, size from any edge/corner, ⇲ or double-click the bar puts it back in the pane you're in.
-  One at a time — floating another swaps them. Clicking in it makes it the writing target. Logic in
+  Clicking in it makes it the writing target. Logic in
   `sessionLayout.ts` (`floatTab`/`dockFloat`/`focusFloat`, `floating` saved with the layout), window
   in `FloatingTab.tsx`, position per device in `workspace:note-float`.
 - Fixed with it: a note moved to another pane re-mounted its editor with the content it opened with;
