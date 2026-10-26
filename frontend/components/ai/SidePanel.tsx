@@ -159,7 +159,7 @@ export function SidePanel({
         className={float ? [
           // Over the page, where you put it; the page keeps its full size.
           // Opaque: the docked panel's tinted chip colour lets a video show through.
-          "fixed z-40 flex flex-col overflow-hidden rounded-xl border border-line bg-surface-elevated shadow-modal",
+          "fixed z-40 flex flex-col overflow-hidden rounded-xl border border-line bg-surface-elevated shadow-modal [--ws-tab-base:var(--c-bg-elevated)]",
           "transition-[opacity,visibility] duration-150",
           open ? "visible opacity-100" : "invisible opacity-0",
         ].join(" ") : [
@@ -245,7 +245,7 @@ export function SidePanel({
                     // the title's end while pointed at, instead of holding empty room.
                     className={`flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:text-ink focus:opacity-100 ${shown
                       ? "hover:bg-surface-hover"
-                      : "absolute right-1 bg-surface-hover opacity-0 hover:bg-surface-active group-hover/tab:opacity-100"}`}
+                      : "ws-tab-cover absolute right-1 opacity-0 group-hover/tab:opacity-100"}`}
                   >
                     <X size={12} />
                   </button>

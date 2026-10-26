@@ -439,6 +439,18 @@ body {
 }
 .ws-scroll-x::-webkit-scrollbar { display: none; }
 
+/* Buttons laid over the end of a tab's title (a tab not shown, pointed at).
+   The hover tint alone is ~5% white, so the title showed through them: the
+   surface goes under it, and the tab looks the same, only covered. A surface
+   other than the page's (the floating AI window) sets --ws-tab-base. */
+.ws-tab-cover {
+  background: linear-gradient(var(--c-bg-hover), var(--c-bg-hover)), var(--ws-tab-base, var(--c-bg));
+}
+.ws-tab-cover:is(button):hover {
+  background: linear-gradient(var(--c-bg-active), var(--c-bg-active)),
+    linear-gradient(var(--c-bg-hover), var(--c-bg-hover)), var(--ws-tab-base, var(--c-bg));
+}
+
 /* ── motion ─────────────────────────────────────────────────────────────── */
 @keyframes ws-rise {
   from { opacity: 0; transform: translateY(6px) scale(0.98); }
