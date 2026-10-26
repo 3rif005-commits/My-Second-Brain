@@ -86,6 +86,18 @@ delete (deleting is permanent).
 
 ---
 
+## Floating note in a session — 2026-10-26 (deployed; checked on the live site)
+
+- A note tab's float button (shown tab only, beside ⇄) lifts it into a window over the panes: move by
+  its bar, size from any edge/corner, ⇲ or double-click the bar puts it back in the pane you're in.
+  One at a time — floating another swaps them. Clicking in it makes it the writing target. Logic in
+  `sessionLayout.ts` (`floatTab`/`dockFloat`/`focusFloat`, `floating` saved with the layout), window
+  in `FloatingNote.tsx`, position per device in `workspace:note-float`.
+- Fixed with it: a note moved to another pane re-mounted its editor with the content it opened with;
+  moves now hand it what the editor holds (`NoteApplyApi.document()`).
+- Live-checked: float, move, swap (content intact), double-click dock. Not checked: resize edges, a
+  capture/AI insert landing in the floating note.
+
 ## AI panel as its own window + faster source uploads — 2026-10-25 (deployed; checked on the live site)
 
 - **Restyle to the workspace's look** (live-checked right, bottom, float): panel on `bg-surface` with a
