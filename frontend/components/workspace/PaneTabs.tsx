@@ -109,10 +109,12 @@ export function PaneTabs({
                   hold 40 px of empty room, leaving one letter): they cover its end when pointed at. */}
               <div className={t.shown ? "contents" : "pointer-events-none absolute inset-y-0 right-0 flex items-center rounded-tr-md ws-tab-cover pl-0.5 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100"}>
                 {/* Where the tab goes, folded like the AI panel's dock switch: ⇄ shows,
-                    pointing at it slides "float" out to its left. Float only on the shown tab. */}
-                {(canMove || (t.canFloat && t.shown)) && (
+                    pointing at it slides "float" out to its left. On the shown tab only: a tab
+                    behind covers just its end with × (two buttons hid a short title whole), and
+                    can still be dragged. */}
+                {t.shown && (canMove || t.canFloat) && (
                   <div role="group" aria-label={`Where ${t.title} sits`} className="group/place flex items-center rounded">
-                    {t.canFloat && t.shown && (
+                    {t.canFloat && (
                       <button
                         type="button"
                         aria-label={`Float ${t.title} as a window`}
@@ -132,7 +134,7 @@ export function PaneTabs({
                       <button
                         type="button"
                         aria-label={`Move ${t.title} to the other side`}
-                        title={t.canFloat && t.shown ? "Move to the other side (or drag the tab) — point here to float it" : "Move to the other side (or drag the tab)"}
+                        title={t.canFloat ? "Move to the other side (or drag the tab) — point here to float it" : "Move to the other side (or drag the tab)"}
                         onClick={() => onMove(t.key)}
                         className="flex size-5 shrink-0 items-center justify-center rounded text-ink-icon hover:bg-surface-active hover:text-ink"
                       >
