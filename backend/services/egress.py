@@ -171,8 +171,11 @@ class Fetched:
 
     @property
     def text(self) -> str:
-        return httpx.Response(self.status_code, headers=self.headers,
-                              content=self.content).text
+        # `content` is already decompressed (iter_bytes); keep only the
+        # charset, or httpx would gunzip it a second time.
+        ctype = self.headers.get("content-type")
+        return httpx.Response(self.status_code, content=self.content,
+                              headers={"content-type": ctype} if ctype else None).text
 
 
 _REDIRECTS = (301, 302, 303, 307, 308)

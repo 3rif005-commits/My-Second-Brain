@@ -162,6 +162,17 @@ def test_fetch_caps_the_size(monkeypatch):
         egress.fetch("https://a.example/", max_bytes=1000)
 
 
+def test_fetch_text_of_a_gzipped_answer(monkeypatch):
+    # GitHub's API answers gzip; the body is stored decompressed, so .text must
+    # not decompress it again (it raised DecodingError on the live site).
+    import gzip
+    _fake_dns(monkeypatch, {"a.example": ["93.184.216.34"]})
+    body = gzip.compress('{"sha": "abc", "name": "café"}'.encode())
+    _mock_client(monkeypatch, lambda req: httpx.Response(200, content=body, headers={
+        "content-encoding": "gzip", "content-type": "application/json; charset=utf-8"}))
+    assert egress.fetch("https://a.example/").text == '{"sha": "abc", "name": "café"}'
+
+
 def test_fetch_error_status_is_a_value_error(monkeypatch):
     _fake_dns(monkeypatch, {"a.example": ["93.184.216.34"]})
     _mock_client(monkeypatch, lambda req: httpx.Response(404))
