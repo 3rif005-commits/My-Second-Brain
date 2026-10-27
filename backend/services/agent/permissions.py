@@ -53,12 +53,23 @@ _MUTATES_EXISTING = {
 }
 
 
+# Writes text that enters every future system prompt (services/memory.py). An
+# injection that lands here outlives the conversation that planted it, and a
+# private fact copied here would ride along to cloud models later.
+_PERSISTS_INTO_PROMPT = {"memory.remember"}
+
+
 def approval_key(tool: str, args: dict[str, Any]) -> str:
     """Identifies one approvable action: tool + the thing it acts on.
 
     Scoping by target means approving one deletion does not approve the next
-    one, and a replayed approval cannot be redirected to another note.
+    one, and a replayed approval cannot be redirected to another note. A
+    memory entry has no id yet: its key is its exact text, so approving one
+    sentence never approves a different one the model writes on the replay.
     """
+    if tool in _PERSISTS_INTO_PROMPT:
+        from services.memory import approval_target
+        return f"{tool}:{approval_target(str(args.get('content') or ''))}"
     target = (args.get("id") or args.get("note_id") or args.get("row_id")
               or args.get("block_id") or "*")
     return f"{tool}:{target}"
@@ -95,6 +106,8 @@ _TOOL_MIN_TIER: dict[str, Tier] = {
     "brain.query_database":      Tier.EXTERNAL,
     "brain.create_row":          Tier.INTERNAL_API,
     "brain.update_row":          Tier.INTERNAL_API,
+    # About you (services/memory.py) — the app's own data, like a note write.
+    "memory.remember":           Tier.INTERNAL_API,
     # Editor tools — inline and ingest surfaces only
     "editor.insert_block":          Tier.INTERNAL_API,
     "editor.replace_block":         Tier.INTERNAL_API,
@@ -171,6 +184,15 @@ def check(
             return Allow()
         return NeedsApproval(
             reason="Deleting is permanent — confirm it in the app first.",
+            key=key,
+        )
+
+    if tool in _PERSISTS_INTO_PROMPT and (untrusted_context or private_context):
+        if key in approvals:
+            return Allow()
+        content = " ".join(str(args.get("content") or "").split())[:300]
+        return NeedsApproval(
+            reason=(f'Remember "{content}" in About you? Every future chat will see it.'),
             key=key,
         )
 

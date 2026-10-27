@@ -4,6 +4,7 @@
 // "Workspace"… headers); `keywords` feed the "Search settings" field.
 import {
   AppWindow,
+  Brain,
   Clock,
   Plug,
   Puzzle,
@@ -37,6 +38,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     group: "Account",
     keywords: "theme dark light appearance accent colour color contrast density compact font serif mono small text full width date time format week monday start page language number motion",
   },
+  // Facts every chat keeps in mind (Hermes Agent's USER.md, our own build).
+  { id: "about-you", label: "About you", icon: Brain, href: "/brain/settings/about-you", group: "AI", keywords: "memory remember profile preferences facts personal" },
   { id: "ai-providers", label: "AI providers", icon: Plug, href: "/brain/settings/ai-providers", group: "AI", keywords: "api key gemini anthropic openai model" },
   // Where each request runs, and which notes may go there (switchboard + privacy gate).
   { id: "routing", label: "Routing", icon: Route, href: "/brain/settings/routing", group: "AI", keywords: "privacy local fast strong rules targets" },

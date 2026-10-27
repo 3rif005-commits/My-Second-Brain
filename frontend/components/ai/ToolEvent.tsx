@@ -23,6 +23,7 @@ const TOOL_ICONS: Record<string, string> = {
   "brain.link_notes":   "🔗",
   "brain.set_mastery":  "🎯",
   "brain.get_backlinks":"🪞",
+  "memory.remember":    "🧠",   // About you (Settings → About you)
 };
 
 export function ToolEvent({ tool, args, summary, deniedReason,

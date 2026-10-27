@@ -28,7 +28,7 @@ from services.agent.permissions import (
     Deny, NeedsApproval, check as permission_check
 )
 from services.agent.skills import SkillRegistry, classify_skills
-from services import privacy
+from services import memory, privacy
 from services.text_hygiene import attribute, instruction_like, untrusted
 from services.routing import log as routing_log
 from services.routing import policy as routing_policy
@@ -216,6 +216,14 @@ def _with_turn_context(messages: list[dict], context: str) -> list[dict]:
             m["content"] = f"{m.get('content') or ''}\n\n{context}"
             return messages[:i] + [m] + messages[i + 1:]
     return messages + [{"role": "user", "content": context}]
+
+
+def _about_you(rows: list[dict] | None, ceiling: str) -> str:
+    """The About you block for a route, or "" — it is personal data, so a
+    provider trusted only with open notes never sees it."""
+    if not rows or not privacy.allows(ceiling, "personal"):
+        return ""
+    return memory.prompt_block(rows)
 
 
 def _build_system_prompt(skill_bodies: list[str], knowledge_xml: str,
@@ -496,6 +504,12 @@ async def _routed_turn(request: AgentRequest, user_id: str,
     system_prompt += "\n\n" + TURN_CONTEXT_NOTICE + "\n\n" + UNTRUSTED_NOTICE
     if workspace_note:
         system_prompt += "\n\n" + WORKSPACE_NOTICE
+    # About you (services/memory.py): in the system prompt, so it is cached
+    # with the rest of it; personal, so never on a route below that ceiling.
+    memory_rows = memory.available(user_id)
+    about_you = _about_you(memory_rows, route.ceiling)
+    if about_you:
+        system_prompt += "\n\n" + about_you
     turn_context = _turn_context(
         [with_style(s.name, s.body) for s in matched], knowledge_xml,
         workspace_sources if workspace_note else None)
@@ -537,6 +551,8 @@ async def _routed_turn(request: AgentRequest, user_id: str,
         all_tool_schemas = all_tool_schemas + [SKILL_LOAD_TOOL]
     if jobs:
         all_tool_schemas = all_tool_schemas + [workspace_job_tool(jobs)]
+    if memory_rows is not None:
+        all_tool_schemas = all_tool_schemas + [memory.MEMORY_TOOL]
 
     provider = route.provider
 
@@ -932,7 +948,15 @@ async def _stream_loop(
                     c for c in (cleaned if isinstance(cleaned, list) else []) if isinstance(c, str)))
             else:
                 try:
-                    result = await execute_brain_tool(tool, args=args, user_id=user_id)
+                    if tool == memory.TOOL_NAME:
+                        result = memory.remember_from_chat(args, user_id)
+                    else:
+                        result = await execute_brain_tool(tool, args=args, user_id=user_id)
+                except memory.MemoryRejected as e:
+                    _answer(slot, f"Not saved: {e} Tell the user in one sentence.")
+                    yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
+                               "reason": str(e)})
+                    continue
                 except Exception as e:
                     _answer(slot, f"Error: {e}")
                     yield _ev({"type": "tool_denied", "id": slot["id"],
@@ -1006,6 +1030,8 @@ def _summarize_result(tool: str, result: dict[str, Any]) -> str:
         return f"note {result.get('id', '?')} {'created' if 'create' in tool else 'updated'}"
     if tool == "brain.delete_note":
         return f"note {result.get('id', '?')} moved to trash"
+    if tool == memory.TOOL_NAME:
+        return f"remembered: {result.get('remembered', '')}"
     if tool.startswith("mcp."):
         # The chip already names the tool; "ask_wiki_question ok" just repeated it.
         text = " ".join(str(c) for c in result.get("content") or [])
