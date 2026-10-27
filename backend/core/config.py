@@ -23,7 +23,9 @@ class Settings(BaseSettings):
     embedder_provider: str = "llamacpp"  # "llamacpp" | "gemini"
     llamacpp_embed_url: str = "http://localhost:8081"  # llama.cpp embedding server
     litert_url: str = ""                               # tablet LiteRT inference server
-    internal_api_key: str = "changeme-internal-key"   # MCP server ↔ FastAPI auth
+    # MCP server ↔ FastAPI auth. No usable default on purpose: an unset or
+    # example key works only from this machine (routers/internal.py).
+    internal_api_key: str = ""
     frontend_url: str = "http://localhost:3000"
     database_url: str = ""
     # MCP "stdio" servers run a command on THIS machine. Fine on your own laptop; on a

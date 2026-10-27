@@ -37,7 +37,7 @@ from mcp.types import Tool, TextContent, CallToolResult
 
 FASTAPI_URL = os.environ.get("FASTAPI_URL", "http://localhost:8000")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "changeme-internal-key")
+INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
 USER_ID = os.environ.get("SECOND_BRAIN_USER_ID", "")
 
 if not USER_ID:

@@ -1,9 +1,10 @@
 """Internal router — used by the MCP server to access retrieval without a user JWT."""
 
+import hmac
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 from core.config import settings
@@ -25,8 +26,37 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/internal", tags=["internal"])
 
 
-def _check_internal_key(x_internal_key: str):
-    if x_internal_key != settings.internal_api_key:
+#: Values that are public knowledge: the old code default and the one in
+#: .env.example. A deployment that never set INTERNAL_API_KEY has one of these.
+_PUBLIC_KEYS = {"", "changeme-internal-key"}
+
+
+def _from_this_machine(request: Request) -> bool:
+    """A direct request from loopback. One that came through a proxy carries
+    X-Forwarded-For (Render's does), so it is never "this machine" even when
+    the proxy itself connects from 127.0.0.1."""
+    host = request.client.host if request.client else ""
+    return (host in ("127.0.0.1", "::1", "localhost")
+            and "x-forwarded-for" not in request.headers)
+
+
+def require_internal_key(request: Request, x_internal_key: str = Header()) -> None:
+    """/internal/* trusts `user_id` from the body, so the key is the whole of
+    its security.
+
+    OpenClaw's 2026 exposure came from a default that was fine on a laptop and
+    fatal on a server. The same trap was here: the key defaulted to a string
+    printed in this repo, so any deployment that forgot INTERNAL_API_KEY served
+    every user's notes to anyone. A public key is now accepted only from this
+    machine (the desktop MCP server beside a local backend); over a network it
+    is refused, wherever the app runs. Compared in constant time."""
+    expected = settings.internal_api_key or ""
+    if expected in _PUBLIC_KEYS and not _from_this_machine(request):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The internal API is off: set INTERNAL_API_KEY to a long random value.")
+    if not expected or not hmac.compare_digest(
+            x_internal_key.encode(), expected.encode()):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid internal key")
 
 
@@ -46,9 +76,8 @@ class ReindexNoteRequest(BaseModel):
 
 
 @router.post("/search")
-def internal_search(body: SearchRequest, x_internal_key: str = Header()):
+def internal_search(body: SearchRequest, _key: None = Depends(require_internal_key)):
     """Embed query and return top-K notes. Called by MCP server."""
-    _check_internal_key(x_internal_key)
     try:
         query_embedding = embed(body.query)
     except Exception as e:
@@ -59,9 +88,8 @@ def internal_search(body: SearchRequest, x_internal_key: str = Header()):
 
 
 @router.post("/note")
-def internal_get_note(body: NoteRequest, x_internal_key: str = Header()):
+def internal_get_note(body: NoteRequest, _key: None = Depends(require_internal_key)):
     """Fetch a single note by ID. Called by MCP server."""
-    _check_internal_key(x_internal_key)
     db = get_supabase()
     _res = (
         db.table("notes")
@@ -79,9 +107,8 @@ def internal_get_note(body: NoteRequest, x_internal_key: str = Header()):
 
 
 @router.post("/notes")
-def internal_list_notes(user_id: str, x_internal_key: str = Header()):
+def internal_list_notes(user_id: str, _key: None = Depends(require_internal_key)):
     """List all notes for a user. Called by MCP server."""
-    _check_internal_key(x_internal_key)
     db = get_supabase()
     result = (
         db.table("notes")
@@ -191,10 +218,9 @@ class UpdateRowRequest(BaseModel):
 
 @router.post("/db/list_databases")
 async def internal_list_databases(
-    body: ListDatabasesRequest, x_internal_key: str = Header()
+    body: ListDatabasesRequest, _key: None = Depends(require_internal_key)
 ):
     """Mirrors brain.list_databases. Called by the MCP server."""
-    _check_internal_key(x_internal_key)
     pool = await get_pool()
     async with pool.acquire() as conn:
         result = await list_databases(user_id=body.user_id, conn=conn)
@@ -203,13 +229,12 @@ async def internal_list_databases(
 
 @router.post("/db/get_database_schema")
 async def internal_get_database_schema(
-    body: GetDatabaseSchemaRequest, x_internal_key: str = Header()
+    body: GetDatabaseSchemaRequest, _key: None = Depends(require_internal_key)
 ):
     """Mirrors brain.get_database_schema. Called by the MCP server.
     `get_database` raises its own HTTPException (404) for a malformed or
     not-owned database_id -- left to propagate as-is, same as any other
     FastAPI route."""
-    _check_internal_key(x_internal_key)
     pool = await get_pool()
     async with pool.acquire() as conn:
         result = await get_database(body.database_id, user_id=body.user_id, conn=conn)
@@ -218,14 +243,13 @@ async def internal_get_database_schema(
 
 @router.post("/db/query_database")
 async def internal_query_database(
-    body: QueryDatabaseRequest, x_internal_key: str = Header()
+    body: QueryDatabaseRequest, _key: None = Depends(require_internal_key)
 ):
     """Mirrors brain.query_database -- the tool the spec's tenancy claim is
     about. `query_rows` is called directly, unmodified, so a filter naming
     a data_source_id/property key `body.user_id` doesn't own is rejected
     exactly the way the HTTP endpoint already rejects it (its own
     HTTPException propagates unchanged)."""
-    _check_internal_key(x_internal_key)
     query_body = QueryRequest(
         filter=body.filter,
         sorts=body.sorts,
@@ -242,9 +266,8 @@ async def internal_query_database(
 
 
 @router.post("/db/create_row")
-async def internal_create_row(body: CreateRowRequest, x_internal_key: str = Header()):
+async def internal_create_row(body: CreateRowRequest, _key: None = Depends(require_internal_key)):
     """Mirrors brain.create_row. Called by the MCP server."""
-    _check_internal_key(x_internal_key)
     try:
         require_uuid(body.data_source_id, "data_source_id")
     except ValueError as exc:
@@ -294,12 +317,11 @@ async def internal_create_row(body: CreateRowRequest, x_internal_key: str = Head
 
 
 @router.post("/db/update_row")
-async def internal_update_row(body: UpdateRowRequest, x_internal_key: str = Header()):
+async def internal_update_row(body: UpdateRowRequest, _key: None = Depends(require_internal_key)):
     """Mirrors brain.update_row -- same title-sync/date-shift-cascade/
     property_edited-automation behavior as a human editing this cell,
     since `update_row_property_core` is the same function the HTTP PATCH
     endpoint calls."""
-    _check_internal_key(x_internal_key)
     try:
         require_uuid(body.data_source_id, "data_source_id")
         require_uuid(body.note_id, "note_id")
