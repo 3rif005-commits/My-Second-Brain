@@ -181,7 +181,7 @@ def test_token_factory_nemotron_is_not_logged_as_free(on, monkeypatch):
 
 def test_one_shot_calls_to_nebius_turn_thinking_off(on, monkeypatch):
     _vm(monkeypatch, alive=True)
-    off = {"chat_template_kwargs": {"enable_thinking": False}}
+    off = {"reasoning_effort": "none", "chat_template_kwargs": {"enable_thinking": False}}
     assert nebius.no_thinking("https://api.tokenfactory.nebius.com/v1/chat/completions") == off
     assert nebius.no_thinking("https://203.0.113.7.sslip.io/v1/chat/completions") == off
     assert nebius.no_thinking("https://openrouter.ai/api/v1/chat/completions") == {}
@@ -206,6 +206,7 @@ def test_thinking_switch_reaches_the_wire(on, monkeypatch):
     monkeypatch.setattr(client.httpx, "stream", stream)
     out = client.complete(nebius.token_factory(), [{"role": "user", "content": "x"}], 60)
     assert out == '{"slot":"fast"}'
+    assert sent["reasoning_effort"] == "none"
     assert sent["chat_template_kwargs"] == {"enable_thinking": False}
 
 

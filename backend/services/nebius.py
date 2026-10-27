@@ -63,12 +63,15 @@ def no_thinking(url: str) -> dict:
     a ping, a title). Nemotron thinks first by default and the thinking is
     dropped from the answer, so a small budget came back empty — the brain
     got no JSON on the live site and every request took the default slot.
-    NVIDIA's documented switch turns it off; chat turns keep it."""
+    Token Factory's documented switch is `reasoning_effort: none` (NVIDIA's
+    `enable_thinking` alone was ignored there, checked live); a vLLM server on
+    the VM reads `enable_thinking`. Chat turns keep their thinking."""
     if not enabled():
         return {}
     vm = _vm_base()
     if urlsplit(url).hostname == provider_key() or (vm and url.startswith(vm)):
-        return {"chat_template_kwargs": {"enable_thinking": False}}
+        return {"reasoning_effort": "none",
+                "chat_template_kwargs": {"enable_thinking": False}}
     return {}
 
 
