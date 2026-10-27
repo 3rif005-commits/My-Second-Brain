@@ -15,6 +15,11 @@ from pydantic import BaseModel, model_validator
 
 from core.config import settings
 from services import egress
+from services.text_hygiene import clean_schema, untrusted
+
+#: Longer than any honest tool needs; a poisoned one hides its instructions in
+#: the length.
+DESCRIPTION_LIMIT = 1024
 
 
 class McpServerConfig(BaseModel):
@@ -42,10 +47,12 @@ class McpToolSchema:
 
     @classmethod
     def from_mcp_tool(cls, server_name: str, tool) -> "McpToolSchema":
+        # The description and schema are prompt text the server controls
+        # ("tool poisoning"): cleaned of invisible characters and capped.
         return cls(
             name=f"mcp.{server_name}.{tool.name}",
-            description=tool.description or "",
-            input_schema=tool.inputSchema or {"type": "object", "properties": {}},
+            description=untrusted(tool.description or "")[:DESCRIPTION_LIMIT],
+            input_schema=clean_schema(tool.inputSchema or {"type": "object", "properties": {}}),
         )
 
     def to_llm_schema(self) -> dict:
