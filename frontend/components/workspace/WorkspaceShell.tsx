@@ -733,11 +733,11 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
   const sessionItems: PickerItem[] = lay ? [
     ...[noteId, ...lay.notes].filter((id) => !openKeys.has(noteKey(id)))
       .map((id) => ({ key: noteKey(id), kind: "note" as const, title: noteById(id)?.title || "Untitled",
-        hint: id === noteId ? "this session's note" : "note" })),
+        hint: id === noteId ? "session note" : undefined })),
     ...allSources.filter((s) => !openKeys.has(srcKey(s.id)))
       .map((s) => ({ key: srcKey(s.id), kind: "source" as const, title: s.title, color: sourceColor(s.order_index),
         hint: lay.foreign.includes(s.id) ? "from another note" : KIND_LABEL[s.kind] ?? "source" })),
-    ...(aiOpen ? [] : [{ key: ASK, kind: "ask" as const, title: "Ask AI", hint: "Ctrl+J" }]),
+    ...(aiOpen ? [] : [{ key: ASK, kind: "ask" as const, title: "Ask AI", keys: "Ctrl+J" }]),
   ] : [];
   const sessionNoteIds = new Set([noteId, ...(lay?.notes ?? [])]);
 

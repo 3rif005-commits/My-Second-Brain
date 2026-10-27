@@ -162,7 +162,8 @@ export function PaneTabs({
           open={pickerOpen}
           onOpenChange={onPickerOpenChange}
           align="end"
-          width={340}
+          width={380}
+          className="max-w-[calc(100vw-16px)]"
           label="Open here"
           maxHeight="none"
           trigger={
