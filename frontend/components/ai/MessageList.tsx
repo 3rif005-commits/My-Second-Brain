@@ -8,6 +8,10 @@ import type { Citation } from "@/lib/workspace";
 import { ToolEvent } from "./ToolEvent";
 import { SkillBadge } from "./SkillBadge";
 import { SkillDraftCard } from "./SkillDraftCard";
+import { RunnablePre } from "./RunnablePython";
+
+/** Python blocks in an answer get Run (browser sandbox, your click only). */
+const RUNNABLE = { pre: RunnablePre };
 import type { SkillDraftProposal } from "@/lib/skills";
 import { UploadCard, type PanelJob } from "./PanelCards";
 import { Answer } from "./Answer";
@@ -137,7 +141,7 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
                 {onCitation && item.citations?.length
                   ? <Answer content={item.content} citations={item.citations}
                       colorIndex={colorIndex ?? new Map()} onCitation={onCitation} />
-                  : <Markdown>{item.citations?.length ? resolveCitations(item.content, item.citations) : item.content}</Markdown>}
+                  : <Markdown components={RUNNABLE}>{item.citations?.length ? resolveCitations(item.content, item.citations) : item.content}</Markdown>}
               </div>
               {item.streaming && (
                 <span className="inline-block w-0.5 h-[1em] bg-accent-400 animate-pulse ml-0.5 align-middle rounded-full" />

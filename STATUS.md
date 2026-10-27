@@ -13,6 +13,14 @@
 | 2 | Settings at phone width not re-checked after the settings rework (Chrome wouldn't resize); Connected apps has no "how to connect" text because the app's own MCP server isn't deployed with Render | small |
 | 3 | Editor AI: one Revert (after Simplify) left stray letters in the paragraph ("foronr"); two later Simplify/Fix-spelling reverts restored the text exactly. Watch for it; if it recurs, check xl-ai's revert with large rewrites | couldn't reproduce |
 
+**Skills, safely (2026-10-27, docs/agent-tools-study/SKILLS_PLAN.md):** found and fixed: every
+account shared one server skills folder (one user's edit = everyone's instructions). Skills are
+now per user (migration 033), carry an origin (built-in/yours/AI-drafted/installed; the last two
+untrusted), the chat can draft a skill you save (unused drafts archived, never deleted), skills
+install from a GitHub folder or SKILL.md link (preview first, text only, pinned, updates as a
+diff), and Python blocks in answers run on click in a browser sandbox (Pyodide, network cut,
+CSP-pinned; checked in Chrome). **Run migrations 032 and 033, then push.**
+
 **Learned from NemoClaw / OpenShell / Hermes Agent / OpenClaw (2026-10-27):** their code read,
 nothing of theirs used (docs/agent-tools-study/DIAGNOSIS.md). Built: internal API key fails closed
 off-machine; one SSRF guard (`services/egress.py`) for website/article import, MCP URLs, custom AI

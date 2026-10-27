@@ -37,3 +37,22 @@ approved plugins. Text only: no script from a skill ever runs on the server.
 Code runs in the user's browser in Pyodide inside a Web Worker: network APIs removed after
 loading, no DOM, no session, only the data passed in, time and memory limits (the worker is
 killed). The server never executes code.
+
+## Status (2026-10-27)
+
+| Step | Commit | Tests |
+|---|---|---|
+| 1 Per-user skills | `d7e55d8b` | `tests/test_skill_store.py` (one user's edit never reaches another) |
+| 2 Origins and limits | `ff90f1a7` | `tests/test_skill_origins.py`, `SourceMark.test.tsx` |
+| 3 AI-drafted skills + curator | `5b824548` | `tests/test_skill_drafts.py`, `SkillDraftCard.test.tsx`, `ArchivedSkills.test.tsx` |
+| 4 Install from a link | `98a948bd` | `tests/test_skill_install.py`, `InstallSkill.test.tsx` |
+| 5 Browser sandbox | (this commit) | `lib/sandbox/*.test.ts`, `RunnablePython.test.tsx` |
+
+Step 5 was checked in Chrome against a local copy served with the same CSP: Pyodide 0.29.5, numpy
+and a matplotlib chart run; fetch, XMLHttpRequest, importScripts, Worker, pyfetch, eval and new
+Function are refused even through `__import__("js")`; an endless loop is killed. Code can forge
+its own "done" message — harmless, the page reads only text and validated PNG data from it.
+
+Decided in building: the sandbox runs on the user's click (Run on a Python block in a chat
+answer), never as a tool the model calls by itself; an installed skill's scripts are skipped,
+not run in the sandbox (a later step if wanted). **Migration 033 must run before pushing.**
