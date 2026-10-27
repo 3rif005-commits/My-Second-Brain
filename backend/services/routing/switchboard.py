@@ -57,6 +57,15 @@ def resolve_slot(slot: str, policy: dict[str, Any], user_id: str,
 
     cfg = policy["slots"].get(slot) or {"provider": "auto", "model": ""}
     if slot == "local" or cfg["provider"] == "local":
+        from services import nebius                 # HACKATHON-NEBIUS
+        if nebius.vm_configured():
+            # The VM is off: say so here, so route() falls back to Token
+            # Factory and private notes are held back, not sent there.
+            from services.router import LocalModelUnavailable, smart_router
+            try:
+                smart_router.get_endpoint()
+            except LocalModelUnavailable:
+                raise NoProvider("The Nemotron VM is not answering.") from None
         p = local_provider()
         return replace(p, chat_model=cfg["model"]) if cfg.get("model") else p
 

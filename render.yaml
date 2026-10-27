@@ -53,3 +53,11 @@ services:
       # Losing it means every Notion connection must be reconnected.
       - key: SECRETS_KEY
         sync: false
+      # HACKATHON-NEBIUS: Nemotron on Nebius (backend/services/nebius.py).
+      # Unset = off. Removal: docs/hackathon/NEBIUS.md
+      - key: NEBIUS_API_KEY
+        sync: false
+      - key: NEBIUS_VM_URL
+        sync: false
+      - key: NEBIUS_VM_API_KEY
+        sync: false

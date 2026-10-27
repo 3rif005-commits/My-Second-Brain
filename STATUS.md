@@ -13,6 +13,12 @@
 | 2 | Settings at phone width not re-checked after the settings rework (Chrome wouldn't resize); Connected apps has no "how to connect" text because the app's own MCP server isn't deployed with Render | small |
 | 3 | Editor AI: one Revert (after Simplify) left stray letters in the paragraph ("foronr"); two later Simplify/Fix-spelling reverts restored the text exactly. Watch for it; if it recurs, check xl-ai's revert with large rewrites | couldn't reproduce |
 
+**Hackathon: Nemotron on Nebius (2026-10-27, docs/hackathon/NEBIUS.md):** a removable add-on
+(`services/nebius.py`, touchpoints marked `HACKATHON-NEBIUS`; off while `NEBIUS_API_KEY` is
+unset). Token Factory Nemotrons fill fast/strong, a Nemotron on your own Nebius VM is the front
+door (local slot + brain), VM off → Token Factory without private notes. Next: key on Render, the
+VM, then Tavily, README, video, Devpost.
+
 **Skills, safely (2026-10-27, docs/agent-tools-study/SKILLS_PLAN.md):** found and fixed: every
 account shared one server skills folder (one user's edit = everyone's instructions). Skills are
 now per user (migration 033), carry an origin (built-in/yours/AI-drafted/installed; the last two

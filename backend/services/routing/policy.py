@@ -85,7 +85,9 @@ class PolicyError(ValueError):
 
 
 def default_policy() -> dict[str, Any]:
-    return copy.deepcopy(DEFAULT_POLICY)
+    p = copy.deepcopy(DEFAULT_POLICY)
+    from services import nebius                     # HACKATHON-NEBIUS
+    return nebius.apply_defaults(p) if nebius.enabled() else p
 
 
 def validate(raw: dict[str, Any]) -> dict[str, Any]:

@@ -42,6 +42,10 @@ def price_for(model: str | None) -> tuple[float, float] | None:
     from core.config import settings
     if model == settings.custom_llm_model and settings.custom_llm_price_in is not None:
         return (settings.custom_llm_price_in, settings.custom_llm_price_out or 0.0)
+    from services import nebius                     # HACKATHON-NEBIUS
+    tf = nebius.price_for(model)
+    if tf is not False:
+        return tf
     if model in PRICES:
         return PRICES[model]
     # OpenRouter marks no-cost models with a `:free` suffix.

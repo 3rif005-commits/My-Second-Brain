@@ -131,6 +131,18 @@ class Settings(BaseSettings):
     custom_llm_price_in: float | None = None
     custom_llm_price_out: float | None = None
 
+    # ── HACKATHON-NEBIUS: Nemotron on Nebius (services/nebius.py) ─────────
+    # Unset NEBIUS_API_KEY and none of this runs. Removal: docs/hackathon/NEBIUS.md
+    nebius_api_key: str = ""                           # Token Factory key
+    nebius_base_url: str = "https://api.tokenfactory.nebius.com/v1"
+    nebius_fast_model: str = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
+    nebius_strong_model: str = "nvidia/nemotron-3-super-120b-a12b"
+    nebius_price_in: float | None = None               # USD per 1M tokens; unset = unknown
+    nebius_price_out: float | None = None
+    nebius_vm_url: str = ""          # the front-door Nemotron on your Nebius VM (https)
+    nebius_vm_api_key: str = ""      # the key the VM's server was started with
+    nebius_vm_model: str = "nvidia/NVIDIA-Nemotron-Nano-9B-v2"
+
     # How skill instructions reach the agent's system prompt.
     #   "inline" (default) — the classifier's top matches are pasted in whole,
     #                        which is what shipped and what the numbers describe.

@@ -115,7 +115,8 @@ def brain_provider(policy: dict[str, Any], user_id: str):
 
     kind = policy["brain"]["kind"]
     if kind == "local":
-        return local_provider()
+        from services import nebius                 # HACKATHON-NEBIUS
+        return nebius.brain_fallback() or local_provider()
     if kind == "cloud":
         want = policy["brain"].get("provider") or ""
         for p in list_providers(user_id):

@@ -99,6 +99,9 @@ def _env_providers() -> list[Provider]:
                             chat_model=settings.api_model_openrouter,
                             label="OpenRouter (.env)",
                             capabilities=set(CAPABILITIES["openai_compatible"])))
+    from services import nebius                     # HACKATHON-NEBIUS
+    if nebius.enabled():
+        out.append(nebius.token_factory())
     return out
 
 
@@ -149,7 +152,9 @@ def _user_providers(user_id: str) -> list[Provider]:
 
 
 def local_provider() -> Provider:
-    return Provider("local", label="Local (Gemma)", capabilities=set(CAPABILITIES["local"]))
+    from services import nebius                     # HACKATHON-NEBIUS
+    return Provider("local", label=nebius.local_label() or "Local (Gemma)",
+                    capabilities=set(CAPABILITIES["local"]))
 
 
 def _drop_disabled(providers: list[Provider]) -> list[Provider]:

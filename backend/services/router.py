@@ -61,6 +61,12 @@ class SmartRouter:
           model    — model name string for the payload
           source   — 'tablet' | 'llamacpp'
         """
+        # HACKATHON-NEBIUS: the Nemotron front door on the user's Nebius VM
+        from services import nebius
+        ep = nebius.vm_endpoint()
+        if ep is not None:
+            return ep
+
         # 1. LiteRT tablet
         if self._tablet_ok():
             logger.info("smartrouter | routing → tablet")
