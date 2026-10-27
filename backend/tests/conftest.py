@@ -246,7 +246,7 @@ def skill_db(monkeypatch, tmp_path):
     monkeypatch.setattr(skill_store, "_synced", {})
     monkeypatch.setattr(skill_store, "_rows", lambda uid: [
         {"name": n, "files": dict(r["files"]), "origin": r.get("origin", "user"),
-         **{k: r.get(k) for k in ("created_at", "last_used_at", "archived_at")}}
+         **{k: r.get(k) for k in ("created_at", "last_used_at", "archived_at", "source", "pin")}}
         for (u, n), r in rows.items() if u == uid])
     monkeypatch.setattr(skill_store, "_touched", {})
     monkeypatch.setattr(skill_store, "_table", lambda: _FakeSkillTable(rows))

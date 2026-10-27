@@ -3,7 +3,7 @@
 // The list of skills, Notion-sidebar style: search, "New", and the skills
 // grouped by where they run (groups.ts), each with its icon and a quiet mark
 // for edited built-ins and the user's own.
-import { Archive, Plus, Search } from "lucide-react";
+import { Archive, Download, Plus, Search } from "lucide-react";
 import type { ArchivedSkill, Skill } from "@/lib/skills";
 import { GROUPS } from "./groups";
 import { matches } from "./model";
@@ -36,11 +36,13 @@ export function SourceMark({ source, origin }: { source: Skill["source"]; origin
   );
 }
 
-export function SkillSidebar({ skills, archived = [], onRestore, selected, query, onQuery, onSelect, onNew, onAction, loading }: {
+export function SkillSidebar({ skills, archived = [], onRestore, onInstall, selected, query, onQuery, onSelect, onNew, onAction, loading }: {
   skills: Skill[];
   /** Drafted skills set aside after 30 days unused — kept, never deleted. */
   archived?: ArchivedSkill[];
   onRestore?: (name: string) => void;
+  /** Install a skill from a link (read before it is yours). */
+  onInstall?: () => void;
   selected: string | null;
   query: string;
   onQuery: (q: string) => void;
@@ -55,6 +57,14 @@ export function SkillSidebar({ skills, archived = [], onRestore, selected, query
       <div className="px-3 pt-4 pb-2 space-y-2 shrink-0">
         <div className="flex items-center justify-between px-1">
           <h1 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100">Skills</h1>
+          <span className="flex-1" />
+          {onInstall && (
+            <button type="button" onClick={onInstall} title="Install a skill from a link"
+              className="mr-1 inline-flex items-center gap-1 h-7 px-2 rounded-lg text-[12.5px] text-gray-600
+                dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors">
+              <Download size={13} /> Install
+            </button>
+          )}
           <button type="button" onClick={onNew}
             className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[12.5px] font-medium
               bg-accent-600 text-white hover:bg-accent-500 transition-colors">

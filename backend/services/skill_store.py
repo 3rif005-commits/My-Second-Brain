@@ -102,7 +102,7 @@ def _rows(uid: str) -> list[dict]:
     from services.database import get_supabase
     try:
         return (get_supabase().table("user_skills")
-                .select("name, files, origin, created_at, last_used_at, archived_at")
+                .select("name, files, origin, created_at, last_used_at, archived_at, source, pin")
                 .eq("user_id", uid).execute().data or [])
     except Exception as e:                                # noqa: BLE001
         text = str(e)
@@ -300,9 +300,12 @@ def origins(user_id: str) -> dict[str, str]:
 
 
 def put_files(user_id: str, name: str, files: dict[str, str | None],
-              origin: str | None = None) -> dict:
+              origin: str | None = None, replace: bool = False,
+              source: str | None = None, pin: str | None = None) -> dict:
     """Write (or, with None, remove) files of one skill. A skill that ends up
-    with no files is deleted. Raises SkillRejected / SkillsUnavailable."""
+    with no files is deleted. `replace` drops every file not in `files` (an
+    installed skill's update). `source`/`pin` record where an installed skill
+    came from. Raises SkillRejected / SkillsUnavailable."""
     uid = _require(user_id)
     if not NAME.match(name):
         raise SkillRejected("A skill name is lowercase letters, digits and dashes.")
@@ -317,7 +320,7 @@ def put_files(user_id: str, name: str, files: dict[str, str | None],
     current = next((r for r in rows if r.get("name") == name), None)
     if current is None and len(rows) >= SKILLS_MAX:
         raise SkillRejected(f"You have {SKILLS_MAX} skills of your own. Delete one first.")
-    merged = dict((current or {}).get("files") or {})
+    merged = {} if replace else dict((current or {}).get("files") or {})
     for rel, text in files.items():
         if text is None:
             merged.pop(rel, None)
@@ -331,6 +334,10 @@ def put_files(user_id: str, name: str, files: dict[str, str | None],
     row = {"user_id": uid, "name": name, "files": merged,
            "origin": origin or (current or {}).get("origin") or "user",
            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    if source is not None:
+        row["source"] = source
+    if pin is not None:
+        row["pin"] = pin
     _table().upsert(row, on_conflict="user_id,name").execute()
     invalidate(uid)
     return row

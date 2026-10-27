@@ -16,6 +16,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/app/providers";
 import { useAIPanel } from "@/context/AIPanelContext";
+import { InstallSkillDialog } from "./InstallSkillDialog";
 import { skillsApi, type ArchivedSkill, type Skill, type SkillDraft } from "@/lib/skills";
 import { draftOf, duplicateOf, isDirty } from "./model";
 import { SkillSidebar } from "./SkillSidebar";
@@ -37,6 +38,7 @@ export function SkillsWorkspace() {
 
   const [skills, setSkills] = useState<Skill[]>([]);
   const [archived, setArchived] = useState<ArchivedSkill[]>([]);
+  const [installing, setInstalling] = useState(false);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<SkillDraft | null>(null);
@@ -76,7 +78,9 @@ export function SkillsWorkspace() {
   // A fresh draft when another skill is opened — only then: a reload of the
   // list (after saving a reference file, say) must not throw away edits to
   // the instructions that are not saved yet.
-  const openName = selected?.name ?? null;
+  // An installed skill's approved update changes its pin: that is a new
+  // version, so the editor starts again from it.
+  const openName = selected ? `${selected.name}:${selected.pin ?? ""}` : null;
   useEffect(() => {
     setDraft(selected ? draftOf(selected) : null);
     setError("");
@@ -190,6 +194,7 @@ export function SkillsWorkspace() {
         <SkillSidebar
           skills={skills}
           archived={archived}
+          onInstall={() => setInstalling(true)}
           onRestore={async (name) => {
             try {
               await skillsApi.restore(name);
@@ -225,6 +230,10 @@ export function SkillsWorkspace() {
             onBack={() => select(null)}
             reportDirty={reportDirty}
             onSkillChanged={() => void load()}
+            onInstalledUpdated={(s) => {
+              setSkills((prev) => prev.map((x) => (x.name === s.name ? s : x)));
+              showToast(`${s.title} updated`, "info");
+            }}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center text-[13px] text-gray-400">
@@ -248,6 +257,15 @@ export function SkillsWorkspace() {
         danger={pendingText?.danger}
         onConfirm={() => void confirmPending()}
         onCancel={() => setPending(null)}
+      />
+      <InstallSkillDialog
+        open={installing}
+        onClose={() => setInstalling(false)}
+        onInstalled={async (skill) => {
+          await load();
+          go(skill.name);
+          showToast(`${skill.title} installed`, "info");
+        }}
       />
     </div>
   );

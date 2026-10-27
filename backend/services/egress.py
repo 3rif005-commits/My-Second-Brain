@@ -179,12 +179,14 @@ _REDIRECTS = (301, 302, 303, 307, 308)
 
 
 def fetch(url: str, *, max_bytes: int = 15_000_000, timeout: float = 20.0,
-          max_redirects: int = 5, allow_private: bool | None = None) -> Fetched:
+          max_redirects: int = 5, allow_private: bool | None = None,
+          headers: dict[str, str] | None = None) -> Fetched:
     """GET a user-supplied URL with every check above. Raises EgressBlocked for
-    a refused address, ValueError for anything else the user should read."""
+    a refused address, ValueError for anything else the user should read.
+    `headers` go to every hop, so never put a credential in them."""
     current = url
     with httpx.Client(follow_redirects=False, timeout=timeout,
-                      headers={"User-Agent": USER_AGENT}) as client:
+                      headers={"User-Agent": USER_AGENT, **(headers or {})}) as client:
         for _ in range(max_redirects + 1):
             check_url(current, allow_private=allow_private)
             try:

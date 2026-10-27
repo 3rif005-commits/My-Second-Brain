@@ -139,6 +139,8 @@ def _json(s: Skill, bundled: set[str], user: set[str]) -> dict:
         # builtin | user | assistant | installed — what the skill may do
         # depends on it (services/agent/skills.py, Skill.trusted).
         "origin": s.origin,
+        # Installed skills: where from, and which exact version (pinned).
+        **(_install_info(s.name) if s.origin == "installed" else {}),
         "can_reset": source == "edited",
         "can_delete": source == "user",
         # The study guide only — None hides the setting for every other skill.
@@ -148,6 +150,15 @@ def _json(s: Skill, bundled: set[str], user: set[str]) -> dict:
         "tools": list(s.tools) if s.tools else None,
         "priority": s.priority,
     }
+
+
+def _install_info(name: str) -> dict:
+    uid = skill_store.current_user()
+    try:
+        row = skill_store.get_row(uid, name) if uid else None
+    except Exception:                               # noqa: BLE001
+        row = None
+    return {"source_url": (row or {}).get("source"), "pin": (row or {}).get("pin")}
 
 
 def _state() -> tuple[SkillRegistry, set[str], set[str]]:
@@ -264,6 +275,77 @@ def save_draft(payload: DraftPayload, authorization: str = Header()):
                       draft["where"], None, origin="assistant")
     reg, bundled, user = _state()
     return _json(reg.get(draft["name"]), bundled, user)
+
+
+# ── installed skills (services/skill_install.py) ───────────────────────────
+
+class InstallPayload(BaseModel):
+    url: str
+    #: install only: the content_hash the preview showed
+    content_hash: str | None = None
+
+
+def _taken(user_id: str) -> set[str]:
+    reg, _, _ = _state()
+    return set(reg.names()) | {a["name"] for a in skill_store.archived(user_id)}
+
+
+def _installing(fn, *args):
+    """skill_install refusals → 400 (409 for a name clash), egress → 400."""
+    from services import egress
+    try:
+        return fn(*args)
+    except skill_store.SkillsUnavailable as e:
+        raise HTTPException(409, detail=str(e)) from None
+    except skill_store.SkillRejected as e:
+        raise HTTPException(409 if "already have" in str(e) else 400, detail=str(e)) from None
+    except egress.EgressBlocked as e:
+        raise HTTPException(400, detail=str(e)) from None
+    except ValueError as e:                       # a fetch that failed, said plainly
+        raise HTTPException(502, detail=str(e)) from None
+
+
+@router.post("/install-preview")
+def install_preview(payload: InstallPayload, authorization: str = Header()):
+    """Everything to read before installing. Saves nothing."""
+    user_id = get_user_id(authorization)
+    from services import skill_install
+    return _installing(skill_install.preview, payload.url, _taken(user_id))
+
+
+@router.post("/install", status_code=201)
+def install_skill(payload: InstallPayload, authorization: str = Header()):
+    """Install exactly what the preview showed (same content hash), or nothing."""
+    user_id = get_user_id(authorization)
+    if not payload.content_hash:
+        raise HTTPException(400, detail="Preview the skill first.")
+    from services import skill_install
+    out = _installing(skill_install.install, user_id, payload.url, payload.content_hash,
+                      _taken(user_id))
+    reg, bundled, user = _state()
+    return _json(reg.get(out["name"]), bundled, user)
+
+
+@router.post("/{name}/check-update")
+def check_update(name: str, authorization: str = Header()):
+    """An installed skill's update, as a diff to read. Applies nothing."""
+    user_id = get_user_id(authorization)
+    from services import skill_install
+    return _installing(skill_install.check_update, user_id, name)
+
+
+class UpdatePayload(BaseModel):
+    content_hash: str
+
+
+@router.post("/{name}/update")
+def update_installed(name: str, payload: UpdatePayload, authorization: str = Header()):
+    """Apply exactly the update the user reviewed (same content hash)."""
+    user_id = get_user_id(authorization)
+    from services import skill_install
+    _installing(skill_install.update, user_id, name, payload.content_hash)
+    reg, bundled, user = _state()
+    return _json(reg.get(name), bundled, user)
 
 
 @router.post("/{name}/restore")

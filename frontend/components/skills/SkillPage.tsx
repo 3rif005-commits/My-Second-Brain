@@ -13,9 +13,11 @@ import { PROPERTIES, PropertyRow, type PropertyCtx } from "./properties";
 import { TABS, type TabCtx } from "./tabs";
 import { SkillMenu, type SkillAction } from "./SkillMenu";
 import { SourceMark } from "./SkillSidebar";
+import { InstalledNotice } from "./InstalledNotice";
 
 export function SkillPage({
   skill, draft, dirty, saving, error, onChange, onSave, onDiscard, onAction, onBack, reportDirty, onSkillChanged,
+  onInstalledUpdated,
 }: {
   skill: Skill;
   draft: SkillDraft;
@@ -30,6 +32,8 @@ export function SkillPage({
   onBack: () => void;
   reportDirty: (tabId: string, dirty: boolean) => void;
   onSkillChanged: () => void;
+  /** An installed skill took an update the user approved. */
+  onInstalledUpdated?: (skill: Skill) => void;
 }) {
   const group = groupOf(draft.where);
   const ctx: PropertyCtx & TabCtx = { skill, draft, set: onChange, reportDirty, onSkillChanged };
@@ -74,6 +78,10 @@ export function SkillPage({
               A built-in skill. Your changes are saved as your own version; the original stays, and
               <span className="font-medium text-gray-700 dark:text-gray-200"> Reset</span> brings it back.
             </p>
+          )}
+
+          {skill.origin === "installed" && (
+            <InstalledNotice skill={skill} onUpdated={(s) => onInstalledUpdated?.(s)} />
           )}
 
           <IconPicker icon={draft.icon} fallback={group.defaultIcon} onChange={(icon) => onChange({ icon })} />

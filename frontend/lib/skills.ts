@@ -30,6 +30,9 @@ export interface Skill {
   files: string[];
   source: SkillSource;
   origin?: SkillOrigin;
+  /** Installed skills: the link it came from and the exact version (pinned). */
+  source_url?: string | null;
+  pin?: string | null;
   can_reset: boolean;
   can_delete: boolean;
   /** The study guide only; null for every other skill. */
@@ -85,6 +88,25 @@ export interface SkillDraftProposal {
   hidden_removed?: boolean;
 }
 
+/** Everything to read before installing (backend: services/skill_install.py). */
+export interface InstallPreview {
+  name: string;
+  description: string;
+  body: string;
+  /** Files that will be stored: SKILL.md and reference texts. */
+  files: string[];
+  /** Everything else in the folder — scripts included — never stored or run. */
+  skipped: string[];
+  warnings: string[];
+  source: string;
+  pin: string;
+  content_hash: string;
+}
+
+export type UpdateCheck =
+  | { up_to_date: true; pin?: string | null }
+  | (InstallPreview & { up_to_date: false; diff: string; current_pin?: string | null });
+
 export const skillsApi = {
   list: () => fetch("/api/skills").then((r) => json<{ skills: Skill[] }>(r)).then((d) => d.skills ?? []),
   /** The skills and the archived ones, for Settings → Skills. */
@@ -93,6 +115,19 @@ export const skillsApi = {
     .then((d) => ({ skills: d.skills ?? [], archived: d.archived ?? [] })),
   restore: (name: string) =>
     fetch(`/api/skills/${enc(name)}/restore`, { method: "POST", headers: JSON_HEADERS, body: "{}" })
+      .then((r) => json<Skill>(r)),
+  installPreview: (url: string) =>
+    fetch("/api/skills/install-preview", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ url }) })
+      .then((r) => json<InstallPreview>(r)),
+  /** Installs exactly the previewed content (same hash), or fails. */
+  install: (url: string, content_hash: string) =>
+    fetch("/api/skills/install", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ url, content_hash }) })
+      .then((r) => json<Skill>(r)),
+  checkUpdate: (name: string) =>
+    fetch(`/api/skills/${enc(name)}/check-update`, { method: "POST", headers: JSON_HEADERS, body: "{}" })
+      .then((r) => json<UpdateCheck>(r)),
+  applyUpdate: (name: string, content_hash: string) =>
+    fetch(`/api/skills/${enc(name)}/update`, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ content_hash }) })
       .then((r) => json<Skill>(r)),
   /** Save a drafted skill exactly as the card shows it (after any edits). */
   saveDraft: (d: Pick<SkillDraftProposal, "name" | "description" | "body" | "where">) =>
