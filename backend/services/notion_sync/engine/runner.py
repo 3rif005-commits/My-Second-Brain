@@ -434,7 +434,7 @@ class Engine(DatabaseMixin):
             if not rows:
                 raise ItemFailure("failed", "permanent", "no_thread", "This chat no longer exists.")
             return objs.thread_to_ir(rows[0])
-        sk = objs.load_skills(objs.skill_dirs()).get(item.note_id)
+        sk = objs.load_skills(objs.skill_dirs(self.conn.user_id)).get(item.note_id)
         if sk is None:
             raise ItemFailure("failed", "permanent", "no_skill", "This skill no longer exists.")
         return objs.skill_to_ir(item.note_id, sk)

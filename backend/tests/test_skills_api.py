@@ -5,6 +5,9 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from services import skill_store
+from tests.conftest import SKILL_USER, signed_in_as
+
 H = {"Authorization": "Bearer fake"}
 GUIDE = ("---\nname: study-guide\ndescription: Write a full study guide.\n"
          "surfaces: [workspace]\ninputs: sources\noutput: draft_note\npriority: 5\n---\n\n"
@@ -12,9 +15,8 @@ GUIDE = ("---\nname: study-guide\ndescription: Write a full study guide.\n"
 
 
 @pytest.fixture
-def client(tmp_path):
-    user_dir = tmp_path / "user_skills"
-    user_dir.mkdir()
+def client(tmp_path, skill_user_dir):
+    user_dir = skill_user_dir
     bundled_dir = tmp_path / "bundled_skills"
     bundled_dir.mkdir()
     (bundled_dir / "cite-everything.md").write_text(
@@ -23,9 +25,8 @@ def client(tmp_path):
     (bundled_dir / "study-guide").mkdir()
     (bundled_dir / "study-guide" / "SKILL.md").write_text(GUIDE, encoding="utf-8")
     with (
-        patch("routers.skills_api.get_user_id", return_value="user-1"),
+        patch("routers.skills_api.get_user_id", side_effect=signed_in_as(SKILL_USER)),
         patch("routers.skills_api._BUNDLED_SKILLS_DIR", bundled_dir),
-        patch("routers.skills_api._USER_SKILLS_DIR", user_dir),
     ):
         from main import app
         yield TestClient(app), user_dir, bundled_dir
@@ -125,7 +126,7 @@ def test_the_setting_is_saved_and_the_instructions_stay_byte_identical(client):
     copy = (user_dir / "study-guide" / "SKILL.md").read_text(encoding="utf-8")
     assert "multi_source: chapters" in copy
     # the runtime reads the same file
-    with patch("prompts._skill_text.USER_SKILLS_DIR", user_dir):
+    with skill_store.as_user(SKILL_USER):
         from prompts._skill_text import skill_body, skill_meta
         assert skill_meta("study-guide")["multi_source"] == "chapters"
         assert skill_body("study-guide") == s["body"]
@@ -175,7 +176,7 @@ def test_a_style_saved_for_any_skill_is_what_the_runtime_reads(client):
     r = tc.put("/skills/cite-everything/files/reference/style.md", headers=H,
                json={"content": "<!-- mine -->\nCite with page numbers.\n"})
     assert r.status_code == 200
-    with patch("prompts._skill_text.USER_SKILLS_DIR", user_dir):
+    with skill_store.as_user(SKILL_USER):
         from prompts._skill_text import skill_style, with_style
         assert skill_style("cite-everything") == "Cite with page numbers."
         assert with_style("cite-everything", "Cite every claim.").startswith("Cite every claim.")

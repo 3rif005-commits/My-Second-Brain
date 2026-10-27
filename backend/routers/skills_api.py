@@ -16,7 +16,6 @@ the registry reads.
 from __future__ import annotations
 
 import re
-import shutil
 from pathlib import Path
 
 import yaml
@@ -29,7 +28,24 @@ from services.agent.skills import Skill, SkillRegistry
 router = APIRouter(prefix="/skills", tags=["skills"])
 
 from prompts._skill_text import SKILLS_DIR as _BUNDLED_SKILLS_DIR  # noqa: E402
-from prompts._skill_text import USER_SKILLS_DIR as _USER_SKILLS_DIR  # noqa: E402
+from services import skill_store  # noqa: E402
+
+
+def _user_dir() -> Path:
+    """The signed-in user's own skills, as a folder rebuilt from the database
+    (services/skill_store.py) — get_user_id set the user. Written only through
+    skill_store; never a folder shared between accounts."""
+    return skill_store.user_skills_dir()
+
+
+def _saving(fn, *args, **kwargs):
+    """Run a skill_store write, turning its refusals into HTTP answers."""
+    try:
+        return fn(*args, **kwargs)
+    except skill_store.SkillsUnavailable as e:
+        raise HTTPException(409, detail=str(e)) from None
+    except skill_store.SkillRejected as e:
+        raise HTTPException(400, detail=str(e)) from None
 
 _SAFE_NAME = re.compile(r"^[a-z0-9][a-z0-9\-]{1,62}$")
 WHERE = ("chat", "selection", "assistant")
@@ -77,7 +93,7 @@ def _files(name: str) -> list[str]:
     always its "Your style" file (E12), which every skill reads."""
     from prompts._skill_text import STYLE_FILE
     found: set[str] = {STYLE_FILE}
-    for root in (_BUNDLED_SKILLS_DIR / name, _USER_SKILLS_DIR / name):
+    for root in (_BUNDLED_SKILLS_DIR / name, _user_dir() / name):
         for d in REF_DIRS:
             if (root / d).is_dir():
                 found |= {f"{d}/{p.name}" for p in (root / d).iterdir()
@@ -85,10 +101,10 @@ def _files(name: str) -> list[str]:
     return sorted(found)
 
 
-def _file_path(name: str, rel: str) -> tuple[Path, Path]:
-    """(where it is read from, where an edit is written). Only a reference
-    file the skill already has — the runtime reads those by name, so a new
-    file would be one nothing uses."""
+def _file_path(name: str, rel: str) -> Path:
+    """Where a reference file is read from: the user's copy, else the
+    built-in. Only a file the skill already has — the runtime reads those by
+    name, so a new file would be one nothing uses."""
     if not _SAFE_NAME.match(name):
         raise HTTPException(400, detail="bad skill name")
     parts = rel.split("/")
@@ -96,15 +112,15 @@ def _file_path(name: str, rel: str) -> tuple[Path, Path]:
         raise HTTPException(400, detail="not a reference file of this skill")
     if rel not in _files(name):
         raise HTTPException(404, detail=f"'{rel}' is not a file of '{name}'")
-    user = _USER_SKILLS_DIR / name / rel
+    user = _user_dir() / name / rel
     bundled = _BUNDLED_SKILLS_DIR / name / rel
-    return (user if user.exists() else bundled), user
+    return user if user.exists() else bundled
 
 
 def _json(s: Skill, bundled: set[str], user: set[str]) -> dict:
     # A built-in counts as edited when the user's folder holds anything of it:
     # its instructions or only one of its reference files.
-    if s.name in bundled and (s.name in user or (_USER_SKILLS_DIR / s.name).exists()):
+    if s.name in bundled and (s.name in user or (_user_dir() / s.name).exists()):
         source = "edited"
     elif s.name in user:
         source = "user"
@@ -133,8 +149,9 @@ def _json(s: Skill, bundled: set[str], user: set[str]) -> dict:
 
 def _state() -> tuple[SkillRegistry, set[str], set[str]]:
     bundled = set(SkillRegistry.load([_BUNDLED_SKILLS_DIR]).names())
-    user = set(SkillRegistry.load([_USER_SKILLS_DIR]).names()) if _USER_SKILLS_DIR.exists() else set()
-    reg = SkillRegistry.load([_BUNDLED_SKILLS_DIR, _USER_SKILLS_DIR])
+    mine = _user_dir()
+    user = set(SkillRegistry.load([mine]).names())
+    reg = SkillRegistry.load([_BUNDLED_SKILLS_DIR, mine])
     return reg, bundled, user
 
 
@@ -143,7 +160,7 @@ MULTI_SOURCE_SKILL = "study-guide"
 MULTI_SOURCE = ("auto", "single", "chapters")
 
 
-def _write_user_skill(name: str, description: str, body: str, where: str,
+def _write_user_skill(user_id: str, name: str, description: str, body: str, where: str,
                       base: Skill | None, icon: str | None = None,
                       output: str | None = None,
                       multi_source: str | None = None) -> None:
@@ -172,13 +189,8 @@ def _write_user_skill(name: str, description: str, body: str, where: str,
     ms = multi_source or (base.multi_source if base else None)
     if name == MULTI_SOURCE_SKILL and ms and ms != "auto":
         meta["multi_source"] = ms
-    folder = _USER_SKILLS_DIR / name
-    folder.mkdir(parents=True, exist_ok=True)
     fm = yaml.safe_dump(meta, sort_keys=False, default_flow_style=None).strip()
-    (folder / "SKILL.md").write_text(f"---\n{fm}\n---\n\n{body}\n", encoding="utf-8")
-    legacy = _USER_SKILLS_DIR / f"{name}.md"        # an old single-file copy
-    if legacy.exists():
-        legacy.unlink()
+    _saving(skill_store.put_files, user_id, name, {"SKILL.md": f"---\n{fm}\n---\n\n{body}\n"})
 
 
 class SkillPayload(BaseModel):
@@ -239,7 +251,7 @@ def get_original(name: str, authorization: str = Header()):
     """The built-in version of an edited skill, to compare against."""
     get_user_id(authorization)
     _, bundled, _ = _state()
-    if name not in bundled or not (_USER_SKILLS_DIR / name).exists():
+    if name not in bundled or not (_user_dir() / name).exists():
         raise HTTPException(404, detail=f"'{name}' has no edited version to compare")
     orig = SkillRegistry.load([_BUNDLED_SKILLS_DIR]).get(name)
     return {"name": name, "description": orig.description,
@@ -249,7 +261,7 @@ def get_original(name: str, authorization: str = Header()):
 @router.get("/{name}/files/{rel:path}")
 def read_file(name: str, rel: str, authorization: str = Header()):
     get_user_id(authorization)
-    src, _ = _file_path(name, rel)
+    src = _file_path(name, rel)
     if not src.exists():
         # A "Your style" file nobody wrote yet: its explanation, nothing sent.
         from prompts._skill_text import STYLE_TEMPLATE
@@ -261,10 +273,9 @@ def read_file(name: str, rel: str, authorization: str = Header()):
 def write_file(name: str, rel: str, payload: FilePayload, authorization: str = Header()):
     """Save the user's copy of a reference file; the built-in stays as it is
     and Reset (DELETE /skills/{name}) brings it back."""
-    get_user_id(authorization)
-    _, dest = _file_path(name, rel)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(payload.content, encoding="utf-8")
+    user_id = get_user_id(authorization)
+    _file_path(name, rel)
+    _saving(skill_store.put_files, user_id, name, {rel: payload.content})
     return {"path": rel, "content": payload.content}
 
 
@@ -280,7 +291,7 @@ def get_skill(name: str, authorization: str = Header()):
 
 @router.post("", status_code=201)
 def create_skill(payload: CreateSkillPayload, authorization: str = Header()):
-    get_user_id(authorization)
+    user_id = get_user_id(authorization)
     if not _SAFE_NAME.match(payload.name):
         raise HTTPException(400, detail="name must be lowercase-kebab-case, 2–63 chars")
     where = payload.where or "assistant"
@@ -290,7 +301,7 @@ def create_skill(payload: CreateSkillPayload, authorization: str = Header()):
     if reg.get(payload.name) is not None:
         raise HTTPException(409, detail=f"Skill '{payload.name}' already exists")
     _check_output(where, payload.output)
-    _write_user_skill(payload.name, payload.description, payload.body, where, None,
+    _write_user_skill(user_id, payload.name, payload.description, payload.body, where, None,
                       icon=payload.icon, output=payload.output)
     reg, bundled, user = _state()
     return _json(reg.get(payload.name), bundled, user)
@@ -300,7 +311,7 @@ def create_skill(payload: CreateSkillPayload, authorization: str = Header()):
 def update_skill(name: str, payload: SkillPayload, authorization: str = Header()):
     """Save the user's version. For a built-in skill this is a copy that
     overrides it; Reset (DELETE) brings the original back."""
-    get_user_id(authorization)
+    user_id = get_user_id(authorization)
     if not _SAFE_NAME.match(name):
         raise HTTPException(400, detail="bad skill name")
     reg, bundled, user = _state()
@@ -316,7 +327,7 @@ def update_skill(name: str, payload: SkillPayload, authorization: str = Header()
             raise HTTPException(400, detail="only the study guide has this setting")
         if payload.multi_source not in MULTI_SOURCE:
             raise HTTPException(400, detail=f"must be one of {', '.join(MULTI_SOURCE)}")
-    _write_user_skill(name, payload.description, payload.body, where, current,
+    _write_user_skill(user_id, name, payload.description, payload.body, where, current,
                       icon=payload.icon, output=payload.output,
                       multi_source=payload.multi_source)
     reg, bundled, user = _state()
@@ -357,16 +368,12 @@ def learn_style(name: str, authorization: str = Header()):
 def delete_skill(name: str, authorization: str = Header()):
     """Reset an edited built-in (the copy goes, the original is back), or
     delete a skill the user created. A built-in itself cannot be deleted."""
-    get_user_id(authorization)
+    user_id = get_user_id(authorization)
     if not _SAFE_NAME.match(name):
         raise HTTPException(400, detail="bad skill name")
-    folder, legacy = _USER_SKILLS_DIR / name, _USER_SKILLS_DIR / f"{name}.md"
-    if not folder.exists() and not legacy.exists():
-        reg, bundled, _ = _state()
+    if not (_user_dir() / name).exists():
+        _, bundled, _ = _state()
         if name in bundled:
             raise HTTPException(403, detail="Built-in skills cannot be deleted")
         raise HTTPException(404, detail=f"User skill '{name}' not found")
-    if folder.exists():
-        shutil.rmtree(folder)
-    if legacy.exists():
-        legacy.unlink()
+    _saving(skill_store.delete, user_id, name)

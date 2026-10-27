@@ -13,7 +13,7 @@ box and a Key takeaways list in each chapter; (c) the quality guard against
 the user-approved note still passes.
 
 The style is written to a TEMPORARY skills folder for this process only — the
-user's own ~/.secondbrain/skills is never touched.
+user's own skills (the database) are never touched.
 """
 from __future__ import annotations
 
@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         (ref_dir / "style.md").write_text("\n".join(accepted) + "\n", encoding="utf-8")
         print(f"\nstyle accepted by the student:\n  " + "\n  ".join(accepted))
         htmls, cut, spent = [], [], 0.0
-        with patch("prompts._skill_text.USER_SKILLS_DIR", Path(tmp)):
+        with patch("prompts._skill_text.user_skills_dir", lambda: Path(tmp)):
             for i in range(args.generate):
                 html, truncated, row = generate(cache=True)
                 spent += row.get("estimated_usd") or 0

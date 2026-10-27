@@ -32,13 +32,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 _BUNDLED_SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
-_USER_SKILLS_DIR = Path.home() / ".secondbrain" / "skills"
 
 SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md", ".rst", ".csv", ".pptx", ".docx"}
 
 
 def _get_registry() -> SkillRegistry:
-    return SkillRegistry.load([_BUNDLED_SKILLS_DIR, _USER_SKILLS_DIR])
+    """Built-ins, then this request's user's own skills (services/skill_store.py)."""
+    from services.skill_store import user_skills_dir
+    return SkillRegistry.load([_BUNDLED_SKILLS_DIR, user_skills_dir()])
 
 
 def _create_stub_note(user_id: str, title: str) -> str:

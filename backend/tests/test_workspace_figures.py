@@ -246,6 +246,6 @@ def test_run_synthesis_asks_for_figures_when_the_flag_is_on_or_theres_no_text():
     else to synthesize from, so vision fires regardless of the flag."""
     import inspect
     from services.workspace import synthesis
-    src = inspect.getsource(synthesis.run_synthesis)
+    src = inspect.getsource(synthesis._run_synthesis)
     assert "settings.workspace_synthesis_vision or not has_text" in src
     assert "figure_parts(source_ids)" in src

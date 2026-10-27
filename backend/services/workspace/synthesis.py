@@ -427,7 +427,14 @@ def run_synthesis(note_id: str, mode: str = "replace",
     if not notes:
         logger.warning(f"run_synthesis: note {note_id} not found")
         return
-    note = notes[0]
+    # As the note's owner, so the study guide follows their own edited skill
+    # (services/skill_store.py) and nobody else's.
+    from services.skill_store import as_user
+    with as_user(str(notes[0].get("user_id") or "")):
+        return _run_synthesis(db, notes[0], note_id, mode, trigger)
+
+
+def _run_synthesis(db, note: dict, note_id: str, mode: str, trigger: str) -> None:
     user_id = note["user_id"]
     sources = ready_sources(note_id)
     source_ids = [s["id"] for s in sources]

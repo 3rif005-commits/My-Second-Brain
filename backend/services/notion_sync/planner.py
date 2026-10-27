@@ -383,7 +383,7 @@ def _object_items(db, conn, adapter, store, thread_ids, skill_names, released) -
                                 0 if state == UNCHANGED else 3 + len(r.blocks), page_url(m["notion_id"]) if exists else None,
                                 h, m["id"] if m else None, released=blocked and tid in released, path="Chats"))
     if skill_names:
-        skills = objs.load_skills(objs.skill_dirs())
+        skills = objs.load_skills(objs.skill_dirs(conn.user_id))
         smaps = store.mappings_for("skill", skill_names)
         for name in skill_names:
             sk = skills.get(name)

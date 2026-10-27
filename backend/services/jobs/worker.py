@@ -161,6 +161,14 @@ def run_one(job: dict, now: datetime) -> dict | None:
 
 
 def _run_one(job: dict, now: datetime) -> dict | None:
+    """As the job's user, so it reads that user's own skills
+    (services/skill_store.py): no request is here to name them."""
+    from services.skill_store import as_user
+    with as_user(job.get("user_id")):
+        return _run_one_as_user(job, now)
+
+
+def _run_one_as_user(job: dict, now: datetime) -> dict | None:
     note = _note(job.get("note_id"))
     if note is None:
         row = store.transition(job["id"], "queued", status="cancelled",

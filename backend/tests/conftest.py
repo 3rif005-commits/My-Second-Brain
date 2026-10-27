@@ -168,3 +168,81 @@ async def test_user(db_conn):
         "INSERT INTO auth.users (id, email) VALUES ($1, $2)", user_id, email
     )
     return user_id
+
+
+# ── per-user skills (services/skill_store.py) ──────────────────────────────
+
+SKILL_USER = "00000000-0000-4000-8000-000000000001"
+OTHER_SKILL_USER = "00000000-0000-4000-8000-000000000002"
+
+
+class _FakeSkillTable:
+    """The user_skills table, in memory: upsert and delete as the store uses them."""
+
+    def __init__(self, rows: dict):
+        self.rows = rows
+        self._filters: dict = {}
+        self._op = None
+
+    def upsert(self, row, on_conflict=None):
+        self.rows[(row["user_id"], row["name"])] = dict(row)
+        self._op = "upsert"
+        return self
+
+    def delete(self):
+        self._op = "delete"
+        return self
+
+    def eq(self, key, value):
+        self._filters[key] = value
+        return self
+
+    def execute(self):
+        from types import SimpleNamespace
+        if self._op == "delete":
+            key = (self._filters.get("user_id"), self._filters.get("name"))
+            gone = self.rows.pop(key, None)
+            return SimpleNamespace(data=[gone] if gone else [])
+        return SimpleNamespace(data=[])
+
+
+class _SyncedDir:
+    """A user's skill folder that is rebuilt from the fake table before every
+    path is taken from it — as the app reads it."""
+
+    def __init__(self, user_id):
+        self.user_id = user_id
+
+    def __truediv__(self, part):
+        from services import skill_store
+        return skill_store.user_skills_dir(self.user_id) / part
+
+
+@pytest.fixture
+def skill_db(monkeypatch, tmp_path):
+    """user_skills in memory, and a private cache folder for this test. Returns
+    the rows dict, keyed (user_id, name)."""
+    from services import skill_store
+    rows: dict = {}
+    monkeypatch.setattr(skill_store, "ROOT", tmp_path / "skills-cache")
+    monkeypatch.setattr(skill_store, "_synced", {})
+    monkeypatch.setattr(skill_store, "_rows", lambda uid: [
+        {"name": n, "files": dict(r["files"]), "origin": r.get("origin", "user")}
+        for (u, n), r in rows.items() if u == uid])
+    monkeypatch.setattr(skill_store, "_table", lambda: _FakeSkillTable(rows))
+    return rows
+
+
+@pytest.fixture
+def skill_user_dir(skill_db):
+    return _SyncedDir(SKILL_USER)
+
+
+def signed_in_as(user_id):
+    """A stand-in for get_user_id that names the user the way the real one
+    does (services/skill_store.set_user)."""
+    def fake(authorization=None):
+        from services.skill_store import set_user
+        set_user(user_id)
+        return user_id
+    return fake

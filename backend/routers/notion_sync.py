@@ -96,7 +96,7 @@ def _expand(body: SendBody, conn) -> SendBody:
     inc = {**scope_mod.DEFAULT_INCLUDE, **(conn.row.get("include") or {})}
     notes, colls, dbs = scope_mod.all_scope(get_supabase(), conn.user_id, inc)
     from services.notion_sync.readers import objects as objs
-    threads, skills = scope_mod.all_extras(get_supabase(), conn.user_id, inc, sorted(objs.load_skills(objs.skill_dirs())))
+    threads, skills = scope_mod.all_extras(get_supabase(), conn.user_id, inc, sorted(objs.load_skills(objs.skill_dirs(conn.user_id))))
     return body.model_copy(update={"thread_ids": list(dict.fromkeys(body.thread_ids + threads)),
                                    "skill_names": list(dict.fromkeys(body.skill_names + skills)),
                                    "note_ids": list(dict.fromkeys(body.note_ids + notes)),

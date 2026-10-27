@@ -7,6 +7,9 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from services import skill_store
+from tests.conftest import SKILL_USER, signed_in_as
+
 H = {"Authorization": "Bearer fake"}
 GUIDE = ("---\nname: study-guide\ndescription: Write a full study guide.\n"
          "surfaces: [workspace]\ninputs: sources\noutput: draft_note\n---\n\n"
@@ -17,9 +20,8 @@ DEFINE = ("---\nname: define-terms\ndescription: Define the selected terms.\n"
 
 
 @pytest.fixture
-def client(tmp_path):
-    user_dir, bundled = tmp_path / "user", tmp_path / "bundled"
-    user_dir.mkdir()
+def client(tmp_path, skill_user_dir):
+    user_dir, bundled = skill_user_dir, tmp_path / "bundled"
     (bundled / "study-guide" / "reference").mkdir(parents=True)
     (bundled / "study-guide" / "SKILL.md").write_text(GUIDE, encoding="utf-8")
     (bundled / "study-guide" / "reference" / "markdown-variant.md").write_text(
@@ -27,11 +29,9 @@ def client(tmp_path):
     (bundled / "define-terms").mkdir()
     (bundled / "define-terms" / "SKILL.md").write_text(DEFINE, encoding="utf-8")
     with (
-        patch("routers.skills_api.get_user_id", return_value="user-1"),
+        patch("routers.skills_api.get_user_id", side_effect=signed_in_as(SKILL_USER)),
         patch("routers.skills_api._BUNDLED_SKILLS_DIR", bundled),
-        patch("routers.skills_api._USER_SKILLS_DIR", user_dir),
         patch("prompts._skill_text.SKILLS_DIR", bundled),
-        patch("prompts._skill_text.USER_SKILLS_DIR", user_dir),
     ):
         from main import app
         yield TestClient(app), user_dir, bundled
@@ -104,9 +104,19 @@ def test_an_edited_study_guide_is_used_on_the_next_run_without_a_restart(client)
     from prompts.note_synthesis import build_note_synthesis_prompt
     from prompts.note_synthesis_md import build_markdown_synthesis_prompt
     src = [{"title": "L1", "kind": "pdf", "text": "content"}]
-    assert "Original guide rules." in build_note_synthesis_prompt(src)
+    # A run happens as the note's owner (synthesis and jobs set the user).
+    with skill_store.as_user(SKILL_USER):
+        assert "Original guide rules." in build_note_synthesis_prompt(src)
     _save(tc, "study-guide", body="Brand new guide rules.")
-    assert "Brand new guide rules." in build_note_synthesis_prompt(src)
+    with skill_store.as_user(SKILL_USER):
+        assert "Brand new guide rules." in build_note_synthesis_prompt(src)
     tc.put("/skills/study-guide/files/reference/markdown-variant.md", headers=H,
            json={"content": "Fresh markdown rules.\n"})
-    assert "Fresh markdown rules." in build_markdown_synthesis_prompt(src)
+    with skill_store.as_user(SKILL_USER):
+        assert "Fresh markdown rules." in build_markdown_synthesis_prompt(src)
+    # Nobody else's run sees this user's edit — and a run with no user sees
+    # only the built-in.
+    from tests.conftest import OTHER_SKILL_USER
+    with skill_store.as_user(OTHER_SKILL_USER):
+        assert "Original guide rules." in build_note_synthesis_prompt(src)
+    assert "Original guide rules." in build_note_synthesis_prompt(src)

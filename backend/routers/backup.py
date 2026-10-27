@@ -41,7 +41,7 @@ def run_now(authorization: str = Header(...)):
     from services.workspace import storage
     try:
         return runner.run_for_user(get_supabase(), user_id, runner.backup_dir(settings.backup_dir),
-                                   storage_download=storage.download, skills_dirs=runner.default_skill_dirs(),
+                                   storage_download=storage.download, skills_dirs=runner.default_skill_dirs(user_id),
                                    now=datetime.now(timezone.utc))
     except RuntimeError as e:
         raise HTTPException(500, {"error": str(e), "error_code": "BACKUP_FAILED"})

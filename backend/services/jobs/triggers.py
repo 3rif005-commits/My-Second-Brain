@@ -101,6 +101,14 @@ def fire_due(now: datetime | None = None) -> list[dict]:
 
 
 def fire_one(trigger: dict, now: datetime) -> dict | None:
+    """As the job's user, so it reads that user's own skills
+    (services/skill_store.py): no request is here to name them."""
+    from services.skill_store import as_user
+    with as_user(trigger.get("user_id")):
+        return _fire_one_as_user(trigger, now)
+
+
+def _fire_one_as_user(trigger: dict, now: datetime) -> dict | None:
     if not _claim(trigger):
         return None                                # stale snapshot; the newer touch will fire later
     note_id, user_id, skill_name = trigger["note_id"], trigger["user_id"], trigger["skill"]

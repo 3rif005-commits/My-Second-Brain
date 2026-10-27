@@ -22,11 +22,13 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 
 
 _BUNDLED_SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
-_USER_SKILLS_DIR = Path.home() / ".secondbrain" / "skills"
 
 
 def _get_registry() -> SkillRegistry:
-    return SkillRegistry.load([_BUNDLED_SKILLS_DIR, _USER_SKILLS_DIR])
+    """Built-ins, then this request's user's own skills (get_user_id set the
+    user; services/skill_store.py)."""
+    from services.skill_store import user_skills_dir
+    return SkillRegistry.load([_BUNDLED_SKILLS_DIR, user_skills_dir()])
 
 
 @router.post("")

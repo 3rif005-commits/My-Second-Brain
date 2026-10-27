@@ -48,7 +48,19 @@ def _token_expiry(token: str) -> float | None:
 
 
 def get_user_id(authorization: str) -> str:
-    """Validate the Supabase JWT via the Supabase auth API (cached briefly)."""
+    """Validate the Supabase JWT via the Supabase auth API (cached briefly).
+
+    Also names this request's user for skills (services/skill_store.py): from
+    here on the request reads that user's own skills and nobody else's. Every
+    authenticated route calls this first, which is why it lives here rather
+    than in each route that happens to touch a skill."""
+    from services.skill_store import set_user
+    user_id = _verified_user_id(authorization)
+    set_user(user_id)
+    return user_id
+
+
+def _verified_user_id(authorization: str) -> str:
     import hashlib
     import time
     token = authorization.removeprefix("Bearer ").strip()

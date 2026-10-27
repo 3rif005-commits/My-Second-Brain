@@ -185,6 +185,14 @@ def _unopened_streak(trigger_id: str) -> bool:
 
 
 def fire_one(trigger: dict, now: datetime) -> dict | None:
+    """As the job's user, so it reads that user's own skills
+    (services/skill_store.py): no request is here to name them."""
+    from services.skill_store import as_user
+    with as_user(trigger.get("user_id")):
+        return _fire_one_as_user(trigger, now)
+
+
+def _fire_one_as_user(trigger: dict, now: datetime) -> dict | None:
     """Fires the latest due occurrence, in this order: catch up (log the
     missed ones, run only the last) → the note still exists → not paused for
     3 unopened results → nothing new since last time (skip, cheaply, before

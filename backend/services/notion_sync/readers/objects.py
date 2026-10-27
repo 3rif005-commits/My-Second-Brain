@@ -136,7 +136,10 @@ def add_sources(db, user_id: str, obj: ir.Obj, note_id: str) -> ir.Obj:
     return obj
 
 
-def skill_dirs() -> list[Path]:
-    """User copies first (they win), then the built-in skills."""
-    from prompts._skill_text import SKILLS_DIR, USER_SKILLS_DIR
-    return [USER_SKILLS_DIR, SKILLS_DIR]
+def skill_dirs(user_id: str | None = None) -> list[Path]:
+    """That user's own skills first (they win), then the built-in skills.
+    Sync runs in its own thread, where no request's user is set: callers pass
+    the connection's user."""
+    from prompts._skill_text import SKILLS_DIR
+    from services.skill_store import user_skills_dir
+    return [user_skills_dir(user_id), SKILLS_DIR]

@@ -14,9 +14,11 @@ def backup_dir(setting: str = "") -> Path:
     return Path(setting).expanduser() if setting else Path.home() / "SecondBrainBackups"
 
 
-def default_skill_dirs() -> list[Path]:
-    from prompts._skill_text import SKILLS_DIR, USER_SKILLS_DIR
-    return [USER_SKILLS_DIR, SKILLS_DIR]
+def default_skill_dirs(user_id: str | None = None) -> list[Path]:
+    """That user's own skills first (they win), then the built-ins."""
+    from prompts._skill_text import SKILLS_DIR
+    from services.skill_store import user_skills_dir
+    return [user_skills_dir(user_id), SKILLS_DIR]
 
 
 def only_user(db) -> str:
@@ -61,7 +63,7 @@ def tick(db=None, now: datetime | None = None) -> list[dict]:
         uid = str(r["id"])
         try:
             if due(folder, uid, now):
-                out.append(run_for_user(db, uid, folder, storage_download=storage.download, skills_dirs=default_skill_dirs(), now=now))
+                out.append(run_for_user(db, uid, folder, storage_download=storage.download, skills_dirs=default_skill_dirs(uid), now=now))
         except Exception:
             log.exception("backup failed for %s", uid[:8])
     return out

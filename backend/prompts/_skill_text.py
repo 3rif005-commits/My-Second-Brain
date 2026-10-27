@@ -2,7 +2,7 @@
 
 The study guide's instructions live in `skills/study-guide/`: SKILL.md is the
 user's HTML instructions (what runs by default), reference/markdown-variant.md
-the opt-in Markdown path. A user's edited copy in USER_SKILLS_DIR (Settings →
+the opt-in Markdown path. A user's edited copy (Settings →
 Skills) wins over the built-in file; reset deletes the copy and the original
 is back. The registry's loader strips whitespace; these readers do not, so the
 prompt the model gets is exactly the text on disk.
@@ -12,7 +12,14 @@ from __future__ import annotations
 from pathlib import Path
 
 SKILLS_DIR = Path(__file__).resolve().parent.parent / "skills"
-USER_SKILLS_DIR = Path.home() / ".secondbrain" / "skills"
+
+
+def user_skills_dir() -> Path:
+    """The current user's own skills (services/skill_store.py): their folder,
+    rebuilt from the database; an empty one when no user is set. Never a
+    folder shared between accounts."""
+    from services.skill_store import user_skills_dir as _dir
+    return _dir()
 
 
 def _first(*paths: Path) -> Path:
@@ -20,14 +27,14 @@ def _first(*paths: Path) -> Path:
 
 
 def skill_body(name: str) -> str:
-    path = _first(USER_SKILLS_DIR / name / "SKILL.md", SKILLS_DIR / name / "SKILL.md")
+    path = _first(user_skills_dir() / name / "SKILL.md", SKILLS_DIR / name / "SKILL.md")
     raw = path.read_text(encoding="utf-8")
     _, _, body = raw.partition("\n---\n")          # after the frontmatter
     return body[1:-1]                               # the blank line, the final newline
 
 
 def skill_reference(name: str, file: str) -> str:
-    path = _first(USER_SKILLS_DIR / name / "reference" / file,
+    path = _first(user_skills_dir() / name / "reference" / file,
                   SKILLS_DIR / name / "reference" / file)
     return path.read_text(encoding="utf-8")[:-1]
 
@@ -36,7 +43,7 @@ def skill_meta(name: str) -> dict:
     """The skill's settings (frontmatter), read at call time like its body —
     a change in Settings → Skills applies to the next run."""
     import yaml
-    path = _first(USER_SKILLS_DIR / name / "SKILL.md", SKILLS_DIR / name / "SKILL.md")
+    path = _first(user_skills_dir() / name / "SKILL.md", SKILLS_DIR / name / "SKILL.md")
     raw = path.read_text(encoding="utf-8")
     head, sep, _ = raw.partition("\n---\n")
     if not sep or not head.startswith("---"):
@@ -76,7 +83,7 @@ def skill_style(name: str) -> str:
     call time — a save in Settings applies to the next run."""
     import re
     try:
-        path = _first(USER_SKILLS_DIR / name / STYLE_FILE, SKILLS_DIR / name / STYLE_FILE)
+        path = _first(user_skills_dir() / name / STYLE_FILE, SKILLS_DIR / name / STYLE_FILE)
         raw = path.read_text(encoding="utf-8")
     except OSError:
         return ""

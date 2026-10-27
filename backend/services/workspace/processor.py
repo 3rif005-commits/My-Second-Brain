@@ -184,7 +184,10 @@ def process_resource(resource_id: str) -> None:
         owner = []
     if not owner:
         return _process_resource(resource_id)
-    with privacy.handling([owner[0]["note_id"]], str(owner[0]["user_id"])):
+    # As the owner: their privacy levels, and their own skills (skill_store).
+    from services.skill_store import as_user
+    with privacy.handling([owner[0]["note_id"]], str(owner[0]["user_id"])), \
+            as_user(str(owner[0]["user_id"])):
         return _process_resource(resource_id)
 
 

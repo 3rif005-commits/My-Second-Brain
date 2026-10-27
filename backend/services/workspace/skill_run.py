@@ -46,7 +46,7 @@ WORKSPACE_SURFACE = "workspace"
 def registry() -> SkillRegistry:
     # The user's copies (Settings → Skills) override the built-ins.
     from prompts import _skill_text
-    return SkillRegistry.load([_skill_text.SKILLS_DIR, _skill_text.USER_SKILLS_DIR])
+    return SkillRegistry.load([_skill_text.SKILLS_DIR, _skill_text.user_skills_dir()])
 
 
 def workspace_skills() -> list[Skill]:

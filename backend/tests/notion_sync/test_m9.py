@@ -121,7 +121,7 @@ def skills(tmp_path, monkeypatch):
     (builtin / "flashcards.md").write_text("---\ndescription: Cards\n---\nMake cards.\n")
     (user / "study-guide").mkdir(parents=True)
     (user / "study-guide" / "SKILL.md").write_text("---\ndescription: My guide\n---\n# Study (mine)\n")
-    monkeypatch.setattr(objs, "skill_dirs", lambda: [user, builtin])
+    monkeypatch.setattr(objs, "skill_dirs", lambda user_id=None: [user, builtin])
     return builtin, user
 
 

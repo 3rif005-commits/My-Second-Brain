@@ -12,7 +12,7 @@ def _with_style(tmp_path, text):
     ref = tmp_path / "study-guide" / "reference"
     ref.mkdir(parents=True)
     (ref / "style.md").write_text(text + "\n", encoding="utf-8")
-    return patch("prompts._skill_text.USER_SKILLS_DIR", tmp_path)
+    return patch("prompts._skill_text.user_skills_dir", lambda: tmp_path)
 
 
 def test_the_shipped_file_changes_nothing():
@@ -57,7 +57,7 @@ def test_a_job_prompt_carries_its_style_after_the_body_and_at_the_end(tmp_path):
     (ref / "style.md").write_text("At most 20 cards.\n", encoding="utf-8")
     skill = Skill(name="flashcards", description="d", body="Write flashcards.",
                   tools=None, priority=0, source_path=tmp_path / "x.md")
-    with patch("prompts._skill_text.USER_SKILLS_DIR", tmp_path):
+    with patch("prompts._skill_text.user_skills_dir", lambda: tmp_path):
         prompt = build_prompt(skill, SRC)
     assert prompt.startswith("Write flashcards.")
     assert prompt.index("At most 20 cards.") < prompt.index("SOURCE MATERIAL")
