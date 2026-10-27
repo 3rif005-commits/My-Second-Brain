@@ -163,8 +163,9 @@ def run_one(job: dict, now: datetime) -> dict | None:
 def _run_one(job: dict, now: datetime) -> dict | None:
     """As the job's user, so it reads that user's own skills
     (services/skill_store.py): no request is here to name them."""
-    from services.skill_store import as_user
+    from services.skill_store import as_user, touch
     with as_user(job.get("user_id")):
+        touch(job.get("user_id"), [job.get("skill")])
         return _run_one_as_user(job, now)
 
 

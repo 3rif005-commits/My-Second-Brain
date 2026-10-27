@@ -65,8 +65,39 @@ async function json<T>(res: Response): Promise<T> {
 const enc = encodeURIComponent;
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
+/** A drafted skill the curator set aside after 30 days unused (never deleted). */
+export interface ArchivedSkill {
+  name: string;
+  description: string;
+  origin: SkillOrigin;
+  archived_at: string;
+}
+
+/** What the chat proposes with skill.propose: nothing is saved until Save. */
+export interface SkillDraftProposal {
+  name: string;
+  description: string;
+  body: string;
+  where: "assistant" | "chat";
+  /** Plain-language warnings (instruction-like text found). Advisory. */
+  warnings: string[];
+  /** Hidden characters were removed from what the model wrote. */
+  hidden_removed?: boolean;
+}
+
 export const skillsApi = {
   list: () => fetch("/api/skills").then((r) => json<{ skills: Skill[] }>(r)).then((d) => d.skills ?? []),
+  /** The skills and the archived ones, for Settings → Skills. */
+  overview: () => fetch("/api/skills")
+    .then((r) => json<{ skills: Skill[]; archived?: ArchivedSkill[] }>(r))
+    .then((d) => ({ skills: d.skills ?? [], archived: d.archived ?? [] })),
+  restore: (name: string) =>
+    fetch(`/api/skills/${enc(name)}/restore`, { method: "POST", headers: JSON_HEADERS, body: "{}" })
+      .then((r) => json<Skill>(r)),
+  /** Save a drafted skill exactly as the card shows it (after any edits). */
+  saveDraft: (d: Pick<SkillDraftProposal, "name" | "description" | "body" | "where">) =>
+    fetch("/api/skills/drafts", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(d) })
+      .then((r) => json<Skill>(r)),
   get: (name: string) => fetch(`/api/skills/${enc(name)}`).then((r) => json<Skill>(r)),
   save: (name: string, d: SkillDraft) =>
     fetch(`/api/skills/${enc(name)}`, { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify(d) })

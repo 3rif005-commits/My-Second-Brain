@@ -101,7 +101,8 @@ def _empty_dir() -> Path:
 def _rows(uid: str) -> list[dict]:
     from services.database import get_supabase
     try:
-        return (get_supabase().table("user_skills").select("name, files, origin")
+        return (get_supabase().table("user_skills")
+                .select("name, files, origin, created_at, last_used_at, archived_at")
                 .eq("user_id", uid).execute().data or [])
     except Exception as e:                                # noqa: BLE001
         text = str(e)
@@ -117,7 +118,7 @@ def _materialize(uid: str, rows: list[dict]) -> Path:
     staging.mkdir()
     for row in rows:
         name = str(row.get("name") or "")
-        if not NAME.match(name):
+        if not NAME.match(name) or row.get("archived_at"):
             continue
         for rel, text in (row.get("files") or {}).items():
             if not FILE.match(rel) or not isinstance(text, str):
@@ -158,9 +159,111 @@ def user_skills_dir(user_id: str | None = None) -> Path:
             # skills beats none, and is still only theirs.
             logger.warning("skills for %s not refreshed: %s", uid, e)
             return final if final.is_dir() else _empty_dir()
-        _materialize(uid, rows)
+        _materialize(uid, _curate(uid, rows))
         _synced[uid] = time.monotonic()
     return final
+
+
+# ── the curator (Hermes Agent's rule: archive, never delete) ────────────────
+
+#: A drafted skill nobody used for this long leaves the chat. It stays in
+#: Settings → Skills, marked archived, and Restore brings it back. Only drafted
+#: skills: the user's own and installed ones are the user's decision to keep.
+ARCHIVE_AFTER_DAYS = 30
+#: A use is recorded at most this often per skill: a chat turn must not cost a
+#: database write each time.
+_TOUCH_EVERY = 3600.0
+_touched: dict[tuple[str, str], float] = {}
+
+
+def _when(value) -> "datetime | None":
+    from datetime import datetime, timezone
+    if not value:
+        return None
+    try:
+        t = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
+def _now():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc)
+
+
+def _curate(uid: str, rows: list[dict]) -> list[dict]:
+    """Archive drafted skills unused for ARCHIVE_AFTER_DAYS; return the rows
+    with those marked. Best effort: a failed write archives nothing."""
+    from datetime import timedelta
+    cutoff = _now() - timedelta(days=ARCHIVE_AFTER_DAYS)
+    stale = [r for r in rows if r.get("origin") == "assistant" and not r.get("archived_at")
+             and (_when(r.get("last_used_at")) or _when(r.get("created_at")) or _now()) < cutoff]
+    if not stale:
+        return rows
+    stamp = _now().isoformat()
+    try:
+        _table().update({"archived_at": stamp}).eq("user_id", uid) \
+            .in_("name", [r["name"] for r in stale]).execute()
+    except Exception as e:                                # noqa: BLE001
+        logger.warning("could not archive unused skills for %s: %s", uid, e)
+        return rows
+    names = {r["name"] for r in stale}
+    return [{**r, "archived_at": stamp} if r.get("name") in names else r for r in rows]
+
+
+def touch(user_id: str | None, names) -> None:
+    """Record that skills were used. Never raises: usage is bookkeeping."""
+    uid = _valid_user(user_id)
+    if not uid:
+        return
+    now = time.monotonic()
+    due = [n for n in set(names) if NAME.match(str(n))
+           and now - _touched.get((uid, n), float("-inf")) >= _TOUCH_EVERY]
+    if not due:
+        return
+    for n in due:
+        _touched[(uid, n)] = now
+    try:
+        _table().update({"last_used_at": _now().isoformat()}).eq("user_id", uid) \
+            .in_("name", due).execute()
+    except Exception as e:                                # noqa: BLE001
+        logger.info("skill use not recorded: %s", e)
+
+
+def archived(user_id: str) -> list[dict]:
+    try:
+        rows = _rows(_require(user_id))
+    except SkillsUnavailable:
+        return []
+    out = []
+    for r in rows:
+        if not r.get("archived_at"):
+            continue
+        meta = _frontmatter((r.get("files") or {}).get("SKILL.md", ""))
+        out.append({"name": r["name"], "description": str(meta.get("description") or ""),
+                    "origin": r.get("origin") or "user", "archived_at": r["archived_at"]})
+    return sorted(out, key=lambda r: r["name"])
+
+
+def restore(user_id: str, name: str) -> bool:
+    uid = _require(user_id)
+    rows = _table().update({"archived_at": None, "last_used_at": _now().isoformat()}) \
+        .eq("user_id", uid).eq("name", name).execute().data or []
+    invalidate(uid)
+    return bool(rows)
+
+
+def _frontmatter(raw: str) -> dict:
+    import yaml
+    head, sep, _ = (raw or "").partition("\n---\n")
+    if not sep or not head.startswith("---"):
+        return {}
+    try:
+        meta = yaml.safe_load(head[3:]) or {}
+    except yaml.YAMLError:
+        return {}
+    return meta if isinstance(meta, dict) else {}
 
 
 def invalidate(user_id: str) -> None:

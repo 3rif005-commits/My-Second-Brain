@@ -7,6 +7,8 @@ import { resolveCitations } from "@/lib/answerToHtml";
 import type { Citation } from "@/lib/workspace";
 import { ToolEvent } from "./ToolEvent";
 import { SkillBadge } from "./SkillBadge";
+import { SkillDraftCard } from "./SkillDraftCard";
+import type { SkillDraftProposal } from "@/lib/skills";
 import { UploadCard, type PanelJob } from "./PanelCards";
 import { Answer } from "./Answer";
 import { RouteBadge, type RouteInfo } from "./RouteBadge";
@@ -31,6 +33,8 @@ export type StreamItem =
   | { kind: "upload"; id: string; title: string; files: UploadFile[] }
   | { kind: "notice"; id: string; content: string }
   | { kind: "skill"; id: string; name: string }
+  /** A skill the chat proposed; saved only by the user's click on the card. */
+  | { kind: "skill_draft"; id: string; draft: SkillDraftProposal }
   | { kind: "tool"; id: string; tool: string; args: Record<string, unknown>;
       summary?: string; denied?: string;
       /** Refused only for want of a human decision — render a Confirm button. */
@@ -98,6 +102,10 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
             if (!names.includes(name)) names.push(name);
           }
           return <SkillBadge key={item.id} names={names} />;
+        }
+
+        if (item.kind === "skill_draft") {
+          return <SkillDraftCard key={item.id} draft={item.draft} />;
         }
 
         if (item.kind === "tool") {

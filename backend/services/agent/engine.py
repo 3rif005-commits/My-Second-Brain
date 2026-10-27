@@ -28,7 +28,7 @@ from services.agent.permissions import (
     Deny, NeedsApproval, check as permission_check
 )
 from services.agent.skills import SkillRegistry, classify_skills
-from services import memory, privacy
+from services import memory, privacy, skill_drafts, skill_store
 from services.text_hygiene import attribute, instruction_like, untrusted
 from services.routing import log as routing_log
 from services.routing import policy as routing_policy
@@ -553,6 +553,10 @@ async def _routed_turn(request: AgentRequest, user_id: str,
         all_tool_schemas = all_tool_schemas + [workspace_job_tool(jobs)]
     if memory_rows is not None:
         all_tool_schemas = all_tool_schemas + [memory.MEMORY_TOOL]
+    all_tool_schemas = all_tool_schemas + [skill_drafts.PROPOSE_TOOL]
+    # Drafted skills that go unused are archived (skill_store's curator), so
+    # a use is recorded — the user's own rows only; built-ins have none.
+    skill_store.touch(user_id, [s.name for s in matched if s.origin != "builtin"])
 
     provider = route.provider
 
@@ -828,10 +832,32 @@ async def _stream_loop(
                         # Its text is now in the model's context: the rest
                         # of the turn is untrusted (permissions.py).
                         untrusted_context = True
+                    if skill.origin != "builtin":
+                        skill_store.touch(user_id, [skill.name])
                     yield _ev({"type": "skill_active", "name": skill.name})
                     yield _ev({"type": "tool_result", "id": slot["id"],
                                "summary": f"loaded {skill.name}",
                                "data": {"name": skill.name}})
+                continue
+
+            if tool == skill_drafts.TOOL_NAME:
+                # Saves nothing: the draft goes to the USER as a card, and only
+                # their click saves it (POST /skills/drafts) — never a tool call.
+                taken = set(skill_registry.names()) if skill_registry else set()
+                try:
+                    draft = skill_drafts.check(args, taken)
+                except skill_store.SkillRejected as e:
+                    _answer(slot, f"Not offered: {e}")
+                    yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
+                               "reason": str(e)})
+                    continue
+                tool_calls_made += 1
+                _answer(slot, "Shown to the user as a card with Save and Dismiss. Nothing is "
+                              "saved unless they click Save. Do not repeat the text; say in "
+                              "one sentence what the skill is for.")
+                yield _ev({"type": "tool_result", "id": slot["id"],
+                           "summary": f"offered skill {draft['name']}", "data": {}})
+                yield _ev({"type": "skill_draft", **draft})
                 continue
 
             if tool == WORKSPACE_JOB_TOOL and workspace_note:

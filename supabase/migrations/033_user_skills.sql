@@ -1,5 +1,5 @@
 -- 033 — skills per user
--- Design: docs/agent-tools-study/SKILLS_PLAN.md (step 1)
+-- Design: docs/agent-tools-study/SKILLS_PLAN.md (steps 1 and 3)
 --
 -- Until now a user's skills (edited built-ins, new skills, "Your style" files)
 -- were files in ONE folder on the server, ~/.secondbrain/skills: every account
@@ -25,8 +25,18 @@ CREATE TABLE IF NOT EXISTS user_skills (
                           CHECK (origin IN ('user', 'assistant', 'installed')),
   created_at  timestamptz NOT NULL DEFAULT now(),
   updated_at  timestamptz NOT NULL DEFAULT now(),
+  -- When a chat or a job last used it (throttled to once an hour).
+  last_used_at timestamptz,
+  -- A drafted skill nobody used for 30 days is archived, never deleted
+  -- (Hermes Agent's curator rule): it leaves the chat, stays in Settings,
+  -- and Restore brings it back.
+  archived_at  timestamptz,
   PRIMARY KEY (user_id, name)
 );
+
+-- For a database where an earlier draft of this file already ran.
+ALTER TABLE user_skills ADD COLUMN IF NOT EXISTS last_used_at timestamptz;
+ALTER TABLE user_skills ADD COLUMN IF NOT EXISTS archived_at  timestamptz;
 
 ALTER TABLE user_skills ENABLE ROW LEVEL SECURITY;
 

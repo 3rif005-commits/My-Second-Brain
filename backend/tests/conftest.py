@@ -193,9 +193,22 @@ class _FakeSkillTable:
         self._op = "delete"
         return self
 
+    def update(self, values):
+        self._op, self._values = "update", dict(values)
+        return self
+
     def eq(self, key, value):
         self._filters[key] = value
         return self
+
+    def in_(self, key, values):
+        self._filters[key] = list(values)
+        return self
+
+    def _matches(self, uid, name):
+        want = self._filters.get("name")
+        return (uid == self._filters.get("user_id")
+                and (name in want if isinstance(want, list) else name == want))
 
     def execute(self):
         from types import SimpleNamespace
@@ -203,6 +216,11 @@ class _FakeSkillTable:
             key = (self._filters.get("user_id"), self._filters.get("name"))
             gone = self.rows.pop(key, None)
             return SimpleNamespace(data=[gone] if gone else [])
+        if self._op == "update":
+            hit = [r for (u, n), r in self.rows.items() if self._matches(u, n)]
+            for r in hit:
+                r.update(self._values)
+            return SimpleNamespace(data=hit)
         return SimpleNamespace(data=[])
 
 
@@ -227,8 +245,10 @@ def skill_db(monkeypatch, tmp_path):
     monkeypatch.setattr(skill_store, "ROOT", tmp_path / "skills-cache")
     monkeypatch.setattr(skill_store, "_synced", {})
     monkeypatch.setattr(skill_store, "_rows", lambda uid: [
-        {"name": n, "files": dict(r["files"]), "origin": r.get("origin", "user")}
+        {"name": n, "files": dict(r["files"]), "origin": r.get("origin", "user"),
+         **{k: r.get(k) for k in ("created_at", "last_used_at", "archived_at")}}
         for (u, n), r in rows.items() if u == uid])
+    monkeypatch.setattr(skill_store, "_touched", {})
     monkeypatch.setattr(skill_store, "_table", lambda: _FakeSkillTable(rows))
     return rows
 

@@ -16,7 +16,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/app/providers";
 import { useAIPanel } from "@/context/AIPanelContext";
-import { skillsApi, type Skill, type SkillDraft } from "@/lib/skills";
+import { skillsApi, type ArchivedSkill, type Skill, type SkillDraft } from "@/lib/skills";
 import { draftOf, duplicateOf, isDirty } from "./model";
 import { SkillSidebar } from "./SkillSidebar";
 import { SkillPage } from "./SkillPage";
@@ -36,6 +36,7 @@ export function SkillsWorkspace() {
   const ai = useAIPanel();
 
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [archived, setArchived] = useState<ArchivedSkill[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<SkillDraft | null>(null);
@@ -51,8 +52,9 @@ export function SkillsWorkspace() {
 
   const load = useCallback(async () => {
     try {
-      const list = await skillsApi.list();
+      const { skills: list, archived: set_aside } = await skillsApi.overview();
       setSkills(list);
+      setArchived(set_aside);
       return list;
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Could not load the skills", "error");
@@ -187,6 +189,16 @@ export function SkillsWorkspace() {
         border-r border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-white/[0.015]`}>
         <SkillSidebar
           skills={skills}
+          archived={archived}
+          onRestore={async (name) => {
+            try {
+              await skillsApi.restore(name);
+              await load();
+              showToast(`${name} is back`, "info");
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : "Could not restore it", "error");
+            }
+          }}
           selected={selectedName}
           query={query}
           onQuery={setQuery}

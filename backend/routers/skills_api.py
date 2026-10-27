@@ -166,7 +166,8 @@ MULTI_SOURCE = ("auto", "single", "chapters")
 def _write_user_skill(user_id: str, name: str, description: str, body: str, where: str,
                       base: Skill | None, icon: str | None = None,
                       output: str | None = None,
-                      multi_source: str | None = None) -> None:
+                      multi_source: str | None = None,
+                      origin: str | None = None) -> None:
     surfaces, output = _surfaces_for(where, base, output)
     meta: dict = {"name": name, "description": description.strip()}
     icon = icon if icon is not None else (base.icon if base else None)
@@ -193,7 +194,8 @@ def _write_user_skill(user_id: str, name: str, description: str, body: str, wher
     if name == MULTI_SOURCE_SKILL and ms and ms != "auto":
         meta["multi_source"] = ms
     fm = yaml.safe_dump(meta, sort_keys=False, default_flow_style=None).strip()
-    _saving(skill_store.put_files, user_id, name, {"SKILL.md": f"---\n{fm}\n---\n\n{body}\n"})
+    _saving(skill_store.put_files, user_id, name, {"SKILL.md": f"---\n{fm}\n---\n\n{body}\n"},
+            origin=origin)
 
 
 class SkillPayload(BaseModel):
@@ -233,7 +235,47 @@ def list_skills(authorization: str = Header()):
     reg, bundled, user = _state()
     order = {"chat": 0, "selection": 1, "assistant": 2}
     skills = sorted(reg.all(), key=lambda s: (order[_where(s)], s.name))
-    return {"skills": [_json(s, bundled, user) for s in skills]}
+    return {"skills": [_json(s, bundled, user) for s in skills],
+            # Drafted skills the curator set aside (skill_store): listed, not used.
+            "archived": skill_store.archived(skill_store.current_user()) if skill_store.current_user() else []}
+
+
+class DraftPayload(BaseModel):
+    name: str
+    description: str
+    body: str
+    where: str = "assistant"
+
+
+@router.post("/drafts", status_code=201)
+def save_draft(payload: DraftPayload, authorization: str = Header()):
+    """The user's Save on a skill the chat drafted (services/skill_drafts.py).
+    The text is what the card showed, possibly edited by the user; it is
+    checked again here and saved with origin "assistant"."""
+    user_id = get_user_id(authorization)
+    reg, bundled, user = _state()
+    taken = set(reg.names()) | {a["name"] for a in skill_store.archived(user_id)}
+    from services import skill_drafts
+    try:
+        draft = skill_drafts.check(payload.model_dump(), taken)
+    except skill_store.SkillRejected as e:
+        raise HTTPException(409 if "already exists" in str(e) else 400, detail=str(e)) from None
+    _write_user_skill(user_id, draft["name"], draft["description"], draft["body"],
+                      draft["where"], None, origin="assistant")
+    reg, bundled, user = _state()
+    return _json(reg.get(draft["name"]), bundled, user)
+
+
+@router.post("/{name}/restore")
+def restore_skill(name: str, authorization: str = Header()):
+    """Bring back a skill the curator archived."""
+    user_id = get_user_id(authorization)
+    if not _SAFE_NAME.match(name):
+        raise HTTPException(400, detail="bad skill name")
+    if not _saving(skill_store.restore, user_id, name):
+        raise HTTPException(404, detail=f"No archived skill '{name}'")
+    reg, bundled, user = _state()
+    return _json(reg.get(name), bundled, user)
 
 
 @router.get("/surface/selection")

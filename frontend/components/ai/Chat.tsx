@@ -32,6 +32,7 @@ import { ACCEPTED_WORKSPACE_FILES, jobTitle, type Citation } from "@/lib/workspa
 import { answerToHtml } from "@/lib/answerToHtml";
 import { getQuote, priceLine, queueJob, tonight, type BgJob } from "@/lib/backgroundJobs";
 import { offerDraft, stageDraft, undoDraft, type NoteDraft } from "@/lib/noteDraft";
+import type { SkillDraftProposal } from "@/lib/skills";
 
 const ACCEPTED_EXT = ACCEPTED_WORKSPACE_FILES.split(",");
 const accepted = (f: File) => ACCEPTED_EXT.some((ext) => f.name.toLowerCase().endsWith(ext));
@@ -508,6 +509,11 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
             patchJob(pickedCard, (j) => (j.result ? j : { ...j, error: ev.content as string }));
           } else if ((ev.type === "job_error" || ev.type === "error") && card) {
             patchJob(card, (j) => (j.result ? j : { ...j, error: ev.content as string }));
+          } else if (ev.type === "skill_draft") {
+            // Shown, never saved: only the card's Save button stores it.
+            setItems((prev) => insertBefore(prev, assistantId, {
+              kind: "skill_draft", id: uid(), draft: ev as unknown as SkillDraftProposal,
+            }));
           } else if (ev.type === "skill_active") {
             setItems((prev) => insertBefore(prev, assistantId, {
               kind: "skill", id: uid(), name: ev.name as string,

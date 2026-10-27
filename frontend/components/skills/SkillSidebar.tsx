@@ -3,8 +3,8 @@
 // The list of skills, Notion-sidebar style: search, "New", and the skills
 // grouped by where they run (groups.ts), each with its icon and a quiet mark
 // for edited built-ins and the user's own.
-import { Plus, Search } from "lucide-react";
-import type { Skill } from "@/lib/skills";
+import { Archive, Plus, Search } from "lucide-react";
+import type { ArchivedSkill, Skill } from "@/lib/skills";
 import { GROUPS } from "./groups";
 import { matches } from "./model";
 import { SkillMenu, type SkillAction } from "./SkillMenu";
@@ -36,8 +36,11 @@ export function SourceMark({ source, origin }: { source: Skill["source"]; origin
   );
 }
 
-export function SkillSidebar({ skills, selected, query, onQuery, onSelect, onNew, onAction, loading }: {
+export function SkillSidebar({ skills, archived = [], onRestore, selected, query, onQuery, onSelect, onNew, onAction, loading }: {
   skills: Skill[];
+  /** Drafted skills set aside after 30 days unused — kept, never deleted. */
+  archived?: ArchivedSkill[];
+  onRestore?: (name: string) => void;
   selected: string | null;
   query: string;
   onQuery: (q: string) => void;
@@ -107,6 +110,28 @@ export function SkillSidebar({ skills, selected, query, onQuery, onSelect, onNew
             </section>
           );
         })}
+        {archived.length > 0 && !query && (
+          <section className="mt-3" aria-label="Archived skills">
+            <h2 className="flex items-center gap-1.5 px-2 h-6 text-[11px] font-semibold uppercase tracking-wide text-gray-400"
+              title="Skills the AI drafted that went unused for 30 days. Not used in chats until restored.">
+              <Archive size={11} /> Archived
+              <span className="ml-auto font-normal normal-case tracking-normal">{archived.length}</span>
+            </h2>
+            <ul className="space-y-px">
+              {archived.map((a) => (
+                <li key={a.name} className="flex items-center gap-2 pl-2 pr-1 h-8 text-[13px] text-gray-500 dark:text-gray-400">
+                  <span className="flex-1 min-w-0 truncate" title={a.description}>{a.name}</span>
+                  {onRestore && (
+                    <button type="button" onClick={() => onRestore(a.name)}
+                      className="shrink-0 h-6 px-2 rounded-md text-[12px] text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5">
+                      Restore
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </nav>
     </aside>
   );
