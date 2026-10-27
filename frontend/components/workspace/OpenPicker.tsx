@@ -6,7 +6,7 @@
 // Enter opens here; Alt+Enter (or the button on the row) opens beside. The footer says
 // what Enter will do for the highlighted row, so it is never wrong for an action.
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { FilePlus, FileText, Link2, PanelRight, Search, Sparkles, Upload, X } from "lucide-react";
+import { CornerDownLeft, FilePlus, FileText, Link2, PanelRight, Search, Sparkles, Upload, X } from "lucide-react";
 import { PromptDialog } from "@/components/ui/PromptDialog";
 import { ACCEPTED_WORKSPACE_FILES, sourceColor, wsApi, type LibrarySource } from "@/lib/workspace";
 
@@ -57,7 +57,7 @@ const day = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined,
 function Key({ children }: { children: React.ReactNode }) {
   return (
     <kbd className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] bg-surface-chip px-1 font-sans text-[10.5px] font-medium leading-none text-ink-secondary">
-      {children}
+      {children === "↵" ? <CornerDownLeft size={11} strokeWidth={2.25} /> : children}
     </kbd>
   );
 }
