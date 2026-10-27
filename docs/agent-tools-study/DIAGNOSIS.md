@@ -20,6 +20,7 @@ real gap in our app; the failures of these tools are lessons too.
 | Secrets at rest | OpenShell providers keep keys out of the agent | `services/secrets.py` (Fernet, fail closed) — used for Notion; `ai_providers.api_key` is still plaintext (known ledger item B5, not in scope here) |
 | Privacy by level | OpenShell routes inference by policy | `services/privacy.py` ceilings per provider, enforced in code, fail closed |
 | No shell for the agent | OpenShell sandboxes a shell | our agent has no shell or file tools; stdio MCP is refused where `RENDER` is set |
+| Third-party code (OpenClaw's ClawHub lesson) | malicious skills in a marketplace | plugins: an approved list, a warning before anything else, server-side fetch with SSRF checks (`lib/plugins/fetchPlugin.ts`), code stored at install and changed only by the user |
 
 ## Gaps, ranked — what we build
 
@@ -86,3 +87,21 @@ Privacy: the profile is `personal` — never sent to a provider marked untrusted
 1 → 2 → 4 need no migration and go first. 3 and 5 share migration
 `supabase/migrations/032_mcp_pins_user_memory.sql`, which the user runs in Supabase before the
 code that uses it is pushed. Each step: code + tests + its own commit.
+
+## Status (2026-10-27)
+
+| # | Gap | Commit | Tests |
+|---|---|---|---|
+| 1 | Public internal key works only from this machine | `f1f60872` | `tests/test_internal_key_defaults.py` |
+| 2 | One SSRF guard (`services/egress.py`) on 5 places | `c520105d` | `tests/test_egress.py` |
+| 4 | Hidden characters removed, wrappers defused, injection flagged | `cecf6e40` | `tests/test_text_hygiene.py` |
+| 3 | MCP tools pinned; changes wait for approval | `dd03b9d9` | `tests/test_mcp_pins.py`, settings/mcp page test |
+| 5 | About you (memory) | `85bf9e6b` + cache | `tests/test_memory.py`, settings/about-you page test |
+
+Whole suites after the last step: backend 3,006 passed (local pgtest running), frontend
+1,517 passed, `tsc` clean. **Before pushing 3 and 5: run migration 032 in Supabase.** Without it
+both degrade safely (tools unpinned as before; About you absent, its page says "needs migration 032").
+
+Residual risk, stated: the SSRF guard checks the connected address after the request is sent, so a
+DNS-rebinding attacker can still make one blind request; reading the answer is refused. Pinning the
+resolved IP per connection would close it and is not done.

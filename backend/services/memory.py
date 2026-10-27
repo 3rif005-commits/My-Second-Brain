@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from typing import Any
 
 from services.text_hygiene import defuse_wrappers, instruction_like, strip_invisible
@@ -128,8 +129,10 @@ def entries(user_id: str) -> list[dict]:
 
 def add(user_id: str, content: str, source: str = "user") -> dict:
     cleaned = validate(content, source, entries(user_id))
-    return _table().insert({"user_id": user_id, "content": cleaned,
-                            "source": source}).execute().data[0]
+    row = _table().insert({"user_id": user_id, "content": cleaned,
+                           "source": source}).execute().data[0]
+    _forget(user_id)
+    return row
 
 
 def delete(user_id: str, entry_id: str) -> bool:
@@ -139,21 +142,38 @@ def delete(user_id: str, entry_id: str) -> bool:
         if _missing_table(e):
             raise MemoryUnavailable("About you needs database migration 032.") from None
         raise
+    _forget(user_id)
     return bool(rows)
 
 
 # ── the chat ────────────────────────────────────────────────────────────────
 
+#: Every chat turn reads the list, and a database round trip from Render costs
+#: ~180 ms (STATUS.md). It changes only through add/delete in this process
+#: (one Render instance), which drop the entry; the TTL bounds anything else.
+_CACHE_TTL = 120.0
+_cache: dict[str, tuple[float, list[dict] | None]] = {}
+
+
+def _forget(user_id: str) -> None:
+    _cache.pop(user_id, None)
+
+
 def available(user_id: str) -> list[dict] | None:
     """Entries for the chat, or None when the feature is absent. Never raises:
     a chat must not fail because About you could not be read."""
+    hit = _cache.get(user_id)
+    if hit and time.monotonic() - hit[0] < _CACHE_TTL:
+        return hit[1]
     try:
-        return entries(user_id)
+        rows: list[dict] | None = entries(user_id)
     except MemoryUnavailable:
-        return None
+        rows = None
     except Exception as e:                               # noqa: BLE001
         logger.warning("About you unavailable: %s", e)
-        return None
+        return None                                      # not cached: may be transient
+    _cache[user_id] = (time.monotonic(), rows)
+    return rows
 
 
 def prompt_block(rows: list[dict]) -> str:

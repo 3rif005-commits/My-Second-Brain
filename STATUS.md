@@ -13,6 +13,14 @@
 | 2 | Settings at phone width not re-checked after the settings rework (Chrome wouldn't resize); Connected apps has no "how to connect" text because the app's own MCP server isn't deployed with Render | small |
 | 3 | Editor AI: one Revert (after Simplify) left stray letters in the paragraph ("foronr"); two later Simplify/Fix-spelling reverts restored the text exactly. Watch for it; if it recurs, check xl-ai's revert with large rewrites | couldn't reproduce |
 
+**Learned from NemoClaw / OpenShell / Hermes Agent / OpenClaw (2026-10-27):** their code read,
+nothing of theirs used (docs/agent-tools-study/DIAGNOSIS.md). Built: internal API key fails closed
+off-machine; one SSRF guard (`services/egress.py`) for website/article import, MCP URLs, custom AI
+provider URLs and the webhook action; hidden characters stripped from untrusted text and MCP
+descriptions; MCP tools pinned (changed ones wait for approval in Settings → MCP servers); About you
+memory (Settings → About you, `memory.remember` tool). **Migration 032 must be run before pushing.**
+Not yet live-checked in a browser.
+
 **Settings pass 2026-10-24 (live, dark mode):** every kit dropdown opened behind the Settings
 window (Popover z-50 vs z-60; now z-10000). MCP: URL servers only spoke SSE at URL+"/sse", so
 current (Streamable HTTP) servers never connected; the trust level was never enforced (now "Ask me

@@ -11,6 +11,15 @@ from services.agent.permissions import Allow, NeedsApproval
 from models.agent import Tier
 
 
+@pytest.fixture(autouse=True)
+def fresh_cache():
+    """The chat's cache of About you is process-wide: no test may leave rows
+    in it for a later test's chat turn to pick up."""
+    memory._cache.clear()
+    yield
+    memory._cache.clear()
+
+
 def rows(*contents, source="user"):
     return [{"id": f"m{i}", "content": c, "source": source} for i, c in enumerate(contents)]
 
@@ -224,3 +233,31 @@ def test_about_you_follows_the_privacy_ceiling(ceiling, shown):
 def test_about_you_absent_without_entries():
     from services.agent.engine import _about_you
     assert _about_you(None, "private") == "" and _about_you([], "private") == ""
+
+
+def test_the_chat_reads_the_list_once_and_sees_changes_at_once(monkeypatch):
+    memory._cache.clear()
+    store = rows("Studies EE")
+    reads = []
+    monkeypatch.setattr(memory, "entries", lambda uid: reads.append(uid) or list(store))
+    assert memory.available("u1") == store and memory.available("u1") == store
+    assert reads == ["u1"]
+    monkeypatch.setattr(memory, "_table", lambda: MagicMock(insert=lambda r: MagicMock(
+        execute=lambda: MagicMock(data=[{"id": "m9", **r}]))))
+    memory.add("u1", "Prefers French")
+    store.append({"id": "m9", "content": "Prefers French", "source": "user"})
+    assert [r["content"] for r in memory.available("u1")] == ["Studies EE", "Prefers French"]
+
+
+def test_a_failed_read_is_not_cached(monkeypatch):
+    memory._cache.clear()
+    calls = []
+
+    def flaky(uid):
+        calls.append(uid)
+        if len(calls) == 1:
+            raise RuntimeError("network")
+        return rows("Studies EE")
+    monkeypatch.setattr(memory, "entries", flaky)
+    assert memory.available("u1") is None
+    assert memory.available("u1") == rows("Studies EE")
