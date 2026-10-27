@@ -213,3 +213,14 @@ def test_thinking_switch_reaches_the_wire(on, monkeypatch):
 def test_off_sends_nothing_extra(monkeypatch):
     monkeypatch.setattr(settings, "nebius_api_key", "")
     assert nebius.no_thinking("https://api.tokenfactory.nebius.com/v1/chat/completions") == {}
+
+
+def test_no_vm_at_all_local_falls_back_to_token_factory(on):
+    # Found live: with no VM the brain picked "local" for a notes search and
+    # the chat errored — nothing runs locally on the server.
+    pol = policy_mod.default_policy()
+    pol["rules"].insert(0, {"id": "t", "enabled": True, "kind": "always",
+                            "value": None, "use": "local"})
+    r = _route(pol)
+    assert r.slot == "fast" and r.provider.label == "Nebius Token Factory"
+    assert r.ceiling == "personal"
