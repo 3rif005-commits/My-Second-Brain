@@ -31,6 +31,8 @@ from typing import Any, Awaitable, Callable
 import asyncpg
 import httpx
 
+from services import egress
+
 from models.database import AutomationCreate, AutomationResponse, AutomationUpdate
 from services.db import notifications as notifications_service
 from services.db import recompute
@@ -710,8 +712,15 @@ async def _action_send_webhook(action: dict[str, Any], ctx: ActionContext) -> No
     if not isinstance(url, str) or not url:
         raise ActionConfigError("send_webhook requires a literal url")
     payload = action.get("payload") if isinstance(action.get("payload"), dict) else {}
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    # The URL is the user's, so it goes through the egress guard (SSRF): checked
+    # before the POST, redirects not followed, the connected address re-checked.
+    try:
+        await egress.check_url_async(url)
+    except egress.EgressBlocked as e:
+        raise ActionConfigError(f"send_webhook: {e}") from None
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
         resp = await client.post(url, json=payload)
+        egress.check_peer(resp)
         resp.raise_for_status()
 
 

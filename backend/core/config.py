@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # shared server it would let any signed-in user run any command there. Off by
     # default where Render runs us (Render sets RENDER on every service).
     mcp_allow_stdio: bool = not os.getenv("RENDER")
+    # Outbound requests to a URL a user typed (website import, MCP servers, custom AI
+    # providers, webhooks) may reach private/loopback/link-local addresses only when
+    # this is on — your own machine, where "private" is your LAN or localhost. Off
+    # where Render runs us, so nobody can make the server call its own network
+    # (services/egress.py).
+    egress_allow_private: bool = not os.getenv("RENDER")
     # Gates the notes-row exclusion sweep and the database query engine.
     # Default False: migration 014 (db_row_props) does not exist yet, so an
     # unconditional exclusion clause would break every notes surface today.

@@ -7,6 +7,8 @@
 import re
 import trafilatura
 
+from services import egress
+
 
 def _youtube_video_id(url: str) -> str | None:
     """Return the video ID if the URL is a YouTube watch/short URL, else None."""
@@ -65,7 +67,9 @@ def _extract_youtube(video_id: str, url: str) -> tuple[str, str]:
     # best-effort title from YouTube page
     title = f"YouTube – {video_id}"
     try:
-        downloaded = trafilatura.fetch_url(url)
+        # Through the egress guard: the YouTube pattern matches anywhere in the
+        # string, so `url` is still whatever the user typed.
+        downloaded = egress.fetch(url).text
         if downloaded:
             meta = trafilatura.extract_metadata(downloaded)
             if meta and meta.title:
@@ -86,8 +90,8 @@ def extract_url(url: str) -> tuple[str, str]:
     if video_id:
         return _extract_youtube(video_id, url)
 
-    # Generic web article via trafilatura
-    downloaded = trafilatura.fetch_url(url)
+    # Generic web article: fetched through the egress guard, read by trafilatura
+    downloaded = egress.fetch(url).text
     if not downloaded:
         raise ValueError(f"Could not fetch URL: {url}")
 

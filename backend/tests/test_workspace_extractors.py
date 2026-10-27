@@ -107,11 +107,14 @@ def test_extract_website_parses_sections_and_tags():
         "image": "https://example.com/thumb.png",
     }
     fake_traf = MagicMock()
-    fake_traf.fetch_url.return_value = "<html>raw</html>"
     fake_traf.bare_extraction.return_value = doc
-    with patch("services.workspace.website.trafilatura", fake_traf):
+    # The page is fetched through the egress guard (services/egress.py), then read.
+    fetched = MagicMock(text="<html>raw</html>")
+    with patch("services.workspace.website.trafilatura", fake_traf), \
+         patch("services.workspace.website.egress.fetch", return_value=fetched) as fetch:
         from services.workspace.website import extract_website
         data = extract_website("https://example.com/a")
+    fetch.assert_called_once_with("https://example.com/a")
 
     assert data["title"] == "My Article"
     kinds = [s["kind"] for s in data["sections"]]

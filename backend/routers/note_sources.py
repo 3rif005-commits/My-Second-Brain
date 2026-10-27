@@ -868,6 +868,13 @@ def create_ai_provider(body: ProviderCreate, authorization: str = Header()):
     if body.provider == "openai_compatible" and not body.base_url:
         raise HTTPException(status_code=400,
                             detail={"error": "openai_compatible needs base_url"})
+    if body.base_url:
+        # The server will POST chats to this address: the egress guard (SSRF).
+        from services import egress
+        try:
+            egress.check_url(body.base_url)
+        except egress.EgressBlocked as e:
+            raise HTTPException(status_code=400, detail={"error": str(e)}) from None
     row = get_supabase().table("ai_providers").insert({
         "user_id": user_id, "provider": body.provider,
         "label": body.label or body.provider, "api_key": body.api_key,

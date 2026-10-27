@@ -14,9 +14,12 @@ Capabilities:
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_MODELS = {
     "gemini": "gemini-flash-latest",
@@ -99,6 +102,19 @@ def _env_providers() -> list[Provider]:
     return out
 
 
+def _base_url_allowed(url: str) -> bool:
+    """A saved row is re-checked on use (the name may resolve elsewhere now, or
+    the row predates the check). Refused rows drop out of the chain: the next
+    provider answers instead, as for any provider that cannot serve."""
+    from services import egress
+    try:
+        egress.check_url(url, cached=True)
+        return True
+    except egress.EgressBlocked as e:
+        logger.warning("AI provider at %s skipped: %s", url, e)
+        return False
+
+
 def _user_providers(user_id: str) -> list[Provider]:
     from services.database import get_supabase
     if not user_id:
@@ -119,6 +135,8 @@ def _user_providers(user_id: str) -> list[Provider]:
     out = []
     for r in rows:
         p = r["provider"]
+        if r.get("base_url") and not _base_url_allowed(r["base_url"]):
+            continue
         out.append(Provider(
             provider=p,
             api_key=r.get("api_key") or "",

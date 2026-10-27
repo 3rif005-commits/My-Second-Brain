@@ -14,6 +14,7 @@ from typing import Any
 from pydantic import BaseModel, model_validator
 
 from core.config import settings
+from services import egress
 
 
 class McpServerConfig(BaseModel):
@@ -163,6 +164,10 @@ async def _with_session(config: McpServerConfig, use):
         return await asyncio.wait_for(_stdio(config, use), _CONNECT_TIMEOUT_SECONDS)
 
     url = (config.url or "").strip()
+    # The URL is the user's: refused here if it points at a private address,
+    # and every request the SDK sends (redirects too) is re-checked by the
+    # guarded client factory (services/egress.py).
+    await egress.check_url_async(url)
     if config.transport == "sse" or url.rstrip("/").endswith("/sse"):
         return await asyncio.wait_for(_sse(url, use), _CONNECT_TIMEOUT_SECONDS)
     try:
@@ -191,7 +196,8 @@ async def _sse(url: str, use):
     from mcp import ClientSession
     from mcp.client.sse import sse_client
 
-    async with sse_client(url) as (read, write):
+    async with sse_client(
+            url, httpx_client_factory=egress.guarded_async_client_factory) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
             return await use(session)
@@ -201,7 +207,9 @@ async def _streamable(url: str, use):
     from mcp import ClientSession
     from mcp.client.streamable_http import streamablehttp_client
 
-    async with streamablehttp_client(url) as (read, write, _session_id):
+    async with streamablehttp_client(
+            url, httpx_client_factory=egress.guarded_async_client_factory
+    ) as (read, write, _session_id):
         async with ClientSession(read, write) as session:
             await session.initialize()
             return await use(session)

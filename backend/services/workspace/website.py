@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import trafilatura
 
+from services import egress
+
 # Re-exported: existing callers (and tests) import chunk_sections from here, and
 # websites are still the main producer of section-anchored sources.
 from services.workspace.sections import (chunk_sections, sections_as_elements,  # noqa: F401
@@ -20,7 +22,8 @@ from services.workspace.sections import (chunk_sections, sections_as_elements,  
 
 
 def extract_website(url: str) -> dict:
-    downloaded = trafilatura.fetch_url(url)
+    # The URL is the user's: fetched through the egress guard (SSRF), then read.
+    downloaded = egress.fetch(url).text
     if not downloaded:
         raise ValueError(f"Could not fetch URL: {url}")
 

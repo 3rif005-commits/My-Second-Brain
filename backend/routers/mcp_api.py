@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from routers.ingest import get_user_id
 from core.config import settings
 from services.agent.mcp_client import McpServerConfig, clear_discovery_cache, probe
+from services import egress
 from services.database import get_supabase
 
 router = APIRouter(tags=["mcp"])
@@ -58,8 +59,11 @@ def add_server(payload: ServerPayload, authorization: str = Header()):
     if payload.transport == "stdio" and not settings.mcp_allow_stdio:
         raise HTTPException(400, detail="stdio servers run a command on the server, so they only "
                                         "work when you run Second Brain yourself. Use an http server.")
-    if payload.transport != "stdio" and not (payload.url or "").startswith(("https://", "http://")):
-        raise HTTPException(400, detail="The URL must start with https://")
+    if payload.transport != "stdio":
+        try:
+            egress.check_url(payload.url or "")
+        except egress.EgressBlocked as e:
+            raise HTTPException(400, detail=str(e)) from None
 
     row = (
         get_supabase()
