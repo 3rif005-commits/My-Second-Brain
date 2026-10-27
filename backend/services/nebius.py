@@ -58,6 +58,20 @@ def provider_key() -> str:
     return (urlsplit(settings.nebius_base_url).hostname or TOKEN_FACTORY_HOST)
 
 
+def no_thinking(url: str) -> dict:
+    """Extra request fields for a one-shot call (`client.complete`: the brain,
+    a ping, a title). Nemotron thinks first by default and the thinking is
+    dropped from the answer, so a small budget came back empty — the brain
+    got no JSON on the live site and every request took the default slot.
+    NVIDIA's documented switch turns it off; chat turns keep it."""
+    if not enabled():
+        return {}
+    vm = _vm_base()
+    if urlsplit(url).hostname == provider_key() or (vm and url.startswith(vm)):
+        return {"chat_template_kwargs": {"enable_thinking": False}}
+    return {}
+
+
 def price_for(model: str) -> tuple[float, float] | None | bool:
     """Token Factory's price for one of its models, None when not set, or
     False when the model is not a Token Factory one. Without this the

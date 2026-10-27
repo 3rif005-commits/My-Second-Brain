@@ -343,6 +343,8 @@ def _openai_compatible_complete(url: str, headers: dict, model: str,
                "max_tokens": max_tokens, "stream": True}
     if "openrouter.ai" in url:
         payload["reasoning"] = {"exclude": True}
+    from services import nebius                     # HACKATHON-NEBIUS
+    payload.update(nebius.no_thinking(url))
     # Only ask gateways known to accept it: a strict server rejects unknown
     # fields outright, and losing the call to get its token count is a bad deal.
     if "openrouter.ai" in url or "api.openai.com" in url:

@@ -175,3 +175,40 @@ def test_token_factory_nemotron_is_not_logged_as_free(on, monkeypatch):
     monkeypatch.setattr(settings, "nebius_price_in", 0.3)
     monkeypatch.setattr(settings, "nebius_price_out", 0.9)
     assert pricing.price_for(settings.nebius_fast_model) == (0.3, 0.9)
+
+
+# ── one-shot calls skip Nemotron's thinking ─────────────────────────────────
+
+def test_one_shot_calls_to_nebius_turn_thinking_off(on, monkeypatch):
+    _vm(monkeypatch, alive=True)
+    off = {"chat_template_kwargs": {"enable_thinking": False}}
+    assert nebius.no_thinking("https://api.tokenfactory.nebius.com/v1/chat/completions") == off
+    assert nebius.no_thinking("https://203.0.113.7.sslip.io/v1/chat/completions") == off
+    assert nebius.no_thinking("https://openrouter.ai/api/v1/chat/completions") == {}
+    assert nebius.no_thinking("https://api.tokenfactory.nebius.com.evil.example/v1") == {}
+
+
+def test_thinking_switch_reaches_the_wire(on, monkeypatch):
+    from services.ai import client
+    sent = {}
+
+    class _Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def raise_for_status(self): pass
+        def iter_lines(self):
+            yield 'data: {"choices":[{"delta":{"content":"{\\"slot\\":\\"fast\\"}"}}]}'
+            yield "data: [DONE]"
+
+    def stream(method, url, headers=None, json=None, timeout=None):
+        sent.update(json)
+        return _Resp()
+    monkeypatch.setattr(client.httpx, "stream", stream)
+    out = client.complete(nebius.token_factory(), [{"role": "user", "content": "x"}], 60)
+    assert out == '{"slot":"fast"}'
+    assert sent["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def test_off_sends_nothing_extra(monkeypatch):
+    monkeypatch.setattr(settings, "nebius_api_key", "")
+    assert nebius.no_thinking("https://api.tokenfactory.nebius.com/v1/chat/completions") == {}
