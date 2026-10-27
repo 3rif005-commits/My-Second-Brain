@@ -136,6 +136,9 @@ def _json(s: Skill, bundled: set[str], user: set[str]) -> dict:
         "icon": s.icon,
         "files": _files(s.name),
         "source": source,
+        # builtin | user | assistant | installed — what the skill may do
+        # depends on it (services/agent/skills.py, Skill.trusted).
+        "origin": s.origin,
         "can_reset": source == "edited",
         "can_delete": source == "user",
         # The study guide only — None hides the setting for every other skill.

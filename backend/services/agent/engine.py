@@ -577,8 +577,10 @@ async def _routed_turn(request: AgentRequest, user_id: str,
             skill_registry=skill_registry,
             # Retrieved note text is ingested from files and web pages, so any
             # turn that has some is a turn that has read untrusted input — and
-            # a workspace turn always has read the note's sources.
-            untrusted_context=bool(notes) or bool(workspace_note),
+            # a workspace turn always has read the note's sources. So has one
+            # that follows a skill a model drafted or a stranger wrote.
+            untrusted_context=(bool(notes) or bool(workspace_note)
+                               or any(not s.trusted for s in matched)),
             approvals=set(request.approvals),
             workspace_note=workspace_note,
             private_context=private_used,
@@ -822,6 +824,10 @@ async def _stream_loop(
                     # rest of the turn — a worse trade than it sounds.
                     _answer(slot, with_style(skill.name, skill.body))
                     tool_calls_made += 1
+                    if not skill.trusted:
+                        # Its text is now in the model's context: the rest
+                        # of the turn is untrusted (permissions.py).
+                        untrusted_context = True
                     yield _ev({"type": "skill_active", "name": skill.name})
                     yield _ev({"type": "tool_result", "id": slot["id"],
                                "summary": f"loaded {skill.name}",

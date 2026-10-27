@@ -9,7 +9,23 @@ import { GROUPS } from "./groups";
 import { matches } from "./model";
 import { SkillMenu, type SkillAction } from "./SkillMenu";
 
-export function SourceMark({ source }: { source: Skill["source"] }) {
+// Drafted and installed skills say so: the chat treats their text with care
+// (it asks before changing anything once one is in use), and so should you.
+const ORIGIN_MARKS: Partial<Record<NonNullable<Skill["origin"]>, { label: string; title: string }>> = {
+  assistant: { label: "Drafted by AI", title: "Written by the chat and saved by you. Chats that use it ask before changing anything." },
+  installed: { label: "Installed", title: "From outside the app. Never used unasked; chats that use it ask before changing anything." },
+};
+
+export function SourceMark({ source, origin }: { source: Skill["source"]; origin?: Skill["origin"] }) {
+  const mark = origin ? ORIGIN_MARKS[origin] : undefined;
+  if (mark) {
+    return (
+      <span title={mark.title}
+        className="shrink-0 text-[10.5px] px-1.5 py-px rounded-full bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+        {mark.label}
+      </span>
+    );
+  }
   if (source === "bundled") return null;
   return (
     <span className={`shrink-0 text-[10.5px] px-1.5 py-px rounded-full ${source === "edited"
@@ -79,7 +95,7 @@ export function SkillSidebar({ skills, selected, query, onQuery, onSelect, onNew
                         : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5"}`}>
                       <span className="w-5 text-center text-[15px] leading-none shrink-0" aria-hidden>{s.icon ?? g.defaultIcon}</span>
                       <span className="flex-1 min-w-0 truncate text-[13px]">{s.title}</span>
-                      <SourceMark source={s.source} />
+                      <SourceMark source={s.source} origin={s.origin} />
                     </button>
                     {/* beside the row, not inside it: a button in a button is not one */}
                     <div className="absolute right-1 top-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100">

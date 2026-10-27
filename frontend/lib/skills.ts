@@ -10,6 +10,11 @@ export type SelectionOutput = "insert_below" | "rewrite_selection";
 
 export type SkillSource = "bundled" | "edited" | "user";
 
+/** Where a skill came from (backend: Skill.origin). Drafted and installed
+ * skills are treated as untrusted text: never picked unasked, and a chat that
+ * uses one asks before it changes anything. */
+export type SkillOrigin = "builtin" | "user" | "assistant" | "installed";
+
 /** How the study guide writes from several sources (E9). */
 export type MultiSource = "auto" | "single" | "chapters";
 
@@ -24,6 +29,7 @@ export interface Skill {
   /** Reference files, as paths inside the skill ("reference/x.md"). */
   files: string[];
   source: SkillSource;
+  origin?: SkillOrigin;
   can_reset: boolean;
   can_delete: boolean;
   /** The study guide only; null for every other skill. */

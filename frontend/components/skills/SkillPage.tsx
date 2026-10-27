@@ -52,7 +52,7 @@ export function SkillPage({
           <ChevronRight size={12} className="hidden sm:inline text-gray-300" />
           <span className="truncate text-gray-800 dark:text-gray-100">{skill.title}</span>
         </nav>
-        <SourceMark source={skill.source} />
+        <SourceMark source={skill.source} origin={skill.origin} />
         <div className="ml-auto flex items-center gap-1">
           {skill.where === "chat" && (
             <button type="button" onClick={() => onAction("try")}

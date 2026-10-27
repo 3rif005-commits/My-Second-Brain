@@ -125,6 +125,11 @@ def _materialize(uid: str, rows: list[dict]) -> Path:
             dest = staging / name / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(text, encoding="utf-8")
+        if (staging / name).is_dir():
+            # Origin from the database, beside the files: what the registry
+            # trusts (services/agent/skills.py). "builtin" is never stored.
+            origin = row.get("origin") if row.get("origin") in ORIGINS else "user"
+            (staging / name / ".origin").write_text(origin, encoding="utf-8")
     final = ROOT / uid
     old = ROOT / f".{uid}.old.{uuid.uuid4().hex}"
     if final.exists():

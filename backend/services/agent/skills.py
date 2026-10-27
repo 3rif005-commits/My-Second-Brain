@@ -59,6 +59,17 @@ class Skill:
     #: "auto" (chapter by chapter from SYNTHESIS_CHAPTERS_MIN_SOURCES
     #: sources), "single" (one call) or "chapters" (E9)
     multi_source: str | None = None
+    #: where it came from: "builtin" (this repo, reviewed), "user" (written or
+    #: edited by the user), "assistant" (drafted by the chat, saved by the
+    #: user), "installed" (from outside the app). Set by the loader from the
+    #: database's record, never from the skill's own text.
+    origin: str = "builtin"
+
+    @property
+    def trusted(self) -> bool:
+        """A skill the user or this repo wrote. The others are text from a
+        model or a stranger: a turn that uses one is an untrusted turn."""
+        return self.origin in TRUSTED_ORIGINS
 
     def reference(self, relative: str) -> str:
         """Read one reference file, on demand.
@@ -86,6 +97,15 @@ class Skill:
                       if p.is_file())
 
 
+#: Origins whose text the app treats as the user's own instructions.
+TRUSTED_ORIGINS = frozenset({"builtin", "user"})
+ORIGINS = ("builtin", "user", "assistant", "installed")
+#: Written next to SKILL.md by services/skill_store.py from user_skills.origin.
+#: A skill's files cannot hold it (skill_store accepts only SKILL.md and
+#: reference texts), so a skill cannot vouch for itself.
+ORIGIN_MARKER = ".origin"
+
+
 _FRONTMATTER_RE = re.compile(
     r"^---\s*\n(?P<yaml>.*?)\n---\s*\n(?P<body>.*)$",
     re.DOTALL,
@@ -93,7 +113,7 @@ _FRONTMATTER_RE = re.compile(
 
 
 def parse_frontmatter(raw: str, source_path: Path,
-                      folder: Path | None = None) -> Skill:
+                      folder: Path | None = None, origin: str = "builtin") -> Skill:
     match = _FRONTMATTER_RE.match(raw)
     if not match:
         raise ValueError(f"{source_path}: missing frontmatter delimiters")
@@ -108,23 +128,50 @@ def parse_frontmatter(raw: str, source_path: Path,
     if isinstance(surfaces, str):
         surfaces = [s.strip() for s in surfaces.split(",") if s.strip()]
 
+    description = meta["description"]
+    auto, priority = bool(meta.get("auto", False)), int(meta.get("priority", 0))
+    if origin not in TRUSTED_ORIGINS:
+        # Text from a model or a stranger: cleaned like any untrusted text,
+        # never picked unasked, never ranked above the user's own skills.
+        from services.text_hygiene import attribute, untrusted
+        body, description = untrusted(body), attribute(str(description))
+        auto, priority = False, min(priority, 0)
+
     return Skill(
         name=meta["name"],
-        description=meta["description"],
+        description=description,
         body=body,
         tools=meta.get("tools"),
-        priority=int(meta.get("priority", 0)),
+        priority=priority,
         source_path=source_path,
         surfaces=tuple(surfaces),
         inputs=meta.get("inputs"),
         output=meta.get("output"),
         model_tier=meta.get("model_tier"),
-        auto=bool(meta.get("auto", False)),
+        auto=auto,
         confirm=bool(meta.get("confirm", False)),
         folder=folder,
         icon=meta.get("icon"),
         multi_source=meta.get("multi_source"),
+        origin=origin,
     )
+
+
+def _origin_of(path: Path, folder: Path | None) -> str:
+    """The skill's origin: the store's marker beside it, else built-in for a
+    file shipped in this repo, else the user's."""
+    if folder is not None:
+        marker = folder / ORIGIN_MARKER
+        if marker.is_file():
+            value = marker.read_text(encoding="utf-8").strip()
+            if value in ORIGINS and value != "builtin":
+                return value
+    from prompts._skill_text import SKILLS_DIR
+    try:
+        path.resolve().relative_to(SKILLS_DIR.resolve())
+        return "builtin"
+    except ValueError:
+        return "user"
 
 
 class SkillRegistry:
@@ -159,7 +206,8 @@ class SkillRegistry:
     @staticmethod
     def _read(path: Path, folder: Path | None = None) -> "Skill | None":
         try:
-            return parse_frontmatter(path.read_text(encoding="utf-8"), path, folder)
+            return parse_frontmatter(path.read_text(encoding="utf-8"), path, folder,
+                                     origin=_origin_of(path, folder))
         except Exception as e:                      # noqa: BLE001
             logger.warning("skipping skill %s: %s", path, e)
             return None
