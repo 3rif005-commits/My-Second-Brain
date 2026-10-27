@@ -31,7 +31,42 @@ interface AuditEntry {
   created_at: string;
 }
 
-type Probe = { state: "checking" } | { state: "ok"; tools: string[] } | { state: "error"; error: string };
+// A tool reaches the AI only as you last approved it: one the server adds or
+// rewrites later waits here ("new" / "changed") until you approve it — the
+// defence against a trusted server turning on you (backend: mcp_pins.py).
+type ToolStatus = "approved" | "new" | "changed";
+interface ProbeTool {
+  name: string;
+  status: ToolStatus;
+  description: string;
+  fingerprint?: string;
+}
+type Probe =
+  | { state: "checking" }
+  | { state: "ok"; tools: ProbeTool[]; notice?: string }
+  | { state: "error"; error: string };
+
+interface ToolsResponse {
+  tools?: { name: string; status?: ToolStatus; description?: string; fingerprint?: string }[];
+  refused?: string[];
+  error?: string | null;
+  detail?: string;
+}
+
+function probeFrom(res: Response, data: ToolsResponse): Probe {
+  if (!res.ok) return { state: "error", error: data.detail ?? data.error ?? `Error ${res.status}` };
+  if (data.error) return { state: "error", error: data.error };
+  const tools = (data.tools ?? []).map((t) => ({
+    name: toolName(t.name),
+    status: t.status ?? "approved",
+    description: t.description ?? "",
+    fingerprint: t.fingerprint,
+  }));
+  const notice = data.refused?.length
+    ? `${data.refused.join(", ")} changed again while you were looking. Check it once more.`
+    : undefined;
+  return { state: "ok", tools, notice };
+}
 type Tab = "servers" | "activity";
 type Trust = "read_only" | "full";
 
@@ -63,13 +98,8 @@ export default function McpSettingsPage() {
     setProbes((p) => ({ ...p, [id]: { state: "checking" } }));
     try {
       const res = await fetch(`/api/mcp-servers/${id}/tools`);
-      const data = await res.json().catch(() => ({}));
-      const next: Probe = !res.ok
-        ? { state: "error", error: data.detail ?? data.error ?? `Error ${res.status}` }
-        : data.error
-          ? { state: "error", error: data.error }
-          : { state: "ok", tools: (data.tools ?? []).map((t: { name: string }) => toolName(t.name)) };
-      setProbes((p) => ({ ...p, [id]: next }));
+      const data: ToolsResponse = await res.json().catch(() => ({}));
+      setProbes((p) => ({ ...p, [id]: probeFrom(res, data) }));
     } catch (e) {
       setProbes((p) => ({ ...p, [id]: { state: "error", error: e instanceof Error ? e.message : String(e) } }));
     }
@@ -133,6 +163,23 @@ export default function McpSettingsPage() {
       body: JSON.stringify(body),
     });
     if (body.enabled) probe(id);
+  }
+
+  // Approves exactly what is on screen: the fingerprints shown go back, and a
+  // tool that changed again in between is refused by the server.
+  async function approveTools(id: string, tools: ProbeTool[]) {
+    const body = Object.fromEntries(tools.filter((t) => t.fingerprint).map((t) => [t.name, t.fingerprint]));
+    try {
+      const res = await fetch(`/api/mcp-servers/${id}/approve-tools`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tools: body }),
+      });
+      const data: ToolsResponse = await res.json().catch(() => ({}));
+      setProbes((p) => ({ ...p, [id]: probeFrom(res, data) }));
+    } catch (e) {
+      setProbes((p) => ({ ...p, [id]: { state: "error", error: e instanceof Error ? e.message : String(e) } }));
+    }
   }
 
   async function confirmRemove() {
@@ -254,7 +301,13 @@ export default function McpSettingsPage() {
                   help={
                     <span className="flex flex-col gap-0.5">
                       <span className="truncate [overflow-wrap:anywhere]">{s.command || s.url || "—"}</span>
-                      <ServerStatus enabled={s.enabled} probe={probes[s.id]} onRetry={() => probe(s.id)} />
+                      <ServerStatus
+                        name={s.name}
+                        enabled={s.enabled}
+                        probe={probes[s.id]}
+                        onRetry={() => probe(s.id)}
+                        onApprove={(tools) => approveTools(s.id, tools)}
+                      />
                     </span>
                   }
                 >
@@ -314,7 +367,13 @@ export default function McpSettingsPage() {
   );
 }
 
-function ServerStatus({ enabled, probe, onRetry }: { enabled: boolean; probe?: Probe; onRetry: () => void }) {
+function ServerStatus({ name, enabled, probe, onRetry, onApprove }: {
+  name: string;
+  enabled: boolean;
+  probe?: Probe;
+  onRetry: () => void;
+  onApprove: (tools: ProbeTool[]) => void;
+}) {
   if (!enabled) return <span className="text-ink-tertiary">Off: the AI doesn&apos;t use it</span>;
   if (!probe || probe.state === "checking") {
     return (
@@ -331,10 +390,35 @@ function ServerStatus({ enabled, probe, onRetry }: { enabled: boolean; probe?: P
       </span>
     );
   }
+  const approved = probe.tools.filter((t) => t.status === "approved");
+  const held = probe.tools.filter((t) => t.status !== "approved");
   return (
-    <span className="text-emerald-600 dark:text-emerald-400 [overflow-wrap:anywhere]">
-      Connected · {probe.tools.length} {probe.tools.length === 1 ? "tool" : "tools"}
-      {probe.tools.length > 0 && <span className="text-ink-tertiary">: {probe.tools.join(", ")}</span>}
+    <span className="flex flex-col gap-1">
+      <span className="text-emerald-600 dark:text-emerald-400 [overflow-wrap:anywhere]">
+        Connected · {approved.length} {approved.length === 1 ? "tool" : "tools"}
+        {approved.length > 0 && <span className="text-ink-tertiary">: {approved.map((t) => t.name).join(", ")}</span>}
+      </span>
+      {held.length > 0 && (
+        <span role="group" aria-label={`${name}: tools waiting for approval`} className="flex flex-col gap-1 rounded-md bg-surface-chip p-2 text-ink-secondary">
+          <span className="font-medium text-amber-700 dark:text-amber-400">
+            {held.length} {held.length === 1 ? "tool is" : "tools are"} waiting for you. The AI can&apos;t use
+            {held.length === 1 ? " it" : " them"} until you approve.
+          </span>
+          {held.map((t) => (
+            <span key={t.name} className="[overflow-wrap:anywhere]">
+              <span className="font-mono text-ink">{t.name}</span>{" "}
+              <span className="text-ink-tertiary">({t.status === "new" ? "new" : "changed since you approved it"})</span>
+              {t.description && <span className="block text-ink-tertiary">{t.description}</span>}
+            </span>
+          ))}
+          <span>
+            <Button size="sm" variant="secondary" onClick={() => onApprove(held)}>
+              Approve {held.length === 1 ? "this tool" : `these ${held.length} tools`}
+            </Button>
+          </span>
+        </span>
+      )}
+      {probe.notice && <span role="status" className="text-amber-700 dark:text-amber-400">{probe.notice}</span>}
     </span>
   );
 }

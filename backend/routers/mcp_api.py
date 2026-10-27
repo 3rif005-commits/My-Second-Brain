@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from routers.ingest import get_user_id
 from core.config import settings
+from services.agent import mcp_pins
 from services.agent.mcp_client import McpServerConfig, clear_discovery_cache, probe
 from services import egress
 from services.database import get_supabase
@@ -133,7 +134,42 @@ async def list_server_tools(server_id: str, authorization: str = Header()):
     # a user who just fixed a broken URL must not be told the old story for five
     # minutes, and a typo must not look like a server with no tools.
     tools, error = await probe(config)
-    return {"tools": [t.to_llm_schema() for t in tools], "error": error}
+    if "approved_tools" not in row:                    # migration 032 not applied
+        return {"tools": [{**t.to_llm_schema(), "status": mcp_pins.APPROVED}
+                          for t in tools], "removed": [], "pinning": False, "error": error}
+    approved = row.get("approved_tools")
+    if approved is None and tools:
+        # First look at this server: what the user sees now is what is trusted.
+        approved = mcp_pins.pins_for(tools)
+        mcp_pins.save(server_id, user_id, approved)
+    return {**mcp_pins.review(tools, approved), "pinning": True, "error": error}
+
+
+class ApprovePayload(BaseModel):
+    #: tool name → the fingerprint the Settings page showed for it
+    tools: dict[str, str]
+
+
+@router.post("/mcp-servers/{server_id}/approve-tools")
+async def approve_server_tools(server_id: str, body: ApprovePayload,
+                               authorization: str = Header()):
+    """Accept new or changed tools — exactly as the user saw them. A tool that
+    changed again since the page loaded is refused and shown afresh."""
+    user_id = get_user_id(authorization)
+    row = (get_supabase().table("mcp_servers").select("*").eq("id", server_id)
+           .eq("user_id", user_id).maybe_single().execute().data)
+    if not row:
+        raise HTTPException(404, detail="Server not found")
+    if "approved_tools" not in row:
+        raise HTTPException(409, detail="Tool approval needs database migration 032.")
+    tools, error = await probe(McpServerConfig(**row))
+    if error:
+        raise HTTPException(502, detail=f"Could not reach the server to check its tools: {error}")
+    pins, refused = mcp_pins.approve(row.get("approved_tools"), tools, body.tools)
+    if not mcp_pins.save(server_id, user_id, pins):
+        raise HTTPException(500, detail="Could not save the approval.")
+    clear_discovery_cache()
+    return {**mcp_pins.review(tools, pins), "refused": refused, "pinning": True, "error": None}
 
 
 @router.get("/mcp-audit-log")

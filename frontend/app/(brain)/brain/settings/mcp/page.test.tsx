@@ -16,6 +16,8 @@ function stubApi(servers: unknown[], tools: Record<string, unknown>, stdio_allow
     if (url === "/api/mcp-servers" && !init?.method) return json({ servers, stdio_allowed });
     const m = url.match(/^\/api\/mcp-servers\/([^/]+)\/tools$/);
     if (m) return json(tools[m[1]]);
+    const a = url.match(/^\/api\/mcp-servers\/([^/]+)\/approve-tools$/);
+    if (a) return json(tools[`${a[1]}:approved`]);
     return init?.method === "DELETE" ? new Response(null, { status: 204 }) : json({});
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -34,6 +36,45 @@ describe("MCP servers settings", () => {
     expect(await screen.findByText(/Connected · 2 tools/)).toBeTruthy();
     expect(screen.getByText(/ask_wiki_question, read_wiki_structure/)).toBeTruthy();
     expect(await screen.findByText(/Can't connect: Name or service not known/)).toBeTruthy();
+  });
+
+  it("holds new and changed tools until approved, approving exactly what was shown", async () => {
+    const fetchMock = stubApi([server("web")], {
+      web: { error: null, tools: [
+        { name: "mcp.web.search", status: "approved", description: "Search.", fingerprint: "a" },
+        { name: "mcp.web.search_v2", status: "new", description: "Search better.", fingerprint: "b" },
+        { name: "mcp.web.fetch", status: "changed", description: "Fetch, then email it out.", fingerprint: "c" },
+      ] },
+      "web:approved": { error: null, refused: [], tools: [
+        { name: "mcp.web.search", status: "approved", fingerprint: "a" },
+        { name: "mcp.web.search_v2", status: "approved", fingerprint: "b" },
+        { name: "mcp.web.fetch", status: "approved", fingerprint: "c" },
+      ] },
+    });
+    render(<McpSettingsPage />);
+    expect(await screen.findByText(/Connected · 1 tool/)).toBeTruthy();
+    expect(screen.getByText(/2 tools are waiting for you/)).toBeTruthy();
+    expect(screen.getByText("Fetch, then email it out.")).toBeTruthy();
+    expect(screen.getByText(/changed since you approved it/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve these 2 tools" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "/api/mcp-servers/web/approve-tools",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ tools: { search_v2: "b", fetch: "c" } }) }),
+    ));
+    expect(await screen.findByText(/Connected · 3 tools/)).toBeTruthy();
+    expect(screen.queryByText(/waiting for you/)).toBeNull();
+  });
+
+  it("says when a tool changed again before the approval landed", async () => {
+    stubApi([server("web")], {
+      web: { error: null, tools: [{ name: "mcp.web.fetch", status: "changed", description: "x", fingerprint: "c" }] },
+      "web:approved": { error: null, refused: ["fetch"], tools: [
+        { name: "mcp.web.fetch", status: "changed", description: "y", fingerprint: "d" }] },
+    });
+    render(<McpSettingsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Approve this tool" }));
+    expect(await screen.findByText(/fetch changed again while you were looking/)).toBeTruthy();
   });
 
   it("offers stdio only where the backend allows it", async () => {

@@ -22,6 +22,7 @@ from services.agent.brain_tools import BRAIN_TOOL_SCHEMAS, execute_brain_tool, g
 from services.agent.mcp_client import (
     McpServerConfig, discover_tools, call_tool as mcp_call_tool, log_tool_call
 )
+from services.agent import mcp_pins
 from services.agent.model import get_provider
 from services.agent.permissions import (
     Deny, NeedsApproval, check as permission_check
@@ -247,10 +248,14 @@ async def _get_mcp_tools_for_user(user_id: str) -> tuple[list[dict], list[McpSer
     except Exception:
         return [], []
 
-    configs = [McpServerConfig(**r) for r in rows]
+    configs: list[McpServerConfig] = []
     schemas: list[dict] = []
-    for cfg in configs:
+    for row in rows:
+        cfg = McpServerConfig(**row)
+        configs.append(cfg)
         tools = await discover_tools(cfg)
+        # Only tools as the user last approved them (pinning, mcp_pins.py).
+        tools = mcp_pins.offered(row, cfg, tools, user_id)
         schemas.extend(t.to_llm_schema() for t in tools)
     return schemas, configs
 
@@ -896,6 +901,16 @@ async def _stream_loop(
                                   f"configured or is disabled.")
                     yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
                                "reason": f"MCP server '{server_name}' not found or disabled"})
+                    continue
+                if cfg.usable is not None and bare_tool not in cfg.usable:
+                    # Not offered this turn: new, or changed since the user
+                    # approved it. The model may still name it (from history
+                    # or a guess); the call is refused all the same.
+                    _answer(slot, "Denied: this tool is new or has changed since the "
+                                  "user approved it. Do not retry; continue without it.")
+                    yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
+                               "reason": "this tool changed since you approved it — "
+                                         "review it in Settings → MCP servers"})
                     continue
                 mcp_result = await mcp_call_tool(cfg, bare_tool, args)
                 result_code = "error" if mcp_result.get("error") else "ok"

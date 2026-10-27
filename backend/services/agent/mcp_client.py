@@ -23,12 +23,16 @@ DESCRIPTION_LIMIT = 1024
 
 
 class McpServerConfig(BaseModel):
+    id: str | None = None
     name: str
     transport: str          # 'stdio' | 'http' | 'sse'
     command: str | None = None
     url: str | None = None
     enabled: bool = True
     trust_level: str = "read_only"
+    #: Runtime only, never stored: bare names of the tools the model was
+    #: offered this turn (services/agent/mcp_pins.py). None = not pinned.
+    usable: set[str] | None = None
 
     @model_validator(mode="after")
     def _check_transport_fields(self):
