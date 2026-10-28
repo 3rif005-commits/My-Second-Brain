@@ -32,6 +32,20 @@ class NoteUpdate(BaseModel):
     is_indexed: bool | None = None
 
 
+class BlockPreviewResponse(BaseModel):
+    """A passage of a note as raw BlockNote JSON — what the citation hover card
+    renders: the cited block plus its siblings either side, each with its own
+    `children`. `target_index` says which one was cited."""
+    note_id: str
+    note_title: str
+    note_icon: str = "📄"
+    block_id: str
+    blocks: list[dict[str, Any]]
+    target_index: int
+    # How current the cited source is ("Edited 3d ago" in the card's header).
+    updated_at: str | None = None
+
+
 class NoteResponse(NoteBase):
     id: str
     user_id: str

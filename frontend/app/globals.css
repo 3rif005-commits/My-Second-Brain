@@ -645,3 +645,133 @@ input[type="range"] {
   color: transparent;
   border-radius: 2px;
 }
+
+/* ---------------------------------------------------------------------------
+ * Citation hover card (BlockPreviewBody.tsx) — a passage of a note, shrunk
+ * to fit a 360px card.
+ *
+ * BlockNote sizes its editor for a note page. Inside the card that is wrong
+ * twice over: the fixed `padding: 0 54px` gutter (its room for drag handles
+ * and the side menu, neither of which a read-only preview shows) eats a
+ * third of the width, and page-sized type and block spacing mean only two
+ * or three lines fit. The reader here is checking a claim at a glance, not
+ * settling in to read, so the whole passage is set a step down — smaller,
+ * tighter, quieter — and the cited line is what carries the emphasis.
+ * ------------------------------------------------------------------------- */
+.bn-block-preview .bn-editor {
+  padding: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* Page rhythm is too airy at this size: it spends the card's height on gaps
+ * rather than on lines the reader came to see. */
+.bn-block-preview .bn-block-outer {
+  margin-block: 1px;
+}
+.bn-block-preview .bn-block-content {
+  padding-block: 2px;
+}
+.bn-block-preview .bn-block-content h1,
+.bn-block-preview .bn-block-content h2,
+.bn-block-preview .bn-block-content h3 {
+  font-size: 13.5px;
+  line-height: 1.35;
+  margin-block: 2px;
+}
+.bn-block-preview .katex-display {
+  margin-block: 4px;
+  font-size: 0.95em;
+}
+
+/* The preview's editor auto-selects its only block on mount, and a
+ * `content: "none"` block (math, callout, database, button) renders that
+ * selection as ProseMirror's blue node ring — a caret artifact in something
+ * nobody can put a caret in. ProseMirror paints that outline on the node
+ * view's CHILD, not on `.ProseMirror-selectednode` itself, so the descendant
+ * selector is doing the work here; `!important` beats the node-view's own
+ * inline-ish rule. Scoped to `.bn-block-preview`, so the real editor's
+ * selection ring — where it is load-bearing — is untouched. */
+.bn-block-preview .ProseMirror-selectednode,
+.bn-block-preview .ProseMirror-selectednode * {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* A block keeps its own vertical rhythm inside the note; in a card the
+ * leading/trailing margin is just padding the card already provides. */
+.bn-block-preview .bn-block-outer:first-child > .bn-block > * {
+  margin-top: 0;
+}
+.bn-block-preview .bn-block-outer:last-child > .bn-block > * {
+  margin-bottom: 0;
+}
+
+/* A callout keeps its identity in a preview — its tint and its icon — but
+ * not its bordered box. On a note page the box is how a callout stands apart
+ * from prose; inside a card that is already a box, it becomes a box inside a
+ * box, competing with the cited-line mark for the reader's attention. */
+.bn-block-preview .bn-block:has(> .react-renderer.node-callout) {
+  border-width: 0;
+  padding: 6px 10px;
+  margin-block: 2px;
+  column-gap: 8px;
+  border-radius: 8px;
+}
+.bn-block-preview .callout-icon {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* BlockNote draws a thin vertical guide beside nested blocks — on a note page
+ * it shows indentation depth while editing. In a preview it is just a stray
+ * line between a callout's icon and its text. Measured, not guessed: it is the
+ * nested `.bn-block-outer`'s ::before, drawn by this rule in @blocknote/react's
+ * styles.css ("Indent line styling"):
+ *
+ *   .bn-block-group .bn-block:not(:has(.bn-toggle-wrapper)) .bn-block-group
+ *     .bn-block-outer:not([data-prev-depth-changed])::before
+ *
+ * That selector weighs (0,5,1), so a short override silently loses — a first
+ * attempt here did exactly that, and a live measurement caught it. This mirrors
+ * it under the preview's scope, (0,6,1), which wins without !important. */
+.bn-block-preview .bn-block-group .bn-block:not(:has(.bn-toggle-wrapper)) .bn-block-group .bn-block-outer:not([data-prev-depth-changed])::before {
+  border-left-width: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * The card's viewport. The passage is usually taller than the card, so the
+ * card scrolls ITSELF to centre the cited block (BlockPreviewLink.tsx) — the
+ * reader cannot, since `pointer-events: none` is what lets their click reach
+ * the link underneath. A hard edge on clipped text reads as broken, so
+ * whichever side actually continues is faded out instead; `data-fade-*` is
+ * set only when there is really more in that direction.
+ * ------------------------------------------------------------------------- */
+.block-preview-viewport {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.block-preview-viewport[data-fade-top="true"][data-fade-bottom="true"] {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 22px,
+                              #000 calc(100% - 22px), transparent 100%);
+}
+.block-preview-viewport[data-fade-top="true"][data-fade-bottom="false"] {
+  mask-image: linear-gradient(to bottom, transparent 0, #000 22px);
+}
+.block-preview-viewport[data-fade-top="false"][data-fade-bottom="true"] {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent 100%);
+}
+
+/* Opening the card answers a deliberate hover, so it gets one short move —
+ * enough to show where it came from, not enough to wait on. */
+@keyframes block-preview-in {
+  from { opacity: 0; transform: translateY(-2px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+.block-preview-card {
+  animation: block-preview-in 110ms cubic-bezier(0.2, 0, 0, 1);
+  transform-origin: top left;
+}
+@media (prefers-reduced-motion: reduce) {
+  .block-preview-card { animation: none; }
+}

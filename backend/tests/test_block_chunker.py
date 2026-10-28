@@ -138,3 +138,34 @@ def test_deep_nesting_traversed():
     assert "top" in ids
     assert "mid" in ids
     assert "leaf" in ids
+
+
+# ── ported from the WebMCP fork's feat/hover-card (2026-09-13) ──────────────
+
+def test_captions_mentions_and_inline_math_are_indexed():
+    from services.block_chunker import parse
+    content = [
+        {"id": "img", "type": "image", "props": {"url": "https://x/y.png", "caption": "Loss curve"},
+         "content": None, "children": []},
+        {"id": "p", "type": "paragraph", "children": [], "content": [
+            {"type": "text", "text": "See"},
+            {"type": "mention", "props": {"noteId": "n2", "noteName": "Lecture 6"}},
+            {"type": "inlineMath", "props": {"latex": "\\nabla L"}}]},
+    ]
+    texts = {c["block_id"]: c["chunk_text"] for c in parse(content)}
+    assert texts["img"] == "Loss curve"           # the caption, not the URL
+    assert texts["p"] == "See Lecture 6 \\nabla L"
+
+
+def test_block_window_is_the_cited_block_and_its_own_siblings():
+    from services.block_chunker import find_block_window
+    blocks = [{"id": f"b{i}", "children": []} for i in range(9)]
+    blocks[4]["children"] = [{"id": "kid1"}, {"id": "kid2"}]
+    win, i = find_block_window(blocks, "b0")
+    assert [b["id"] for b in win] == ["b0", "b1", "b2", "b3"] and i == 0
+    win, i = find_block_window(blocks, "b6")
+    assert [b["id"] for b in win] == ["b3", "b4", "b5", "b6", "b7", "b8"] and i == 3
+    win, i = find_block_window(blocks, "kid2")
+    assert [b["id"] for b in win] == ["kid1", "kid2"] and i == 1
+    assert find_block_window(blocks, "nope") is None
+    assert find_block_window(None, "b0") is None

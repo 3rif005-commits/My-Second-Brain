@@ -38,15 +38,17 @@ PROPERTY_PREAMBLE_BLOCK_ID = "__property_preamble__"
 
 
 def embed_and_insert_chunks(note_id: str, user_id: str, blocks: list[dict]) -> None:
-    """Delete existing chunks for note and insert fresh block-level rows."""
+    """Replace a note's chunks with fresh block-level rows.
+
+    Embeds first and deletes after: deleting first meant an embedding failure
+    (a 429, a timeout) left the note with no chunks, silently gone from search."""
     db = get_supabase()
+    texts = [b["chunk_text"] for b in blocks]
+    embeddings = embed_batch(texts) if texts else []
     db.table("note_chunks").delete().eq("note_id", note_id).execute()
 
     if not blocks:
         return
-
-    texts = [b["chunk_text"] for b in blocks]
-    embeddings = embed_batch(texts)
 
     rows = [
         {

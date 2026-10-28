@@ -10,6 +10,7 @@ import "katex/dist/katex.min.css";
 import { remarkCustomFences } from "./fences";
 import { Callout } from "./components/Callout";
 import { NoteRef } from "./components/NoteRef";
+import { BlockPreviewLink } from "./components/BlockPreviewLink";
 import { InteractiveFrame } from "@/components/interactive/InteractiveFrame";
 
 interface Props {
@@ -73,9 +74,9 @@ const components: any = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   blockquote: ({ children }: any) => <blockquote className="my-2 border-l-2 border-accent-300 pl-3 italic text-gray-600 dark:text-gray-400">{children}</blockquote>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  a: ({ href, children }: any) => (
-    <a href={href} className="text-accent-600 dark:text-accent-400 hover:underline">{children}</a>
-  ),
+  // A `/brain/{id}#{blockId}` citation opens a hover card with the cited
+  // passage; every other link stays a plain link. See BlockPreviewLink.
+  a: ({ href, children }: any) => <BlockPreviewLink href={href}>{children}</BlockPreviewLink>,
 };
 
 export function Markdown({ children, components: extra }: Props) {

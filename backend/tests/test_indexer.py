@@ -247,3 +247,49 @@ def test_a_database_without_the_fingerprint_column_still_indexes():
         Exception("column notes.content_hash does not exist")) if "content_hash" in fields else real
     with _patched(db):
         assert indexer.index_note(NOTE_ID, USER_ID) is True
+
+
+def test_an_embedding_failure_leaves_the_existing_chunks_in_place():
+    # The old order was delete -> embed -> insert, so an embedding failure (a
+    # provider 429, a timeout) left the note with no chunks and it silently
+    # vanished from search. Found while planning a re-index against a
+    # rate-limited free-tier embedder, where that would happen across many
+    # notes at once. Embedding now happens before anything is deleted.
+    tables: dict = {}
+    db = MagicMock()
+    db.table.side_effect = lambda name: tables.setdefault(name, MagicMock())
+    blocks = [{"block_id": "b1", "chunk_index": 0, "chunk_text": "First block"}]
+
+    with patch.object(indexer, "get_supabase", return_value=db), \
+         patch.object(indexer, "embed_batch", side_effect=RuntimeError("429 quota exceeded")):
+        try:
+            indexer.embed_and_insert_chunks(NOTE_ID, USER_ID, blocks)
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("the embedding failure should propagate")
+
+    chunks = tables.get("note_chunks")
+    assert chunks is None or not chunks.delete.called, \
+        "existing chunks were deleted before embedding succeeded"
+
+
+def test_chunks_are_replaced_only_after_embedding_succeeds():
+    order: list[str] = []
+    tables: dict = {}
+    db = MagicMock()
+    db.table.side_effect = lambda name: tables.setdefault(name, MagicMock())
+    chunks = tables.setdefault("note_chunks", MagicMock())
+    chunks.delete.side_effect = lambda *a, **k: (order.append("delete"), MagicMock())[1]
+    chunks.insert.side_effect = lambda *a, **k: (order.append("insert"), MagicMock())[1]
+    blocks = [{"block_id": "b1", "chunk_index": 0, "chunk_text": "First block"}]
+
+    def fake_embed(texts):
+        order.append("embed")
+        return [[0.0] * 3 for _ in texts]
+
+    with patch.object(indexer, "get_supabase", return_value=db), \
+         patch.object(indexer, "embed_batch", side_effect=fake_embed):
+        indexer.embed_and_insert_chunks(NOTE_ID, USER_ID, blocks)
+
+    assert order == ["embed", "delete", "insert"]

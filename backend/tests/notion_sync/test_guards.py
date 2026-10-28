@@ -7,7 +7,7 @@ from services.notion_sync.notion.writers import WRITERS
 from services.portable import ir
 
 ROOT = Path(__file__).resolve().parents[2]            # backend/
-FRONTEND_EDITOR = ROOT.parent / "frontend" / "components" / "editor" / "BlockEditor.tsx"
+FRONTEND_EDITOR = ROOT.parent / "frontend" / "components" / "editor" / "noteSchema.tsx"  # the note schema
 
 #: BlockNote default blocks + our custom ones that M1 reads
 M1_READ = {"paragraph", "heading", "quote", "codeBlock", "bulletListItem", "numberedListItem",

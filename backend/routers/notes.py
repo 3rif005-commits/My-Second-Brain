@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Header, HTTPException, status
-from models.note import NoteCreate, NoteUpdate, NoteResponse
+from models.note import BlockPreviewResponse, NoteCreate, NoteUpdate, NoteResponse
 from services.database import get_supabase
 
 router = APIRouter(prefix="/notes", tags=["notes"])
@@ -93,6 +93,37 @@ def get_note(note_id: str, authorization: str = Header()):
     if not result.data:
         raise HTTPException(status_code=404, detail="Note not found")
     return result.data
+
+
+@router.get("/{note_id}/blocks/{block_id}", response_model=BlockPreviewResponse)
+def get_note_block(note_id: str, block_id: str, authorization: str = Header()):
+    """A cited block and the passage around it, for the citation hover card
+    (`/brain/{note_id}#{block_id}` links in chat answers). Selected by
+    (id, user_id) like every route here: another user's note is a 404."""
+    from services.block_chunker import find_block_window
+    user_id = get_user_id(authorization)
+    rows = (
+        get_supabase().table("notes")
+        .select("id, title, icon, content, updated_at")
+        .eq("id", note_id)
+        .eq("user_id", user_id)
+        .is_("deleted_at", "null")
+        .execute()
+    ).data or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="Note not found")
+    note = rows[0]
+    content = note.get("content") or []
+    # `_top`: a link to the whole note — its opening passage, nothing marked.
+    window = ((content[:5], -1) if content else None) if block_id == "_top" \
+        else find_block_window(content, block_id)
+    if window is None:
+        raise HTTPException(status_code=404, detail="Block not found")
+    blocks, target_index = window
+    return BlockPreviewResponse(
+        note_id=note["id"], note_title=note.get("title") or "Untitled",
+        note_icon=note.get("icon") or "📄", block_id=block_id, blocks=blocks,
+        target_index=target_index, updated_at=note.get("updated_at"))
 
 
 @router.patch("/{note_id}", response_model=NoteResponse)

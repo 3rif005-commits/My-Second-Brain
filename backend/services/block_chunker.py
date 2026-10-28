@@ -34,8 +34,40 @@ def _walk(blocks: list[dict], out: list[dict]) -> None:
             _walk(children, out)
 
 
+def find_block_window(content: list | None, block_id: str,
+                      radius: int = 3) -> tuple[list[dict], int] | None:
+    """The cited block plus up to `radius` siblings either side, and the cited
+    one's index in that list — for the citation hover card
+    (`GET /notes/{id}/blocks/{block_id}`). A block alone is often a fragment
+    (a list item, a heading), so the card shows the passage around it.
+    Siblings come from the block's OWN parent list: a block inside a callout
+    previews with the callout's other children. Raw BlockNote JSON, since the
+    card renders it with a real BlockNote instance."""
+    if not content or not block_id:
+        return None
+    found = _find_siblings(content, block_id)
+    if found is None:
+        return None
+    blocks, i = found
+    start = max(0, i - radius)
+    return blocks[start:i + radius + 1], i - start
+
+
+def _find_siblings(blocks: list, block_id: str) -> tuple[list[dict], int] | None:
+    for i, block in enumerate(blocks):
+        if not isinstance(block, dict):
+            continue
+        if block.get("id") == block_id:
+            return blocks, i
+        found = _find_siblings(block.get("children") or [], block_id)
+        if found is not None:
+            return found
+    return None
+
+
 def _inline_text(content) -> str:
-    """Text of inline content, links included (a link's words were lost)."""
+    """Text of inline content: links (a link's words were lost), an @mention's
+    note name and inline math's LaTeX."""
     parts: list[str] = []
     for inline in content or []:
         if not isinstance(inline, dict):
@@ -44,6 +76,11 @@ def _inline_text(content) -> str:
             parts.append(inline.get("text", ""))
         elif isinstance(inline.get("content"), list):          # link, etc.
             parts.append(_inline_text(inline["content"]))
+        else:
+            props = inline.get("props") or {}
+            for key in ("noteName", "latex"):
+                if isinstance(props.get(key), str) and props[key].strip():
+                    parts.append(props[key])
     return " ".join(p for p in parts if p)
 
 
@@ -62,4 +99,9 @@ def _extract_text(block: dict) -> str:
         return "\n".join(r for r in rows if r.strip(" |")).strip()
     if block.get("type") == "math":
         return str((block.get("props") or {}).get("latex") or "").strip()
-    return _inline_text(content).strip()
+    text = _inline_text(content).strip()
+    if block.get("type") in ("image", "video", "audio", "file"):
+        # The caption, not the URL: a URL is noise to a semantic search.
+        caption = str((block.get("props") or {}).get("caption") or "").strip()
+        text = " ".join(p for p in (text, caption) if p)
+    return text

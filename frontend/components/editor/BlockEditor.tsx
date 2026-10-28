@@ -9,18 +9,15 @@ import { AIExtension, AIMenuController } from "@blocknote/xl-ai";
 // @ts-ignore — ClientSideTransport + fetchViaProxy + getAISlashMenuItems exist in runtime bundle but omitted from index.d.ts
 import { ClientSideTransport, fetchViaProxy, getAISlashMenuItems } from "@blocknote/xl-ai";
 import { createOpenAI } from "@ai-sdk/openai";
-// @ts-ignore — @blocknote/core@0.48.0 ships an empty index.d.ts (upstream bug); runtime exports are fine
-import { BlockNoteSchema, defaultBlockSpecs, defaultInlineContentSpecs, createInlineContentSpec } from "@blocknote/core";
 // @ts-ignore — locales subpath has types but upstream types may not be picked up
 import { en as coreEn } from "@blocknote/core/locales";
 // @ts-ignore — locales subpath export
 import { en as aiEn } from "@blocknote/xl-ai/locales";
-import { withMultiColumn, multiColumnDropCursor, getMultiColumnSlashMenuItems, locales as multiColumnLocales } from "@blocknote/xl-multi-column";
+import { multiColumnDropCursor, getMultiColumnSlashMenuItems, locales as multiColumnLocales } from "@blocknote/xl-multi-column";
 import { useTheme } from "@/app/providers";
 import { Sparkles } from "lucide-react";
-import { MathBlockSpec, CheckpointBlockSpec, CalloutBlockSpec, UnknownBlockSpec, InlineMathSpec, insertMathBlock, insertCalloutBlock } from "./customBlocks";
-import { wrapUnknown, restoreUnknown } from "./unknownBlocks";
-import { createNotionCodeBlockSpec } from "./codeBlock";
+import { insertMathBlock, insertCalloutBlock } from "./customBlocks";
+import { restoreUnknown } from "./unknownBlocks";
 import {
   extractCalloutChildren, attachCalloutChildren, inlineMathInTableCells,
   mergeRedundantToggleHeadings,
@@ -34,71 +31,13 @@ import { NoteIdContext } from "./noteIdContext";
 import { modelFileFrom, modelTitle, uploadModel } from "@/lib/modelDrop";
 import { useToast } from "@/app/providers";
 import { freshFileUrl } from "@/lib/freshFileUrl";
-import { DatabaseBlockSpec, insertDatabaseBlock } from "../database/DatabaseBlock";
-import { ButtonBlockSpec, insertButtonBlock } from "../database/ButtonBlock";
-import { InteractiveBlockSpec, insertInteractiveBlock } from "./InteractiveBlock";
+import { insertDatabaseBlock } from "../database/DatabaseBlock";
+import { insertButtonBlock } from "../database/ButtonBlock";
+import { insertInteractiveBlock } from "./InteractiveBlock";
 
-// Inline @mention — links to another note in the brain
-const MentionSpec = createInlineContentSpec(
-  {
-    type: "mention" as const,
-    propSchema: {
-      noteId: { default: "" },
-      noteName: { default: "" },
-    },
-    content: "none",
-  },
-  {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    render: (inlineContent: any) => {
-      const el = document.createElement("a");
-      el.textContent = `@${inlineContent.props.noteName}`;
-      el.className = "mention-link";
-      el.style.cursor = "pointer";
-      el.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        window.location.href = `/brain/${inlineContent.props.noteId}`;
-      });
-      return { dom: el };
-    },
-  }
-);
-
-// Extend the full default schema with column/columnList + @mention
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const multiColSchema = withMultiColumn(
-  (BlockNoteSchema as any).create({
-    blockSpecs: {
-      ...defaultBlockSpecs,
-      // Syntax colours + Notion's hover pill (language, Copy, Wrap) — see codeBlock.ts
-      codeBlock: createNotionCodeBlockSpec(),
-      // createReactBlockSpec returns a factory — must be invoked to get the BlockSpec
-      math: MathBlockSpec(),
-      checkpoint: CheckpointBlockSpec(),
-      callout: CalloutBlockSpec(),
-      database: DatabaseBlockSpec(),
-      button: ButtonBlockSpec(),
-      interactive: InteractiveBlockSpec(),
-      unknownBlock: UnknownBlockSpec(),
-    },
-    inlineContentSpecs: {
-      ...defaultInlineContentSpecs,
-      mention: MentionSpec,
-      // Mid-sentence `$…$` formulas from a Notion paste — see customBlocks.tsx
-      inlineMath: InlineMathSpec,
-    },
-  })
-);
-
-const VALID_BLOCK_TYPES = new Set(Object.keys(multiColSchema.blockSpecs));
-
-// useCreateBlockNote can't hold a block of an unregistered type, so each one is
-// swapped for an `unknownBlock` placeholder that keeps the original; `persist`
-// below swaps it back before anything is saved (unknownBlocks.ts).
-function sanitizeBlocks(blocks: AnyBlock[]): AnyBlock[] {
-  return wrapUnknown(blocks, VALID_BLOCK_TYPES);
-}
+// The note schema lives in noteSchema.tsx: the citation hover card renders
+// blocks with it too, without pulling this editor's AI bundle into chat.
+import { multiColSchema, sanitizeBlocks } from "./noteSchema";
 
 /** Reorders slash-menu items so every group's items sit in one contiguous
  *  run, keeping first-appearance order of the groups and of the items inside
@@ -188,6 +127,16 @@ function AIKeyboardHandler() {
   }, [editor, aiExt]);
   return null;
 }
+
+// A block's OWN toggle control — never a descendant's: BlockNote renders a
+// block's children in a sibling `.bn-block-group`, so anchoring on the block's
+// own `.bn-block-content` (directly, or inside the `.react-renderer` wrapper
+// custom React blocks add) cannot reach a nested toggle. Used by scrollToBlock
+// to open collapsed toggles around a deep-linked block.
+const TOGGLE_WRAPPER_OF_BLOCK =
+  ":scope > .bn-block-content .bn-toggle-wrapper, :scope > .react-renderer > .bn-block-content .bn-toggle-wrapper";
+const TOGGLE_BUTTON_OF_BLOCK =
+  ":scope > .bn-block-content .bn-toggle-button, :scope > .react-renderer > .bn-block-content .bn-toggle-button";
 
 export interface BlockEditorHandle {
   exportMarkdown: (title: string) => Promise<void>;
@@ -472,12 +421,90 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         }
       },
       scrollToBlock(blockId: string) {
-        const el = editor.domElement?.querySelector(`[data-id="${blockId}"]`) as HTMLElement | null;
-        if (!el) return;
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.style.transition = "background-color 0.4s";
-        el.style.backgroundColor = "rgba(99,102,241,0.18)";
-        setTimeout(() => { el.style.backgroundColor = ""; }, 1400);
+        const found = editor.domElement?.querySelector(`[data-id="${blockId}"]`) as HTMLElement | null;
+        if (!found) return;
+        const el: HTMLElement = found;
+
+        // A block nested inside a COLLAPSED toggle — a toggle heading or a
+        // toggle list item — is in the DOM but under a `display:none` group:
+        // BlockNote hides a block's `.bn-block-group` while its toggle wrapper
+        // says `data-show-children="false"`. scrollIntoView on it does nothing
+        // and the highlight below measures 0x0, so a citation to it "only
+        // opened the page". Live-found on a bullet inside a collapsed toggle.
+        //
+        // Open each collapsed ancestor, outermost first, by clicking BlockNote's
+        // own toggle button: the same path as a user's click, which BlockNote
+        // keeps as UI state in localStorage and which never rewrites the note
+        // (verified live: updated_at unchanged, no save). Not by setting
+        // `data-show-children` ourselves — that attribute is on a node view
+        // ProseMirror manages, the same trap the highlight below avoids.
+        const collapsed: HTMLElement[] = [];
+        for (let a: HTMLElement | null = el.parentElement; a && a !== editor.domElement; a = a.parentElement) {
+          if (!a.classList.contains("bn-block")) continue;
+          const wrapper = a.querySelector(TOGGLE_WRAPPER_OF_BLOCK);
+          if (wrapper?.getAttribute("data-show-children") === "false") collapsed.push(a);
+        }
+        for (const block of collapsed.reverse()) {
+          block.querySelector<HTMLElement>(TOGGLE_BUTTON_OF_BLOCK)?.click();
+        }
+
+        const revealAndHighlight = () => {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+          // Not a direct style write on `el`: ProseMirror keeps its own
+          // MutationObserver on this subtree (to catch spellcheck/IME edits it
+          // didn't make itself) and, live-verified, treats ANY externally-applied
+          // inline style the same way — discarding it by re-rendering the node
+          // from its own state within the same tick, regardless of focus or how
+          // long after mount it runs. A fixed-position overlay tracking the
+          // block's own rect sits outside ProseMirror's tracked tree entirely, so
+          // there is nothing for it to "fix" back.
+          const overlay = document.createElement("div");
+          overlay.setAttribute("aria-hidden", "true");
+          overlay.dataset.blockHighlight = blockId;
+          overlay.style.cssText =
+            "position:fixed;pointer-events:none;z-index:40;border-radius:4px;" +
+            "background-color:rgb(var(--accent-500) / 0.18);transition:background-color 0.4s;";
+          document.body.appendChild(overlay);
+
+          function place() {
+            const rect = el!.getBoundingClientRect();
+            overlay.style.left = `${rect.left}px`;
+            overlay.style.top = `${rect.top}px`;
+            overlay.style.width = `${rect.width}px`;
+            overlay.style.height = `${rect.height}px`;
+          }
+          place();
+
+          // Tracks the block through the smooth-scroll animation triggered
+          // above; stops itself the instant the fade starts, well before the
+          // 1400ms mark, so it can never spin longer than the highlight itself.
+          let raf = requestAnimationFrame(function track() {
+            place();
+            raf = requestAnimationFrame(track);
+          });
+
+          setTimeout(() => {
+            cancelAnimationFrame(raf);
+            overlay.style.backgroundColor = "transparent";
+            setTimeout(() => overlay.remove(), 400);
+          }, 1000);
+        };
+
+        if (collapsed.length === 0) {
+          revealAndHighlight();
+          return;
+        }
+        // Opening is a React state change, so the children only get a box on a
+        // later frame. Poll layout until the block has one — reading only,
+        // never writing to the editor, and bounded, so an id that somehow never
+        // renders gives up quietly instead of spinning.
+        const started = performance.now();
+        const waitForBox = () => {
+          if (el.getBoundingClientRect().height > 0) return revealAndHighlight();
+          if (performance.now() - started < 1500) requestAnimationFrame(waitForBox);
+        };
+        requestAnimationFrame(waitForBox);
       },
       async replaceWithHtml(html: string) {
         const parsed = await parseDraftHtml(html);
