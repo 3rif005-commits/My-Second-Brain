@@ -36,6 +36,20 @@ BATCH = 20
 _missing_warned = False
 
 
+def _private_still_embedded(db, limit: int) -> list[dict]:
+    """Private notes indexed before keeps_private existed still carry a cloud
+    embedding: re-index them, which replaces it with none."""
+    from services.indexer import keeps_private
+    if not keeps_private({"local_only": True}):
+        return []
+    try:
+        return (db.table("notes").select("id,user_id").eq("local_only", True)
+                .not_.is_("descriptor_embedding", "null").is_("deleted_at", "null")
+                .limit(limit).execute().data or [])
+    except Exception:                               # noqa: BLE001
+        return []
+
+
 def sweep_once(limit: int = BATCH, quiet_seconds: int = QUIET_SECONDS) -> int:
     """Index up to `limit` changed notes. Returns how many were indexed."""
     global _missing_warned
@@ -53,6 +67,7 @@ def sweep_once(limit: int = BATCH, quiet_seconds: int = QUIET_SECONDS) -> int:
                 _missing_warned = True
             return 0
         raise
+    rows = rows + _private_still_embedded(db, limit)
     done = 0
     for row in rows:
         note_id, user_id = str(row["id"]), str(row["user_id"])

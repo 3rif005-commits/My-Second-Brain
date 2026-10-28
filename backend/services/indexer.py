@@ -21,6 +21,7 @@ from services.db.properties.format import format_property_value
 from services.descriptor import _fallback as describe_without_model
 from services.descriptor import generate as generate_descriptor
 from services.embedder import embed, embed_batch
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -37,14 +38,25 @@ logger = logging.getLogger(__name__)
 PROPERTY_PREAMBLE_BLOCK_ID = "__property_preamble__"
 
 
-def embed_and_insert_chunks(note_id: str, user_id: str, blocks: list[dict]) -> None:
+def keeps_private(note: dict) -> bool:
+    """A private (local-only) note on a server whose embedder is a cloud API
+    (Gemini on the deployed site): nothing of it may be sent out, not even to
+    build the search index. Its chunks are stored without an embedding and
+    found by word matching instead (retriever._private_matches). With the
+    local llama.cpp embedder, private notes are embedded as before."""
+    return bool(note.get("local_only")) and settings.embedder_provider != "llamacpp"
+
+
+def embed_and_insert_chunks(note_id: str, user_id: str, blocks: list[dict],
+                            embed_text: bool = True) -> None:
     """Replace a note's chunks with fresh block-level rows.
 
     Embeds first and deletes after: deleting first meant an embedding failure
     (a 429, a timeout) left the note with no chunks, silently gone from search."""
     db = get_supabase()
     texts = [b["chunk_text"] for b in blocks]
-    embeddings = embed_batch(texts) if texts else []
+    embeddings = (embed_batch(texts) if texts and embed_text
+                  else [None] * len(texts))
     db.table("note_chunks").delete().eq("note_id", note_id).execute()
 
     if not blocks:
@@ -57,7 +69,7 @@ def embed_and_insert_chunks(note_id: str, user_id: str, blocks: list[dict]) -> N
             "chunk_index": b["chunk_index"],
             "chunk_text":  b["chunk_text"],
             "block_id":    b["block_id"],
-            "embedding":   "[" + ",".join(str(v) for v in emb) + "]",
+            "embedding":   "[" + ",".join(str(v) for v in emb) + "]" if emb else None,
         }
         for b, emb in zip(blocks, embeddings)
     ]
@@ -169,26 +181,31 @@ def index_note(note_id: str, user_id: str) -> bool:
 
     blocks = parse_blocks(content)
     indexed_blocks = _with_property_preamble(note_id, user_id, blocks)
-    embed_and_insert_chunks(note_id, user_id, indexed_blocks)
+    private = keeps_private(note)
+    embed_and_insert_chunks(note_id, user_id, indexed_blocks, embed_text=not private)
 
     # Descriptor generation deliberately reads from `blocks` (the note's own
     # body), not `indexed_blocks` — the brief's "descriptor generation is
     # unchanged" holds exactly: the property preamble is a note_chunks/
     # retrieval concern only, not a topic-summary input.
     if not blocks:
+        if private:      # a cloud embedding from before keeps_private goes too
+            db.table("notes").update({"descriptor_embedding": None}).eq("id", note_id).execute()
         _record_indexed(db, note)
         return True
 
     texts = [b["chunk_text"] for b in blocks]
     # A local-only note never leaves the machine: its descriptor is written
-    # without a model (title + first block). Embeddings are already local.
+    # without a model (title + first block), and with a cloud embedder it is
+    # not embedded either (keeps_private).
     desc = (describe_without_model(title, texts) if note.get("local_only")
             else generate_descriptor(title, texts, user_id))
-    desc_emb = embed(desc)
+    desc_emb = None if private else embed(desc)
 
     db.table("notes").update({
         "descriptor":           desc,
-        "descriptor_embedding": "[" + ",".join(str(v) for v in desc_emb) + "]",
+        "descriptor_embedding": ("[" + ",".join(str(v) for v in desc_emb) + "]"
+                                 if desc_emb else None),
     }).eq("id", note_id).execute()
     _record_indexed(db, note)
     return True

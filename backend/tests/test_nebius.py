@@ -260,3 +260,7 @@ def test_the_brain_stays_the_small_model_for_an_only_nebius_account(on, monkeypa
     policy = policy_mod.default_policy()
     bp = brain_mod.brain_provider(policy, "demo-user")
     assert bp.chat_model == settings.nebius_fast_model
+
+
+def test_the_cloud_brain_gets_time_for_the_network(on):
+    assert policy_mod.default_policy()["brain"]["timeout_ms"] >= 6000

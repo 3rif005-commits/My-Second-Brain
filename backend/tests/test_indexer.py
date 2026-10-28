@@ -293,3 +293,42 @@ def test_chunks_are_replaced_only_after_embedding_succeeds():
         indexer.embed_and_insert_chunks(NOTE_ID, USER_ID, blocks)
 
     assert order == ["embed", "delete", "insert"]
+
+
+# ── private notes and a cloud embedder (2026-10-28) ─────────────────────────
+# On the deployed site the embedder is Gemini: a private note's text must not
+# be sent there, not even to build the search index.
+
+def _private_note():
+    return {"id": NOTE_ID, "title": "Health", "content": CONTENT, "local_only": True}
+
+
+def test_a_private_note_is_not_sent_to_a_cloud_embedder(monkeypatch):
+    monkeypatch.setattr(indexer.settings, "embedder_provider", "gemini")
+    db = _db(note=_private_note())
+    with _patched(db), patch.object(indexer, "embed_batch") as batch, \
+         patch.object(indexer, "embed") as one:
+        assert indexer.index_note(NOTE_ID, USER_ID)
+    batch.assert_not_called()
+    one.assert_not_called()
+    rows = _inserted_rows(db)
+    assert rows and all(r["embedding"] is None for r in rows)       # text kept, no vector
+    assert rows[0]["chunk_text"] == "First block"
+    update = db.tables["notes"].update.call_args_list[0][0][0]
+    assert update["descriptor_embedding"] is None
+
+
+def test_with_the_local_embedder_private_notes_are_embedded_as_before(monkeypatch):
+    monkeypatch.setattr(indexer.settings, "embedder_provider", "llamacpp")
+    db = _db(note=_private_note())
+    with _patched(db):
+        indexer.index_note(NOTE_ID, USER_ID)
+    assert all(r["embedding"] for r in _inserted_rows(db))
+
+
+def test_an_ordinary_note_is_still_embedded(monkeypatch):
+    monkeypatch.setattr(indexer.settings, "embedder_provider", "gemini")
+    db = _db(note={"id": NOTE_ID, "title": "Lecture", "content": CONTENT, "local_only": False})
+    with _patched(db):
+        indexer.index_note(NOTE_ID, USER_ID)
+    assert all(r["embedding"] for r in _inserted_rows(db))

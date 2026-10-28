@@ -14,7 +14,7 @@ embedding alone: E8's eval does not model it yet.
 from __future__ import annotations
 
 from services.database import get_supabase
-from services.hybrid_search import fuse
+from services.hybrid_search import fuse, lexical_order
 
 _TOP_NOTES    = 5
 _TOP_BLOCKS   = 15   # total across all top notes
@@ -44,6 +44,12 @@ def retrieve(query_embedding: list[float], user_id: str,
     ).execute()
 
     note_rows = pass1.data or []
+    # Private notes have no embedding on a cloud-embedder server (indexer.
+    # keeps_private), so pass 1 cannot see them: they join by their words.
+    # They still go through the privacy gate like any retrieved note.
+    for p in (_private_matches(db, query, user_id) if query else []):
+        if p["id"] not in {r["id"] for r in note_rows}:
+            note_rows.append(p)
 
     if not note_rows:
         return _legacy_fallback(db, vec, user_id)
@@ -133,6 +139,32 @@ def with_neighbours(hits: list[dict], blocks: list[dict],
 
 def _block_key(row: dict) -> str:
     return f"{row['note_id']}:{row.get('chunk_index')}"
+
+
+_PRIVATE_SCAN = 200   # private notes read for word matching
+_PRIVATE_TOP  = 2
+
+
+def _private_matches(db, query: str, user_id: str) -> list[dict]:
+    """The user's private notes whose title or text shares words with the
+    query — read from our own database, nothing sent anywhere."""
+    try:
+        rows = (db.table("notes").select("id,title").eq("user_id", user_id)
+                .eq("local_only", True).is_("deleted_at", "null")
+                .limit(_PRIVATE_SCAN).execute().data or [])
+    except Exception:                              # noqa: BLE001
+        return []
+    if not rows:
+        return []
+    texts: dict[str, list[str]] = {str(r["id"]): [r.get("title") or ""]
+                                   for r in rows if isinstance(r, dict) and r.get("id")}
+    for b in _note_blocks(db, list(texts), user_id):
+        if str(b.get("note_id")) in texts:
+            texts[str(b["note_id"])].append(b.get("chunk_text") or "")
+    ids = list(texts)
+    order = lexical_order(query, [" ".join(texts[i]) for i in ids])[:_PRIVATE_TOP]
+    by_id = {str(r["id"]): r for r in rows}
+    return [{"id": ids[i], "title": by_id[ids[i]].get("title") or ""} for i in order]
 
 
 def _note_blocks(db, note_ids: list, user_id: str) -> list[dict]:

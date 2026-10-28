@@ -187,8 +187,12 @@ def apply_defaults(policy: dict) -> dict:
     else:
         # The small model decides; never the strong one an only-Nebius
         # account's provider list leads with (`only_providers`).
+        # 2.5 s (the app's default) was too short over the network: a hard
+        # question timed out of the brain and fell back to the fast model
+        # (live, 2026-10-28; the brain answers in 1-3 s on Token Factory).
         policy["brain"] = {**policy["brain"], "kind": "cloud", "provider": provider_key(),
-                           "model": settings.nebius_fast_model}
+                           "model": settings.nebius_fast_model,
+                           "timeout_ms": max(policy["brain"].get("timeout_ms", 0), 6000)}
     return policy
 
 
