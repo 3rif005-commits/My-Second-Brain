@@ -18,8 +18,12 @@
 unset). Token Factory Nemotrons fill fast/strong, a Nemotron on your own Nebius VM is the front
 door (local slot + brain), VM off → Token Factory without private notes. Live on Token Factory
 (2026-10-28). **Tavily web research** (docs/hackathon/TAVILY.md, `HACKATHON-TAVILY`): chat tool
-`web.search_web`; only the query leaves, asked first once a turn has read notes. Next: the VM
-(optional), README, video, Devpost.
+`web.search_web`; only the query leaves, asked first once a turn has read notes.
+**Demo account** `mysecondbrain.demo@gmail.com`: 11 notes (2 private), live-checked 2026-10-28.
+**Citation hover card** recovered from the WebMCP fork's unmerged `feat/hover-card` and live-checked;
+other unmerged fork work still to check: `fix/agent-tool-schema`, 3 database-tool fixes (2026-09-03),
+`feat/playlist-ingestion`. Script: docs/hackathon/DEMO_SCENARIO.md. Next: demo-only-Nemotron setting,
+MCP in the demo account, rehearsal, README, video, Devpost.
 
 **Skills, safely (2026-10-27, docs/agent-tools-study/SKILLS_PLAN.md):** found and fixed: every
 account shared one server skills folder (one user's edit = everyone's instructions). Skills are
