@@ -61,3 +61,7 @@ services:
         sync: false
       - key: NEBIUS_VM_API_KEY
         sync: false
+      # HACKATHON-TAVILY: web research in chat (backend/services/web_research.py).
+      # Unset = off. Removal: docs/hackathon/TAVILY.md
+      - key: TAVILY_API_KEY
+        sync: false

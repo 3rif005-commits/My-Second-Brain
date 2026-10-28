@@ -29,6 +29,7 @@ from services.agent.permissions import (
 )
 from services.agent.skills import SkillRegistry, classify_skills
 from services import memory, privacy, skill_drafts, skill_store
+from services import web_research                      # HACKATHON-TAVILY
 from services.text_hygiene import attribute, instruction_like, untrusted
 from services.routing import log as routing_log
 from services.routing import policy as routing_policy
@@ -554,6 +555,8 @@ async def _routed_turn(request: AgentRequest, user_id: str,
     if memory_rows is not None:
         all_tool_schemas = all_tool_schemas + [memory.MEMORY_TOOL]
     all_tool_schemas = all_tool_schemas + [skill_drafts.PROPOSE_TOOL]
+    if web_research.enabled():                         # HACKATHON-TAVILY
+        all_tool_schemas = all_tool_schemas + [web_research.TOOL]
     # Drafted skills that go unused are archived (skill_store's curator), so
     # a use is recorded — the user's own rows only; built-ins have none.
     skill_store.touch(user_id, [s.name for s in matched if s.origin != "builtin"])
@@ -982,6 +985,11 @@ async def _stream_loop(
                 try:
                     if tool == memory.TOOL_NAME:
                         result = memory.remember_from_chat(args, user_id)
+                    elif tool == web_research.TOOL_NAME:     # HACKATHON-TAVILY
+                        import asyncio
+                        result = await asyncio.to_thread(web_research.search, args)
+                        # Web pages are text nobody here wrote.
+                        untrusted_context = True
                     else:
                         result = await execute_brain_tool(tool, args=args, user_id=user_id)
                 except memory.MemoryRejected as e:
@@ -1064,6 +1072,9 @@ def _summarize_result(tool: str, result: dict[str, Any]) -> str:
         return f"note {result.get('id', '?')} moved to trash"
     if tool == memory.TOOL_NAME:
         return f"remembered: {result.get('remembered', '')}"
+    if tool == web_research.TOOL_NAME:                 # HACKATHON-TAVILY
+        n = len(result.get("results", []))
+        return f"{n} web page{'' if n == 1 else 's'}"
     if tool.startswith("mcp."):
         # The chip already names the tool; "ask_wiki_question ok" just repeated it.
         text = " ".join(str(c) for c in result.get("content") or [])

@@ -58,6 +58,10 @@ _MUTATES_EXISTING = {
 # private fact copied here would ride along to cloud models later.
 _PERSISTS_INTO_PROMPT = {"memory.remember"}
 
+# Sends a model-written query to an outside service (services/web_research.py).
+# HACKATHON-TAVILY
+_LEAVES_THE_APP = {"web.search_web"}
+
 
 def approval_key(tool: str, args: dict[str, Any]) -> str:
     """Identifies one approvable action: tool + the thing it acts on.
@@ -108,6 +112,8 @@ _TOOL_MIN_TIER: dict[str, Tier] = {
     "brain.update_row":          Tier.INTERNAL_API,
     # About you (services/memory.py) — the app's own data, like a note write.
     "memory.remember":           Tier.INTERNAL_API,
+    # Web research (Tavily) — only the query leaves; gated below. HACKATHON-TAVILY
+    "web.search_web":            Tier.INTERNAL_API,
     # Editor tools — inline and ingest surfaces only
     "editor.insert_block":          Tier.INTERNAL_API,
     "editor.replace_block":         Tier.INTERNAL_API,
@@ -203,6 +209,19 @@ def check(
         return NeedsApproval(
             reason=("This turn can read your private notes — confirm before "
                     "anything is sent to an outside server."),
+            key=key,
+        )
+
+    # The model writes the query. After it has read notes (personal or private)
+    # or untrusted text, the words it sends out are the user's call: the
+    # reason shows them. One OK covers the web searches of this answer.
+    # HACKATHON-TAVILY
+    if tool in _LEAVES_THE_APP and (untrusted_context or private_context):
+        if key in approvals:
+            return Allow()
+        query = " ".join(str(args.get("query") or "").split())[:200]
+        return NeedsApproval(
+            reason=f'Search the web for "{query}"? Only these words are sent to Tavily.',
             key=key,
         )
 

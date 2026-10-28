@@ -143,6 +143,10 @@ class Settings(BaseSettings):
     nebius_vm_api_key: str = ""      # the key the VM's server was started with
     nebius_vm_model: str = "nvidia/NVIDIA-Nemotron-Nano-9B-v2"
 
+    # ── HACKATHON-TAVILY: web research in chat (services/web_research.py) ──
+    # Unset = the tool is not offered. Removal: docs/hackathon/TAVILY.md
+    tavily_api_key: str = ""
+
     # How skill instructions reach the agent's system prompt.
     #   "inline" (default) — the classifier's top matches are pasted in whole,
     #                        which is what shipped and what the numbers describe.

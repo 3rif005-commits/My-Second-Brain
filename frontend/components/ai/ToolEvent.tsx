@@ -24,6 +24,7 @@ const TOOL_ICONS: Record<string, string> = {
   "brain.set_mastery":  "🎯",
   "brain.get_backlinks":"🪞",
   "memory.remember":    "🧠",   // About you (Settings → About you)
+  "web.search_web":     "🌐",   // HACKATHON-TAVILY: web research (Tavily)
 };
 
 export function ToolEvent({ tool, args, summary, deniedReason,
