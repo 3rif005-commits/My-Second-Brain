@@ -25,6 +25,14 @@ links to them. Every note has a privacy level (Open / Personal / Private), and a
 decides, for every AI call, **which model may see what**. You can always see where an answer ran
 and why.
 
+**The design:** two kinds of model.
+- **A small Nemotron that can run on an ordinary computer** (Nemotron Nano 9B fits a laptop). It
+  decides where each request goes and is the only model that may read private notes.
+- **Bigger Nemotrons on Nebius Token Factory** (Nano 30B, Super 120B), called over the API for the
+  heavy work.
+- **In the hosted demo** there is no local machine, so the small model's job runs in the cloud on
+  Token Factory, and private notes are held back instead of sent there.
+
 **The one sentence for the video:** *"One place for everything I know, with an AI that knows it
 too, and still keeps my private life private."*
 
@@ -97,9 +105,10 @@ Narration is short on purpose: read it slowly. **Bold** = what to click or type.
   the demo runs without a local model.
 - **Show:** the badge **Fast · Nemotron 3 Nano · 1 private held back**. Click it: *Held back
   (private): Health · knee physio plan*.
-- **Say:** "My health note is private. In real use, private notes go only to a model running on my
-  own machine. For this demo I don't have the computing power for one, so the app does the safe
-  thing: it holds the note back. The cloud model never saw it."
+- **Say:** "My health note is private. Second Brain uses two kinds of model: a small Nemotron
+  that can run on an ordinary computer, and bigger Nemotrons it calls over the API for heavy work.
+  Private notes only ever go to the small one on my own machine. In this demo the small model runs
+  in the cloud, so the app does the safe thing: it holds the note back. The cloud never saw it."
 
 ### 1:40–2:02 · Web research (Tavily)
 - **Type:** **"Search the web for recent work on CNNs for crop disease detection and save a short
