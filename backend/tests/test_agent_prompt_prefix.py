@@ -69,9 +69,11 @@ async def test_the_next_turn_starts_with_everything_up_to_the_last_question(monk
 
 
 @pytest.mark.asyncio
-async def test_no_retrieval_means_no_context_block(monkeypatch):
+async def test_no_retrieval_means_only_the_date_is_attached(monkeypatch):
     msgs = await _turn(monkeypatch, [], "hello", [])
-    assert msgs[-1]["content"] == "hello"
+    content = msgs[-1]["content"]
+    assert content.startswith("hello\n\n<turn_context>\n<today>")
+    assert "<knowledge_context>" not in content
 
 
 def test_context_goes_on_the_latest_user_message_only():
@@ -184,3 +186,9 @@ def test_deepseek_cache_hits_are_read_too():
 def test_no_cache_reported_changes_nothing():
     c = _counts({"usage": {"prompt_tokens": 3000, "completion_tokens": 50}})
     assert c == {"input_tokens": 3000, "output_tokens": 50, "cache_read_tokens": 0}
+
+
+def test_the_turn_carries_today_at_its_end_not_in_the_system_prompt():
+    ctx = engine._turn_context([], "", today="Wednesday 28 October 2026 (UTC)")
+    assert "<today>Wednesday 28 October 2026 (UTC)</today>" in ctx
+    assert "<today>" not in engine._build_system_prompt([], "")

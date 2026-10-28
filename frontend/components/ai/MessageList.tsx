@@ -18,6 +18,7 @@ import { Answer } from "./Answer";
 import { RouteBadge, type RouteInfo } from "./RouteBadge";
 import type { UploadFile } from "./panelSources";
 import { linkBareNoteRefs } from "@/lib/markdown/blockPreview";
+import { BlockPreviewLink } from "@/lib/markdown/components/BlockPreviewLink";
 
 export type StreamItem =
   | { kind: "user"; id: string; content: string }
@@ -31,7 +32,11 @@ export type StreamItem =
        *  notes on the device — a later cloud turn gets a placeholder. */
       route?: RouteInfo; private?: boolean;
       /** The question it answers — "Ask again on…" replays it. */
-      query?: string }
+      query?: string;
+      /** The notes this answer was given to read (after the privacy gate),
+       *  shown as links under it — so the reader can check them even when
+       *  the model forgets to cite. */
+      sources?: { title: string; href: string }[] }
   | { kind: "privacy"; id: string; query: string; withheld: { id: string; title: string }[];
       slot: string; model?: string; scopeNoteId?: string; resolved?: string }
   | { kind: "job"; id: string; job: PanelJob }
@@ -151,6 +156,14 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
                 <RouteBadge route={item.route} busy={busy}
                   onRerun={onRerun && item.query && !item.streaming ? (slot) => onRerun(item, slot) : undefined} />
               )}
+              {!item.streaming && item.content && item.sources?.length ? (
+                <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11.5px] text-gray-500 dark:text-gray-400">
+                  <span>Read from your notes:</span>
+                  {item.sources.map((s) => (
+                    <BlockPreviewLink key={s.href} href={s.href}>{s.title}</BlockPreviewLink>
+                  ))}
+                </div>
+              ) : null}
               {!item.streaming && item.content && renderAnswerActions?.(item)}
             </div>
           </div>

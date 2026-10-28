@@ -66,7 +66,13 @@ const components: any = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   pre: ({ children }: any) => <pre className="my-3 p-3 rounded-lg bg-gray-900 text-gray-100 text-[13px] overflow-x-auto">{children}</pre>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  table: ({ children }: any) => <table className="my-3 border-collapse text-sm w-full">{children}</table>,
+  // A wide table scrolls in its own box: in the narrow AI panel it used to
+  // push the whole answer sideways.
+  table: ({ children }: any) => (
+    <div className="my-3 max-w-full overflow-x-auto">
+      <table className="border-collapse text-sm w-full">{children}</table>
+    </div>
+  ),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   th: ({ children }: any) => <th className="border border-gray-300 dark:border-gray-700 px-2 py-1 bg-gray-50 dark:bg-gray-800 text-left font-semibold">{children}</th>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -86,7 +92,16 @@ export function Markdown({ children, components: extra }: Props) {
       rehypePlugins={[rehypeKatex, [rehypePrism, { ignoreMissing: true }]]}
       components={extra ? { ...components, ...extra } : components}
     >
-      {children}
+      {typeof children === "string" ? normalizeMath(children) : children}
     </ReactMarkdown>
   );
+}
+
+/** `\( … \)` and `\[ … \]` (how many models write LaTeX) as the `$ … $` and
+ *  `$$ … $$` that remark-math reads; code spans and fences are left alone. */
+export function normalizeMath(md: string): string {
+  return md.split(/(```[\s\S]*?```|`[^`\n]*`)/g).map((part, i) => i % 2 ? part : part
+    .replace(/\\\[([\s\S]+?)\\\]/g, (_m, x) => `$$${x}$$`)
+    .replace(/\\\(([\s\S]+?)\\\)/g, (_m, x) => `$${x.trim()}$`),
+  ).join("");
 }

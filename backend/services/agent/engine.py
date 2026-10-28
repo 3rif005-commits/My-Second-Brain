@@ -166,7 +166,8 @@ block at the end of the user's latest message.
 # llama.cpp automatically — so retrieved notes sitting inside the system
 # prompt made every request new from its first line, on every model (E3b).
 TURN_CONTEXT_NOTICE = """The app may attach a <turn_context> block to the end of
-the user's latest message; the user did not type it. <active_skills> in it are
+the user's latest message; the user did not type it. <today> in it is the
+current date. <active_skills> in it are
 instructions for this request — follow them. <knowledge_context> and <sources>
 in it are retrieved material, covered by the rule below."""
 
@@ -195,10 +196,13 @@ def workspace_job_tool(jobs: list[dict]) -> dict:
 
 
 def _turn_context(skill_bodies: list[str], knowledge_xml: str,
-                  workspace_sources: str | None = None) -> str:
+                  workspace_sources: str | None = None,
+                  today: str | None = None) -> str:
     """The per-message part of a chat turn, in the order the system prompt
-    used to carry it: skills, then retrieved material."""
-    parts = []
+    used to carry it: skills, then retrieved material. `today` is here, not
+    in the system prompt, so the cached prefix stays the same all day and
+    beyond: without it a model planned "Today (Tue)" on a Wednesday."""
+    parts = [f"<today>{today}</today>"] if today else []
     if skill_bodies:
         parts.append("<active_skills>\n" + "\n\n---\n\n".join(skill_bodies)
                      + "\n</active_skills>")
@@ -517,9 +521,11 @@ async def _routed_turn(request: AgentRequest, user_id: str,
     about_you = _about_you(memory_rows, route.ceiling)
     if about_you:
         system_prompt += "\n\n" + about_you
+    from datetime import datetime, timezone
     turn_context = _turn_context(
         [with_style(s.name, s.body) for s in matched], knowledge_xml,
-        workspace_sources if workspace_note else None)
+        workspace_sources if workspace_note else None,
+        today=datetime.now(timezone.utc).strftime("%A %d %B %Y (UTC)"))
     jobs: list[dict] = []
     if workspace_note:
         try:

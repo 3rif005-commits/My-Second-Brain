@@ -491,6 +491,14 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
           } else if (ev.type === "text") {
             patchItem(assistantId, (it) => it.kind === "assistant"
               ? { ...it, content: it.content + (ev.content as string) } : it);
+          } else if (ev.type === "context" && Array.isArray(ev.notes) && ev.notes.length) {
+            // One link per note, at the block that matched first.
+            const seen = new Set<string>();
+            const sources = (ev.notes as { id: string; title?: string; deep_link?: string }[])
+              .filter((n) => n.id && !seen.has(n.id) && seen.add(n.id))
+              .slice(0, 6)
+              .map((n) => ({ title: n.title || "Untitled", href: n.deep_link || `/brain/${n.id}` }));
+            patchItem(assistantId, (it) => it.kind === "assistant" ? { ...it, sources } : it);
           } else if ((ev.type === "context" || ev.type === "citations") && ev.citations) {
             patchItem(assistantId, (it) => it.kind === "assistant"
               ? { ...it, citations: ev.citations as Citation[] } : it);
