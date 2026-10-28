@@ -44,7 +44,8 @@ async def agent_endpoint(
     # question — an approval, a privacy choice, "Ask again on" — is already there.
     replay = bool(body.approvals or body.release or body.withheld_ok or body.override_of)
     if not (replay and body.thread_id):
-        _append_user_message_to_thread(thread_id, user_id, body)
+        thread_id = _append_user_message_to_thread(thread_id, user_id, body) or thread_id
+        body.thread_id = thread_id      # the engine logs the route against it
 
     if body.job and body.surface == "workspace" and body.current_note_id:
         return StreamingResponse(_job_stream(body, user_id, thread_id),
@@ -91,8 +92,14 @@ async def _job_stream(body: AgentRequest, user_id: str, thread_id: str):
 
 def _append_user_message_to_thread(
     thread_id: str, user_id: str, body: AgentRequest
-) -> None:
-    """Either update an existing thread's messages or create a new one."""
+) -> str:
+    """Either update an existing thread's messages or create a new one.
+    Returns the thread's id: a fresh one when the id the client sent belongs
+    to someone else. The AI panel keeps its chat tabs in the browser, so after
+    signing in to another account it sent that account's thread id; this
+    user's lookup found nothing, the insert hit the taken primary key, and
+    every message failed with a 500 (live, 2026-10-28). Another user's thread
+    is never written to."""
     supabase = get_supabase()
     _res = (
         supabase.table("chat_threads")
@@ -109,14 +116,19 @@ def _append_user_message_to_thread(
         supabase.table("chat_threads").update({"messages": messages}).eq(
             "id", thread_id
         ).execute()
-    else:
-        supabase.table("chat_threads").insert({
-            "id": thread_id,
-            "user_id": user_id,
-            "messages": [new_message],
-            "model_mode": body.mode.value,
-            "title": body.query[:60],  # placeholder; replaced after first reply
-        }).execute()
+        return thread_id
+    taken = (supabase.table("chat_threads").select("id").eq("id", thread_id)
+             .execute().data)
+    if taken:
+        thread_id = str(uuid.uuid4())
+    supabase.table("chat_threads").insert({
+        "id": thread_id,
+        "user_id": user_id,
+        "messages": [new_message],
+        "model_mode": body.mode.value,
+        "title": body.query[:60],  # placeholder; replaced after first reply
+    }).execute()
+    return thread_id
 
 
 #: What the thread keeps of a route event: enough to redraw the badge.

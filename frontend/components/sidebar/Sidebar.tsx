@@ -41,6 +41,7 @@ import { NotificationsBell } from "./NotificationsBell";
 import { useJobBadge } from "@/components/activity/useJobBadge";
 import { CsvImport, type CsvImportHandle } from "./CsvImport";
 import { Logo } from "@/components/brand/Logo";
+import { forgetPanelTabs } from "@/components/ai/panelTabs";
 
 /** One round icon button in the nav pill row. The current page's button grows into
  * a labelled pill (Notion's 2026 sidebar, shell.md §1). */
@@ -404,6 +405,7 @@ export function Sidebar({
 
   async function handleSignOut() {
     const supabase = createClient();
+    forgetPanelTabs();
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();

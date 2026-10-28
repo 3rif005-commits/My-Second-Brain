@@ -11,6 +11,7 @@ import { SettingsPage, SettingsRow, SettingsSection } from "@/components/ui/Sett
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { forgetPanelTabs } from "@/components/ai/panelTabs";
 
 export default function AccountPage() {
   const router = useRouter();
@@ -48,6 +49,7 @@ export default function AccountPage() {
   }
 
   async function signOut() {
+    forgetPanelTabs();
     await createClient().auth.signOut();
     router.push("/login");
     router.refresh();

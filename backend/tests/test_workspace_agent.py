@@ -132,7 +132,7 @@ def test_a_slash_job_through_the_agent_endpoint_runs_without_a_model_turn():
 
     saved = []
     with patch("routers.agent.get_user_id", return_value="u1"), \
-         patch.object(agent_router, "_append_user_message_to_thread"), \
+         patch.object(agent_router, "_append_user_message_to_thread", side_effect=lambda tid, *a: tid), \
          patch.object(agent_router, "_append_assistant_message_to_thread",
                       side_effect=lambda tid, text: saved.append(text)), \
          patch.object(chat, "run_skill_in_chat", fake_job), \

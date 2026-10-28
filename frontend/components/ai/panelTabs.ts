@@ -122,3 +122,11 @@ export function readFloatRect(raw: string | null, vw: number, vh: number): Float
   } catch { /* fall through */ }
   return defaultFloat(vw, vh);
 }
+
+/** The tabs are kept per browser, not per account: forget them on sign-out,
+ *  or the next account's panel sends the last account's thread ids and shows
+ *  its chat titles (live, 2026-10-28). */
+export const PANEL_TABS_KEY = "ai-panel-tabs";
+export function forgetPanelTabs() {
+  try { window.localStorage.removeItem(PANEL_TABS_KEY); } catch { /* private mode */ }
+}

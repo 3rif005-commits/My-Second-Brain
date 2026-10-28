@@ -5,10 +5,10 @@ import { AppWindow, Bot, History, PanelBottom, PanelRight, Plus, Sparkles, X } f
 import { Chat, type WorkspaceBinding } from "./Chat";
 import {
   NEW_TAB_TITLE, addTab, clampFloat, closePanelTab, freshTabs, patchTab, readPanelTabs, showTab,
-  type DockSide, type FloatRect, type PanelTabs,
+  type DockSide, type FloatRect, type PanelTabs, PANEL_TABS_KEY,
 } from "./panelTabs";
 
-const TABS_KEY = "ai-panel-tabs";
+const TABS_KEY = PANEL_TABS_KEY;
 
 const DOCKS: { side: DockSide; label: string; icon: React.ReactNode }[] = [
   { side: "right", label: "Dock on the right", icon: <PanelRight size={14} /> },
