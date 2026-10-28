@@ -36,3 +36,24 @@ def test_no_shared_word_means_no_private_note():
 def test_no_private_notes_reads_nothing_more():
     db = _db([], [])
     assert retriever._private_matches(db, "physio", "u1") == []
+
+
+def test_a_word_matched_private_note_keeps_a_passage_in_the_results(monkeypatch):
+    """Lexical-only passages can fall below the fusion's cut; the private note
+    still comes back (the privacy gate then holds it back from cloud models)."""
+    from unittest.mock import patch
+    pass1 = [{"id": f"n{i}", "title": f"Note {i}"} for i in range(5)]
+    vector = [{"note_id": f"n{i % 5}", "block_id": f"b{i}", "chunk_text": "lecture text",
+               "chunk_index": i, "dist": 0.1} for i in range(40)]
+    blocks = vector + [{"note_id": "health", "block_id": "h1", "chunk_index": 0,
+                        "chunk_text": "Physio Tuesday and Thursday 15:00"}]
+    db = MagicMock()
+    db.rpc.side_effect = lambda name, args: MagicMock(**{"execute.return_value.data":
+                                                       pass1 if name == "match_note_descriptors" else vector})
+    with patch.object(retriever, "get_supabase", return_value=db), \
+         patch.object(retriever, "_private_matches", return_value=[{"id": "health", "title": "Health"}]), \
+         patch.object(retriever, "_note_blocks", return_value=blocks):
+        out = retriever.retrieve([0.1] * 3, "u1", query="my physio appointments")
+    hit = [r for r in out if r["id"] == "health"]
+    assert hit and hit[0]["deep_link"] == "/brain/health#h1"
+    assert "Physio" in hit[0]["content_text"]

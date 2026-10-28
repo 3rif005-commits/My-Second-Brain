@@ -47,7 +47,8 @@ def retrieve(query_embedding: list[float], user_id: str,
     # Private notes have no embedding on a cloud-embedder server (indexer.
     # keeps_private), so pass 1 cannot see them: they join by their words.
     # They still go through the privacy gate like any retrieved note.
-    for p in (_private_matches(db, query, user_id) if query else []):
+    private = _private_matches(db, query, user_id) if query else []
+    for p in private:
         if p["id"] not in {r["id"] for r in note_rows}:
             note_rows.append(p)
 
@@ -94,6 +95,25 @@ def retrieve(query_embedding: list[float], user_id: str,
             "content_text": text,
             "similarity":   score,
         })
+
+    # A private note found by its words has no embedding, so the fusion can
+    # rank its passages below the cut; it keeps its best one, and the privacy
+    # gate decides who may read it.
+    found = {r["id"] for r in results}
+    for p in private:
+        if str(p["id"]) in found:
+            continue
+        own = [b for b in note_blocks if str(b.get("note_id")) == str(p["id"])]
+        best = lexical_order(query, [b.get("chunk_text") or "" for b in own])
+        if best:
+            b = own[best[0]]
+            results.append({
+                "id": str(p["id"]), "title": p.get("title") or "",
+                "deep_link": f"/brain/{p['id']}#{b.get('block_id')}" if b.get("block_id")
+                             else f"/brain/{p['id']}",
+                "content_text": (b.get("chunk_text") or "")[:_BLOCK_CAP],
+                "similarity": 0.0,
+            })
 
     return results
 
