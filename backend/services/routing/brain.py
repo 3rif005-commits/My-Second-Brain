@@ -123,6 +123,10 @@ def brain_provider(policy: dict[str, Any], user_id: str):
             if p.provider == "local" or not p.api_key:
                 continue
             if not want or privacy.provider_key(p) == want or p.label == want:
+                model = policy["brain"].get("model")    # HACKATHON-NEBIUS
+                if model:
+                    from dataclasses import replace
+                    return replace(p, chat_model=model)
                 return p
     return None
 

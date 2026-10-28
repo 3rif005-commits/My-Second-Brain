@@ -23,7 +23,7 @@ Content (first 2000 chars):
 Descriptor:"""
 
 
-def generate(note_title: str, blocks: list[str]) -> str:
+def generate(note_title: str, blocks: list[str], user_id: str = "") -> str:
     """Return a 2-3 sentence descriptor string for the note.
 
     Falls back to "{title}. {first_block[:200]}" if the LLM is unreachable.
@@ -34,7 +34,7 @@ def generate(note_title: str, blocks: list[str]) -> str:
         with usage_log.annotate(surface="indexer", job="descriptor",
                                 trigger="auto"):
             text = complete_with_fallback(
-                "summarize_text", "",
+                "summarize_text", user_id,
                 [{"role": "user",
                   "content": _PROMPT.format(title=note_title, content=content)}],
                 max_tokens=120)

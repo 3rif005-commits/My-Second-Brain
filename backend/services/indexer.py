@@ -183,7 +183,7 @@ def index_note(note_id: str, user_id: str) -> bool:
     # A local-only note never leaves the machine: its descriptor is written
     # without a model (title + first block). Embeddings are already local.
     desc = (describe_without_model(title, texts) if note.get("local_only")
-            else generate_descriptor(title, texts))
+            else generate_descriptor(title, texts, user_id))
     desc_emb = embed(desc)
 
     db.table("notes").update({

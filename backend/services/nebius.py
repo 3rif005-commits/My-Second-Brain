@@ -185,8 +185,29 @@ def apply_defaults(policy: dict) -> dict:
     if vm_configured():
         policy["brain"] = {**policy["brain"], "kind": "local"}
     else:
-        policy["brain"] = {**policy["brain"], "kind": "cloud", "provider": provider_key()}
+        # The small model decides; never the strong one an only-Nebius
+        # account's provider list leads with (`only_providers`).
+        policy["brain"] = {**policy["brain"], "kind": "cloud", "provider": provider_key(),
+                           "model": settings.nebius_fast_model}
     return policy
+
+
+def only_nebius(user_id: str) -> bool:
+    """Is this account limited to Nebius (NEBIUS_ONLY_USERS)? The demo account
+    is, so everything it shows — chat, ingest, study guides, titles, search
+    descriptors — really runs on Nemotron."""
+    if not enabled() or not user_id:
+        return False
+    return user_id in {u.strip() for u in settings.nebius_only_users.split(",") if u.strip()}
+
+
+def only_providers() -> list:
+    """The providers such an account gets: Token Factory, with the strong
+    model for one-shot jobs (a study guide is the heavy work), and the local
+    slot, which `resolve_slot` refuses when no local model answers."""
+    from dataclasses import replace
+    from services.ai.providers import local_provider
+    return [replace(token_factory(), chat_model=settings.nebius_strong_model), local_provider()]
 
 
 def brain_fallback():

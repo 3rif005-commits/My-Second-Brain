@@ -235,3 +235,28 @@ def test_chat_rounds_on_token_factory_think_lightly_with_room(on):
 def test_chat_extras_off_without_the_add_on(monkeypatch):
     monkeypatch.setattr(settings, "nebius_api_key", "")
     assert nebius.chat_extras("https://api.tokenfactory.nebius.com/v1/chat/completions", 2048) == {}
+
+
+def test_an_only_nebius_account_gets_nebius_and_nothing_else(on, monkeypatch):
+    monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-real")
+    monkeypatch.setattr(settings, "nebius_only_users", "demo-user, other")
+    demo = providers.list_providers("demo-user")
+    assert [p.provider for p in demo] == ["openai_compatible", "local"]
+    assert demo[0].label == "Nebius Token Factory"
+    assert demo[0].chat_model == settings.nebius_strong_model     # the heavy work
+    # Everyone else keeps their own providers, Claude first.
+    assert providers.list_providers("someone-else")[0].provider == "anthropic"
+
+
+def test_only_nebius_needs_a_user_and_the_add_on(on, monkeypatch):
+    monkeypatch.setattr(settings, "nebius_only_users", "demo-user")
+    assert not nebius.only_nebius("")
+    monkeypatch.setattr(settings, "nebius_api_key", "")
+    assert not nebius.only_nebius("demo-user")
+
+
+def test_the_brain_stays_the_small_model_for_an_only_nebius_account(on, monkeypatch):
+    monkeypatch.setattr(settings, "nebius_only_users", "demo-user")
+    policy = policy_mod.default_policy()
+    bp = brain_mod.brain_provider(policy, "demo-user")
+    assert bp.chat_model == settings.nebius_fast_model

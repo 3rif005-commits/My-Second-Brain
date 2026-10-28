@@ -47,6 +47,7 @@ counts as off.
 | `NEBIUS_VM_URL` | no | `https://…` address of the VM's server |
 | `NEBIUS_VM_API_KEY` | with a VM | the `--api-key` the VM's server was started with |
 | `NEBIUS_FAST_MODEL`, `NEBIUS_STRONG_MODEL`, `NEBIUS_VM_MODEL` | no | model ids (defaults in `core/config.py`) |
+| `NEBIUS_ONLY_USERS` | no | user ids (comma-separated) whose every AI call runs on Nebius: the demo account |
 | `NEBIUS_PRICE_IN`, `NEBIUS_PRICE_OUT` | no | USD per 1M tokens for the run log. Unset = "unknown", never $0 |
 
 Check the model ids against your account before the demo. Nebius pages spell them differently:
@@ -89,7 +90,8 @@ caddy reverse-proxy --from 203-0-113-7.sslip.io --to localhost:8000
    | `backend/services/ai/pricing.py` | the three `nebius.price_for` lines in `price_for` |
    | `backend/services/routing/policy.py` | `default_policy` goes back to `return copy.deepcopy(DEFAULT_POLICY)` |
    | `backend/services/routing/switchboard.py` | the local-model check in `resolve_slot` |
-   | `backend/services/routing/brain.py` | `brain_provider` goes back to `return local_provider()` |
+   | `backend/services/routing/brain.py` | `brain_provider` goes back to `return local_provider()`; drop the `model` lines in the cloud branch |
+   | `backend/services/ai/providers.py` (2) | the `only_nebius` lines at the top of `list_providers` |
    | `render.yaml`, `backend/.env.example` | the `NEBIUS_*` entries |
 
 3. Run `grep -rn -i nebius backend render.yaml`. Only unrelated hits should remain.

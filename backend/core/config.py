@@ -142,6 +142,9 @@ class Settings(BaseSettings):
     nebius_vm_url: str = ""          # the front-door Nemotron on your Nebius VM (https)
     nebius_vm_api_key: str = ""      # the key the VM's server was started with
     nebius_vm_model: str = "nvidia/NVIDIA-Nemotron-Nano-9B-v2"
+    # Accounts (user ids, comma-separated) whose every AI call runs on Nebius —
+    # the hackathon demo account. Everyone else keeps their usual providers.
+    nebius_only_users: str = ""
 
     # ── HACKATHON-TAVILY: web research in chat (services/web_research.py) ──
     # Unset = the tool is not offered. Removal: docs/hackathon/TAVILY.md

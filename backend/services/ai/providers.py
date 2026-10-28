@@ -187,6 +187,9 @@ def list_providers(user_id: str) -> list[Provider]:
     when Anthropic runs dry, turning it off is how the app stops paying for it
     in latency. The local model is never dropped: it is the floor.
     """
+    from services import nebius                     # HACKATHON-NEBIUS
+    if nebius.only_nebius(user_id):
+        return nebius.only_providers()
     ordered = _drop_disabled(
         _user_providers(user_id) + _env_providers()) + [local_provider()]
     return sorted(ordered, key=lambda p: 0 if p.provider == "anthropic" else 1)

@@ -145,7 +145,7 @@ def test_descriptor_generation_uses_original_blocks_not_the_preamble():
          patch.object(indexer, "generate_descriptor", return_value="a descriptor") as mock_desc:
         indexer.index_note(NOTE_ID, USER_ID)
 
-    mock_desc.assert_called_once_with("Row note", ["First block", "Second block"])
+    mock_desc.assert_called_once_with("Row note", ["First block", "Second block"], USER_ID)
 
 
 # ── case 3: database row, every property empty -> no preamble chunk ─────
