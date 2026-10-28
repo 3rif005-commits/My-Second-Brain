@@ -10,7 +10,7 @@ the **Best Use of Tavily** bonus. Deadline Fri 30 Oct 2026, 10:00 PT.
 |---|---|---|
 | Technological implementation | How well is it built, and how well does it use Token Factory / AI Cloud and Nemotron? | Three Nemotrons with three jobs: Nano decides, Nano answers everyday questions, Super does the hard work. Every answer shows which one ran and why |
 | Design | A complete product, not a proof of concept | One real person's day in one app: capture → ask → think → private → web → control |
-| Potential impact | A real problem for a real audience, solved in what is shown | Students hand all their notes to a cloud AI, or get no AI help. Here the AI knows their material, and their private life stays theirs |
+| Potential impact | A real problem for a real audience, solved in what is shown | Everyone's knowledge is scattered across PDFs, links, videos and notes, and using AI on it means handing all of it to a cloud. Here the AI knows all of it, and private things stay private. The video shows this through one audience, students, so the case is specific |
 | Quality of the idea | A creative, non-obvious use of Nebius + Nemotron | The small Nemotron is the **switchboard**: it decides where each request runs. Private notes go only to your own model. Big jobs go to the big model |
 
 The Personal AI track asks for: private, data under your control, persistent memory, reusable
@@ -18,18 +18,24 @@ skills, tools you choose, tasks across your daily work. Each of these appears on
 
 ## 2. The app's idea, in one breath
 
-Second Brain is a Notion-style notebook that **understands** what you put in it. Drop a PDF, a link
+Second Brain is **one home for all your digital knowledge**: what you read, watch, study, plan
+and keep. It is a Notion-style notebook that **understands** what you put in it. Drop a PDF, a link
 or a video and it becomes a study guide. Ask a question and it answers from your own notes, with
 links to them. Every note has a privacy level (Open / Personal / Private), and a switchboard
 decides, for every AI call, **which model may see what**. You can always see where an answer ran
 and why.
 
-**The one sentence for the video:** *"An AI that knows everything I study, and still keeps my
-private life private."*
+**The one sentence for the video:** *"One place for everything I know, with an AI that knows it
+too, and still keeps my private life private."*
+
+**Why the video shows studying:** three minutes can't show every use. Studying is the clearest
+example: a lot of material, real deadlines, and private life mixed in. The video says once that
+this is one example, and the closing line goes back to the general idea.
 
 ## 3. The story
 
-A student (the narrator, "I") has a machine-learning midterm on Friday, a capstone project, and a
+The example is a student. The narrator ("I") keeps everything in Second Brain: courses, a
+project, health, money, a weekly review. This week they have a machine-learning midterm on Friday, a capstone project, and a
 knee injury with physio appointments. All of it lives in Second Brain.
 
 ## 4. The script (target 2:50)
@@ -38,8 +44,8 @@ Narration is short on purpose: read it slowly. **Bold** = what to click or type.
 
 ### 0:00–0:15 · The problem
 - **Screen:** the demo account's home, sidebar full of notes.
-- **Say:** "My notes have everything: lectures, my project, my health. AI could help me study, but
-  then I hand it everything. Second Brain gives me both."
+- **Say:** "Everything I know lives in my Second Brain: what I read, watch, plan, and study. AI
+  could help me use it, but then I hand it everything. Today I'll show it with my studies."
 
 ### 0:15–0:40 · Capture: a PDF becomes a study guide (Nemotron 3 Super)
 - **Do:** open **Ingest**, drop `Lecture 8 - Attention and Transformers.pdf`.
@@ -102,8 +108,9 @@ Quick cuts, about 5 s each:
 
 ### 2:40–2:55 · Close
 - **Screen:** the architecture diagram from the README.
-- **Say:** "Second Brain. Three Nemotrons on Nebius: one decides, one answers fast, one thinks
-  hard. Your private notes only ever reach your own model."
+- **Say:** "Today it was my studies. It works the same for all your knowledge: work, research,
+  reading, life. Second Brain: three Nemotrons on Nebius. One decides, one answers fast, one
+  thinks hard. Your private notes only ever reach your own model."
 
 ## 5. The demo account
 
