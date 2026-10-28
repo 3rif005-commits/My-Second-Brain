@@ -20,6 +20,13 @@ door (local slot + brain), VM off → Token Factory without private notes. Live 
 (2026-10-28). **Tavily web research** (docs/hackathon/TAVILY.md, `HACKATHON-TAVILY`): chat tool
 `web.search_web`; only the query leaves, asked first once a turn has read notes.
 **Demo account** `mysecondbrain.demo@gmail.com`: 11 notes (2 private), live-checked 2026-10-28.
+**Privacy fix 2026-10-28 (7f7e048, 8a57644):** with the Gemini embedder (Render), private notes'
+full text was sent to Google to build the search index. Now never: no embedding, found by words in
+our own DB, held back by the gate; the sweep strips old embeddings from private notes (all accounts).
+Demo: `NEBIUS_ONLY_USERS` set (every call on Nemotron, checked in Render logs); DeepWiki MCP added;
+"Academic studies" database (Board by Module → Type); all scenes rehearsed (DEMO_SCENARIO.md §6b);
+draft video from the live site: video/draft/make_real_draft.py. Still to capture with the screen
+on: scenes 4–9 (the laptop display slept, Chrome stopped drawing).
 **Citation hover card** recovered from the WebMCP fork's unmerged `feat/hover-card` and live-checked;
 other unmerged fork work still to check: `fix/agent-tool-schema`, 3 database-tool fixes (2026-09-03),
 `feat/playlist-ingestion`. Script: docs/hackathon/DEMO_SCENARIO.md. Next: demo-only-Nemotron setting,

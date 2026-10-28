@@ -543,8 +543,8 @@ def s_close(step):
              "Nebius Token Factory", NV)
         node((x0 + 450, y0 + 130, x0 + 800, y0 + 200), "Strong · Nemotron 3 Super",
              "Nebius Token Factory", NV)
-        node((x0 + 450, y0 + 220, x0 + 800, y0 + 290), "Local · Nemotron",
-             "your own Nebius VM — private notes only go here", GREEN)
+        node((x0 + 450, y0 + 220, x0 + 800, y0 + 290), "Local · small Nemotron",
+             "on your own computer — the only model private notes reach", GREEN)
         node((x0 + 450, y0 + 320, x0 + 800, y0 + 390), "Tools you choose",
              "Tavily web search · MCP servers — asked first", ACCENT)
         arrow((x0 + 150, y0 + 190), (x0 + 188, y0 + 140))
