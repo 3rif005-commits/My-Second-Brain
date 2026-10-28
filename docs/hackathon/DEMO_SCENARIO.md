@@ -92,14 +92,15 @@ Narration is short on purpose: read it slowly. **Bold** = what to click or type.
   the fast model."
 
 ### 1:00–1:15 · A hard question goes to the big model
-- **Type:** **"Derive the backprop update for a 2-layer network, then quiz me with 3 questions."**
+- **Type:** **"Derive the backprop update for a 2-layer network, then quiz me with 3 questions. Answer here in the chat."**
+  (Without the last sentence it once wrote the derivation into a new note.)
 - **Show:** the badge **Strong · Nemotron 3 Super**. Click it: *Decided by the brain · Why: deep
   reasoning*.
 - **Say:** "Hard question, so it goes to Nemotron Super. Every answer tells me which model ran, and
   why."
 
 ### 1:15–1:40 · Private stays private (the key scene)
-- **Type:** **"Plan my study week around my physio appointments."**
+- **Type:** **"Plan my study week around my physio appointments. Answer in chat."**
 - **Decided (28 Oct): no VM in the demo.** The app keeps its full structure: the local slot, the
   privacy gate and the Nebius VM front door all stay in the code (docs/hackathon/NEBIUS.md); only
   the demo runs without a local model.
@@ -111,8 +112,10 @@ Narration is short on purpose: read it slowly. **Bold** = what to click or type.
   in the cloud, so the app does the safe thing: it holds the note back. The cloud never saw it."
 
 ### 1:40–2:02 · Web research (Tavily)
-- **Type:** **"Search the web for recent work on CNNs for crop disease detection and save a short
-  reading list for my capstone."**
+- **Type:** **"Use web search to find 3 recent papers on CNNs for crop disease detection. List them
+  with links, then save them as a note titled 'Capstone reading list'."**
+  (The vaguer wording made Nano skip the search on the replay after Confirm. This one went to
+  Super, searched 8 pages and saved three real 2025 papers.)
 - **Show, in order:**
   1. the prompt *Search the web for "…"? Only these words are sent to Tavily.*;
   2. **Confirm**;
@@ -123,7 +126,8 @@ Narration is short on purpose: read it slowly. **Bold** = what to click or type.
   that leave. Then it saves a reading list as a note."
 
 ### 2:02–2:17 · Tools I choose (MCP)
-- **Type:** **"Ask DeepWiki how PyTorch computes gradients."**
+- **Type:** **"Use the DeepWiki tool to ask how PyTorch's autograd computes gradients (repo
+  pytorch/pytorch). Answer in 3 sentences."**
 - **Show:** the 🔌 *deepwiki · ask question* chip with **Confirm** (the server is set to *Ask me
   first*), then the answer.
 - **Say:** "It connects to any MCP tool I choose, and asks me first. My brain is an MCP server
@@ -131,7 +135,9 @@ Narration is short on purpose: read it slowly. **Bold** = what to click or type.
   - The last sentence only if the app's own MCP server is checked working before recording.
 
 ### 2:17–2:30 · It learns a skill (and asks before keeping it)
-- **Type:** **"Save the way you quizzed me as a skill."**
+- **Type:** **"Turn this way of studying into a reusable skill: explain a concept in plain words,
+  then quiz me with 3 questions from easy to hard, then wait for my answers and mark them. Propose
+  it as a skill called quiz-me."**
 - **Show:** the skill card (name, description, steps) → **Save**. It now appears in
   **Settings → Skills** with the label *AI-drafted*.
 - **Say:** "It can turn what worked into a reusable skill. Nothing is kept until I say so."
@@ -205,6 +211,22 @@ ourselves, so there is nothing to license.
 6. **Clean up the test runs:** delete the rehearsal chats; keep the notes.
 7. **Recording:** 1080p, dark or light mode (pick one), browser zoom 110%, no other tabs.
    - Upload to YouTube as public or unlisted (the rules say *publicly visible*).
+
+## 6b. Rehearsal, 28 Oct (live site, demo account)
+
+| Scene | Result |
+|---|---|
+| Workspace | Nano answered with [1][2]; the chip card showed *p. 2* and the passage; a click jumped the PDF to p. 2 |
+| Ask your brain | Nano, with note links; the hover card showed the cited passage |
+| Hard question | Brain → **Strong · Super** (1.2 s) once the brain had 6 s; at 2.5 s it timed out to Fast |
+| Private | **Held back: Health · knee physio plan, Budget and scholarship**; the answer did not know the times |
+| Web | Asked first with the exact words; after Confirm, Super searched (8 pages) and saved the note |
+| MCP | Asked first ("set to ask before each use"); after Confirm, DeepWiki answered (3,615 chars) |
+| Skill | Nano offered **quiz-me** as a card; nothing saved without a click |
+
+Found and fixed while rehearsing: private notes were sent to the cloud embedder (Gemini) to build
+the search index, and then could not show as "held back". Both fixed (7f7e048, 8a57644).
+Answers take 10–40 s (Nemotron thinks first): cut the waits in the edit.
 
 ## 7. Not in the video, but in the Devpost text
 
