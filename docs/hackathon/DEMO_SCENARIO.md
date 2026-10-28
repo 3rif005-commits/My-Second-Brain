@@ -92,14 +92,14 @@ Narration is short on purpose: read it slowly. **Bold** = what to click or type.
 
 ### 1:15–1:40 · Private stays private (the key scene)
 - **Type:** **"Plan my study week around my physio appointments."**
-- **With the Nebius VM on (recommended):**
-  - **Show:** the badge **Local · Nemotron (your Nebius VM)**. The answer knows *Thursday 15:00*.
-  - **Say:** "My health note is private. It never goes to a shared API. This ran on my own
-    Nemotron, on my own Nebius machine."
-- **Without the VM:**
-  - **Show:** the badge **… · 1 private held back**. Click it: *Held back (private): Health: knee
-    physio plan*.
-  - **Say:** "My health note is private, so it was held back. The cloud model never saw it."
+- **Decided (28 Oct): no VM in the demo.** The app keeps its full structure: the local slot, the
+  privacy gate and the Nebius VM front door all stay in the code (docs/hackathon/NEBIUS.md); only
+  the demo runs without a local model.
+- **Show:** the badge **Fast · Nemotron 3 Nano · 1 private held back**. Click it: *Held back
+  (private): Health · knee physio plan*.
+- **Say:** "My health note is private. In real use, private notes go only to a model running on my
+  own machine. For this demo I don't have the computing power for one, so the app does the safe
+  thing: it holds the note back. The cloud model never saw it."
 
 ### 1:40–2:02 · Web research (Tavily)
 - **Type:** **"Search the web for recent work on CNNs for crop disease detection and save a short
@@ -186,12 +186,9 @@ ourselves, so there is nothing to license.
    - Fix: a removable `NEBIUS_ONLY_USERS` setting. Accounts listed there use only Nebius. The real
      account keeps Claude.
    - Then check that Nemotron Super's study guide renders well (callouts, toggles, formulas).
-2. **Decide on the VM.**
-   - With it, the private scene shows a private answer on your own Nemotron: the strongest moment,
-     and it uses Nebius AI Cloud too.
-   - Cost: a few dollars for setup + recording. Turn it off after; the app falls back by itself.
-3. **The badge wording on the VM:** "stayed on this device" should read "on your own model" when
-   the local slot is the VM.
+2. **VM: decided no** (28 Oct). Say in the video and the README that private notes run on a local
+   model in real use, and that the demo holds them back for lack of compute. Keep all of that code.
+3. ~~Badge wording on the VM~~: not needed without the VM.
 4. **The demo account's MCP server:** add DeepWiki in Settings → MCP servers, set to *Ask me
    first*. Check that Nemotron calls it.
 5. **Run each prompt above once before recording.** Nano's answers vary; change a prompt's wording
@@ -206,5 +203,5 @@ ourselves, so there is nothing to license.
   private-model front door, Tavily web research, per-user skills, About-you memory, and the
   security work from studying NemoClaw / OpenShell / Hermes.
 - Embeddings for note search use Gemini. Say so; don't claim "100% Nemotron".
-- Honest wording: "Private" means *your own model* (the VM), not "never leaves the laptop", when
-  the VM is the private model.
+- Honest wording: private notes go only to a local model the user runs; the hosted demo has none,
+  so they are held back there. The VM front door is built and documented for anyone with compute.
