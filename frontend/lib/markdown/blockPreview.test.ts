@@ -5,7 +5,7 @@
  * the citations the whole feature exists for stay plain.
  */
 import { describe, expect, it } from "vitest";
-import { parseBlockLink } from "./blockPreview";
+import { linkBareNoteRefs, parseBlockLink } from "./blockPreview";
 
 const UUID = "3f1c9a2e-4b7d-4e21-9a6f-2c8b17d5e0aa";
 
@@ -44,5 +44,17 @@ describe("parseBlockLink", () => {
 describe("parseBlockLink — whole-note links", () => {
   it("previews a note link with no block from its opening passage", () => {
     expect(parseBlockLink(`/brain/${UUID}`)).toEqual({ noteId: UUID, blockId: "_top" });
+  });
+});
+
+describe("linkBareNoteRefs", () => {
+  const U = "09dc0273-e973-4eef-9307-c5703ab54222";
+  it("turns a bare [uuid#block] citation into a link", () => {
+    expect(linkBareNoteRefs(`see [${U}#n3b2].`)).toBe(`see [↗ note](/brain/${U}#n3b2).`);
+    expect(linkBareNoteRefs(`[/brain/${U}]`)).toBe(`[↗ note](/brain/${U})`);
+  });
+  it("leaves real links and other brackets alone", () => {
+    const ok = `[Midterm plan](/brain/${U}#n3b2) and [1] and [not-a-uuid]`;
+    expect(linkBareNoteRefs(ok)).toBe(ok);
   });
 });

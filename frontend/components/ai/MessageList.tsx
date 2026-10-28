@@ -17,6 +17,7 @@ import { UploadCard, type PanelJob } from "./PanelCards";
 import { Answer } from "./Answer";
 import { RouteBadge, type RouteInfo } from "./RouteBadge";
 import type { UploadFile } from "./panelSources";
+import { linkBareNoteRefs } from "@/lib/markdown/blockPreview";
 
 export type StreamItem =
   | { kind: "user"; id: string; content: string }
@@ -139,9 +140,9 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
             <div className="flex-1 min-w-0">
               <div className="text-[14px] text-ink leading-relaxed prose-sm prose dark:prose-invert max-w-none prose-p:my-1.5">
                 {onCitation && item.citations?.length
-                  ? <Answer content={item.content} citations={item.citations}
+                  ? <Answer content={linkBareNoteRefs(item.content)} citations={item.citations}
                       colorIndex={colorIndex ?? new Map()} onCitation={onCitation} />
-                  : <Markdown components={RUNNABLE}>{item.citations?.length ? resolveCitations(item.content, item.citations) : item.content}</Markdown>}
+                  : <Markdown components={RUNNABLE}>{linkBareNoteRefs(item.citations?.length ? resolveCitations(item.content, item.citations) : item.content)}</Markdown>}
               </div>
               {item.streaming && (
                 <span className="inline-block w-0.5 h-[1em] bg-accent-400 animate-pulse ml-0.5 align-middle rounded-full" />

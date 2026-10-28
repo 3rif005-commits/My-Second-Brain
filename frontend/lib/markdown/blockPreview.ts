@@ -78,6 +78,18 @@ export function fetchBlockPreview(
   return pending;
 }
 
+/** A model sometimes cites a note as a bare `[<uuid>#<block>]` (or
+ *  `[/brain/<uuid>#<block>]`) instead of a markdown link — seen live on
+ *  Nemotron. That renders as noise and opens nothing; turn it into a real
+ *  link (so it also gets the hover card). Proper links `[..](..)` are left
+ *  alone. */
+const BARE_REF =
+  /\[(?:\/brain\/)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(#[\w-]+)?\](?!\()/gi;
+
+export function linkBareNoteRefs(markdown: string): string {
+  return markdown.replace(BARE_REF, (_m, id: string, hash = "") => `[↗ note](/brain/${id}${hash})`);
+}
+
 /** Test-only: drop everything fetched so far. */
 export function __clearBlockPreviewCache() {
   cache.clear();

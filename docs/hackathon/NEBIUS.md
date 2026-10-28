@@ -85,6 +85,7 @@ caddy reverse-proxy --from 203-0-113-7.sslip.io --to localhost:8000
    | `backend/services/router.py` | the VM step at the top of `get_endpoint` |
    | `backend/services/ai/providers.py` | the Token Factory lines in `_env_providers`; `local_provider` goes back to `label="Local (Gemma)"` |
    | `backend/services/ai/client.py` | the two `nebius.no_thinking` lines in `_openai_compatible_complete` |
+   | `backend/services/ai/agent_stream.py` | the two `nebius.chat_extras` lines in `_stream_openai` |
    | `backend/services/ai/pricing.py` | the three `nebius.price_for` lines in `price_for` |
    | `backend/services/routing/policy.py` | `default_policy` goes back to `return copy.deepcopy(DEFAULT_POLICY)` |
    | `backend/services/routing/switchboard.py` | the local-model check in `resolve_slot` |

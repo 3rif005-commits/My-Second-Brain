@@ -368,6 +368,8 @@ async def _stream_openai(client: httpx.AsyncClient, url: str, headers: dict,
                                "max_tokens": max_tokens, "stream": True}
     if tools:
         payload["tools"] = [_openai_tool(t) for t in tools]
+    from services import nebius                     # HACKATHON-NEBIUS
+    payload.update(nebius.chat_extras(url, max_tokens))
     if any(host in url for host in ("openrouter.ai", "api.openai.com")):
         payload["stream_options"] = {"include_usage": True}
 

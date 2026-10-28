@@ -75,6 +75,22 @@ def no_thinking(url: str) -> dict:
     return {}
 
 
+#: Room for a chat round on Token Factory. Nemotron thinks before it answers
+#: and the thinking is dropped, so at the app's usual 2,048 a long-context
+#: question spent it all thinking and the answer came back empty (live, demo
+#: account, 2026-10-28).
+CHAT_MAX_TOKENS = 6144
+
+
+def chat_extras(url: str, max_tokens: int) -> dict:
+    """Extra fields for an agent (chat) round: light thinking, enough room.
+    Unlike `no_thinking`, chat keeps some reasoning — it is what makes the
+    strong model worth routing to."""
+    if not enabled() or urlsplit(url).hostname != provider_key():
+        return {}
+    return {"reasoning_effort": "low", "max_tokens": max(max_tokens, CHAT_MAX_TOKENS)}
+
+
 def price_for(model: str) -> tuple[float, float] | None | bool:
     """Token Factory's price for one of its models, None when not set, or
     False when the model is not a Token Factory one. Without this the

@@ -224,3 +224,14 @@ def test_no_vm_at_all_local_falls_back_to_token_factory(on):
     r = _route(pol)
     assert r.slot == "fast" and r.provider.label == "Nebius Token Factory"
     assert r.ceiling == "personal"
+
+
+def test_chat_rounds_on_token_factory_think_lightly_with_room(on):
+    extras = nebius.chat_extras("https://api.tokenfactory.nebius.com/v1/chat/completions", 2048)
+    assert extras == {"reasoning_effort": "low", "max_tokens": nebius.CHAT_MAX_TOKENS}
+    assert nebius.chat_extras("https://openrouter.ai/api/v1/chat/completions", 2048) == {}
+
+
+def test_chat_extras_off_without_the_add_on(monkeypatch):
+    monkeypatch.setattr(settings, "nebius_api_key", "")
+    assert nebius.chat_extras("https://api.tokenfactory.nebius.com/v1/chat/completions", 2048) == {}
