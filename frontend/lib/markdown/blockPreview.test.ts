@@ -52,6 +52,7 @@ describe("linkBareNoteRefs", () => {
   it("turns a bare [uuid#block] citation into a link", () => {
     expect(linkBareNoteRefs(`see [${U}#n3b2].`)).toBe(`see [↗ note](/brain/${U}#n3b2).`);
     expect(linkBareNoteRefs(`[/brain/${U}]`)).toBe(`[↗ note](/brain/${U})`);
+    expect(linkBareNoteRefs(`plan 【/brain/${U}#n3b11】.`)).toBe(`plan [↗ note](/brain/${U}#n3b11).`);
   });
   it("leaves real links and other brackets alone", () => {
     const ok = `[Midterm plan](/brain/${U}#n3b2) and [1] and [not-a-uuid]`;

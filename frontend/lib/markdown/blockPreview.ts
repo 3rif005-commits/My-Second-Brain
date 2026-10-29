@@ -79,12 +79,12 @@ export function fetchBlockPreview(
 }
 
 /** A model sometimes cites a note as a bare `[<uuid>#<block>]` (or
- *  `[/brain/<uuid>#<block>]`) instead of a markdown link — seen live on
- *  Nemotron. That renders as noise and opens nothing; turn it into a real
+ *  `[/brain/<uuid>#<block>]`, or in 【】 brackets) instead of a markdown link —
+ *  seen live on Nemotron. That renders as noise and opens nothing; turn it into a real
  *  link (so it also gets the hover card). Proper links `[..](..)` are left
  *  alone. */
 const BARE_REF =
-  /\[(?:\/brain\/)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(#[\w-]+)?\](?!\()/gi;
+  /(?:\[|【)(?:\/brain\/)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(#[\w-]+)?(?:\]|】)(?!\()/gi;
 
 export function linkBareNoteRefs(markdown: string): string {
   return markdown.replace(BARE_REF, (_m, id: string, hash = "") => `[↗ note](/brain/${id}${hash})`);
