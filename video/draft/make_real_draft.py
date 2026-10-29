@@ -105,69 +105,31 @@ SCENES = [
      [(9, REAL, S("s02a_answer.jpg")), (10, REAL, S("s02b_sourcecard.jpg")),
       (9, REAL, S("s02c_jump.jpg"))]),
     ("0:40", "Ask your whole brain", 20,
-     "It searches all my notes and links to them. A small Nemotron read my question and chose "
-     "the fast model.",
-     [(12, REAL, S("s03a_answer.jpg")),
-      (8, LIVE, C("What should I review before Friday's midterm?", [
-          ("Hover a link", "A floating card opens: the note's title, \"Edited 9m ago\", the "
-                           "passage around the cited block with the cited part marked, formulas "
-                           "drawn. Click opens the note at that block."),
-          ("Under answer", "Read from your notes: Weekly review · Midterm plan · Advisor "
-                           "meeting · Lecture 6 (each with the same card)"),
-          ("Ran on", "Fast · Nemotron 3 Nano · decided by the brain")]))]),
+     "It searches all my notes and links to them. Hover a link and I see the note it came from. "
+     "A small Nemotron read my question and picked the model.",
+     [(10, REAL, S("s03a_answer.jpg")), (10, REAL, S("s03b_hover.jpg"))]),
     ("1:00", "A hard question goes to the big model", 15,
      "Hard question, so it goes to Nemotron Super. Every answer tells me which model ran, and why.",
-     [(15, LIVE, C("Derive the backprop update for a 2-layer network, then quiz me with 3 "
-                   "questions. Answer here in the chat.", [
-          ("Ran on", "Strong · nvidia/nemotron-3-super-120b-a12b · Nebius Token Factory"),
-          ("Decided by", "the brain (Nemotron Nano, 1,160 ms)"),
-          ("Why", "Need detailed derivation"),
-          ("Answer", "The forward pass, ∂L/∂W₂ = (ŷ − y)·a₁ᵀ, ∂L/∂W₁ with the transpose, and "
-                     "three questions from easy to hard.")]))]),
+     [(8, REAL, S("s04a_derivation.jpg")), (7, REAL, S("s04b_why.jpg"))]),
     ("1:15", "Private stays private", 25,
      "My health note is private. Second Brain uses two kinds of model: a small Nemotron that can "
      "run on an ordinary computer, and bigger Nemotrons over the API. Private notes only go to "
      "the small one on my own machine. In this demo it runs in the cloud, so the note is held back.",
-     [(25, LIVE, C("Plan my study week around my physio appointments. Answer in chat.", [
-          ("Ran on", "Strong · Nemotron 3 Super · Nebius Token Factory"),
-          ("Held back", "2 private: Health · knee physio plan, Budget and scholarship"),
-          ("Answer", "\"…leave open windows for physio; you can fill in the exact times once you "
-                     "know your appointment schedule.\" The cloud model never saw the note."),
-          ("Index", "The private note is searchable by its words in our own database; it is "
-                    "never sent to the cloud embedder (fixed today).")]))]),
+     [(10, REAL, S("s05a_plan.jpg")), (15, REAL, S("s05b_heldback.jpg"))]),
     ("1:40", "Web research (Tavily)", 22,
      "When my notes aren't enough, it searches the web with Tavily. I approve the exact words "
      "that leave. Then it saves a reading list as a note.",
-     [(8, LIVE, C("Use web search to find 3 recent papers on CNNs for crop disease detection. "
-                  "List them with links, then save them as a note titled 'Capstone reading list'.", [
-          ("Asks first", "Search the web for \"recent CNNs for crop disease detection\"? Only "
-                         "these words are sent to Tavily.   [Confirm]")])),
-      (14, LIVE, C("…after Confirm", [
-          ("Ran on", "Strong · Nemotron 3 Super"),
-          ("Tools", "search web — 8 web pages   →   create note — Capstone reading list"),
-          ("Found", "González-Briones et al. 2025 (Int J Comput Intell Syst); Ashurov et al. "
-                    "2025 (Front. Plant Sci.); and a third 2025 paper, each with its link")]))]),
+     [(7, REAL, S("s06a_ask.jpg")), (7, REAL, S("s06b_tools.jpg")), (8, REAL, S("s06c_note.jpg"))]),
     ("2:02", "Tools I choose (MCP)", 15,
      "It connects to any MCP tool I choose, and asks me first.",
-     [(5, LIVE, C("Use the DeepWiki tool to ask how PyTorch's autograd computes gradients "
-                  "(repo pytorch/pytorch). Answer in 3 sentences.", [
-          ("Asks first", "deepwiki · ask wiki question — This server is set to ask before each "
-                         "use — confirm to run it.   [Confirm]")])),
-      (10, LIVE, C("…after Confirm", [
-          ("Tool", "deepwiki · ask wiki question — answered (3,615 characters)"),
-          ("Answer", "Operations on tensors with requires_grad are recorded into a graph; "
-                     ".backward() walks it in reverse and applies the chain rule…")]))]),
+     [(6, REAL, S("s07a_ask.jpg")), (9, REAL, S("s07b_answer.jpg"))]),
     ("2:17", "It learns a skill", 13,
      "It can turn what worked into a reusable skill. Nothing is kept until I say so.",
-     [(13, LIVE, C("Turn this way of studying into a reusable skill … Propose it as a skill "
-                   "called quiz-me.", [
-          ("Card", "New skill: quiz-me — Explain a concept in plain language, then quiz the "
-                   "user with three questions of increasing difficulty and mark the answers."),
-          ("Buttons", "[Save]  [Dismiss]   — nothing is saved until the click")]))]),
+     [(7, REAL, S("s08a_card.jpg")), (6, REAL, S("s08b_saved.jpg"))]),
     ("2:30", "I stay in control", 12,
      "Rules, memory, and a log of every call. All mine to change.",
-     [(4, MOCK, drawn(m.s_control, 0)), (4, MOCK, drawn(m.s_control, 1)),
-      (4, MOCK, drawn(m.s_control, 2))]),
+     [(3, REAL, S("s09a_targets.jpg")), (3, REAL, S("s09b_rules.jpg")),
+      (3, REAL, S("s09c_aboutyou.jpg")), (3, REAL, S("s09d_activity.jpg"))]),
     ("2:42", "Close", 13,
      "Today it was my studies. It works the same for all your knowledge. Second Brain: a small "
      "Nemotron that decides and keeps private notes private, and bigger Nemotrons on Nebius for "
