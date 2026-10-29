@@ -164,3 +164,10 @@ def test_a_job_records_its_skill(monkeypatch):
     monkeypatch.setattr(worker, "_run_one_as_user", lambda job, now: None)
     worker._run_one({"user_id": SKILL_USER, "skill": "weekly-review"}, None)
     assert touched == [(SKILL_USER, ["weekly-review"])]
+
+
+def test_double_escaped_newlines_become_lines():
+    d = skill_drafts.check({"name": "quiz-me", "description": "Quiz me.", "body": "1. Explain.\\n2. Quiz."}, set())
+    assert d["body"] == "1. Explain.\n2. Quiz."
+    real = skill_drafts.check({"name": "quiz-me", "description": "Quiz me.", "body": "Print it:\nprint('a\\nb')"}, set())
+    assert real["body"] == "Print it:\nprint('a\\nb')"

@@ -72,6 +72,11 @@ def check(draft: dict, taken: set[str]) -> dict:
     raw_desc, raw_body = str(draft.get("description") or ""), str(draft.get("body") or "")
     description = " ".join(strip_invisible(raw_desc).split())
     body = strip_invisible(raw_body).strip()
+    if "\n" not in body and "\\n" in body:
+        # A model sometimes double-escapes its newlines (seen live on Nemotron
+        # Nano): one line full of literal "\n". Only then, so a real
+        # multi-line body that quotes "\n" in code keeps it.
+        body = body.replace("\\n", "\n")
     if not description or len(description) > DESCRIPTION_MAX:
         raise SkillRejected(f"The description is one sentence under {DESCRIPTION_MAX} characters.")
     if not body or len(body) > BODY_MAX:
