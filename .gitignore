@@ -41,3 +41,7 @@ frontend/next-env.d.ts
 test-results/
 *.swp
 .claude/scheduled_tasks.lock
+
+# Rendered videos and raw screen recordings (large, not code)
+video/out/
+video/draft/__pycache__/
