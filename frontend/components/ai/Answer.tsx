@@ -37,6 +37,8 @@ function SourceChip({ c, color, onOpen }: { c: Citation; color: string; onOpen: 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const where = c.kind === "note" ? "your note" : anchorLabel(c.anchor_type, c.anchor_start);
+  // Extracted passages keep markdown heading marks ("## 3. Self-attention").
+  const snippet = c.snippet?.replace(/(^|\s)#{1,6}\s+/g, "$1");
 
   const close = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -45,7 +47,7 @@ function SourceChip({ c, color, onOpen }: { c: Citation; color: string; onOpen: 
   };
   const open = () => {
     const rect = ref.current?.getBoundingClientRect();
-    if (rect) setPos(positionFor(rect, 34, c.snippet ? 96 : 0));
+    if (rect) setPos(positionFor(rect, 34, snippet ? 96 : 0));
   };
   useEffect(() => {
     if (!pos) return;
@@ -85,10 +87,10 @@ function SourceChip({ c, color, onOpen }: { c: Citation; color: string; onOpen: 
             <span className="min-w-0 flex-1 truncate font-medium text-gray-600 dark:text-gray-300">{c.title}</span>
             <span className="shrink-0 text-gray-400 dark:text-gray-500">{where}</span>
           </div>
-          {c.snippet && (
+          {snippet && (
             <p className="m-0 px-3.5 pb-3.5 pt-3 text-[12.5px] leading-[1.5] text-gray-800 dark:text-gray-100"
               style={{ boxShadow: "inset 2px 0 0 rgb(var(--accent-500))", background: "rgb(var(--accent-500) / 0.06)" }}>
-              {c.snippet.length > 420 ? `${c.snippet.slice(0, 420)}…` : c.snippet}
+              {snippet.length > 420 ? `${snippet.slice(0, 420)}…` : snippet}
             </p>
           )}
         </div>,
