@@ -35,11 +35,17 @@ def _ytdlp_section(url: str, start: float, end: float, out_dir: str) -> str:
     out_tpl = os.path.join(out_dir, "clip.%(ext)s")
     cmd = [
         "yt-dlp", "--quiet", "--no-warnings",
-        "-f", "best[height<=720]/best",
+        # YouTube now mostly serves video and audio apart: merge them when no
+        # single file fits (2026-10-30, the old format string found nothing).
+        "-f", "best[height<=720]/bv*[height<=720]+ba/b",
         "--download-sections", f"*{max(0, start)}-{end}",
         "--force-keyframes-at-cuts",
         "-o", out_tpl, url,
     ]
+    if shutil.which("node"):
+        # YouTube's download signature is a JS challenge; without a runtime
+        # every media URL answers 403. yt-dlp only looks for deno by default.
+        cmd[1:1] = ["--js-runtimes", "node"]
     try:
         subprocess.run(cmd, capture_output=True, timeout=300, check=True)
     except subprocess.CalledProcessError as e:
