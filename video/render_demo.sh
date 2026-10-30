@@ -32,7 +32,7 @@ run_chunk() {
   local pid=$! waited=0
   while kill -0 "$pid" 2>/dev/null; do
     sleep 2; waited=$((waited + 2))
-    if ((waited >= 180)); then
+    if ((waited >= 420)); then
       kill -- -"$pid" 2>/dev/null; sleep 2; kill -9 -- -"$pid" 2>/dev/null
       wait "$pid" 2>/dev/null; return 1
     fi
