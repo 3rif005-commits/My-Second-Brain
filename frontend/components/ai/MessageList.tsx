@@ -15,6 +15,7 @@ const RUNNABLE = { pre: RunnablePre };
 import type { SkillDraftProposal } from "@/lib/skills";
 import { UploadCard, type PanelJob } from "./PanelCards";
 import { Answer } from "./Answer";
+import { holdBackOpenTail } from "@/lib/markdown/streamingTail";
 import { RouteBadge, type RouteInfo } from "./RouteBadge";
 import type { UploadFile } from "./panelSources";
 import { linkBareNoteRefs } from "@/lib/markdown/blockPreview";
@@ -144,10 +145,14 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
             {/* The answer reads as text on the page, as a note does: no card around it */}
             <div className="flex-1 min-w-0">
               <div className="text-[14px] text-ink leading-relaxed prose-sm prose dark:prose-invert max-w-none prose-p:my-1.5">
-                {onCitation && item.citations?.length
-                  ? <Answer content={linkBareNoteRefs(item.content)} citations={item.citations}
-                      colorIndex={colorIndex ?? new Map()} onCitation={onCitation} />
-                  : <Markdown components={RUNNABLE}>{linkBareNoteRefs(item.citations?.length ? resolveCitations(item.content, item.citations) : item.content)}</Markdown>}
+                {(() => {
+                  // mid-stream, an unfinished link or formula waits for its end
+                  const content = item.streaming ? holdBackOpenTail(item.content) : item.content;
+                  return onCitation && item.citations?.length
+                    ? <Answer content={linkBareNoteRefs(content)} citations={item.citations}
+                        colorIndex={colorIndex ?? new Map()} onCitation={onCitation} />
+                    : <Markdown components={RUNNABLE}>{linkBareNoteRefs(item.citations?.length ? resolveCitations(content, item.citations) : content)}</Markdown>;
+                })()}
               </div>
               {item.streaming && (
                 <span className="inline-block w-0.5 h-[1em] bg-accent-400 animate-pulse ml-0.5 align-middle rounded-full" />
