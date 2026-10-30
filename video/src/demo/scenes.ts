@@ -23,56 +23,46 @@ export type Scene = {
 const FULL = (t: number): Cam => ({t, s: 1, x: PAGE.w / 2, y: PAGE.h / 2});
 const PANEL = (t: number, y = 280, s = 1.75): Cam => ({t, s, x: 1100, y});
 
+// Script v2 (docs/hackathon/DEMO_SCENARIO.md): one study session, from blocks
+// to the database. v1 (routing, privacy, MCP, skills) is in git history.
 export const SCENES: Scene[] = [
   {
-    title: 'The problem', seconds: 9, rec: 's01_board',
-    say: 'Everything I know lives in my Second Brain: what I read, watch, plan, and study. AI could help me use it, but then I hand it everything. Today I’ll show it with my studies.',
-    camera: [FULL(0), {t: 6, s: 1.08, x: 640, y: 290}],
+    title: 'Second Brain', seconds: 4,
+    say: 'Second Brain: AI for everything you know, built on NVIDIA Nemotron on Nebius.',
   },
   {
-    title: 'A lecture with its sources', seconds: 20, rec: 's02_workspace',
-    say: 'My lecture sits beside my note. Nemotron answers from it, and every claim shows where it came from. One click takes me to the exact page.',
-    camera: [FULL(0), FULL(3), PANEL(4), {t: 10, s: 1.3, x: 880, y: 290}, {t: 14.5, s: 1.3, x: 880, y: 290}, PANEL(15.4, 380)],
+    title: 'A note is blocks', seconds: 22, rec: 'v2_s01_blocks',
+    say: 'A note is made of blocks. Type slash and pick one: headings, to-dos, callouts, toggles, formulas, tables, code.',
   },
   {
-    title: 'Ask your whole brain', seconds: 19, rec: 's03_brain',
-    say: 'It searches all my notes and links to them. Hover a link and I see the note it came from. A small Nemotron read my question and picked the model.',
-    camera: [FULL(0), FULL(2.6), PANEL(3.6), PANEL(13.6), PANEL(14.3, 400), PANEL(16.3, 400), PANEL(17, 420, 1.9)],
+    title: 'The workspace, with a lecture', seconds: 14, rec: 'v2_s02_workspace',
+    say: 'Backprop is my weak spot. I open the note in the workspace and add a 3Blue1Brown lecture.',
   },
   {
-    title: 'Hard question → the big model', seconds: 14, rec: 's04_hard',
-    say: 'Hard question, so it goes to Nemotron Super. Every answer tells me which model ran, and why.',
-    camera: [FULL(0), FULL(1.4), PANEL(2.4), PANEL(14.2), PANEL(15.2, 420, 1.9)],
+    title: 'Nemotron writes the study guide', seconds: 12, rec: 'v2_s03_guide',
+    say: 'Nemotron on Nebius reads the transcript and writes a study guide into my note.',
+    camera: [{t: 0, s: 1.45, x: 1020, y: 200}],
   },
   {
-    title: 'Private stays private', seconds: 22, rec: 's05_private',
-    say: 'My health note is private. Second Brain uses two kinds of model: a small Nemotron that can run on an ordinary computer, and bigger Nemotrons over the API. Private notes only go to the small one on my own machine. In this demo it runs in the cloud, so the note is held back.',
-    camera: [FULL(0), FULL(4.6), {t: 5.6, s: 1.6, x: 560, y: 320}, {t: 8.4, s: 1.6, x: 560, y: 320}, FULL(9.2), PANEL(10.4), PANEL(14.8), PANEL(15.8, 420, 2)],
+    title: 'Study with the video', seconds: 28, rec: 'v2_s04_capture',
+    say: 'The transcript follows the video. I jump to a moment, then grab a frame and a clip straight into my note.',
   },
   {
-    title: 'Web research with Tavily', seconds: 22, rec: 's06_tavily',
-    say: 'When my notes aren’t enough, it searches the web with Tavily. I approve the exact words that leave. Then it saves a reading list as a note.',
+    title: 'Nemotron builds something to play with', seconds: 16, rec: 'v2_s05_build',
+    say: 'Nemotron Super writes a small app from my request, and it runs inside the note: drag the weight, watch the loss.',
+  },
+  {
+    title: 'The web, with my OK (Tavily)', seconds: 20, rec: 's06_tavily',
+    say: 'When the lecture is not enough, it searches the web with Tavily. I approve the exact words that leave.',
     camera: [FULL(0), FULL(1.8), PANEL(2.8, 260), PANEL(25.8, 260), FULL(26.8)],
   },
   {
-    title: 'Tools I choose (MCP)', seconds: 17, rec: 's07_mcp',
-    say: 'It connects to any MCP tool I choose, and asks me first.',
-    camera: [FULL(0), FULL(1.8), PANEL(2.8, 260)],
-    cut: [[17, 27]], // the DeepWiki call spinning
+    title: 'Filed in my database', seconds: 14, rec: 'v2_s06_database',
+    say: 'Every lecture lives in my course database: a row with its module and type, and a full note when I open it.',
   },
   {
-    title: 'It learns a skill', seconds: 13, rec: 's08_skill',
-    say: 'It can turn what worked into a reusable skill. Nothing is kept until I say so.',
-    camera: [FULL(0), FULL(1.8), PANEL(2.8, 220), PANEL(9.6, 220), FULL(10.4), FULL(14.4), {t: 15.4, s: 1.4, x: 520, y: 400}],
-  },
-  {
-    title: 'I stay in control', seconds: 12, rec: 's09_control',
-    say: 'Rules, memory, and a log of every call. All mine to change.',
-    camera: [FULL(0), FULL(13), {t: 14, s: 1.35, x: 620, y: 380}],
-  },
-  {
-    title: 'Second Brain', seconds: 13,
-    say: 'Today it was my studies. It works the same for all your knowledge. Second Brain: a small Nemotron that decides and keeps private notes private, and bigger Nemotrons on Nebius for the heavy work.',
+    title: 'Second Brain ', seconds: 12,
+    say: 'Second Brain: a small Nemotron decides and keeps private notes private, and bigger Nemotrons on Nebius do the heavy work.',
   },
 ];
 

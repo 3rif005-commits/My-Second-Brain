@@ -95,15 +95,15 @@ const TopBar: React.FC<{i: number; scene: Scene}> = ({i, scene}) => {
   return (
     <div style={{position: 'absolute', left: BOX.x, top: 14, right: BOX.x, height: 32,
       display: 'flex', alignItems: 'center', gap: 14, fontFamily: FONT}}>
-      {i < n && (
+      {i > 0 && i < n && (
         <div style={{color: GREEN, fontSize: 15, fontWeight: 700, letterSpacing: 1,
-          opacity: inn}}>{String(i + 1).padStart(2, '0')} / {String(n).padStart(2, '0')}</div>
+          opacity: inn}}>{String(i).padStart(2, '0')} / {String(n - 1).padStart(2, '0')}</div>
       )}
       <div style={{color: INK, fontSize: 21, fontWeight: 600, opacity: inn,
         transform: `translateX(${(1 - inn) * -16}px)`}}>{scene.title}</div>
       <div style={{flex: 1}} />
       <div style={{color: MUTED, fontSize: 13, opacity: inn}}>
-        live app · Nemotron on Nebius Token Factory
+        the real app · NVIDIA Nemotron on Nebius Token Factory
       </div>
     </div>
   );
@@ -197,6 +197,20 @@ const Close: React.FC = () => {
   );
 };
 
+const Intro: React.FC = () => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const p = spring({frame, fps, config: {damping: 200}});
+  return (
+    <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center', fontFamily: FONT, color: INK}}>
+      <div style={{fontSize: 68, fontWeight: 700, opacity: p, transform: `translateY(${(1 - p) * 20}px)`}}>Second Brain</div>
+      <div style={{fontSize: 26, color: MUTED, marginTop: 14, opacity: p}}>
+        AI for everything you know · <span style={{color: GREEN}}>NVIDIA Nemotron on Nebius</span>
+      </div>
+    </AbsoluteFill>
+  );
+};
+
 // ── The whole video ──────────────────────────────────────────────────────
 
 const SceneView: React.FC<{i: number; scene: Scene; start: number}> = ({i, scene, start}) => {
@@ -206,7 +220,7 @@ const SceneView: React.FC<{i: number; scene: Scene; start: number}> = ({i, scene
   return (
     <AbsoluteFill style={{background: BG}}>
       <AbsoluteFill style={{opacity: o}}>
-        {scene.rec ? <Recording scene={scene} /> : <Close />}
+        {scene.rec ? <Recording scene={scene} /> : i === 0 ? <Intro /> : <Close />}
         <TopBar i={i} scene={scene} />
         <Caption text={scene.say} />
       </AbsoluteFill>
