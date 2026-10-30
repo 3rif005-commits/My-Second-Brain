@@ -45,6 +45,27 @@ backend on Render among them). There, a YouTube source gets its transcript from 
 added to the same session; frame and clip capture from YouTube need the app running on a home
 connection (`./app.sh start`), which is how the demo video was recorded.
 
+### The plan: from a notebook to a second brain
+
+A second brain does four things with what you live through: it **captures** it, **stores** it,
+**links** it to what you already know, and **analyses** it so you can act. One rule holds at every
+step: **you decide what the AI may see**, and private things stay on hardware you own.
+
+Each phase widens one part of that loop:
+
+| Phase | Name | What it adds | Status |
+|---|---|---|---|
+| 1 | **Foundation**: the knowledge substrate | Blocks and databases: one structure that can hold any kind of knowledge and link it (pages, rows, properties, relations, backlinks) | Built |
+| 2 | **Agency**: the agent layer | An AI that works on that substrate: the routing switchboard and privacy rules, skills, MCP tools, web research, and a learning loop (after Hermes Agent) that drafts new skills you approve before they are kept | Built (this hackathon) |
+| 3 | **Reach**: universal capture | Everything digital you take in, not only what you upload. PDFs, web pages, YouTube, video and audio work today; next come social media, newsletters, messages, podcasts and bookmarks, captured as you consume them | Started |
+| 4 | **Ownership**: a dedicated device | A small, portable box that runs the small Nemotron and keeps your private memory on it. Your second brain becomes something you own and carry; the cloud only does the heavy work you allow | Idea |
+| 5 | **Presence**: the physical world | Real-life input from smart glasses, wearables and sensors: what you see, hear and do becomes notes, processed on your own device under the same privacy rules | Idea |
+
+Phases 1 and 2 build the brain: where knowledge lives, and the mind that works on it. Phases 3 to 5
+widen its senses: from the files you give it, to your whole digital life, to the physical world.
+Phase 4 comes before phase 5 on purpose: before the brain sees your real life, it has to run on
+hardware you own.
+
 ---
 
 
