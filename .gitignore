@@ -46,3 +46,6 @@ test-results/
 video/out/
 video/draft/__pycache__/
 video/build/
+
+# The Android app stays on this machine only (behind the web app; not published)
+android/
