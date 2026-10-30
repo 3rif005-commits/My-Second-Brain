@@ -46,115 +46,66 @@ The example is a student. The narrator ("I") keeps everything in Second Brain: c
 project, health, money, a weekly review. This week they have a machine-learning midterm on Friday, a capstone project, and a
 knee injury with physio appointments. All of it lives in Second Brain.
 
-## 4. The script (target 2:55)
+## 4. The script, v2 (target 2:45)
 
-Narration is short on purpose: read it slowly. **Bold** = what to click or type.
+v1 (nine scenes on routing, privacy, Tavily, MCP, skills) was recorded on 29 Oct and reviewed
+frame by frame; it is in git history. v2 follows one study session from an empty note to a filed
+note, and keeps the AI visible at every step. Narration is short: read it slowly. **Bold** = what
+to click or type.
 
-**Why these scenes (chosen against the criteria):**
-- Each Personal AI track word appears on screen: private, memory, skills, tools you choose,
-  tasks across daily work.
-- **Workspace and the hover card** are the *Design* score: a finished product you can see, not a
-  terminal.
-- **MCP and Tavily** are the "tools you choose". Both ask before anything leaves.
-- **The AI-drafted skill** is the self-improving loop the track names (Hermes Agent's idea), done
-  safely: nothing is saved until you click.
-- **Left out:**
-  - The interactive block (an AI-made simulation) is impressive, but its quality on Nano is
-    unproven. It can go in the closing montage if a rehearsal comes out well.
-  - Notion databases: no time.
+**Recording rules (from the v1 review):**
+- Browser zoom 125 %, AI panel wide: little camera zoom needed, text stays sharp.
+- Every take starts on a clean screen, at the moment the action starts.
+- One confirm per tool; no "denied" from an earlier attempt on screen.
+- Captions are short lines timed to the action, not one paragraph per scene.
+- Callouts (box + label) point at what matters instead of heavy zoom.
 
-### 0:00–0:12 · The problem
-- **Screen:** the demo account's home, sidebar full of notes (courses, project, health, money).
-- **Say:** "Everything I know lives in my Second Brain: what I read, watch, plan, and study. AI
-  could help me use it, but then I hand it everything. Today I'll show it with my studies."
+### 0:00–0:05 · Title
+Card: "Second Brain: AI for everything you know · NVIDIA Nemotron on Nebius".
 
-### 0:12–0:40 · Workspace: a lecture becomes a study guide, with sources (Nemotron Super)
-- **Do:** open the **Lecture 8** workspace and drop `Lecture 8 - Attention and Transformers.pdf`
-  as a source.
-  - The study guide is already made: **cut** the wait, or run the *Study guide* job off camera.
-- **Do:** in the AI panel, type **"Explain self-attention simply."**
-- **Show:**
-  1. the answer with source chips **[1] [2]**;
-  2. **hover a chip:** the floating card shows *Lecture 8 PDF · page 3* and the quoted lines;
-  3. **click it:** the PDF jumps to page 3.
-- **Say:** "My lecture sits beside my note. Nemotron answers from it, and every claim shows where
-  it came from. One click takes me to the exact page."
+### 0:05–0:30 · A note is blocks
+New note **Backprop: midterm review**. Type **/** and add: heading, to-do, toggle, callout,
+**math formula** (the chain rule), table, code.
+> "A note is made of blocks. Type slash and pick one: headings, to-dos, toggles, callouts,
+> formulas, tables, code."
 
-### 0:40–1:00 · Ask your whole brain (Nemotron Nano, chosen by Nemotron)
-- **Type:** **"What should I review before Friday's midterm?"**
-- **Show:**
-  1. the 🔍 *search brain* chip;
-  2. the answer, linking *Midterm plan* and *Lecture 6*;
-  3. **hover a link:** the card shows where the note lives (*ML 301 › Lecture 6*), its first
-     lines, and its privacy level;
-  4. the badge **Fast · Nemotron 3 Nano**.
-- **Say:** "It searches all my notes and links to them. A small Nemotron read my question and chose
-  the fast model."
+### 0:30–0:50 · The workspace, with a lecture video
+**Open in workspace** → add source → paste the 3Blue1Brown video
+(*Backpropagation, intuitively*, https://www.youtube.com/watch?v=Ilg3gGewQ5U).
+> "Backprop is my weak spot. I open the note in the workspace and add a 3Blue1Brown lecture."
 
-### 1:00–1:15 · A hard question goes to the big model
-- **Type:** **"Derive the backprop update for a 2-layer network, then quiz me with 3 questions. Answer here in the chat."**
-  (Without the last sentence it once wrote the derivation into a new note.)
-- **Show:** the badge **Strong · Nemotron 3 Super**. Click it: *Decided by the brain · Why: deep
-  reasoning*.
-- **Say:** "Hard question, so it goes to Nemotron Super. Every answer tells me which model ran, and
-  why."
+### 0:50–1:10 · Nemotron writes the study guide
+Run **Study guide** on the video. Callout on the model badge / "why" box.
+> "Nemotron on Nebius reads the transcript and writes a study guide, with timestamps."
 
-### 1:15–1:40 · Private stays private (the key scene)
-- **Type:** **"Plan my study week around my physio appointments. Answer in chat."**
-- **Decided (28 Oct): no VM in the demo.** The app keeps its full structure: the local slot, the
-  privacy gate and the Nebius VM front door all stay in the code (docs/hackathon/NEBIUS.md); only
-  the demo runs without a local model.
-- **Show:** the badge **Fast · Nemotron 3 Nano · 1 private held back**. Click it: *Held back
-  (private): Health · knee physio plan*.
-- **Say:** "My health note is private. Second Brain uses two kinds of model: a small Nemotron
-  that can run on an ordinary computer, and bigger Nemotrons it calls over the API for heavy work.
-  Private notes only ever go to the small one on my own machine. In this demo the small model runs
-  in the cloud, so the app does the safe thing: it holds the note back. The cloud never saw it."
+### 1:10–1:40 · Study with the video
+Click a timestamp in the guide → the video jumps there. On the capture rail: **Frame** → the
+frame lands in the note; **Clip** … **End clip** → a clip lands in the note.
+> "Each section links to its moment in the video. I grab a frame, and a clip, straight into my
+> note."
 
-### 1:40–2:02 · Web research (Tavily)
-- **Type:** **"Use web search to find 3 recent papers on CNNs for crop disease detection. List them
-  with links, then save them as a note titled 'Capstone reading list'."**
-  (The vaguer wording made Nano skip the search on the replay after Confirm. This one went to
-  Super, searched 8 pages and saved three real 2025 papers.)
-- **Show, in order:**
-  1. the prompt *Search the web for "…"? Only these words are sent to Tavily.*;
-  2. **Confirm**;
-  3. 🌐 *5 web pages*;
-  4. the answer with links (hover one: the card shows the website);
-  5. ✨ *create note*.
-- **Say:** "When my notes aren't enough, it searches the web with Tavily. I approve the exact words
-  that leave. Then it saves a reading list as a note."
+### 1:40–2:05 · Nemotron builds something to play with
+AI panel: **"Make an interactive block where I drag a weight and watch the loss and the gradient
+change."** The block appears in the note; drag it.
+> "Then I ask Nemotron to build something I can play with: an interactive block, written in
+> HTML, inside my note."
 
-### 2:02–2:17 · Tools I choose (MCP)
-- **Type:** **"Use the DeepWiki tool to ask how PyTorch's autograd computes gradients (repo
-  pytorch/pytorch). Answer in 3 sentences."**
-- **Show:** the 🔌 *deepwiki · ask question* chip with **Confirm** (the server is set to *Ask me
-  first*), then the answer.
-- **Say:** "It connects to any MCP tool I choose, and asks me first. My brain is an MCP server
-  too, so other AI apps can search it."
-  - The last sentence only if the app's own MCP server is checked working before recording.
+### 2:05–2:20 · The web, with my OK (Tavily)
+AI panel: **"Find one recent article that explains backprop well and add it to the note."** →
+the query to approve → **Confirm** → the link is in the note. Callout: "Only these words are
+sent to Tavily".
+> "When the lecture isn't enough, it searches the web with Tavily. I approve the exact words
+> that leave."
 
-### 2:17–2:30 · It learns a skill (and asks before keeping it)
-- **Type:** **"Turn this way of studying into a reusable skill: explain a concept in plain words,
-  then quiz me with 3 questions from easy to hard, then wait for my answers and mark them. Propose
-  it as a skill called quiz-me."**
-- **Show:** the skill card (name, description, steps) → **Save**. It now appears in
-  **Settings → Skills** with the label *AI-drafted*.
-- **Say:** "It can turn what worked into a reusable skill. Nothing is kept until I say so."
+### 2:20–2:40 · File it in the database
+Properties: **Module = Machine Learning (ML 301)**, **Type = Course** → open **Academic studies**:
+the note is a card on the board, with the other lectures.
+> "Finally I file it. Set its module and type, and it joins my course database with every other
+> lecture."
 
-### 2:30–2:42 · I stay in control
-Quick cuts, about 4 s each:
-1. **Settings → Routing:** the rules (*private → my own model*, *big context → Strong*) and the
-   Nemotron brain;
-2. **Settings → About you:** what it remembers about me;
-3. **Activity:** every AI call, which model, what it cost.
-- **Say:** "Rules, memory, and a log of every call. All mine to change."
-
-### 2:42–2:55 · Close
-- **Screen:** the architecture diagram from the README.
-- **Say:** "Today it was my studies. It works the same for all your knowledge. Second Brain: three
-  Nemotrons on Nebius. One decides, one answers fast, one thinks hard. Your private notes only
-  ever reach your own model."
+### 2:40–2:45 · End card
+Repo and demo links. "Second Brain: a small Nemotron decides, private notes stay private,
+bigger Nemotrons on Nebius do the heavy work."
 
 ## 5. The demo account
 
