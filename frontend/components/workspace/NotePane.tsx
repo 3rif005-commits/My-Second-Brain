@@ -125,6 +125,20 @@ export function NotePane({
   const syncOn = follow;
   const [empty, setEmpty] = useState(() => !hasContent(note.content ?? []));
   const editorRef = useRef<BlockEditorHandle>(null);
+  // The page's title heads the pane, as it heads the note page: without it the
+  // pane opened on bare text (or nothing) and you couldn't tell which note it was.
+  const [title, setTitle] = useState(note.title);
+  const titleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTitle = useCallback((val: string) => {
+    if (titleTimer.current) clearTimeout(titleTimer.current);
+    titleTimer.current = setTimeout(async () => {
+      await fetch(`/api/notes/${note.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: val }),
+      });
+      window.dispatchEvent(new Event("notes-changed"));
+    }, 600);
+  }, [note.id]);
   const pendingRef = useRef<{ anchors: (PendingAnchor | null)[]; sourceIds: string[] } | null>(null);
   const anchorsRef = useRef<NoteAnchor[]>([]);
   const lastSyncedBlock = useRef<string | null>(null);
@@ -433,6 +447,15 @@ export function NotePane({
               </button>
             );
           })}
+          <label htmlFor={`pane-title-${note.id}`} className="sr-only">Note title</label>
+          <input
+            id={`pane-title-${note.id}`}
+            className="mb-3 w-full border-none bg-transparent px-0 text-[30px] font-bold leading-[38px] text-ink outline-none placeholder:text-ink-placeholder"
+            value={title}
+            placeholder="Untitled"
+            onChange={(e) => { setTitle(e.target.value); saveTitle(e.target.value); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusEditor(); } }}
+          />
           <BlockEditor
             ref={editorRef}
             noteId={note.id}
