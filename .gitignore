@@ -45,3 +45,4 @@ test-results/
 # Rendered videos and raw screen recordings (large, not code)
 video/out/
 video/draft/__pycache__/
+video/build/

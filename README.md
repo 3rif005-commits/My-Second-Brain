@@ -1,5 +1,53 @@
 # Second Brain — AI-Powered Personal Knowledge OS
 
+## Nebius x NVIDIA Global AI Hackathon (Personal AI track)
+
+**Second Brain is one home for everything you know** (lectures, PDFs, videos, links, plans) with an
+AI that works on it, while you stay in control of what it sees. Every AI call in the demo runs on
+**NVIDIA Nemotron on Nebius Token Factory**.
+
+- Demo: https://second-brain-webmcp.vercel.app (demo account: see the Devpost page)
+- Video (under 3 minutes): see the Devpost page
+
+### How it uses Nemotron on Nebius
+
+Two kinds of model, chosen per request by a switchboard (rules, then a small model, then a slot):
+
+| Role | Model (Nebius Token Factory) | Used for |
+|---|---|---|
+| Brain + Fast | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | reads each request and decides where it runs; everyday answers |
+| Strong | `nvidia/nemotron-3-super-120b-a12b` | study guides from sources, derivations, building interactive blocks |
+| Private (by design) | a small Nemotron on your own machine or VM | the only model allowed to read notes marked Private |
+
+Every answer shows which model ran and why (Settings → Routing → Activity logs each call).
+Web research uses **Tavily**, and the exact query is shown for your OK before anything leaves.
+
+Code: `backend/services/nebius.py` (provider, demo-account lock), `backend/services/web_research.py`
+(Tavily). Every hackathon touchpoint is marked `HACKATHON-NEBIUS` / `HACKATHON-TAVILY`;
+details and removal steps in `docs/hackathon/NEBIUS.md` and `docs/hackathon/TAVILY.md`.
+
+### Run it
+
+1. Supabase project: run `supabase/migrations/*.sql` in order in the SQL editor.
+2. Backend: `cd backend && python -m venv .venv && .venv/bin/pip install -r requirements.txt`,
+   copy `.env.example` to `.env`, fill the Supabase values and:
+   ```
+   NEBIUS_API_KEY=...            # Nebius Token Factory key
+   NEBIUS_ONLY_USERS=<user id>   # optional: lock an account to Nemotron only
+   TAVILY_API_KEY=...            # optional: web research
+   ```
+   then `.venv/bin/uvicorn main:app --port 8000`.
+3. Frontend: `cd frontend && npm ci`, copy `.env.local.example` to `.env.local`, `npm run dev`.
+4. Or both at once: `./app.sh start`.
+
+**Known limit:** YouTube refuses caption and media requests from many cloud servers (the hosted
+backend on Render among them). There, a YouTube source gets its transcript from a subtitle file
+added to the same session; frame and clip capture from YouTube need the app running on a home
+connection (`./app.sh start`), which is how the demo video was recorded.
+
+---
+
+
 A Notion-style block editor with an AI ingestion pipeline. Drop a PDF or paste a URL and the AI generates a structured mastery guide directly into the editor.
 
 ---
