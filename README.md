@@ -47,11 +47,19 @@ connection (`./app.sh start`), which is how the demo video was recorded.
 
 ### The plan: from a notebook to a second brain
 
-A second brain does four things with what you live through: it **captures** it, **stores** it,
-**links** it to what you already know, and **analyses** it so you can act. One rule holds at every
-step: **you decide what the AI may see**, and private things stay on hardware you own.
+The app stands on three pillars. Everything it does serves one of them:
 
-Each phase widens one part of that loop:
+| Pillar | What it means | What the app does today |
+|---|---|---|
+| **Store** | Keep what you learn, in a structure that lasts | Blocks and databases; sources (PDF, web, video, audio) kept beside the notes made from them; a privacy level on every note; search over all of it |
+| **Link** | Connect each new thing to what you already know | Links and backlinks between notes; database relations; every AI claim cites the exact page or moment it came from; hover a link to see the passage |
+| **Analyse** | Turn what is stored and linked into understanding and action | Nemotron study guides from your sources; answers grounded in your own notes; interactive blocks built on request; web research; a small model that reads each request and decides where it runs |
+
+One rule runs under all three: **you decide what the AI may see**, and private things stay on
+hardware you own. Capture is the door into the pillars: the more the brain can take in, the more
+it can store, link and analyse.
+
+The plan grows the three pillars in five phases:
 
 | Phase | Name | What it adds | Status |
 |---|---|---|---|
