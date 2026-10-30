@@ -130,6 +130,20 @@ def _paired(db, resource: dict, want_video: bool) -> dict | None:
     return None
 
 
+def _lone_subtitle(db, resource: dict) -> dict | None:
+    """The one subtitle file on this note that no video has claimed yet, if there is
+    exactly one: a YouTube video's title rarely matches the file's name."""
+    from services.workspace.subtitles import is_subtitle
+    try:
+        rows = (db.table("note_resources").select("id,title,kind,storage_path,meta")
+                .eq("note_id", resource["note_id"]).execute().data or [])
+    except Exception:                                    # noqa: BLE001
+        return None
+    free = [r for r in rows if r.get("id") != resource["id"] and r.get("kind") == "document"
+            and is_subtitle(r.get("storage_path")) and not (r.get("meta") or {}).get("paired_video")]
+    return free[0] if len(free) == 1 else None
+
+
 def _mark_subtitle_paired(db, subtitle: dict, video_id: str) -> None:
     """The video now carries these cues: the subtitle source keeps its readable sections but
     leaves synthesis and chat, so the words aren't counted twice."""
@@ -308,9 +322,27 @@ def _process_resource(resource_id: str) -> None:
                 meta["transcript"] = youtube.transcript_lines(snippets)
                 _insert_chunks(resource, youtube.chunk_transcript(snippets, chapters=chapters))
             except ValueError:
-                # No transcript: synthesis re-derives the video URL from the
-                # source row and takes the Gemini-native path (synthesis._complete).
-                meta["has_transcript"] = False
+                # YouTube refuses caption requests from many cloud servers
+                # (Render's, seen live 2026-10-30). A subtitle file in the same
+                # session stands in: the video's name, or the only one there.
+                subtitle = _paired(db, resource, want_video=False) or _lone_subtitle(db, resource)
+                snippets = None
+                if subtitle:
+                    from services.workspace.subtitles import parse_subtitles
+                    try:
+                        snippets = parse_subtitles(storage.download(subtitle["storage_path"]))
+                    except Exception as e:                        # noqa: BLE001
+                        logger.warning(f"resource {resource_id}: subtitle unreadable: {e}")
+                if snippets:
+                    meta["has_transcript"] = True
+                    meta["transcript_from"] = "subtitles"
+                    meta["transcript"] = youtube.transcript_lines(snippets)
+                    _insert_chunks(resource, youtube.chunk_transcript(snippets, chapters=chapters))
+                    _mark_subtitle_paired(db, subtitle, resource_id)
+                else:
+                    # No transcript: synthesis re-derives the video URL from the
+                    # source row and takes the Gemini-native path (synthesis._complete).
+                    meta["has_transcript"] = False
 
         elif resource["kind"] == "video":
             from services.workspace import video as vsvc

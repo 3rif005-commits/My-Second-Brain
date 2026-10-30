@@ -74,3 +74,15 @@ def test_synthesis_skips_a_paired_subtitle(monkeypatch):
         {"id": "v1", "meta": {}}, {"id": "s1", "meta": {"paired_video": "v1"}}, {"id": "p1", "meta": None}]
     monkeypatch.setattr(synthesis, "get_supabase", lambda: db)
     assert [r["id"] for r in synthesis.ready_sources("n")] == ["v1", "p1"]
+
+
+def test_lone_subtitle_is_the_only_unclaimed_one():
+    from services.workspace.processor import _lone_subtitle
+    yt = {"id": "y1", "note_id": "n", "title": "Backpropagation, intuitively"}
+    one = [{"id": "s1", "title": "captions", "kind": "document", "storage_path": "u/s1/c.srt"},
+           {"id": "d1", "title": "notes", "kind": "document", "storage_path": "u/d1/n.md"}]
+    assert _lone_subtitle(_db_with(one), yt)["id"] == "s1"
+    claimed = [{**one[0], "meta": {"paired_video": "v9"}}]
+    assert _lone_subtitle(_db_with(claimed), yt) is None
+    two = one + [{"id": "s2", "title": "other", "kind": "document", "storage_path": "u/s2/o.vtt"}]
+    assert _lone_subtitle(_db_with(two), yt) is None      # which one? don't guess
