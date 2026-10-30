@@ -20,6 +20,15 @@ Two kinds of model, chosen per request by a switchboard (rules, then a small mod
 | Private (by design) | a small Nemotron on your own machine or VM | the only model allowed to read notes marked Private |
 
 Every answer shows which model ran and why (Settings → Routing → Activity logs each call).
+
+**Where Token Factory accelerated the work:**
+- **One OpenAI-compatible endpoint** for every Nemotron: adding Nebius was one provider entry
+  (`backend/services/nebius.py`), not a new client. Switching between Nano and Super is a model name.
+- **No GPUs to run:** a 120B model (Nemotron Super) for heavy jobs with nothing to host or scale.
+- **Fast enough to route every request:** Nano on Token Factory decides where a request runs in
+  about 1–3 s, so the small model can sit in front of every call.
+- **Other Nebius services:** the design adds a small Nemotron on a Nebius VM (`NEBIUS_VM_URL`) as
+  the private front door; the demo runs without it, so private notes are held back.
 Web research uses **Tavily**, and the exact query is shown for your OK before anything leaves.
 
 Code: `backend/services/nebius.py` (provider, demo-account lock), `backend/services/web_research.py`
