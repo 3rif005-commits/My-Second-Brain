@@ -1,7 +1,7 @@
 # Second Brain — Project Status
 
 > Source of truth across all conversations. Read at session start, update at session end.
-> Last updated: 2026-10-24
+> Last updated: 2026-11-03
 
 ---
 
@@ -12,6 +12,17 @@
 | 1 | Every database query from Render to Supabase takes ~180 ms (measured with the CSV import's Server-Timing header); a simple database list takes ~1 s. Likely the two services are in different regions (`render.yaml` sets no region, so Render's default, Oregon). Check the Supabase project's region; co-locating would speed up every database page | the whole app, not one feature |
 | 2 | Settings at phone width not re-checked after the settings rework (Chrome wouldn't resize); Connected apps has no "how to connect" text because the app's own MCP server isn't deployed with Render | small |
 | 3 | Editor AI: one Revert (after Simplify) left stray letters in the paragraph ("foronr"); two later Simplify/Fix-spelling reverts restored the text exactly. Watch for it; if it recurs, check xl-ai's revert with large rewrites | couldn't reproduce |
+
+**Notion block selection (2026-11-03, `components/editor/blockSelection.ts`):** blocks are now
+selectable units, not just text. A real ProseMirror selection type (`BlockSelection`, like
+prosemirror-tables' CellSelection) with Notion's keys: Esc in text → the block; Ctrl+A → block
+text, again → every block; Esc in block mode → nothing; Enter → caret back in; ↑/↓, Shift+↑/↓
+(lifts to the parent when the ends are at different depths); Backspace/Del, Ctrl+C/X (whole
+blocks, children included), Ctrl+D, Tab/Shift+Tab, Ctrl+Shift+↑/↓; typing never overwrites;
+drag from the page margin box-selects; Shift+click extends; the ⋮⋮ menu selects its block and
+Turn into/Duplicate/Delete act on every selected block; paste lands after the selected blocks.
+Checked in Chromium on a scratch page (not on real notes). Not yet: block colour from ⋮⋮ applies
+to the menu's block only; Ctrl+/ "turn into" shortcut; a selection survives clicks outside the page.
 
 **Hackathon: Nemotron on Nebius (2026-10-27, docs/hackathon/NEBIUS.md):** a removable add-on
 (`services/nebius.py`, touchpoints marked `HACKATHON-NEBIUS`; off while `NEBIUS_API_KEY` is

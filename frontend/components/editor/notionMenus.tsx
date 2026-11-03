@@ -6,7 +6,7 @@
 // working; app/editor.css (".bn-notion-menu") gives them Notion's measured card
 // (docs/notion-reference/surfaces/blocks.md §4): 265px, radius 10px, 28px rows,
 // 20px icons, grey shortcut hints on the right.
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CheckSquare, Code, Copy, Eraser,
   Heading1, Heading2, Heading3, Link2, List, ListOrdered, ListCollapse, Paintbrush, Quote,
@@ -18,6 +18,7 @@ import {
   BlockColorsItem, useBlockNoteEditor, useComponentsContext, useExtension, useExtensionState,
 } from "@blocknote/react";
 import { useToast } from "@/app/providers";
+import { selectBlocksById, selectedBlockIds, withoutIds } from "./blockSelectionExtension";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyBlock = any;
@@ -58,10 +59,12 @@ function blockLabel(block: AnyBlock): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** A copy of a block that BlockNote will give fresh ids. */
-function withoutIds(block: AnyBlock): AnyBlock {
-  const { id: _id, children, ...rest } = block; // eslint-disable-line @typescript-eslint/no-unused-vars
-  return { ...rest, children: (children ?? []).map(withoutIds) };
+/** The blocks a menu action applies to: every selected block when the menu's
+ *  block is part of a block selection (Notion), else just that block. */
+function targetsOf(editor: AnyBlock, block: AnyBlock): AnyBlock[] {
+  const ids = selectedBlockIds(editor);
+  if (!ids.includes(block.id)) return [block];
+  return ids.map((id) => editor.getBlock(id)).filter(Boolean);
 }
 
 /** Click ⋮⋮: Notion's block action menu. */
@@ -71,6 +74,22 @@ export function NotionBlockMenu({ noteId }: { noteId?: string }) {
   const aiExt = useExtension(AIExtension);
   const { showToast } = useToast();
   const block = useExtensionState(SideMenuExtension, { editor, selector: (s) => s?.block });
+  // Opening the menu selects its block, painted with the block-selection
+  // overlay, unless the block is already part of a larger block selection —
+  // then the menu acts on all of them.
+  const blockId = block?.id as string | undefined;
+  useEffect(() => {
+    if (!blockId) return;
+    if (!selectedBlockIds(editor).includes(blockId)) selectBlocksById(editor, [blockId]);
+    // When the menu closes, the keyboard goes back to the page with the blocks
+    // still selected (Notion): ↑/↓, Delete, Ctrl+Z… act on them right away
+    // instead of on the ⋮⋮ button the menu would hand focus back to.
+    return () => {
+      window.setTimeout(() => {
+        if (selectedBlockIds(editor).length) editor.prosemirrorView?.focus();
+      }, 0);
+    };
+  }, [editor, blockId]);
   if (!block) return null;
 
   const textLike = Array.isArray(block.content);
@@ -93,7 +112,11 @@ export function NotionBlockMenu({ noteId }: { noteId?: string }) {
                 && (t.type !== "heading" || block.props?.level === t.props?.level);
               return (
                 <Components.Generic.Menu.Item key={t.label} className="bn-menu-item" checked={current}
-                  onClick={() => editor.updateBlock(block, { type: t.type, props: t.props ?? {} })}>
+                  onClick={() => {
+                    for (const b of targetsOf(editor, block)) {
+                      if (Array.isArray(b.content)) editor.updateBlock(b, { type: t.type, props: t.props ?? {} });
+                    }
+                  }}>
                   <Row icon={t.icon} label={t.label} />
                 </Components.Generic.Menu.Item>
               );
@@ -113,10 +136,14 @@ export function NotionBlockMenu({ noteId }: { noteId?: string }) {
         </Components.Generic.Menu.Item>
       )}
       <Components.Generic.Menu.Item className="bn-menu-item"
-        onClick={() => editor.insertBlocks([withoutIds(block)], block, "after")}>
+        onClick={() => {
+          const targets = targetsOf(editor, block);
+          const copies = editor.insertBlocks(targets.map(withoutIds), targets[targets.length - 1], "after");
+          selectBlocksById(editor, copies.map((b: AnyBlock) => b.id));
+        }}>
         <Row icon={<Copy />} label="Duplicate" />
       </Components.Generic.Menu.Item>
-      <Components.Generic.Menu.Item className="bn-menu-item" onClick={() => editor.removeBlocks([block])}>
+      <Components.Generic.Menu.Item className="bn-menu-item" onClick={() => editor.removeBlocks(targetsOf(editor, block))}>
         <Row icon={<Trash2 />} label="Delete" hint="Del" />
       </Components.Generic.Menu.Item>
       {aiExt && textLike && (

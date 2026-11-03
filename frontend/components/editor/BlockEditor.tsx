@@ -28,6 +28,7 @@ import { SkillAIMenu } from "./selectionSkills";
 import { transformNotionHtml } from "./notionPaste";
 import { readNotionJson, notionJsonToBlocks } from "./notionBlocks";
 import { NoteIdContext } from "./noteIdContext";
+import { NotionBlockSelection, selectedBlockIds } from "./blockSelectionExtension";
 import { modelFileFrom, modelTitle, uploadModel } from "@/lib/modelDrop";
 import { useToast } from "@/app/providers";
 import { freshFileUrl } from "@/lib/freshFileUrl";
@@ -264,7 +265,9 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           const safe = sanitizeBlocks(initialContent);
           return safe.length > 0 ? safe : undefined;
         })(),
-        extensions: [AIExtension({ transport: inlineTransport })],
+        // NotionBlockSelection: blocks as selectable units (Esc, Ctrl+A twice,
+        // ↑/↓, Shift+↑/↓, drag from the margin…) — see blockSelection.ts.
+        extensions: [AIExtension({ transport: inlineTransport }), NotionBlockSelection()],
         // Pictures captured into a note used to carry a 24-hour link (ledger B2): swap an old link to our own
         // storage for a fresh one when it is shown. Stored content is untouched.
         resolveFileUrl: freshFileUrl,
@@ -290,6 +293,11 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           // dispatched — clipboardData is not guaranteed valid afterwards.
           const notionJson = readNotionJson(event.clipboardData);
           if (!html && !notionJson) return defaultPasteHandler();
+          // With blocks selected (block mode), the paste goes right after them;
+          // otherwise after the block holding the caret.
+          const selectedIds = selectedBlockIds(editor);
+          const pasteAfter = (): string | undefined =>
+            selectedIds[selectedIds.length - 1] ?? editor.getTextCursorPosition()?.block?.id;
           (async () => {
             try {
               // Preferred path: Notion's JSON says outright whether a block is
@@ -299,8 +307,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
               if (notionJson) {
                 const fromJson = notionJsonToBlocks(notionJson);
                 if (fromJson && fromJson.length > 0) {
-                  const pos = editor.getTextCursorPosition();
-                  if (pos?.block) editor.insertBlocks(fromJson, pos.block.id, "after");
+                  const after = pasteAfter();
+                  if (after) editor.insertBlocks(fromJson, after, "after");
                   else editor.replaceBlocks(editor.document, fromJson);
                   return;
                 }
@@ -320,8 +328,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
               );
               const rawParsed = await editor.tryParseHTMLToBlocks(strippedHtml);
               const parsed = attachCalloutChildren(rawParsed as AnyBlock[], calloutChildren);
-              const pos = editor.getTextCursorPosition();
-              if (pos?.block) editor.insertBlocks(parsed, pos.block.id, "after");
+              const after = pasteAfter();
+              if (after) editor.insertBlocks(parsed, after, "after");
               else editor.replaceBlocks(editor.document, parsed);
             } catch (e) {
               // eslint-disable-next-line no-console
@@ -338,8 +346,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
               if (!html) return;
               try {
                 const rawParsed = await editor.tryParseHTMLToBlocks(html);
-                const pos = editor.getTextCursorPosition();
-                if (pos?.block) editor.insertBlocks(rawParsed, pos.block.id, "after");
+                const after = pasteAfter();
+                if (after) editor.insertBlocks(rawParsed, after, "after");
                 else editor.replaceBlocks(editor.document, rawParsed);
               } catch (e2) {
                 // eslint-disable-next-line no-console

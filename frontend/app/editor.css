@@ -521,3 +521,49 @@
   font-size: 26.25px;
   --level: 26.25px;
 }
+
+/* ---------------------------------------------------------------------------
+ * Block selection (components/editor/blockSelection.ts): Esc, Ctrl+A twice, a
+ * drag from the margin or the ⋮⋮ menu select whole blocks. Each selected block
+ * (with its children) gets Notion's blue overlay, rgba(35,131,226,0.14) in
+ * light (--c-bg-selected), drawn ABOVE the block so coloured blocks, code and
+ * callouts tint too. The browser's own highlight and the caret are hidden while
+ * blocks are selected (ProseMirror adds .ProseMirror-hideselection).
+ * ------------------------------------------------------------------------- */
+.notion-editor .ProseMirror-hideselection *::selection {
+  background: transparent;
+}
+.notion-editor .ProseMirror-hideselection *::-moz-selection {
+  background: transparent;
+}
+.notion-editor .ProseMirror-hideselection {
+  caret-color: transparent;
+}
+.notion-editor .sb-block-selected {
+  position: relative;
+}
+.notion-editor .sb-block-selected::after {
+  content: "";
+  position: absolute;
+  /* 1px in from top and bottom: stacked selected blocks show Notion's thin
+   * seam between their overlays instead of one solid slab. */
+  inset: 1px 0;
+  border-radius: 4px;
+  background: var(--c-bg-selected);
+  pointer-events: none;
+  z-index: 2;
+}
+/* On the dark page 0.14 barely reads; Notion's dark overlay is about 0.2
+ * (measured off its block-selection screenshot). */
+.dark .notion-editor .sb-block-selected::after {
+  background: rgb(var(--accent-600) / 0.2);
+}
+/* The box drawn while dragging from the margin. */
+.sb-block-box {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  background: rgba(35, 131, 226, 0.08);
+  border: 1px solid rgba(35, 131, 226, 0.3);
+  border-radius: 2px;
+}

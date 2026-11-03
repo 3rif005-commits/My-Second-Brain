@@ -28,7 +28,9 @@ import {
   useBlockNoteEditor,
   useComponentsContext,
   useSelectedBlocks,
+  useEditorState,
 } from "@blocknote/react";
+import { isBlockSelection } from "./blockSelection";
 import { SelectionKeepingAIButton } from "./selectionSkills";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,6 +92,16 @@ function InlineMathButton() {
 const NO_TEXT_TOOLBAR = new Set(["interactive"]);
 
 function TextToolbarOrNothing({ children }: { children: React.ReactNode }) {
+  // Whole blocks selected (Esc, Ctrl+A twice, margin drag): Notion shows no
+  // text toolbar then — the block is the unit, not its text.
+  const blockMode = useEditorState({
+    selector: ({ editor }) => isBlockSelection(editor.prosemirrorState.selection),
+  });
+  if (blockMode) return null;
+  return <TextToolbarUnlessNoText>{children}</TextToolbarUnlessNoText>;
+}
+
+function TextToolbarUnlessNoText({ children }: { children: React.ReactNode }) {
   const blocks = useSelectedBlocks();
   if (blocks.length > 0 && blocks.every((b) => NO_TEXT_TOOLBAR.has(b.type as string))) return null;
   return <>{children}</>;
