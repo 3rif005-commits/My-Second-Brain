@@ -6,7 +6,7 @@
 // working; app/editor.css (".bn-notion-menu") gives them Notion's measured card
 // (docs/notion-reference/surfaces/blocks.md §4): 265px, radius 10px, 28px rows,
 // 20px icons, grey shortcut hints on the right.
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, CheckSquare, Code, Copy, Eraser,
   Heading1, Heading2, Heading3, Link2, List, ListOrdered, ListCollapse, Paintbrush, Quote,
@@ -19,6 +19,9 @@ import {
 } from "@blocknote/react";
 import { useToast } from "@/app/providers";
 import { selectBlocksById, selectedBlockIds, withoutIds } from "./blockSelectionExtension";
+// Clicking ⋮⋮ selects its block: done in blockSelectionExtension.ts on the
+// click itself. Not here — BlockNote mounts this menu's contents whenever the
+// side menu shows (hover, the caret entering a block), not only when it opens.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyBlock = any;
@@ -74,22 +77,6 @@ export function NotionBlockMenu({ noteId }: { noteId?: string }) {
   const aiExt = useExtension(AIExtension);
   const { showToast } = useToast();
   const block = useExtensionState(SideMenuExtension, { editor, selector: (s) => s?.block });
-  // Opening the menu selects its block, painted with the block-selection
-  // overlay, unless the block is already part of a larger block selection —
-  // then the menu acts on all of them.
-  const blockId = block?.id as string | undefined;
-  useEffect(() => {
-    if (!blockId) return;
-    if (!selectedBlockIds(editor).includes(blockId)) selectBlocksById(editor, [blockId]);
-    // When the menu closes, the keyboard goes back to the page with the blocks
-    // still selected (Notion): ↑/↓, Delete, Ctrl+Z… act on them right away
-    // instead of on the ⋮⋮ button the menu would hand focus back to.
-    return () => {
-      window.setTimeout(() => {
-        if (selectedBlockIds(editor).length) editor.prosemirrorView?.focus();
-      }, 0);
-    };
-  }, [editor, blockId]);
   if (!block) return null;
 
   const textLike = Array.isArray(block.content);

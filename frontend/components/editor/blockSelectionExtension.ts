@@ -7,7 +7,7 @@
 // whose "is anything selected?" check reads the browser selection, which a block
 // selection hides.
 import { createExtension, selectedFragmentToHTML } from "@blocknote/core";
-import { SuggestionMenu } from "@blocknote/core/extensions";
+import { SideMenuExtension, SuggestionMenu } from "@blocknote/core/extensions";
 import { Extension as TiptapExtension } from "@tiptap/core";
 import type { EditorView } from "prosemirror-view";
 import { BlockSelection, blockSelectionPlugin, isBlockSelection } from "./blockSelection";
@@ -80,7 +80,35 @@ export const NotionBlockSelection = createExtension(({ editor }: { editor: AnyEd
       if (!ids.length) return original();
       return { blocks: ids.map((id) => editor.getBlock(id)).filter(Boolean) };
     };
-    return () => { editor.getSelection = original; };
+
+    // Click ⋮⋮: its block is selected (Notion paints it while the menu is
+    // open, and the menu then acts on it) — unless it is already part of a
+    // larger block selection, which the menu then acts on as a whole.
+    const onHandleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest?.(".bn-side-menu") || !target.closest("[draggable='true']")) return;
+      const block = editor.getExtension(SideMenuExtension)?.store?.state?.block;
+      if (!block?.id || selectedBlockIds(editor).includes(block.id)) return;
+      selectBlocksById(editor, [block.id]);
+    };
+    // When the menu closes, its library hands focus back to ⋮⋮; with blocks
+    // still selected the keyboard belongs to them (↑/↓, Delete, Ctrl+Z…).
+    const onFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest?.(".bn-side-menu") || !selectedBlockIds(editor).length) return;
+      window.setTimeout(() => {
+        const menuOpen = [...document.querySelectorAll<HTMLElement>("[role='menu']")]
+          .some((m) => m.offsetParent !== null);
+        if (!menuOpen && selectedBlockIds(editor).length) editor.prosemirrorView?.focus();
+      }, 0);
+    };
+    document.addEventListener("click", onHandleClick, true);
+    document.addEventListener("focusin", onFocusIn, true);
+    return () => {
+      editor.getSelection = original;
+      document.removeEventListener("click", onHandleClick, true);
+      document.removeEventListener("focusin", onFocusIn, true);
+    };
   },
   tiptapExtensions: [
     TiptapExtension.create({

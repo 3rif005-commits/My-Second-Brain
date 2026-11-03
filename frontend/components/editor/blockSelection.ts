@@ -18,6 +18,7 @@
 //   block mode ── Ctrl+Shift+↑ / ↓ ─▶ move the blocks up / down
 //   block mode ── typing ───────────▶ nothing (a block selection is never overwritten)
 //   drag from the page margin ──────▶ box-select the blocks the rectangle touches
+//   click ⋮⋮ ───────────────────────▶ that block (blockSelectionExtension.ts)
 //   Shift+click in block mode ──────▶ extend the selection to the clicked block
 //
 // This is built as a real ProseMirror Selection subclass (like prosemirror-tables'
@@ -700,7 +701,7 @@ const DRAG_THRESHOLD = 5;
  *  starts from the page's side margins too, not only inside the editor. */
 class BoxSelect {
   private start: {
-    x: number; y: number; scrollY: number; scroller: HTMLElement | null; inEditor: boolean;
+    x: number; y: number; scrollY: number; scroller: HTMLElement | null;
   } | null = null;
   private box: HTMLDivElement | null = null;
   private active = false;
@@ -728,20 +729,20 @@ class BoxSelect {
     const page = this.page();
     if (!target || !page || !page.contains(target)) return;
     if (target.closest(NO_BOX_START)) return;
+    // Notion starts the box only from the page around the text column: a press
+    // inside the column (even in the gap between two blocks) is ProseMirror's,
+    // and a drag from there selects text.
+    if ((this.view.dom as HTMLElement).contains(target)) return;
     if (!this.view.editable) return;
     // Below the top of the editor only: the title, icon and properties above
     // it are not blocks.
     const editorRect = (this.view.dom as HTMLElement).getBoundingClientRect();
     if (e.clientY < editorRect.top) return;
     const scroller = scrollParent(this.view.dom as HTMLElement);
-    const inEditor = (this.view.dom as HTMLElement).contains(target);
-    this.start = { x: e.clientX, y: e.clientY, scrollY: scroller?.scrollTop ?? 0, scroller, inEditor };
+    this.start = { x: e.clientX, y: e.clientY, scrollY: scroller?.scrollTop ?? 0, scroller };
     this.active = false;
-    // No native text selection from the margin. Inside the editor (the gaps
-    // between blocks) ProseMirror would start a text selection of its own, so
-    // the event stops here too.
+    // No native text selection from the margin.
     e.preventDefault();
-    if (inEditor) e.stopPropagation();
     document.addEventListener("mousemove", this.onMove, true);
     document.addEventListener("mouseup", this.onUp, true);
   };
@@ -765,22 +766,13 @@ class BoxSelect {
 
   private onUp = (e: MouseEvent) => {
     const wasActive = this.active;
-    const startedInEditor = !!this.start?.inEditor;
     this.stop();
     if (wasActive) {
       e.preventDefault();
       return;
     }
-    // A plain click in a gap between blocks: put the caret there, as a click
-    // on the page would have.
-    if (startedInEditor) {
-      const at = this.view.posAtCoords({ left: e.clientX, top: e.clientY });
-      if (at) {
-        this.view.dispatch(this.view.state.tr.setSelection(Selection.near(this.view.state.doc.resolve(at.pos))));
-        this.view.focus();
-      }
-    } else if (isBlockSelection(this.view.state.selection)) {
-      // A click on the empty page clears a block selection.
+    // A click on the empty page clears a block selection.
+    if (isBlockSelection(this.view.state.selection)) {
       clearBlockSelection(this.view);
       (this.view.dom as HTMLElement).blur();
     }
