@@ -11,6 +11,7 @@ import { SideMenuExtension, SuggestionMenu } from "@blocknote/core/extensions";
 import { Extension as TiptapExtension } from "@tiptap/core";
 import type { EditorView } from "prosemirror-view";
 import { BlockSelection, blockSelectionPlugin, isBlockSelection } from "./blockSelection";
+import { APP_HTML_MIME, toNotionClipboardHtml } from "./notionCopy";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyEditor = any;
@@ -118,10 +119,16 @@ export const NotionBlockSelection = createExtension(({ editor }: { editor: AnyEd
         blockSelectionPlugin({
           menuOpen: () => !!editor.getExtension(SuggestionMenu)?.shown(),
           writeClipboard: (view: EditorView, event: ClipboardEvent) => {
-            const { clipboardHTML, externalHTML, markdown } = selectedFragmentToHTML(view, editor);
+            const { clipboardHTML, externalHTML, markdown } = selectedFragmentToHTML(view as never, editor);
             event.clipboardData?.clearData();
+            // text/html is what Notion (and every other app) reads, rewritten
+            // into the shapes Notion pastes as to-dos, toggles and callouts
+            // (notionCopy.ts). This app's own paste reads the unrewritten
+            // export from APP_HTML_MIME instead, so copy → paste inside the
+            // app is exactly what it was.
             event.clipboardData?.setData("blocknote/html", clipboardHTML);
-            event.clipboardData?.setData("text/html", externalHTML);
+            event.clipboardData?.setData(APP_HTML_MIME, externalHTML);
+            event.clipboardData?.setData("text/html", toNotionClipboardHtml(externalHTML));
             event.clipboardData?.setData("text/plain", markdown);
           },
           duplicate: () => duplicateSelectedBlocks(editor),

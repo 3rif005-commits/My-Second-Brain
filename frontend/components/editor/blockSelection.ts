@@ -618,15 +618,21 @@ export function blockSelectionPlugin(opts: BlockSelectionOptions = {}): Plugin {
       },
 
       handleDOMEvents: {
+        // Copy/cut of whole blocks: block mode, or a text selection that runs
+        // across blocks. (A selection inside one block's text stays with
+        // BlockNote's own handler, which copies just that text.)
         copy(view, event) {
-          if (!isBlockSelection(view.state.selection)) return false;
+          if (!isBlockSelection(view.state.selection) && !textSpansBlocks(view)) return false;
           writeClipboard(view, event, opts);
           return true;
         },
         cut(view, event) {
-          if (!isBlockSelection(view.state.selection)) return false;
+          const blockMode = isBlockSelection(view.state.selection);
+          if (!blockMode && !textSpansBlocks(view)) return false;
           writeClipboard(view, event, opts);
-          if (view.editable) deleteSelectedBlocks(view.state, view.dispatch);
+          if (!view.editable) return true;
+          if (blockMode) deleteSelectedBlocks(view.state, view.dispatch);
+          else view.dispatch(view.state.tr.deleteSelection().scrollIntoView());
           return true;
         },
         mousedown(view, event) {
@@ -669,6 +675,21 @@ export function blockSelectionPlugin(opts: BlockSelectionOptions = {}): Plugin {
       return new BoxSelect(view);
     },
   });
+}
+
+/** A text selection whose ends are in different blocks, outside any
+ *  non-editable island (an embed's own selectable text keeps the browser's
+ *  copy, as BlockNote's handler does). */
+function textSpansBlocks(view: EditorView): boolean {
+  const sel = view.state.selection;
+  if (!(sel instanceof TextSelection) || sel.empty) return false;
+  const dom = window.getSelection();
+  let node: Node | null | undefined = dom?.focusNode;
+  while (node) {
+    if (node instanceof HTMLElement && node.getAttribute("contenteditable") === "false") return false;
+    node = node.parentElement;
+  }
+  return blockPosAt(view.state.doc, sel.from) !== blockPosAt(view.state.doc, sel.to);
 }
 
 /** Ends block mode without selecting anything else visible. */
