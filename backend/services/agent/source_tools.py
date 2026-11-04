@@ -325,8 +325,13 @@ def search_source(args: dict, turn: SourceTurn) -> dict:
     if not terms:
         raise SourceToolError("query is required: words to look for in the source.")
     phrase = _norm(query)
+    chunks = _chunks(str(source["id"]), turn.user_id)
+    if not chunks:
+        raise SourceToolError(
+            f"{source.get('title')} has no text stored (for a video: its transcript could not "
+            "be fetched). Tell the user; reprocessing the source may fix it.")
     scored = []
-    for c in _chunks(str(source["id"]), turn.user_id):
+    for c in chunks:
         text = c.get("chunk_text") or ""
         low = text.lower()
         hits = sum(1 for t in terms if t in low)

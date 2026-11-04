@@ -251,3 +251,9 @@ def test_search_source_lists_matches_in_source_order(db):
          "anchor_start": 9, "anchor_end": 9, "chunk_text": "Off-policy learning revisited."})
     out = source_tools.search_source({"source_id": PDF, "query": "off-policy"}, _turn())
     assert [p["where"] for p in out["passages"]] == ["p. 3", "p. 9"]
+
+
+def test_search_source_says_when_a_source_has_no_text(db):
+    db.tables["resource_chunks"] = [c for c in db.tables["resource_chunks"] if c["resource_id"] != VID]
+    with pytest.raises(SourceToolError, match="no text stored"):
+        source_tools.search_source({"source_id": VID, "query": "network"}, _turn())
