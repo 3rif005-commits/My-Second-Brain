@@ -29,7 +29,7 @@ import { transformNotionHtml } from "./notionPaste";
 import { readNotionJson, notionJsonToBlocks } from "./notionBlocks";
 import { NoteIdContext } from "./noteIdContext";
 import { NotionBlockSelection, selectedBlockIds } from "./blockSelectionExtension";
-import { APP_HTML_MIME } from "./notionCopy";
+import { readAppClipboard, pasteAppClipboard } from "./appClipboard";
 import { modelFileFrom, modelTitle, uploadModel } from "@/lib/modelDrop";
 import { useToast } from "@/app/providers";
 import { freshFileUrl } from "@/lib/freshFileUrl";
@@ -288,10 +288,12 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         // falls back to defaultPasteHandler so a bug in this path degrades to
         // today's paste behavior rather than eating the paste entirely.
         pasteHandler: ({ event, editor, defaultPasteHandler }: AnyBlock) => {
-          // Copied from this app: its own export, as it was. The text/html
-          // beside it is reshaped for Notion (notionCopy.ts), not for us.
-          const html = event.clipboardData?.getData(APP_HTML_MIME)
-            || event.clipboardData?.getData("text/html");
+          // Copied from this app (any note, any tab): the blocks themselves are
+          // on the clipboard, as Notion's own are — pasted exactly, every type
+          // and prop, never re-parsed from HTML (appClipboard.ts).
+          const appClip = readAppClipboard(event.clipboardData);
+          if (appClip) return pasteAppClipboard(editor, appClip, selectedBlockIds(editor));
+          const html = event.clipboardData?.getData("text/html");
           // Notion's own block tree, when the clipboard carries it. It must be
           // read here, synchronously, while the paste event is still being
           // dispatched — clipboardData is not guaranteed valid afterwards.

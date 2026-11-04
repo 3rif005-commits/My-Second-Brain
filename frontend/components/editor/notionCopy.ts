@@ -5,10 +5,10 @@
 // (headings, paragraphs, bullets, numbered lists, quotes, code, dividers,
 // tables), but three shapes come out wrong in Notion:
 //
-//   to-do    BlockNote: <ul><li><input type="checkbox"><p>Todo</p></li></ul>
+//   to-do    BlockNote: <ul><li><input type=checkbox><p>Todo</p></li></ul>
 //            Notion: an EMPTY to-do (its "To-do" placeholder) with "Todo" as a
 //            separate line under it: the <p> inside the item is read as a child.
-//            Here:   <ul><li><input type="checkbox">Todo</li></ul>
+//            Here:   <ul><li><input type=checkbox>Todo</li></ul>
 //
 //   toggle   BlockNote: <ul><li><details><summary><p>Title</p></summary>…</li></ul>
 //            Notion: a BULLET whose text is the title and the children glued
@@ -27,19 +27,15 @@
 
 const INLINE = "bn-inline-content";
 
-/** Clipboard type holding BlockNote's export as it was, before the rewrite
- *  below — what this app's own paste handler reads (BlockEditor.tsx). */
-export const APP_HTML_MIME = "text/x-second-brain-html";
-
 /** Replaces `el` with its children. */
 function unwrap(el: Element): void {
   el.replaceWith(...Array.from(el.childNodes));
 }
 
-/** <li><input type="checkbox"><p>text</p></li> → <li><input …>text</li>. */
+/** <li><input type=checkbox><p>text</p></li> → <li><input …>text</li>. */
 function flattenTodos(root: ParentNode): void {
   root.querySelectorAll("li").forEach((li) => {
-    const box = li.querySelector(":scope > input[type='checkbox']");
+    const box = li.querySelector(":scope > input[type=checkbox]");
     if (!box) return;
     const p = li.querySelector(`:scope > p.${INLINE}, :scope > p:first-of-type`);
     if (p && p.previousElementSibling === box) unwrap(p);

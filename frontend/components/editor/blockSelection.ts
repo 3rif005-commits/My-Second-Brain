@@ -618,20 +618,26 @@ export function blockSelectionPlugin(opts: BlockSelectionOptions = {}): Plugin {
       },
 
       handleDOMEvents: {
-        // Copy/cut of whole blocks: block mode, or a text selection that runs
-        // across blocks. (A selection inside one block's text stays with
-        // BlockNote's own handler, which copies just that text.)
+        // Every copy/cut inside the editor goes through the app's clipboard
+        // (appClipboard.ts: the blocks themselves as JSON, like Notion's own
+        // clipboard), except a table cell range and text inside a
+        // non-editable embed, which keep BlockNote's / the browser's.
         copy(view, event) {
-          if (!isBlockSelection(view.state.selection) && !textSpansBlocks(view)) return false;
+          if (!ownsCopy(view)) return false;
           writeClipboard(view, event, opts);
           return true;
         },
         cut(view, event) {
-          const blockMode = isBlockSelection(view.state.selection);
-          if (!blockMode && !textSpansBlocks(view)) return false;
+          if (!ownsCopy(view)) return false;
           writeClipboard(view, event, opts);
           if (!view.editable) return true;
-          if (blockMode) deleteSelectedBlocks(view.state, view.dispatch);
+          const sel = view.state.selection;
+          if (sel instanceof NodeSelection) {
+            // A selected image/embed: cutting removes its whole block.
+            const pos = blockPosAt(view.state.doc, sel.from);
+            if (pos != null) view.dispatch(view.state.tr.setSelection(BlockSelection.single(view.state.doc, pos)));
+          }
+          if (isBlockSelection(view.state.selection)) deleteSelectedBlocks(view.state, view.dispatch);
           else view.dispatch(view.state.tr.deleteSelection().scrollIntoView());
           return true;
         },
@@ -677,19 +683,20 @@ export function blockSelectionPlugin(opts: BlockSelectionOptions = {}): Plugin {
   });
 }
 
-/** A text selection whose ends are in different blocks, outside any
- *  non-editable island (an embed's own selectable text keeps the browser's
- *  copy, as BlockNote's handler does). */
-function textSpansBlocks(view: EditorView): boolean {
+/** Whether a copy/cut of the current selection is the app's to write: whole
+ *  blocks, a selected image/embed, or text — but not a table cell range, and
+ *  not text inside a non-editable island (an embed's own selectable text keeps
+ *  the browser's copy, as BlockNote's handler does). */
+function ownsCopy(view: EditorView): boolean {
   const sel = view.state.selection;
+  if (isBlockSelection(sel) || sel instanceof NodeSelection) return true;
   if (!(sel instanceof TextSelection) || sel.empty) return false;
-  const dom = window.getSelection();
-  let node: Node | null | undefined = dom?.focusNode;
+  let node: Node | null | undefined = window.getSelection()?.focusNode;
   while (node) {
     if (node instanceof HTMLElement && node.getAttribute("contenteditable") === "false") return false;
     node = node.parentElement;
   }
-  return blockPosAt(view.state.doc, sel.from) !== blockPosAt(view.state.doc, sel.to);
+  return true;
 }
 
 /** Ends block mode without selecting anything else visible. */

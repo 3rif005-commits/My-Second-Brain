@@ -1,7 +1,7 @@
 # Second Brain — Project Status
 
 > Source of truth across all conversations. Read at session start, update at session end.
-> Last updated: 2026-11-03
+> Last updated: 2026-11-04
 
 ---
 
@@ -23,6 +23,13 @@ drag from the page margin box-selects; Shift+click extends; the ⋮⋮ menu sele
 Turn into/Duplicate/Delete act on every selected block; paste lands after the selected blocks.
 Checked in Chromium on a scratch page (not on real notes). Not yet: block colour from ⋮⋮ applies
 to the menu's block only; Ctrl+/ "turn into" shortcut; a selection survives clicks outside the page.
+
+**Copy/paste like Notion (2026-11-04, `components/editor/appClipboard.ts`):** the app writes
+its own clipboard type (`text/x-second-brain-blocks`: the selected blocks as stored JSON, as
+Notion writes `_notion-blocks-v3`), and its paste reads that first, so copy → paste between any
+notes is exact for every block type (database = same database, image, callout, math, button,
+interactive, toggles, colours, children). Text selections are cut at their ends; the first piece
+joins the caret's line. `text/html` stays for other apps, reshaped for Notion (`notionCopy.ts`).
 
 **Hackathon: Nemotron on Nebius (2026-10-27, docs/hackathon/NEBIUS.md):** a removable add-on
 (`services/nebius.py`, touchpoints marked `HACKATHON-NEBIUS`; off while `NEBIUS_API_KEY` is
