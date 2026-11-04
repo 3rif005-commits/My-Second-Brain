@@ -163,9 +163,11 @@ block at the end of the user's latest message.
   token on its own line in your reply where the item belongs, and Insert turns
   it into the real block. Never write image or file URLs yourself.
 - Sources are named by src= in the excerpts; workspace.list_sources lists them
-  all and workspace.find_elements gives a source's figures, tables and
-  formulas as text. Work from that text; workspace.look_at is for when the
-  user asks about a picture itself.
+  all, workspace.search_source searches a source's own text (a video's
+  transcript too) and workspace.find_elements gives a source's figures, tables
+  and formulas as text. Work from that text; workspace.look_at is for when the
+  user asks about a picture itself. Never use brain.search_brain to look
+  inside the open note's sources.
 - When the user asks for one of the JOBS (a study guide, flashcards, a
   comparison…), call workspace.run_job; its result is shown to them as a card.
   Do not run a job they did not ask for."""

@@ -270,7 +270,8 @@ def find_elements(args: dict, turn: SourceTurn) -> dict:
     source = turn.source(args.get("source_id"))
     if source.get("kind") in _VIDEO_KINDS:
         raise SourceToolError("A video has no figures or tables. Use workspace.capture_frame, "
-                              "capture_clip, capture_audio or insert_quote with a time.")
+                              "capture_clip, capture_audio, or search_source to read its "
+                              "transcript.")
     q = (get_supabase().table("resource_elements")
          .select("*").eq("resource_id", str(source["id"])).eq("user_id", turn.user_id))
     page = args.get("page")
@@ -304,6 +305,48 @@ def find_elements(args: dict, turn: SourceTurn) -> dict:
     return out
 
 
+#: Passages search_source returns at once.
+MAX_PASSAGES = 5
+_WORD = re.compile(r"[^\W_]{3,}", re.UNICODE)
+
+
+def _label(anchor_type: str, value: float) -> str:
+    if anchor_type == "time":
+        return fmt_time(value)
+    return f"p. {int(value)}" if anchor_type == "page" else f"§{int(value)}"
+
+
+def search_source(args: dict, turn: SourceTurn) -> dict:
+    """A source's own words: the excerpts are a few retrieved passages, so a
+    quote from anywhere else (a video's transcript above all) starts here."""
+    source = turn.source(args.get("source_id"))
+    query = str(args.get("query") or "").strip()
+    terms = {w.lower() for w in _WORD.findall(query)}
+    if not terms:
+        raise SourceToolError("query is required: words to look for in the source.")
+    phrase = _norm(query)
+    scored = []
+    for c in _chunks(str(source["id"]), turn.user_id):
+        text = c.get("chunk_text") or ""
+        low = text.lower()
+        hits = sum(1 for t in terms if t in low)
+        if not hits:
+            continue
+        score = hits / len(terms) + (1.0 if phrase and phrase in _norm(text) else 0.0)
+        scored.append((score, -int(c.get("chunk_index") or 0), c))
+    scored.sort(key=lambda s: (s[0], s[1]), reverse=True)
+    # The best matches, then in source order: "where is X first mentioned"
+    # reads the list top down.
+    best = sorted((c for _, _, c in scored[:MAX_PASSAGES]),
+                  key=lambda c: int(c.get("chunk_index") or 0))
+    passages = [{"where": _label(c.get("anchor_type") or "page", float(c.get("anchor_start") or 0)),
+                 "text": " ".join((c.get("chunk_text") or "").split())[:900]} for c in best]
+    n = len(passages)
+    return {"summary": f"{n} passage{'' if n == 1 else 's'} in {source.get('title')}",
+            "source_id": str(source["id"]), "passages": passages,
+            **({} if n else {"note": "No passage has those words; try other words."})}
+
+
 def insert_quote(args: dict, turn: SourceTurn) -> dict:
     source = turn.source(args.get("source_id"))
     text = " ".join(str(args.get("text") or "").split())
@@ -323,7 +366,8 @@ def insert_quote(args: dict, turn: SourceTurn) -> dict:
                 break
     if hit is None:
         raise SourceToolError("Those words are not in that source. Quote it word for word, "
-                              "from the excerpts or workspace.find_elements.")
+                              "from the excerpts, workspace.search_source or "
+                              "workspace.find_elements.")
     anchor_type = hit.get("anchor_type") or "page"
     value: float = float(hit.get("anchor_start") or 0)
     if args.get("page") not in (None, "") and anchor_type == "page":
@@ -537,6 +581,12 @@ SCHEMAS: list[dict] = [
             {"source_id": _SRC, "page": {"type": "integer"},
              "type": {"type": "string", "enum": ["figure", "table", "formula", "heading", "text"]}},
             ["source_id"]),
+    _schema("workspace.search_source",
+            "Search one source's own text (a PDF's pages, a video's transcript) for "
+            "words; gives up to 5 passages with their page or time, in source order. "
+            "Use it to find exact words to quote, or a moment to capture.",
+            {"source_id": _SRC, "query": {"type": "string", "description": "words to look for"}},
+            ["source_id", "query"]),
     _schema("workspace.insert_quote",
             "Quote a source word for word, with a pill that jumps back to the place. "
             "Returns a token for your reply.",
@@ -578,6 +628,7 @@ SCHEMAS: list[dict] = [
 _RUN = {
     "workspace.list_sources": list_sources,
     "workspace.find_elements": find_elements,
+    "workspace.search_source": search_source,
     "workspace.insert_quote": insert_quote,
     "workspace.insert_formula": insert_formula,
     "workspace.insert_table": insert_table,
@@ -590,7 +641,8 @@ _RUN = {
 
 NAMES = frozenset(_RUN)
 #: Tools that read only; the rest make a block, a file or a vision call.
-READS = frozenset({"workspace.list_sources", "workspace.find_elements"})
+READS = frozenset({"workspace.list_sources", "workspace.find_elements",
+                   "workspace.search_source"})
 
 
 def execute(tool: str, args: dict, turn: SourceTurn) -> dict:

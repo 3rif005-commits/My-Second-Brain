@@ -226,3 +226,28 @@ def test_every_send_to_note_button_has_an_ai_tool():
     assert not missing, f"viewer actions with no AI tool: {missing} — add one to source_tools.py"
     for tools in _BUTTON_TOOLS.values():
         assert tools <= source_tools.NAMES
+
+
+def test_search_source_reads_a_videos_transcript_and_feeds_a_quote(db):
+    db.tables["resource_chunks"].append(
+        {"resource_id": VID, "user_id": U, "chunk_index": 1, "anchor_type": "time",
+         "anchor_start": 300, "anchor_end": 330,
+         "chunk_text": "This is just the chain rule from calculus, applied again and again."})
+    out = source_tools.search_source({"source_id": VID, "query": "chain rule"}, _turn())
+    assert out["passages"][0]["where"] == "5:00"
+    assert "chain rule" in out["passages"][0]["text"]
+    quote = source_tools.insert_quote(
+        {"source_id": VID, "text": "This is just the chain rule from calculus"}, _turn())
+    assert quote["insert"]["anchor_type"] == "time" and quote["insert"]["value"] == 300
+    empty = source_tools.search_source({"source_id": VID, "query": "eigenvalues"}, _turn())
+    assert empty["passages"] == [] and "note" in empty
+    with pytest.raises(SourceToolError):
+        source_tools.search_source({"source_id": FOREIGN, "query": "x"}, _turn())
+
+
+def test_search_source_lists_matches_in_source_order(db):
+    db.tables["resource_chunks"].append(
+        {"resource_id": PDF, "user_id": U, "chunk_index": 1, "anchor_type": "page",
+         "anchor_start": 9, "anchor_end": 9, "chunk_text": "Off-policy learning revisited."})
+    out = source_tools.search_source({"source_id": PDF, "query": "off-policy"}, _turn())
+    assert [p["where"] for p in out["passages"]] == ["p. 3", "p. 9"]

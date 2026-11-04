@@ -123,6 +123,7 @@ _TOOL_MIN_TIER: dict[str, Tier] = {
     # read; the rest make a block, a capture file or a vision call.
     "workspace.list_sources":   Tier.EXTERNAL,
     "workspace.find_elements":  Tier.EXTERNAL,
+    "workspace.search_source":  Tier.EXTERNAL,
     "workspace.insert_quote":   Tier.INTERNAL_API,
     "workspace.insert_formula": Tier.INTERNAL_API,
     "workspace.insert_table":   Tier.INTERNAL_API,

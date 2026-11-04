@@ -8,6 +8,9 @@ Status: **steps 1–4 and 6 built 2026-11-04; step 5 partly** (diagnosis 2026-11
   writes them is best-effort, so it runs before the migration too (it just re-reads).
 - `backend/services/agent/source_tools.py`: all ten tools in §1. Offered in the workspace
   panel only, scoped to the notes that passed the privacy gate. Tiers in `permissions.py`.
+- Added after the first live test: `workspace.search_source` (read-only). The excerpts are
+  only a few retrieved passages and `find_elements` has nothing for a video, so the AI had
+  no way to read a transcript to quote it; it spent all 5 rounds on `brain.search_brain`.
 - Decisions on the open questions:
   - **Token records** ride on the stream (`source_insert` event, kept on the chat message
     like citations). No table. A reloaded thread loses them, as it loses citations.
