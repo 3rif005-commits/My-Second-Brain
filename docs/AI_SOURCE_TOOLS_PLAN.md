@@ -1,6 +1,40 @@
 # AI source tools: let the AI insert what the source viewer can insert
 
-Status: **plan only, nothing built yet** (diagnosis 2026-11-03).
+Status: **steps 1–4 and 6 built 2026-11-04; step 5 partly** (diagnosis 2026-11-03).
+
+### What was built (2026-11-04)
+
+- Migration `034_element_text.sql` (`description`, `latex`, `described_at`). Code that
+  writes them is best-effort, so it runs before the migration too (it just re-reads).
+- `backend/services/agent/source_tools.py`: all ten tools in §1. Offered in the workspace
+  panel only, scoped to the notes that passed the privacy gate. Tiers in `permissions.py`.
+- Decisions on the open questions:
+  - **Token records** ride on the stream (`source_insert` event, kept on the chat message
+    like citations). No table. A reloaded thread loses them, as it loses citations.
+  - **Describe lazily**: `look_at` writes and saves the description on first use.
+  - **Capture tier**: `INTERNAL_API`, no Confirm (the user asked for it); one capture per turn.
+  - **Clip cap**: 120 s.
+  - **`look_at` returns text**: a separate vision call under the note's privacy level, so
+    tool results never need image parts (works on every provider).
+- Excerpts carry `src=<8 chars>`; a source is found by full id or that prefix.
+- `formula-latex` reads saved LaTeX first and saves a new reading.
+- Frontend: `lib/sourceInserts.ts` (record → blocks, chat preview), `lib/embeddedBlocks.ts`
+  (`<div data-sb-blocks>`: blocks carried in draft HTML, restored after BlockNote parses it,
+  in both the replace and append paths), `answerToHtml` turns tokens into blocks and `[n]`
+  into a pill after the paragraph that cites it.
+- `note_html.py` keeps `<video>`/`<audio>` and reads `data-sb-blocks` too.
+- `mcp_remote`: read-only `list_note_sources` and `find_source_elements`.
+- CLAUDE.md rule + `test_every_send_to_note_button_has_an_ai_tool`.
+
+### Not built
+
+- **Synthesis / chaptered / job placeholders** (`[[FIGURE p7]]` resolved on the server) and
+  the `FIGURE_EXTENSION` / `note-author` prompt changes: these are the study-guide prompt,
+  which only the user edits. The resolver can emit `<div data-sb-blocks>`, which both the
+  editor and `note_html.py` already read.
+- Insert tools in `mcp_remote` (external apps write markdown; they have no Insert step).
+- Cleanup of captures the user never inserts (`{user}/{resource}/captures/`).
+- Manual check on a real lecture PDF and a YouTube source.
 
 ## The problem
 

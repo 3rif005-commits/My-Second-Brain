@@ -38,7 +38,8 @@ _HTML_HELP = (
     "summary makes a collapsible heading). Callout: <div data-type=\"callout\" "
     "data-callout-type=\"OVERVIEW|NOTE|TIP|IMPORTANT|WARNING|CAUTION|FORMULA|"
     "ANALOGY|EXAM\">…</div>. Formula: <div data-type=\"math\">LaTeX</div>. "
-    "Highlight: <span data-style-type=\"backgroundColor\" data-value=\"red\">…</span>."
+    "Highlight: <span data-style-type=\"backgroundColor\" data-value=\"red\">…</span>. "
+    "Image / video / audio: <img src>, <video src>, <audio src> (https links only)."
 )
 _BLOCKS_HELP = ("Only to write back blocks exactly as brain.get_note returned them. "
                 "For new content use `html`.")

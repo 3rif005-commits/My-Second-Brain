@@ -127,7 +127,8 @@ def test_the_full_login_then_the_tools(server):
     assert status == 200, data
     names = {t["name"] for t in data["result"]["tools"]}
     assert names == {"search_notes", "list_notes", "get_note", "create_note",
-                     "update_note", "delete_note", "check_change"}
+                     "update_note", "delete_note", "check_change",
+                     "list_note_sources", "find_source_elements"}
 
 
 def test_the_tools_act_as_the_user_who_allowed(server):
@@ -375,3 +376,25 @@ def test_a_private_note_never_reaches_a_connected_app(server):
             "arguments": {"note_id": "n2"}})
         db.return_value.table.return_value.insert.assert_not_called()
     assert "private" in json.dumps(data) and "SECRET-DIAGNOSIS" not in json.dumps(data)
+
+
+def test_a_connected_app_reads_a_notes_sources_as_text_but_never_a_private_ones(server):
+    from tests.fake_db import FakeDB
+    c, _, _ = server
+    _, tok = _connect(c)
+    db = FakeDB(note_resources=[{"id": "src-aaaaaaaa", "note_id": "n1", "user_id": "u1",
+                                 "kind": "pdf", "title": "Lecture", "status": "ready",
+                                 "meta": {}, "order_index": 0}],
+                resource_elements=[{"id": "e1", "resource_id": "src-aaaaaaaa", "user_id": "u1",
+                                    "page": 2, "element_type": "table", "order_index": 0,
+                                    "content": "| a |\n|---|\n| 1 |"}])
+    with patch("services.agent.source_tools.get_supabase", return_value=db):
+        _, data = _call(c, tok["access_token"], "tools/call",
+                        {"name": "find_source_elements",
+                         "arguments": {"note_id": "n1", "source_id": "src-aaaaaaaa"}})
+        assert "| a |" in json.dumps(data)
+        PRIVATE.add("n1")
+        _, data = _call(c, tok["access_token"], "tools/call",
+                        {"name": "list_note_sources", "arguments": {"note_id": "n1"}})
+    text = json.dumps(data)
+    assert "private" in text and "Lecture" not in text

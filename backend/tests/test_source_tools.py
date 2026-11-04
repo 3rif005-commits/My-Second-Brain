@@ -197,3 +197,32 @@ async def test_a_tool_error_reaches_the_model_as_text(db):
     stream = _Scripted([call("c1", "workspace.insert_table", {"element_id": "nope"}), say("ok")])
     events = await _collect(stream, workspace_note=NOTE, source_turn=_turn())
     assert any(e["type"] == "tool_denied" and "No element" in e["reason"] for e in events)
+
+
+# Every viewer button that puts something into a note has an AI tool
+# (CLAUDE.md, "AI parity"). A new SendAction type with no entry here fails.
+_BUTTON_TOOLS = {
+    "text": {"workspace.insert_quote"},
+    "image": {"workspace.insert_figure", "workspace.capture_frame"},
+    "table": {"workspace.insert_table"},
+    "latex": {"workspace.insert_formula"},
+    # A pill on its own: the AI's [n] citations become pills on Insert, and
+    # every insert tool adds one.
+    "checkpoint": {"workspace.insert_quote"},
+    "clip": {"workspace.capture_clip"},
+    "audio": {"workspace.capture_audio"},
+}
+
+
+def test_every_send_to_note_button_has_an_ai_tool():
+    import re
+    from pathlib import Path
+    ts = (Path(__file__).resolve().parents[2] / "frontend/lib/workspace.ts").read_text()
+    union = ts[ts.index("export type SendAction"):]
+    union = union[:union.index(";\n\n")]
+    actions = set(re.findall(r'type: "([a-z]+)"', union))
+    assert actions, "SendAction not found"
+    missing = actions - set(_BUTTON_TOOLS)
+    assert not missing, f"viewer actions with no AI tool: {missing} — add one to source_tools.py"
+    for tools in _BUTTON_TOOLS.values():
+        assert tools <= source_tools.NAMES

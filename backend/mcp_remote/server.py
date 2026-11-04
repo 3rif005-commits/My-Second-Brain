@@ -171,6 +171,37 @@ def build(store, public_url: str = PUBLIC_URL, frontend_url: str = FRONTEND_URL)
 
 
     @mcp.tool()
+    async def list_note_sources(note_id: str) -> dict:
+        """The sources attached to one note (PDFs, videos, web pages): id, title,
+        kind, pages or duration, and how many figures, tables and formulas each
+        has. Read them with find_source_elements."""
+        user_id = _user()
+        if not await asyncio.to_thread(privacy.outside_app_may_see, note_id, user_id):
+            return {"error": "That note is private (or not found): its sources stay on the user's device."}
+        from services.agent import source_tools
+        out = await asyncio.to_thread(source_tools.list_sources, {},
+                                      source_tools.SourceTurn(note_ids=[note_id], user_id=user_id))
+        return {**out, "link": _link(note_id)}
+
+    @mcp.tool()
+    async def find_source_elements(note_id: str, source_id: str, page: int | None = None,
+                                   type: str = "") -> dict:
+        """A PDF source's figures, tables, formulas and headings, as text:
+        tables as markdown, formulas as LaTeX, figures as a description when one
+        has been written. `page` gives everything on one page; `type` is one of
+        figure, table, formula, heading, text."""
+        user_id = _user()
+        if not await asyncio.to_thread(privacy.outside_app_may_see, note_id, user_id):
+            return {"error": "That note is private (or not found): its sources stay on the user's device."}
+        from services.agent import source_tools
+        turn = source_tools.SourceTurn(note_ids=[note_id], user_id=user_id)
+        try:
+            return await asyncio.to_thread(source_tools.find_elements,
+                                           {"source_id": source_id, "page": page, "type": type}, turn)
+        except source_tools.SourceToolError as e:
+            return {"error": str(e)}
+
+    @mcp.tool()
     async def create_note(title: str, content_markdown: str) -> dict:
         """Save a NEW note in the user's Second Brain (Markdown: headings, lists,
         paragraphs). Use only when the user asks to save something. It never

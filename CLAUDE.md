@@ -60,6 +60,13 @@ damaged, not the code: `cd frontend && npm ci`.
 - The e2e tests and anything driving the browser run on the user's **real** notes: read-only
   where possible, undo every change, delete what you create.
 
+## AI parity with the source viewer
+
+- Any button that puts something from a source into a note also gets a tool in
+  `backend/services/agent/source_tools.py` (plan: `docs/AI_SOURCE_TOOLS_PLAN.md`). Insert
+  tools return a `[[src:…]]` token, never a URL; `frontend/lib/sourceInserts.ts` turns the
+  record into blocks. `tests/test_source_tools.py` fails when a `SendAction` type has no tool.
+
 ## Database migrations (Supabase)
 
 - New file `supabase/migrations/NNN_name.sql`, next free number, safe to run twice
