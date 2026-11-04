@@ -72,6 +72,8 @@ export interface Citation {
   /** "note": the passage is from a note the session brought in (it opens that note). */
   kind?: "note";
   note_id?: string;
+  /** The note a source passage's source belongs to (its pill opens it there). */
+  source_note_id?: string;
   title: string;
   anchor_type: AnchorType;
   anchor_start: number;

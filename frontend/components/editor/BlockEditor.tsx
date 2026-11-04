@@ -33,6 +33,7 @@ import { readAppClipboard, pasteAppClipboard } from "./appClipboard";
 import { modelFileFrom, modelTitle, uploadModel } from "@/lib/modelDrop";
 import { useToast } from "@/app/providers";
 import { freshFileUrl } from "@/lib/freshFileUrl";
+import { extractEmbeddedBlocks, restoreEmbeddedBlocks } from "@/lib/embeddedBlocks";
 import { insertDatabaseBlock } from "../database/DatabaseBlock";
 import { insertButtonBlock } from "../database/ButtonBlock";
 import { insertInteractiveBlock } from "./InteractiveBlock";
@@ -375,14 +376,16 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
 
     // A generated draft → blocks, with the callout bodies BlockNote's own
     // parser would drop (see calloutChildren.ts).
-    const parseDraftHtml = async (html: string): Promise<AnyBlock[]> => {
+    const parseDraftHtml = async (draftHtml: string): Promise<AnyBlock[]> => {
+      // Ready-made blocks (source inserts, citation pills) skip the HTML parser.
+      const { html, embedded } = extractEmbeddedBlocks(draftHtml);
       const doc = new window.DOMParser().parseFromString(html, "text/html");
       const { strippedHtml, calloutChildren } = await extractCalloutChildren(
         mergeRedundantToggleHeadings(inlineMathInTableCells(doc.body.innerHTML)),
         async (h: string) => (await editor.tryParseHTMLToBlocks(h)) as AnyBlock[]
       );
       const rawParsed = await editor.tryParseHTMLToBlocks(strippedHtml);
-      return attachCalloutChildren(rawParsed as AnyBlock[], calloutChildren);
+      return restoreEmbeddedBlocks(attachCalloutChildren(rawParsed as AnyBlock[], calloutChildren), embedded);
     };
 
     useImperativeHandle(ref, () => ({
@@ -603,8 +606,10 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
     useEffect(() => {
       if (!ingestHtml || !onSave) return;
       (async () => {
+        // Ready-made blocks (source inserts, citation pills) skip the HTML parser.
+        const { html: ingestBody, embedded } = extractEmbeddedBlocks(ingestHtml);
         // Extract <div data-type="interactive"> before BlockNote parsing
-        const doc = new window.DOMParser().parseFromString(ingestHtml, "text/html");
+        const doc = new window.DOMParser().parseFromString(ingestBody, "text/html");
         const interactiveDivs = [...doc.querySelectorAll('[data-type="interactive"]')];
         const interactiveData = interactiveDivs.map((el) => ({
           title: el.getAttribute("data-title") || "Knowledge Check",
@@ -621,7 +626,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
           async (h: string) => (await editor.tryParseHTMLToBlocks(h)) as AnyBlock[]
         );
         const rawBlocks = await editor.tryParseHTMLToBlocks(strippedHtml);
-        const blocks = [...attachCalloutChildren(rawBlocks as AnyBlock[], calloutChildren),
+        const blocks = [...restoreEmbeddedBlocks(
+            attachCalloutChildren(rawBlocks as AnyBlock[], calloutChildren), embedded),
           // interactive blocks found in the ingest are real blocks of the note now (ledger B1)
           ...interactiveData.map((d) => ({ type: "interactive", props: { title: d.title, html: d.html } }))] as AnyBlock[];
         editor.replaceBlocks(editor.document, blocks);

@@ -5,6 +5,7 @@ import { Sparkles } from "lucide-react";
 import { Markdown } from "@/lib/markdown/Markdown";
 import { resolveCitations } from "@/lib/answerToHtml";
 import type { Citation } from "@/lib/workspace";
+import { previewInserts, type SourceInsert } from "@/lib/sourceInserts";
 import { ToolEvent } from "./ToolEvent";
 import { SkillBadge } from "./SkillBadge";
 import { SkillDraftCard } from "./SkillDraftCard";
@@ -27,6 +28,8 @@ export type StreamItem =
       /** Answered from a note's sources: [n] markers resolve through these,
        *  and the answer can be inserted into that note. */
       citations?: Citation[]; scopeNoteId?: string;
+      /** What the source tools made this turn, by token ([[src:…]] in the text). */
+      inserts?: SourceInsert[];
       /** Where Insert put it; `undoNote` says why Undo could not. */
       inserted?: string; undoNote?: string;
       /** Where it ran and why (routing). `private`: written from private
@@ -147,7 +150,8 @@ export function MessageList({ items, onApprove, renderJob, renderAnswerActions, 
               <div className="text-[14px] text-ink leading-relaxed prose-sm prose dark:prose-invert max-w-none prose-p:my-1.5">
                 {(() => {
                   // mid-stream, an unfinished link or formula waits for its end
-                  const content = item.streaming ? holdBackOpenTail(item.content) : item.content;
+                  const content = previewInserts(
+                    item.streaming ? holdBackOpenTail(item.content) : item.content, item.inserts);
                   return onCitation && item.citations?.length
                     ? <Answer content={linkBareNoteRefs(content)} citations={item.citations}
                         colorIndex={colorIndex ?? new Map()} onCitation={onCitation} />

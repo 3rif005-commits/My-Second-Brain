@@ -15,6 +15,7 @@ import {
   type NoteAnchor, type NoteSource, type SendAction,
 } from "@/lib/workspace";
 import { anchorRows, findLevelHeadings, readDraftAnchors, type DraftAnchor } from "./anchorHeadings";
+import { markdownTableToBlock } from "@/lib/sourceInserts";
 import { hasContent, textBlocks } from "./sendBlocks";
 import { quotedPassages, type Passage } from "./viewers/passageMarks";
 
@@ -92,27 +93,6 @@ function getPlainText(blocks: AnyBlock[]): string {
 
 function normalize(s: string): string {
   return s.replace(/\s+/g, " ").trim();
-}
-
-function markdownTableToBlock(md: string): AnyBlock | null {
-  const rows = md.trim().split("\n")
-    .map((r) => r.trim())
-    .filter((r) => r.startsWith("|"))
-    .filter((r) => !/^\|[\s:|-]+\|$/.test(r)) // drop separator row
-    .map((r) => r.slice(1, r.endsWith("|") ? -1 : undefined).split("|").map((c) => c.trim()));
-  if (rows.length === 0) return null;
-  const width = Math.max(...rows.map((r) => r.length));
-  return {
-    type: "table",
-    content: {
-      type: "tableContent",
-      rows: rows.map((cells) => ({
-        cells: Array.from({ length: width }, (_, i) => [
-          { type: "text", text: cells[i] ?? "", styles: {} },
-        ]),
-      })),
-    },
-  };
 }
 
 export function NotePane({

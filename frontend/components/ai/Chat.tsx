@@ -30,6 +30,7 @@ import {
 } from "@/lib/chatJobs";
 import { ACCEPTED_WORKSPACE_FILES, jobTitle, type Citation } from "@/lib/workspace";
 import { answerToHtml } from "@/lib/answerToHtml";
+import type { SourceInsert } from "@/lib/sourceInserts";
 import { getQuote, priceLine, queueJob, tonight, type BgJob } from "@/lib/backgroundJobs";
 import { offerDraft, stageDraft, undoDraft, type NoteDraft } from "@/lib/noteDraft";
 import type { SkillDraftProposal } from "@/lib/skills";
@@ -502,6 +503,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
           } else if ((ev.type === "context" || ev.type === "citations") && ev.citations) {
             patchItem(assistantId, (it) => it.kind === "assistant"
               ? { ...it, citations: ev.citations as Citation[] } : it);
+          } else if (ev.type === "source_insert") {
+            // A source tool's block: the answer's [[src:…]] token stands for it.
+            patchItem(assistantId, (it) => it.kind === "assistant"
+              ? { ...it, inserts: [...(it.inserts ?? []), ev as unknown as SourceInsert] } : it);
           } else if (ev.type === "skill_start" && card) {
             patchJob(card, (j) => ({ ...j, title: (ev.title as string) ?? j.title }));
           } else if (ev.type === "skill_start" && opts.where) {
@@ -728,7 +733,8 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   }
 
   async function insertAnswer(item: Extract<StreamItem, { kind: "assistant" }>, noteId: string) {
-    await deliver({ noteId, html: answerToHtml(item.content, item.citations ?? []),
+    await deliver({ noteId, html: answerToHtml(item.content, item.citations ?? [],
+      item.inserts ?? [], item.scopeNoteId ?? noteId),
       mode: "replace", sourceIds: [] });
     patchItem(item.id, (it) => it.kind === "assistant" ? { ...it, inserted: noteId, undoNote: undefined } : it);
   }
