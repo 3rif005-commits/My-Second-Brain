@@ -23,6 +23,7 @@ from services.agent.mcp_client import (
     McpServerConfig, discover_tools, call_tool as mcp_call_tool, log_tool_call
 )
 from services.agent import mcp_pins
+from services.agent import source_tools
 from services.agent.model import get_provider
 from services.agent.permissions import (
     Deny, NeedsApproval, check as permission_check
@@ -156,6 +157,15 @@ block at the end of the user's latest message.
   and cite those notes by their deep_link.
 - Never edit or delete the open note with a tool: it is open in the editor.
   Write the text in your reply instead — the user inserts it with one click.
+- To put something FROM a source into the note — a quote with its page, a
+  table, a formula, a figure, a video frame, clip or audio — use the
+  workspace.* source tools. Each returns a token like [[src:ab12cd]]: put the
+  token on its own line in your reply where the item belongs, and Insert turns
+  it into the real block. Never write image or file URLs yourself.
+- Sources are named by src= in the excerpts; workspace.list_sources lists them
+  all and workspace.find_elements gives a source's figures, tables and
+  formulas as text. Work from that text; workspace.look_at is for when the
+  user asks about a picture itself.
 - When the user asks for one of the JOBS (a study guide, flashcards, a
   comparison…), call workspace.run_job; its result is shown to them as a card.
   Do not run a job they did not ask for."""
@@ -481,6 +491,7 @@ async def _routed_turn(request: AgentRequest, user_id: str,
     notes = privacy.filter_rows(notes)
     citations: list[dict] = []
     workspace_sources = ""
+    source_turn: source_tools.SourceTurn | None = None
     if workspace_note:
         # Each passage only if the note it belongs to may go on this route.
         owners = ws_note_titles or {workspace_note: ws_title}
@@ -489,7 +500,11 @@ async def _routed_turn(request: AgentRequest, user_id: str,
         if ws_chunks:
             from services.workspace.chat import citations_payload, source_excerpts
             citations = citations_payload(ws_chunks, ws_titles)
-            workspace_sources = source_excerpts(ws_chunks, ws_titles)
+            workspace_sources = source_excerpts(ws_chunks, ws_titles, with_ids=True)
+        # The source tools reach exactly the notes the gate let through.
+        if allowed:
+            source_turn = source_tools.SourceTurn(
+                note_ids=[n for n in owners if n in allowed], user_id=user_id)
         yield _ev({"type": "context", "notes": [], "citations": citations})
     else:
         yield _ev({"type": "context", "notes": notes})
@@ -564,6 +579,8 @@ async def _routed_turn(request: AgentRequest, user_id: str,
         all_tool_schemas = all_tool_schemas + [SKILL_LOAD_TOOL]
     if jobs:
         all_tool_schemas = all_tool_schemas + [workspace_job_tool(jobs)]
+    if source_turn is not None:
+        all_tool_schemas = all_tool_schemas + source_tools.SCHEMAS
     if memory_rows is not None:
         all_tool_schemas = all_tool_schemas + [memory.MEMORY_TOOL]
     all_tool_schemas = all_tool_schemas + [skill_drafts.PROPOSE_TOOL]
@@ -603,6 +620,7 @@ async def _routed_turn(request: AgentRequest, user_id: str,
             approvals=set(request.approvals),
             workspace_note=workspace_note,
             private_context=private_used,
+            source_turn=source_turn,
         ):
             yield ev
 
@@ -736,6 +754,7 @@ async def _stream_loop(
     skill_registry: "SkillRegistry | None" = None,
     workspace_note: str | None = None,
     private_context: bool = False,
+    source_turn: "source_tools.SourceTurn | None" = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """The agent loop: stream a model turn, run whatever tools it asked for,
     feed the results back, and go round again until it answers in text.
@@ -920,6 +939,12 @@ async def _stream_loop(
                 except Exception:
                     note_meta = None
 
+            if tool in source_tools.NAMES and source_turn is None:
+                _answer(slot, "Denied: source tools work only beside an open note.")
+                yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
+                           "reason": "no open note"})
+                continue
+
             mcp_cfg = None
             if tool.startswith("mcp.") and tool.count(".") >= 2:
                 mcp_cfg = next((c for c in (mcp_configs or [])
@@ -994,8 +1019,15 @@ async def _stream_loop(
                 mcp_flags = instruction_like(" ".join(
                     c for c in (cleaned if isinstance(cleaned, list) else []) if isinstance(c, str)))
             else:
+                insert = None
                 try:
-                    if tool == memory.TOOL_NAME:
+                    if tool in source_tools.NAMES:
+                        import asyncio
+                        result = await asyncio.to_thread(
+                            source_tools.execute, tool, args, source_turn)
+                        # The block goes to the client; the model keeps the token.
+                        insert = result.pop("insert", None)
+                    elif tool == memory.TOOL_NAME:
                         result = memory.remember_from_chat(args, user_id)
                     elif tool == web_research.TOOL_NAME:     # HACKATHON-TAVILY
                         import asyncio
@@ -1004,6 +1036,11 @@ async def _stream_loop(
                         untrusted_context = True
                     else:
                         result = await execute_brain_tool(tool, args=args, user_id=user_id)
+                except source_tools.SourceToolError as e:
+                    _answer(slot, f"Error: {e}")
+                    yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
+                               "reason": str(e)})
+                    continue
                 except memory.MemoryRejected as e:
                     _answer(slot, f"Not saved: {e} Tell the user in one sentence.")
                     yield _ev({"type": "tool_denied", "id": slot["id"], "tool": tool,
@@ -1025,6 +1062,8 @@ async def _stream_loop(
             _answer(slot, _tool_message_content(summary, result))
             yield _ev({"type": "tool_result", "id": slot["id"],
                        "summary": summary, "data": result})
+            if not tool.startswith("mcp.") and insert:
+                yield _ev({"type": "source_insert", **insert})
 
         # Hand the round back to the model: its own tool_calls, then the
         # replies. Kept in the OpenAI shape whatever the provider is —
@@ -1087,6 +1126,8 @@ def _summarize_result(tool: str, result: dict[str, Any]) -> str:
     if tool == web_research.TOOL_NAME:                 # HACKATHON-TAVILY
         n = len(result.get("results", []))
         return f"{n} web page{'' if n == 1 else 's'}"
+    if tool in source_tools.NAMES:
+        return str(result.get("summary") or tool.split(".")[-1])
     if tool.startswith("mcp."):
         # The chip already names the tool; "ask_wiki_question ok" just repeated it.
         text = " ".join(str(c) for c in result.get("content") or [])

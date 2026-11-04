@@ -139,12 +139,17 @@ def retrieve_chunks(query: str, note_id: str, user_id: str,
     return [by_id[i] for i in order]
 
 
-def source_excerpts(chunks: list[dict], titles: dict[str, str]) -> str:
-    """The numbered excerpts, as the prompt shows them — [n] (title, page) text."""
+def source_excerpts(chunks: list[dict], titles: dict[str, str],
+                    with_ids: bool = False) -> str:
+    """The numbered excerpts, as the prompt shows them — [n] (title, page) text.
+    `with_ids` adds `src=` and the source id's first 8 characters, so a model
+    with the source tools can name the source it wants to act on."""
     lines = []
     for i, c in enumerate(chunks, start=1):
         title = titles.get(str(c["resource_id"]), "resource")
-        lines.append(f'[{i}] ({title}, {_anchor_label(c)}) {c["chunk_text"][:800]}')
+        src = (f', src={str(c["resource_id"])[:8]}'
+               if with_ids and c.get("kind") != "note" else "")
+        lines.append(f'[{i}] ({title}, {_anchor_label(c)}{src}) {c["chunk_text"][:800]}')
     return "\n\n".join(lines)
 
 
@@ -198,6 +203,8 @@ def citations_payload(chunks: list[dict], titles: dict[str, str]) -> list[dict]:
             "anchor_start": c["anchor_start"],
             "anchor_end": c["anchor_end"],
             "snippet": c["chunk_text"][:200],
+            # The note the source belongs to: a citation pill opens it there.
+            **({"source_note_id": str(c["note_id"])} if c.get("note_id") and c.get("kind") != "note" else {}),
             # A brought-in note's own text: the citation opens that note.
             **({"kind": "note", "note_id": str(c["note_id"])} if c.get("kind") == "note" else {}),
         }

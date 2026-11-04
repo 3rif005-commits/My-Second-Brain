@@ -367,6 +367,29 @@ def _element(n: _Node) -> list[dict]:
                            "name": "", "url": url, "caption": n.attrs.get("alt", ""),
                            "showPreview": True},
                  "children": []}]
+    if t in ("video", "audio"):
+        # A captured clip or audio (the source tools' Insert, or a model
+        # writing one): the editor's own video / audio block.
+        src = n.attrs.get("src", "")
+        if not src:
+            source = next((c for c in n.children if isinstance(c, _Node) and c.tag == "source"), None)
+            src = source.attrs.get("src", "") if source is not None else ""
+        url = _safe_href(src)
+        if not url:
+            return []
+        return [{"id": str(uuid.uuid4()), "type": t,
+                 "props": {"backgroundColor": "default", "name": "", "url": url,
+                           "caption": n.attrs.get("title", "") or n.attrs.get("aria-label", ""),
+                           "showPreview": True},
+                 "children": []}]
+    if "data-sb-blocks" in n.attrs:
+        # Ready-made blocks (the format frontend/lib/embeddedBlocks.ts reads):
+        # a source insert resolved from its token.
+        import json
+        try:
+            return normalize_blocks(json.loads(n.attrs["data-sb-blocks"]))
+        except (ValueError, TypeError):
+            return []
     if t == "input":
         return []
     # div, section, article, figure, body, html, …: just a container

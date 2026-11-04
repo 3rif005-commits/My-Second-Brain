@@ -528,17 +528,23 @@ def capture_media(source_id: str, body: CaptureRequest,
 def formula_latex(source_id: str, body: FormulaRequest,
                         authorization: str = Header()):
     user_id = get_user_id(authorization)
-    _own_source(source_id, user_id)
+    source = _own_source(source_id, user_id)
     rows = (get_supabase().table("resource_elements").select("*")
-            .eq("id", body.element_id).eq("user_id", user_id).execute().data)
+            .eq("id", body.element_id).eq("user_id", user_id)
+            .eq("resource_id", source_id).execute().data)
     if not rows:
         raise HTTPException(status_code=404, detail={"error": "Element not found"})
     el = rows[0]
+    if el.get("latex"):
+        # Read once, kept (migration 034): no second OCR call for the same formula.
+        return {"latex": el["latex"]}
     if not el.get("image_path"):
         raise HTTPException(status_code=422, detail={"error": "Element has no image crop"})
+    from services.agent.source_tools import SourceToolError, element_latex
     try:
-        image_bytes = storage.download(el["image_path"])
-        return {"latex": formula_to_latex(image_bytes, user_id)}
+        return {"latex": element_latex(el, user_id, str(source.get("note_id") or ""))}
+    except SourceToolError as e:
+        raise HTTPException(status_code=422, detail={"error": str(e)})
     except CaptureError as e:
         raise HTTPException(status_code=422, detail={"error": str(e)})
     except Exception as e:

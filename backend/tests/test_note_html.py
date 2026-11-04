@@ -143,3 +143,26 @@ async def test_update_note_title_only_keeps_content(mock_supa):
     assert table.update.call_args[0][0] == {"title": "New"}
     with pytest.raises(ValueError):
         await execute_brain_tool("brain.update_note", args={"id": "n"}, user_id="u")
+
+
+def test_video_and_audio_survive_as_their_own_blocks():
+    blocks = html_to_blocks('<p>Watch:</p><video src="https://x.co/clip.mp4" title="12:00"></video>'
+                            '<audio controls><source src="https://x.co/a.mp3"></audio>')
+    kinds = [b["type"] for b in blocks]
+    assert kinds == ["paragraph", "video", "audio"]
+    assert blocks[1]["props"]["url"] == "https://x.co/clip.mp4"
+    assert blocks[1]["props"]["caption"] == "12:00"
+    assert blocks[2]["props"]["url"] == "https://x.co/a.mp3"
+
+
+def test_a_video_with_an_unsafe_link_is_dropped():
+    assert html_to_blocks('<video src="javascript:alert(1)"></video>') == []
+
+
+def test_embedded_ready_made_blocks_are_kept():
+    import html as _html
+    import json as _json
+    payload = _html.escape(_json.dumps([{"type": "math", "props": {"latex": "x^2"}}]), quote=True)
+    blocks = html_to_blocks(f'<p>a</p><div data-sb-blocks="{payload}"></div>')
+    assert [b["type"] for b in blocks] == ["paragraph", "math"]
+    assert blocks[1]["props"]["latex"] == "x^2"

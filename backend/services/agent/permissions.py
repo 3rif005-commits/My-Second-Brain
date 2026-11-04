@@ -119,6 +119,18 @@ _TOOL_MIN_TIER: dict[str, Tier] = {
     "editor.replace_block":         Tier.INTERNAL_API,
     "editor.delete_block":          Tier.INTERNAL_API,
     "editor.generate_interactive":  Tier.INTERNAL_API,
+    # Source tools (services/agent/source_tools.py): reading a source is a
+    # read; the rest make a block, a capture file or a vision call.
+    "workspace.list_sources":   Tier.EXTERNAL,
+    "workspace.find_elements":  Tier.EXTERNAL,
+    "workspace.insert_quote":   Tier.INTERNAL_API,
+    "workspace.insert_formula": Tier.INTERNAL_API,
+    "workspace.insert_table":   Tier.INTERNAL_API,
+    "workspace.insert_figure":  Tier.INTERNAL_API,
+    "workspace.capture_frame":  Tier.INTERNAL_API,
+    "workspace.capture_clip":   Tier.INTERNAL_API,
+    "workspace.capture_audio":  Tier.INTERNAL_API,
+    "workspace.look_at":        Tier.INTERNAL_API,
 }
 
 
