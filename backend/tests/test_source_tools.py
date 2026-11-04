@@ -257,3 +257,11 @@ def test_search_source_says_when_a_source_has_no_text(db):
     db.tables["resource_chunks"] = [c for c in db.tables["resource_chunks"] if c["resource_id"] != VID]
     with pytest.raises(SourceToolError, match="no text stored"):
         source_tools.search_source({"source_id": VID, "query": "network"}, _turn())
+
+
+def test_the_prompt_names_every_source_even_without_excerpts(db):
+    line = source_tools.roster(_turn())
+    assert line.startswith("Sources: ")
+    assert f"src={PDF[:8]}" in line and f"src={VID[:8]}" in line and "youtube" in line
+    assert FOREIGN[:8] not in line                    # another note's source stays out
+    assert source_tools.roster(SourceTurn(note_ids=[], user_id=U)) == ""

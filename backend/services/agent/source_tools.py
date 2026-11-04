@@ -232,6 +232,18 @@ def _source_ref(source: dict) -> dict:
 
 # ── tools ────────────────────────────────────────────────────────────────────
 
+def roster(turn: SourceTurn) -> str:
+    """One line per source for the prompt: `Sources: Talk (youtube, src=bbbbbbbb); …`."""
+    try:
+        rows = turn.sources()
+    except Exception:                                   # noqa: BLE001 — the prompt goes without
+        return ""
+    if not rows:
+        return ""
+    return "Sources: " + "; ".join(
+        f"{r.get('title') or 'source'} ({r.get('kind')}, src={str(r['id'])[:8]})" for r in rows)
+
+
 def list_sources(args: dict, turn: SourceTurn) -> dict:
     rows = turn.sources()
     counts = _counts([str(r["id"]) for r in rows], turn.user_id)

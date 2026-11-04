@@ -507,6 +507,14 @@ async def _routed_turn(request: AgentRequest, user_id: str,
         if allowed:
             source_turn = source_tools.SourceTurn(
                 note_ids=[n for n in owners if n in allowed], user_id=user_id)
+            # Every source by name and id, excerpts or not: a source with no
+            # matching passage (a video whose transcript failed) is still one
+            # the tools can capture from, and a small model will not think to
+            # call list_sources to find its id.
+            roster = source_tools.roster(source_turn)
+            if roster:
+                workspace_sources = (f"{roster}\n\n{workspace_sources}" if workspace_sources
+                                     else roster)
         yield _ev({"type": "context", "notes": [], "citations": citations})
     else:
         yield _ev({"type": "context", "notes": notes})
