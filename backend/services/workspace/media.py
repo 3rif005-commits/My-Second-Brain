@@ -71,8 +71,11 @@ def _local_source(resource: dict, start: float, end: float, tmp: str) -> tuple[s
     return local, start
 
 
-def capture(resource: dict, capture_type: str, start: float, end: float | None) -> dict:
-    """capture_type: frame | clip | audio. Returns {path, url, mime}."""
+def capture(resource: dict, capture_type: str, start: float, end: float | None,
+            prefix: str = "") -> dict:
+    """capture_type: frame | clip | audio. Returns {path, url, mime}.
+    `prefix` marks who made it: the AI's captures are "ai-", which
+    capture_cleanup.py may remove once no note uses them."""
     _require_ffmpeg()
     user_id = resource["user_id"]
     rid = resource["id"]
@@ -84,7 +87,7 @@ def capture(resource: dict, capture_type: str, start: float, end: float | None) 
             out = os.path.join(tmp, "frame.jpg")
             args = ["ffmpeg", "-v", "quiet", "-ss", str(offset), "-i", src,
                     "-frames:v", "1", "-q:v", "3", out]
-            dest = f"{user_id}/{rid}/captures/frame-{uid}.jpg"
+            dest = f"{user_id}/{rid}/captures/{prefix}frame-{uid}.jpg"
             mime = "image/jpeg"
         elif capture_type == "clip":
             if end is None or end <= start:
@@ -94,7 +97,7 @@ def capture(resource: dict, capture_type: str, start: float, end: float | None) 
             args = ["ffmpeg", "-v", "quiet", "-ss", str(offset), "-i", src,
                     "-t", str(end - start), "-c:v", "libx264", "-preset", "veryfast",
                     "-c:a", "aac", "-movflags", "+faststart", out]
-            dest = f"{user_id}/{rid}/captures/clip-{uid}.mp4"
+            dest = f"{user_id}/{rid}/captures/{prefix}clip-{uid}.mp4"
             mime = "video/mp4"
         elif capture_type == "audio":
             if end is None or end <= start:
@@ -103,7 +106,7 @@ def capture(resource: dict, capture_type: str, start: float, end: float | None) 
             out = os.path.join(tmp, "audio.mp3")
             args = ["ffmpeg", "-v", "quiet", "-ss", str(offset), "-i", src,
                     "-t", str(end - start), "-vn", "-acodec", "libmp3lame", out]
-            dest = f"{user_id}/{rid}/captures/audio-{uid}.mp3"
+            dest = f"{user_id}/{rid}/captures/{prefix}audio-{uid}.mp3"
             mime = "audio/mpeg"
         else:
             raise CaptureError(f"Unknown capture type: {capture_type}")

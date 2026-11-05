@@ -1,6 +1,6 @@
 # AI source tools: let the AI insert what the source viewer can insert
 
-Status: **steps 1–4 and 6 built 2026-11-04; step 5 partly** (diagnosis 2026-11-03).
+Status: **built 2026-11-04/05; step 5's prompt part decided against (see Not built)** (diagnosis 2026-11-03).
 
 ### What was built (2026-11-04)
 
@@ -29,15 +29,23 @@ Status: **steps 1–4 and 6 built 2026-11-04; step 5 partly** (diagnosis 2026-11
 - `mcp_remote`: read-only `list_note_sources` and `find_source_elements`.
 - CLAUDE.md rule + `test_every_send_to_note_button_has_an_ai_tool`.
 
-### Not built
+- Cleanup of captures nobody inserts (2026-11-05): the AI's captures are named `ai-…`;
+  `services/workspace/capture_cleanup.py` removes one older than 7 days that no note
+  (trashed ones included) mentions, at startup and daily. The viewer's captures are never touched.
+- Checked live 2026-11-04/05: PDF quote and table Insert on the deployed site; YouTube
+  frame, clip and audio Insert in the local app (Render is blocked by YouTube, below).
+
+### Not built (decided)
 
 - **Synthesis / chaptered / job placeholders** (`[[FIGURE p7]]` resolved on the server) and
-  the `FIGURE_EXTENSION` / `note-author` prompt changes: these are the study-guide prompt,
-  which only the user edits. The resolver can emit `<div data-sb-blocks>`, which both the
-  editor and `note_html.py` already read.
+  the `FIGURE_EXTENSION` / `note-author` prompt changes. Decided 2026-11-05 not to: figures
+  reach the note writer only with `workspace_synthesis_vision` (off by default), so the gain
+  is small, and the study-guide prompt is the one place where tuning made notes worse
+  before. The chat's source tools insert any figure on request. If it is ever wanted, the
+  resolver can emit `<div data-sb-blocks>`, which the editor and `note_html.py` already read.
 - Insert tools in `mcp_remote` (external apps write markdown; they have no Insert step).
-- Cleanup of captures the user never inserts (`{user}/{resource}/captures/`).
-- Manual check on a real lecture PDF and a YouTube source.
+- YouTube captures on Render: YouTube answers "Sign in to confirm you're not a bot" to
+  Render's address, for the viewer's buttons and the AI alike. They work from the local app.
 
 ## The problem
 

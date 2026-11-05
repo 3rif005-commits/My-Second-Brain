@@ -40,6 +40,9 @@ async def lifespan(app: FastAPI):
     # E8: index notes changed by any writer, not only the editor's timer.
     from services import index_sweep
     sweep = index_sweep.start()
+    # The AI's captures nobody inserted, removed after a week.
+    from services.workspace import capture_cleanup
+    captures = capture_cleanup.start() if "pytest" not in sys.modules else None
     # Sources a restart cut off mid-processing (deploy, sleep, crash) run again, one by one.
     if "pytest" not in sys.modules:
         from services.workspace.processor import resume_interrupted
@@ -47,6 +50,8 @@ async def lifespan(app: FastAPI):
     yield
     if sweep is not None:
         sweep.cancel()
+    if captures is not None:
+        captures.set()
     stop_scheduler()
     # Safe no-op if the database query engine's pool was never created
     # (database_rows_enabled defaults False, so this is normally the case).

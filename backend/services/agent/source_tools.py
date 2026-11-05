@@ -38,6 +38,9 @@ LONG_LIVED = 10 * 365 * 24 * 3600
 MAX_CLIP_SECONDS = 120
 #: Captures (frame, clip, audio, or a look at a moment) per turn.
 MAX_CAPTURES_PER_TURN = 1
+#: The AI's captures are named so; one no note uses is removed after a week
+#: (services/workspace/capture_cleanup.py). The viewer's own captures are not.
+AI_CAPTURE_PREFIX = "ai-"
 #: Elements find_elements returns at once.
 MAX_ELEMENTS = 40
 
@@ -451,7 +454,7 @@ def _video_source(args: dict, turn: SourceTurn) -> dict:
 def _capture(source: dict, kind: str, start: float, end: float | None) -> dict:
     from services.workspace.media import CaptureError, capture
     try:
-        return capture(source, kind, start, end)
+        return capture(source, kind, start, end, prefix=AI_CAPTURE_PREFIX)
     except CaptureError as e:
         raise SourceToolError(f"The capture failed: {e}")
 
