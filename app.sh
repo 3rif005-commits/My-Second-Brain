@@ -203,7 +203,9 @@ cmd_start() {
     ok "Frontend started (pid $(cat "$FRONTEND_PID_FILE")) — logs: $FRONTEND_LOG"
   fi
 
-  if [[ -x "$ROOT_DIR/llama.sh" ]] && [[ -f "$HOME/llama.cpp/build/bin/llama-server" ]]; then
+  if [[ $LLAMA -eq 0 ]]; then
+    info "llama.cpp skipped (--no-llama)"
+  elif [[ -x "$ROOT_DIR/llama.sh" ]] && [[ -f "$HOME/llama.cpp/build/bin/llama-server" ]]; then
     info "Starting local llama.cpp servers …"
     "$ROOT_DIR/llama.sh" start
   else
@@ -271,7 +273,13 @@ cmd_logs() {
 }
 
 MODE=dev
-[[ "${2:-}" == "--prod" ]] && MODE=prod
+LLAMA=1
+for arg in "${@:2}"; do
+  [[ "$arg" == "--prod" ]] && MODE=prod
+  # A 4 GB laptop cannot hold the local model next to the app; cloud models
+  # and the app's other providers still work without it.
+  [[ "$arg" == "--no-llama" ]] && LLAMA=0
+done
 
 case "${1:-help}" in
   start)  cmd_start  ;;
@@ -285,6 +293,7 @@ case "${1:-help}" in
     echo ""
     echo "  start    Start backend + frontend + llama.cpp (if set up) in the background"
     echo "           add --prod for a built, much faster frontend (rebuild after code changes)"
+    echo "           add --no-llama to leave the local model off (saves ~3 GB of memory)"
     echo "  stop     Kill everything"
     echo "  status   Show what's running"
     echo "  tunnel   Give the MCP server a public HTTPS address (claude.ai, ChatGPT…)"
