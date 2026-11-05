@@ -31,6 +31,17 @@ notes is exact for every block type (database = same database, image, callout, m
 interactive, toggles, colours, children). Text selections are cut at their ends; the first piece
 joins the caret's line. `text/html` stays for other apps, reshaped for Notion (`notionCopy.ts`).
 
+**Notion database → app paste: format captured, not built (2026-11-05).** A real copy (dummy
+page "UI Reference (Claude)", `setData` patched) shows Notion puts NO database contents on the
+clipboard: an inline database brings its `collection_view` block plus the view (type, column
+order/widths by internal property id, no names; row ids in `page_sort`; a `collection_pointer`
+id); a full-page database is a bare `{blockId}` with no subtree; `text/html` is only a link
+reading "Untitled". So the hand-off's CSV/HTML-table fallback is impossible; schema and rows can
+only come from Notion's API (the Send to Notion connection, if the database is shared with it).
+User chose to stop at the report. Fixtures: `frontend/components/editor/fixtures/notion-database-*.json`
+(user/space ids scrubbed). Unchecked: an ORIGINAL (non-linked) inline database, and whether the
+public API's data-source id equals the clipboard's collection id.
+
 **Hackathon: Nemotron on Nebius (2026-10-27, docs/hackathon/NEBIUS.md):** a removable add-on
 (`services/nebius.py`, touchpoints marked `HACKATHON-NEBIUS`; off while `NEBIUS_API_KEY` is
 unset). Token Factory Nemotrons fill fast/strong, a Nemotron on your own Nebius VM is the front

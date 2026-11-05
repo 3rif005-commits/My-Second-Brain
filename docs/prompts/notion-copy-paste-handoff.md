@@ -44,6 +44,19 @@ plus this hand-off file). Run `git pull` first and check `git log --oneline -6` 
 
 ### What is still broken: pasting a DATABASE from Notion into the app
 
+> **Update 2026-11-05: step 1 done, and it changes the plan.** The real clipboard (fixtures in
+> `frontend/components/editor/fixtures/notion-database-*.json`) carries no schema and no rows:
+> - Inline (linked) database: the `collection_view` block plus `blockSubtree.collection_view`,
+>   which holds the view type, `format.table_properties` (property ids, not names), `page_sort`
+>   (row ids) and `format.collection_pointer.id`. There is no `collection` table and there are no row pages.
+> - Full-page database (`collection_view_page`): `{ "blockId": … }` only, with no subtree.
+> - `text/html`: `<p><a href="…/p/<id>">Untitled</a></p>`, with no table.
+>
+> So steps 2–3 below can't work from the clipboard. The data has to be fetched from Notion's API with
+> the user's Send to Notion connection, and only if the database is shared with that connection. The user
+> stopped here; nothing is built. Not yet checked: an original (non-linked) inline database, and whether the
+> public API's data-source id equals `collection_pointer.id`.
+
 The user copied a database in Notion and pasted it into the app. It did not come through. The cause:
 - Notion → app goes through `readNotionJson` / `notionJsonToBlocks` in `notionBlocks.ts`. That code only
   reads `blocks[].blockSubtree.block` records.
