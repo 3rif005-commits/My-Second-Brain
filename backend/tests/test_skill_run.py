@@ -80,6 +80,48 @@ def test_a_run_writes_a_ready_draft_the_editor_can_apply():
     assert 'data-anchor="1:s:1"' in html
 
 
+def _html_skill():
+    return Skill(name="solve-worksheet", description="d", body="Write HTML.", tools=None,
+                 priority=4, source_path=Path("/x"), surfaces=("workspace",),
+                 inputs="sources", output="draft_note", model_tier="standard",
+                 auto=False, confirm=True, format="html")
+
+
+def test_an_html_skills_answer_reaches_the_editor_as_html_not_escaped_text():
+    """Through the Markdown converter, `<h3>` would arrive as the text "<h3>"."""
+    answer = ('<h1>Sheet 1: Solutions</h1><h3 data-anchor="1:p:2">Q1 · Speed</h3>'
+              '<p data-background-color="green"><strong>Answer:</strong> $v = 4$</p>')
+    with patch.object(skill_run, "_blocks_for", return_value=(BLOCKS[:1], ["s1"])), \
+         patch.object(skill_run, "registry") as reg, \
+         patch.object(skill_run, "estimate", return_value={"usd": 0.01}), \
+         patch.object(skill_run, "complete_with_fallback", return_value=answer), \
+         patch.object(skill_run, "last_call_truncated", return_value=False):
+        reg.return_value.get.return_value = _html_skill()
+        out = skill_run.produce_skill_result("n1", "u1", "solve-worksheet")
+
+    assert out["html"].startswith("<h1>Sheet 1: Solutions</h1>")
+    assert '<h3 data-anchor="1:p:2">' in out["html"]
+    assert 'data-latex="v = 4"' in out["html"]                  # inline maths converted
+
+
+def test_a_cut_off_html_answer_says_so_in_the_editors_dialect():
+    html = skill_run.result_html(_html_skill(), "<h1>T</h1><p>half", truncated=True)
+    assert html.startswith("<h1>T</h1>")
+    assert 'data-callout-type="WARNING"' in html and "cut off" in html
+
+
+def test_a_markdown_skill_is_still_converted_from_markdown():
+    html = skill_run.result_html(_skill(), "# Compared\n\n:::tip\nA tip.\n:::", truncated=False)
+    assert "<h1>Compared</h1>" in html and 'data-callout-type="TIP"' in html
+
+
+def test_a_batch_answer_is_read_in_the_skills_own_dialect():
+    with patch.object(skill_run, "registry") as reg:
+        reg.return_value.get.return_value = _html_skill()
+        out = skill_run.finish_batch("solve-worksheet", "<h1>T</h1><p>$x$</p>", False)
+    assert out["html"].startswith("<h1>T</h1>") and 'data-latex="x"' in out["html"]
+
+
 def test_an_unknown_skill_fails_the_row_instead_of_raising():
     """The client polls that row; an exception here leaves it spinning."""
     with patch.object(skill_run, "registry") as reg, \

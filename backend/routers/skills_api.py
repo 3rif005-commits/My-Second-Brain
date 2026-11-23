@@ -195,6 +195,10 @@ def _write_user_skill(user_id: str, name: str, description: str, body: str, wher
     if output:
         meta["output"] = output
     meta["model_tier"] = base.model_tier if base and base.model_tier else "standard"
+    # The body is written for one dialect; an edited copy read as the other
+    # would arrive as escaped tags (an html skill) or unparsed fences.
+    if base and base.format != "markdown":
+        meta["format"] = base.format
     meta["auto"] = False
     meta["confirm"] = base.confirm if base else (where == "chat")
     if base and base.priority:

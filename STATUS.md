@@ -13,6 +13,19 @@
 | 2 | Settings at phone width not re-checked after the settings rework (Chrome wouldn't resize); Connected apps has no "how to connect" text because the app's own MCP server isn't deployed with Render | small |
 | 3 | Editor AI: one Revert (after Simplify) left stray letters in the paragraph ("foronr"); two later Simplify/Fix-spelling reverts restored the text exactly. Watch for it; if it recurs, check xl-ai's revert with large rewrites | couldn't reproduce |
 
+**Worksheet solver (2026-11-23, `backend/skills/solve-worksheet/`):** a workspace job
+(`/solve-worksheet` in the AI panel) that answers every question of an attached worksheet for
+revision. Each question: condensed question quote → **Method** line → working folded in a
+*Solution* toggle (numbered steps, equations, a Check line) → the answer in a **green band** →
+at most two callouts (Trap / Shortcut / Marks / Missing). Red/orange heading = redo first (max
+2/3). Ends with a *Revision sheet*: answer key table, FORMULA callouts, "when the question… do
+this" method map. First skill with `format: html`: it writes the editor's own dialect, and
+`services/workspace/skill_html.py` turns `$…$` into inline formulas and Mermaid into live
+diagram blocks; an edited copy in Settings → Skills keeps the format. Live-checked 3× with Haiku
+4.5 on a synthetic 9-question sheet (~$0.035 a run): all answers right; rules tightened after
+the runs (Method line on code/diagram questions, one-line bands, never invent a missing given).
+Not yet run on a real worksheet inside the app.
+
 **Notion block selection (2026-11-03, `components/editor/blockSelection.ts`):** blocks are now
 selectable units, not just text. A real ProseMirror selection type (`BlockSelection`, like
 prosemirror-tables' CellSelection) with Notion's keys: Esc in text → the block; Ctrl+A → block

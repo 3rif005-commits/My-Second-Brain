@@ -14,6 +14,9 @@ H = {"Authorization": "Bearer fake"}
 GUIDE = ("---\nname: study-guide\ndescription: Write a full study guide.\n"
          "surfaces: [workspace]\ninputs: sources\noutput: draft_note\n---\n\n"
          "Original guide rules.\n")
+WORKSHEET = ("---\nname: solve-worksheet\ndescription: Solve a worksheet.\n"
+             "surfaces: [workspace]\ninputs: sources\noutput: draft_note\nformat: html\n---\n\n"
+             "Write <h1> first.\n")
 DEFINE = ("---\nname: define-terms\ndescription: Define the selected terms.\n"
           "surfaces: [selection]\ninputs: selection\noutput: insert_below\n---\n\n"
           "Define each term.\n")
@@ -26,6 +29,8 @@ def client(tmp_path, skill_user_dir):
     (bundled / "study-guide" / "SKILL.md").write_text(GUIDE, encoding="utf-8")
     (bundled / "study-guide" / "reference" / "markdown-variant.md").write_text(
         "Markdown rules.\n", encoding="utf-8")
+    (bundled / "solve-worksheet").mkdir()
+    (bundled / "solve-worksheet" / "SKILL.md").write_text(WORKSHEET, encoding="utf-8")
     (bundled / "define-terms").mkdir()
     (bundled / "define-terms" / "SKILL.md").write_text(DEFINE, encoding="utf-8")
     with (
@@ -89,6 +94,17 @@ def test_files_stay_inside_the_skill_and_only_existing_ones_are_editable(client)
         assert tc.get(f"/skills/study-guide/files/{bad}", headers=H).status_code in (400, 404)
     assert tc.put("/skills/study-guide/files/reference/new.md", headers=H,
                   json={"content": "x"}).status_code == 404
+
+
+def test_an_edited_html_skill_still_writes_html(client):
+    """The body is written for the editor's HTML; a saved copy read as
+    Markdown would put every tag into the note as text."""
+    tc, _, bundled = client
+    assert _save(tc, "solve-worksheet", body="Write <h1> first, briefly.").status_code == 200
+    from services.agent.skills import SkillRegistry
+    with skill_store.as_user(SKILL_USER):
+        mine = SkillRegistry.load([bundled, skill_store.user_skills_dir(SKILL_USER)]).get("solve-worksheet")
+    assert mine.body == "Write <h1> first, briefly." and mine.format == "html"
 
 
 def test_the_original_of_an_edited_built_in(client):

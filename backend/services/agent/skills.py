@@ -59,6 +59,11 @@ class Skill:
     #: "auto" (chapter by chapter from SYNTHESIS_CHAPTERS_MIN_SOURCES
     #: sources), "single" (one call) or "chapters" (E9)
     multi_source: str | None = None
+    #: what the skill's body tells the model to write: "markdown" (the small
+    #: fenced dialect in services/workspace/md_to_blocks.py, the default) or
+    #: "html" (the editor's own dialect, the study guide's: colours, inline
+    #: maths, toggles with any block inside — services/workspace/skill_html.py)
+    format: str = "markdown"
     #: where it came from: "builtin" (this repo, reviewed), "user" (written or
     #: edited by the user), "assistant" (drafted by the chat, saved by the
     #: user), "installed" (from outside the app). Set by the loader from the
@@ -153,6 +158,7 @@ def parse_frontmatter(raw: str, source_path: Path,
         folder=folder,
         icon=meta.get("icon"),
         multi_source=meta.get("multi_source"),
+        format="html" if str(meta.get("format", "")).strip().lower() == "html" else "markdown",
         origin=origin,
     )
 

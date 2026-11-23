@@ -78,6 +78,21 @@ def selection_skills() -> list[Skill]:
                   key=lambda s: (-s.priority, s.name))
 
 
+def result_html(skill: Skill | None, answer: str, truncated: bool) -> str:
+    """A skill's answer → the HTML the editor applies, read in the dialect the
+    skill writes: the fenced Markdown most skills use, or the editor's own
+    HTML for a skill with `format: html` (services/workspace/skill_html.py)."""
+    if skill is not None and skill.format == "html":
+        from services.workspace import skill_html
+        from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML
+        doc = skill_html.finish(answer)
+        return doc + ("\n" + TRUNCATION_NOTICE_HTML if truncated else "")
+    md = _strip_fences(answer)
+    if truncated:
+        md = md.rstrip() + "\n\n" + TRUNCATION_NOTICE_MD
+    return markdown_to_html(md)
+
+
 _ID_HEADER = re.compile(r"^\|\s*ID\s*\|")
 _ID_CELL = re.compile(r"^\|\s*[A-Z]{1,8}-\d{2,3}\s*\|")
 _SEPARATOR_CELL = re.compile(r"^\|\s*:?-{3,}:?\s*\|")
@@ -233,13 +248,13 @@ def run_skill(note_id: str, user_id: str, skill_name: str,
 
         if not answer.strip():
             raise RuntimeError("The model returned nothing.")
-        if last_call_truncated():
+        truncated = last_call_truncated()
+        if truncated:
             logger.warning(f"note {note_id}: {skill.name} hit the output cap")
-            answer = answer.rstrip() + "\n\n" + TRUNCATION_NOTICE_MD
 
-        # Skills speak Markdown; the editor speaks the HTML dialect. One
-        # converter, the same one E6 measures, sits between them.
-        html = markdown_to_html(answer)
+        # Most skills speak Markdown and the editor speaks the HTML dialect;
+        # one converter, the same one E6 measures, sits between them.
+        html = result_html(skill, answer, truncated)
         _write(note_id, user_id, {"status": "ready", "html": html, "error": None,
                                   "source_ids": source_ids,
                                   "title_suggestion": None})
@@ -352,7 +367,7 @@ def produce_skill_result(note_id: str, user_id: str, name: str,
     Raises ValueError with a reason a person can read when the job cannot run
     (unknown skill, not enough sources, over budget). The study guide runs on
     its own HTML dialect path — the user's instructions, unchanged — and every
-    other skill on the Markdown path the skills are written for.
+    other skill on the path its `format` names (Markdown unless it says html).
     """
     from services.ai import usage as usage_log
     skill = registry().get(name)
@@ -395,9 +410,7 @@ def produce_skill_result(note_id: str, user_id: str, name: str,
             truncated = last_call_truncated()
             if not answer.strip():
                 raise ValueError("The model returned nothing.")
-            if truncated:
-                answer = answer.rstrip() + "\n\n" + TRUNCATION_NOTICE_MD
-            html = markdown_to_html(answer)
+            html = result_html(skill, answer, truncated)
             check, method = None, None
 
     rows = list(usage_log.RECENT)[mark:]
@@ -485,6 +498,5 @@ def finish_batch(name: str, text: str, truncated: bool,
     answer = _strip_fences(text)
     if not answer.strip():
         raise ValueError("The model returned nothing.")
-    if truncated:
-        answer = answer.rstrip() + "\n\n" + TRUNCATION_NOTICE_MD
-    return {"html": markdown_to_html(answer), "truncated": truncated, "method": None, "check": None}
+    return {"html": result_html(registry().get(name), answer, truncated),
+            "truncated": truncated, "method": None, "check": None}
