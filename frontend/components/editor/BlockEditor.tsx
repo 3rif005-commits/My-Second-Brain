@@ -13,7 +13,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { en as coreEn } from "@blocknote/core/locales";
 // @ts-ignore — locales subpath export
 import { en as aiEn } from "@blocknote/xl-ai/locales";
-import { EDITOR_AI_PROMPT, editorDocumentState, editorStreamTools } from "./editorAI";
+import { EDITOR_AI_PROMPT, cleanEveryAICall, editorDocumentState, editorStreamTools } from "./editorAI";
 import { multiColumnDropCursor, getMultiColumnSlashMenuItems, locales as multiColumnLocales } from "@blocknote/xl-multi-column";
 import { useTheme } from "@/app/providers";
 import { Sparkles } from "lucide-react";
@@ -379,6 +379,9 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         },
       } as Parameters<typeof useCreateBlockNote>[0]
     );
+    // BlockNote's own AI menu items bring their own tool provider; route them
+    // through the same formula clean-up (editorAI.ts).
+    cleanEveryAICall(editor.getExtension(AIExtension));
 
     // Every save goes through here: placeholders become their original blocks
     // again, so a block this editor can't show is never lost on save.

@@ -10,7 +10,7 @@ import { aiDocumentFormats, StreamToolExecutor, _getApplySuggestionsTr } from "@
 import { multiColSchema } from "./noteSchema";
 import {
   EDITOR_AI_PROMPT, compactBlockHtml, editorDocumentState, editorStreamTools,
-  normalizeAIHtml, windowAround, withNormalizedParse, SELECTION_BUDGET,
+  normalizeAIHtml, windowAround, SELECTION_BUDGET, cleanEveryAICall, cleanedProvider,
 } from "./editorAI";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -138,16 +138,24 @@ describe("how the editor AI's answer is read", () => {
     ]) expect(normalizeAIHtml(html)).toBe(html);
   });
 
-  it("applies to what the AI tools parse, and nothing else of the editor", async () => {
+  it("covers BlockNote's own menu items, which bring a plain provider", async () => {
+    const seen: AnyBlock[] = [];
+    const ai = { invokeAI: async (opts: AnyBlock) => { seen.push(opts.streamToolsProvider); } };
+    cleanEveryAICall(ai);
+    cleanEveryAICall(ai);                       // once is enough
+    await ai.invokeAI({ userPrompt: "Improve writing", streamToolsProvider: aiDocumentFormats.html.getStreamToolsProvider() });
+    await ai.invokeAI({ userPrompt: "typed" });
+    const tools = seen[0].getStreamTools(makeEditor(), false);
+    expect(tools.map((t: AnyBlock) => t.name)).toEqual(["update", "add", "delete"]);
+    expect(cleanedProvider(seen[0])).toBe(seen[0]);
+    expect(seen[1]).toBeUndefined();            // the extension's default (already ours)
+  });
+
+  it("is xl-ai's own tools, with nothing of the editor itself changed", () => {
     const editor = makeEditor();
-    const proxied = withNormalizedParse(editor);
-    const [block] = (await proxied.tryParseHTMLToBlocks("<p>the field \\(E_0\\) grows</p>")) as AnyBlock[];
-    expect(block.content[1]).toMatchObject({ type: "inlineMath", props: { latex: "E_0" } });
-    expect(proxied.document).toEqual(editor.document);
-    const [plain] = (await editor.tryParseHTMLToBlocks("<p>the field \\(E_0\\) grows</p>")) as AnyBlock[];
-    expect(plain.content).toHaveLength(1);
     const tools = editorStreamTools().getStreamTools(editor, false);
     expect(tools.map((t: AnyBlock) => t.name)).toEqual(["update", "add", "delete"]);
+    expect(editor.tryParseHTMLToBlocks).toBe(makeEditor().tryParseHTMLToBlocks);
   });
 });
 
@@ -187,17 +195,40 @@ describe("every block the editor AI may change", () => {
     expect(bad).toEqual([]);
   });
 
-  it("is fixed when it holds a formula typed as text (live: every fix said 'Oops')", async () => {
-    const curl = "\\nabla \\times \\vec{E} = -\\frac{\\partial \\vec{B}}{\\partial t}";
-    const editor = makeEditor([{ type: "paragraph", content: `\\[ ${curl} \\]` }]);
+  /** Runs one "update" through xl-ai's executor the way a live answer
+   *  arrives: growing prefixes marked partial, then the whole. */
+  async function stream(start: AnyBlock, html: string, cuts: number[]) {
+    const editor = makeEditor([start]);
     const id = editor.document[0].id;
-    const tools = editorStreamTools({ withDelays: false }).getStreamTools(editor, false);
-    const executor = new StreamToolExecutor(tools);
-    // what Nemotron answered to "fix it": the same text back
-    await executor.executeOne({ type: "update", id, block: `<p>\\[ ${curl} \\]</p>` });
-    const doc = _getApplySuggestionsTr(editor).doc;
-    const math: AnyBlock[] = [];
-    doc.descendants((n: AnyBlock) => { if (n.type.name === "math") math.push(n.attrs.latex); });
-    expect(math).toEqual([curl]);
+    const executor = new StreamToolExecutor(editorStreamTools({ withDelays: false }).getStreamTools(editor, false));
+    await executor.execute((async function* () {
+      for (const [i, n] of [...cuts, html.length].entries()) {
+        yield { operation: { type: "update", id, block: html.slice(0, n) },
+          isUpdateToPreviousOperation: i > 0, isPossiblyPartial: n < html.length, metadata: {} };
+      }
+    })());
+    const out: string[] = [];
+    _getApplySuggestionsTr(editor).doc.descendants((n: AnyBlock) => {
+      if (n.type.name === "math") out.push(`math ${n.attrs.latex}`);
+      if (n.type.name === "inlineMath") out.push(`inline ${n.attrs.latex}`);
+    });
+    return out;
+  }
+
+  const curl = "\\nabla \\times \\vec{E} = -\\frac{\\partial \\vec{B}}{\\partial t}";
+
+  it("is fixed when it holds a formula typed as text (live: every fix said 'Oops')", async () => {
+    // what Nemotron answered to "fix it" on such a line: the same text back
+    const answer = `<p>\\[ ${curl} \\]</p>`;
+    expect(await stream({ type: "paragraph", content: `\\[ ${curl} \\]` }, answer, [])).toEqual([`math ${curl}`]);
+    expect(await stream({ type: "paragraph", content: `\\[ ${curl} \\]` }, answer, [10, 25, 40, 60])).toEqual([`math ${curl}`]);
+  });
+
+  it("takes a formula block or an inline formula, streamed", async () => {
+    const div = '<div data-type="math">x^3 + y</div>';
+    expect(await stream({ type: "math", props: { latex: "x^2" } }, div, [24, 28])).toEqual(["math x^3 + y"]);
+    expect(await stream({ type: "paragraph", content: "old" }, div, [24, 28])).toEqual(["math x^3 + y"]);
+    const p = "<p>so $E_0 = cB_0$ holds</p>";
+    expect(await stream({ type: "paragraph", content: "old" }, p, [8, 14, 20])).toEqual(["inline E_0 = cB_0"]);
   });
 });

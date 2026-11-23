@@ -223,41 +223,63 @@ export function normalizeAIHtml(html: string): string {
   return doc.body.innerHTML;
 }
 
-/** The editor as the AI's tools see it: the model's HTML is normalised before
- *  BlockNote parses it. Everything else goes to the real editor.
- *
- *  Not the editor's own HTML: before each edit xl-ai turns the current block
- *  into HTML and back (html-blocks/tools/rebaseTool.ts) and refuses the edit
- *  if anything changed ("html diff"). Normalising that round trip turned a
- *  block's `\[ … \]` text into a formula, and every fix of such a block
- *  failed with "Oops! Something went wrong" (live, 2026-11-23). */
-export function withNormalizedParse(editor: AnyEditor): AnyEditor {
-  const own = new Set<string>();
-  return new Proxy(editor, {
-    get(target, prop) {
-      if (prop === "blocksToHTMLLossy") {
-        return async (...args: unknown[]) => {
-          const html: string = await target.blocksToHTMLLossy(...args);
-          own.add(html);
-          return html;
-        };
-      }
-      if (prop === "tryParseHTMLToBlocks") {
-        return (html: string) => target.tryParseHTMLToBlocks(own.delete(html) ? html : normalizeAIHtml(html));
-      }
-      const v = Reflect.get(target, prop, target);
-      return typeof v === "function" ? v.bind(target) : v;
+/** One tool, with the model's HTML cleaned up (normalizeAIHtml) once each
+ *  operation is complete. Half-written chunks pass through as they are: a
+ *  formula still arriving is just text, and cleaning it up switched the block
+ *  between paragraph and formula mid-stream ("Inconsistent open depths").
+ *  The editor's own HTML is never touched: xl-ai turns the current block
+ *  into HTML and back before each edit and refuses it if anything changed
+ *  ("html diff", live 2026-11-23, when the editor itself was wrapped). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function cleanedUp(tool: any): any {
+  return {
+    ...tool,
+    executor: () => {
+      const inner = tool.executor();
+      return {
+        ...inner,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        execute: (chunk: any, abortSignal?: AbortSignal) => {
+          const op = chunk.operation;
+          if (chunk.isPossiblyPartial || !op) return inner.execute(chunk, abortSignal);
+          const fixed = typeof op.block === "string" ? { ...op, block: normalizeAIHtml(op.block) }
+            : Array.isArray(op.blocks) ? { ...op, blocks: op.blocks.map((b: unknown) => typeof b === "string" ? normalizeAIHtml(b) : b) }
+            : op;
+          return inner.execute({ ...chunk, operation: fixed }, abortSignal);
+        },
+      };
     },
-  });
+  };
 }
 
-/** aiDocumentFormats.html's tools, reading the model's HTML through
- *  normalizeAIHtml. `opts` as for getStreamToolsProvider. */
+const CLEANED = Symbol("editorAI.cleaned");
+
+/** A tool provider whose tools clean up the model's HTML (cleanedUp). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function editorStreamTools(opts: any = {}) {
-  const base = aiDocumentFormats.html.getStreamToolsProvider(opts);
+export function cleanedProvider(base: any): any {
+  if (!base || base[CLEANED]) return base;
   return {
-    getStreamTools: (editor: AnyEditor, selectionInfo: boolean | { from: number; to: number } | undefined, onBlockUpdate?: (id: string) => void) =>
-      base.getStreamTools(withNormalizedParse(editor), selectionInfo, onBlockUpdate),
+    [CLEANED]: true,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    getStreamTools: (...args: any[]) => base.getStreamTools(...args).map(cleanedUp),
   };
+}
+
+/** aiDocumentFormats.html's tools, with the model's maths read right.
+ *  `opts` as for getStreamToolsProvider. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function editorStreamTools(opts: any = {}): any {
+  return cleanedProvider(aiDocumentFormats.html.getStreamToolsProvider(opts));
+}
+
+/** Every AI call of this editor through cleanedProvider, including
+ *  BlockNote's own menu items (Improve writing, Fix spelling, Translate…),
+ *  which pass a plain aiDocumentFormats.html provider of their own. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function cleanEveryAICall(ai: any): void {
+  if (!ai || ai[CLEANED]) return;
+  const invoke = ai.invokeAI.bind(ai);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ai.invokeAI = (opts: any) => invoke({ ...opts, streamToolsProvider: cleanedProvider(opts?.streamToolsProvider) });
+  ai[CLEANED] = true;
 }
