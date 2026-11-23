@@ -24,9 +24,9 @@ from fastapi.responses import StreamingResponse
 
 from core.config import settings
 from routers.ingest import get_user_id
-from services import privacy
+from services import nebius, privacy
 from services.ai.openai_bridge import stream_anthropic_as_openai
-from services.ai.passthrough import OPENAI_DIALECT, stream_passthrough
+from services.ai.passthrough import OPENAI_DIALECT, endpoint_for, stream_passthrough
 from services.ai.providers import Provider
 from services.routing import policy as routing_policy
 from services.routing.switchboard import NoProvider, resolve_slot
@@ -78,9 +78,13 @@ async def agent_inline(
             ):
                 yield chunk
             return
+        # Nemotron on Token Factory thinks first, and on xl-ai's forced tool
+        # call it thought until max length and never called the tool: the
+        # editor showed "Oops! Something went wrong" (live, 2026-11-23).
+        payload = {**body, **nebius.no_thinking(endpoint_for(provider)[0])}
         try:
             async for chunk in stream_passthrough(
-                provider, body, surface="inline", job="inline_edit",
+                provider, payload, surface="inline", job="inline_edit",
                 user_id=user_id, note_id=note_id,
             ):
                 yield chunk

@@ -155,3 +155,29 @@ async def test_without_upstream_usage_the_row_is_marked_an_estimate(monkeypatch)
     row = list(usage_log.RECENT)[-1]
     assert row["usage_reported"] is False
     assert row["input_tokens"] > 0
+
+
+@pytest.mark.asyncio
+async def test_nemotron_is_asked_not_to_think_and_other_providers_are_left_alone(monkeypatch):
+    """Nemotron thinks first; on xl-ai's forced tool call it thought until
+    max length and never called the tool, and the editor said "Oops! Something
+    went wrong" (live, 2026-11-23). Thinking off, it calls the tool."""
+    from services import nebius
+    monkeypatch.setattr(agent_inline, "get_user_id", lambda auth: "u1")
+    monkeypatch.setattr(nebius, "enabled", lambda: True)
+    sent = []
+
+    async def fake(provider, payload, **kw):
+        sent.append(payload)
+        yield b"data: [DONE]\n\n"
+
+    monkeypatch.setattr(agent_inline, "stream_passthrough", fake)
+    tf = Provider(provider="openai_compatible", api_key="k",
+                  base_url=agent_inline.settings.nebius_base_url,
+                  chat_model="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B", label="Nebius")
+    for p in (tf, OPENROUTER):
+        with patch.object(agent_inline, "_inline_provider", return_value=p):
+            await _drain(await agent_inline.agent_inline(
+                {"messages": [], "tool_choice": "required"}, authorization="Bearer x"))
+    assert sent[0]["reasoning_effort"] == "none" and sent[0]["tool_choice"] == "required"
+    assert sent[1] == {"messages": [], "tool_choice": "required"}
