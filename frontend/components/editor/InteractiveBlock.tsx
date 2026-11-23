@@ -57,6 +57,20 @@ export const InteractiveBlockSpec = createReactBlockSpec(
         )}
       </div>
     ),
+    // A Mermaid diagram's own export, read back as the diagram. The editor AI
+    // edits a block through its HTML and xl-ai refuses any block whose HTML
+    // doesn't come back as itself ("html diff"), so without this no diagram
+    // could be edited by the AI. The code text is the diagram (what the AI
+    // changes); data-html is removed so BlockNote's data-* mapping can't put
+    // the old code back over it.
+    parse: (el: HTMLElement) => {
+      if (el.tagName !== "PRE" || !(el.hasAttribute("data-title") || el.hasAttribute("data-html"))) return undefined;
+      const code = el.querySelector("code.language-mermaid")?.textContent;
+      if (code == null) return undefined;
+      const stored = el.getAttribute("data-html") ?? "";
+      el.removeAttribute("data-html");
+      return { title: el.getAttribute("data-title") || "Diagram", html: stored.trim() === code.trim() ? stored : code };
+    },
     // What leaves the editor (Export as Markdown, copy): the block's content, not its toolbar.
     // Mermaid stays Mermaid, a 3D model is a link, anything else is named like the LaTeX export.
     toExternalHTML: ({ block }: { block: AnyBlock }) => {

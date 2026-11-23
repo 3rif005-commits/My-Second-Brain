@@ -16,8 +16,9 @@
 //            Here:   <details><summary>Title</summary>…children…</details>
 //            — not inside a list, and the summary holds the text itself.
 //
-//   callout  BlockNote (this app's callout has no toExternalHTML): the icon's
-//            <span> and then the body's <p>s as loose siblings.
+//   callout  BlockNote: <div data-type="callout">icon</div> (customBlocks.tsx's
+//            toExternalHTML; before it, the icon's <span>) and then the
+//            body's <p>s as loose siblings.
 //            Notion: an emoji-only line, then the body as plain paragraphs.
 //            Here:   <aside>🧭 first line…</aside> — the element Notion itself
 //            uses for a callout in its Markdown/HTML exports.
@@ -73,7 +74,7 @@ function liftToggles(root: ParentNode, doc: Document): void {
 
 /** The callout's icon <span> plus the body that follows → one <aside>. */
 function wrapCallouts(root: ParentNode, doc: Document): void {
-  root.querySelectorAll("span.callout-icon, [data-callout-icon].callout-icon").forEach((icon) => {
+  root.querySelectorAll('span.callout-icon, [data-callout-icon].callout-icon, div[data-type="callout"]').forEach((icon) => {
     const aside = doc.createElement("aside");
     const emoji = (icon.getAttribute("data-callout-icon") || icon.textContent || "").trim();
     // The body: the nested blocks BlockNote exported right after the icon

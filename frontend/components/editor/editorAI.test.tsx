@@ -6,7 +6,7 @@ import { join } from "node:path";
 // @ts-ignore — @blocknote/core@0.48.0 ships an empty index.d.ts (upstream bug)
 import { BlockNoteEditor } from "@blocknote/core";
 // @ts-ignore — xl-ai@0.48.0 exports these at runtime but its index.d.ts is empty
-import { aiDocumentFormats } from "@blocknote/xl-ai";
+import { aiDocumentFormats, StreamToolExecutor, _getApplySuggestionsTr } from "@blocknote/xl-ai";
 import { multiColSchema } from "./noteSchema";
 import {
   EDITOR_AI_PROMPT, compactBlockHtml, editorDocumentState, editorStreamTools,
@@ -148,5 +148,56 @@ describe("how the editor AI's answer is read", () => {
     expect(plain.content).toHaveLength(1);
     const tools = editorStreamTools().getStreamTools(editor, false);
     expect(tools.map((t: AnyBlock) => t.name)).toEqual(["update", "add", "delete"]);
+  });
+});
+
+describe("every block the editor AI may change", () => {
+  const T = (text: string, styles: AnyBlock = {}) => ({ type: "text", text, styles });
+  const kinds: AnyBlock[] = [
+    { type: "paragraph", props: { backgroundColor: "green" }, content: [T("Answer: ", { bold: true }), { type: "inlineMath", props: { latex: "x^2" } }] },
+    { type: "paragraph", content: [T("grey", { textColor: "gray" }), T(" code", { code: true }), T(" it", { italic: true })] },
+    { type: "paragraph", content: [T("\\[ \\nabla \\times \\vec{E} \\]")] },
+    { type: "paragraph", content: [{ type: "link", href: "https://example.com", content: [T("link")] }] },
+    { type: "heading", props: { level: 2, isToggleable: true }, content: [T("Exercise 01")] },
+    { type: "heading", props: { level: 3, isToggleable: true }, content: [T("Fields", { backgroundColor: "red" })] },
+    { type: "bulletListItem", content: [T("bullet")] },
+    { type: "numberedListItem", content: [T("step → "), { type: "inlineMath", props: { latex: "a=b" } }] },
+    { type: "checkListItem", props: { checked: true }, content: [T("done")] },
+    { type: "toggleListItem", content: [T("Solution")] },
+    { type: "quote", content: [T("Insight: ", { bold: true }), T("text")] },
+    { type: "codeBlock", props: { language: "python" }, content: [T("print(1)")] },
+    { type: "math", props: { latex: "E=mc^2" } },
+    { type: "callout", props: { calloutType: "TIP", calloutIcon: "📐" }, children: [{ type: "paragraph", content: "tip" }] },
+    { type: "table", content: { type: "tableContent", rows: [{ cells: [[T("a")], [{ type: "inlineMath", props: { latex: "b" } }]] }] } },
+    { type: "interactive", props: { title: "Diagram", html: "stateDiagram-v2\n  [*] --> Idle" } },
+  ];
+
+  // xl-ai turns the block into HTML and back before each edit, and refuses it
+  // ("html diff") unless the block comes back as itself.
+  it("comes back as itself through its HTML, so xl-ai will edit it", async () => {
+    const editor = makeEditor(kinds);
+    const bad: string[] = [];
+    for (const block of editor.document.slice(0, kinds.length)) {
+      const html: string = await editor.blocksToHTMLLossy([{ ...block, children: [] }]);
+      const back = (await editor.tryParseHTMLToBlocks(html)) as AnyBlock[];
+      const { children: _a, ...want } = strip(block);
+      const { children: _b, ...got } = back.length === 1 ? strip(back[0]) : { type: `${back.length} blocks` };
+      if (JSON.stringify(got) !== JSON.stringify(want)) bad.push(block.type);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("is fixed when it holds a formula typed as text (live: every fix said 'Oops')", async () => {
+    const curl = "\\nabla \\times \\vec{E} = -\\frac{\\partial \\vec{B}}{\\partial t}";
+    const editor = makeEditor([{ type: "paragraph", content: `\\[ ${curl} \\]` }]);
+    const id = editor.document[0].id;
+    const tools = editorStreamTools({ withDelays: false }).getStreamTools(editor, false);
+    const executor = new StreamToolExecutor(tools);
+    // what Nemotron answered to "fix it": the same text back
+    await executor.executeOne({ type: "update", id, block: `<p>\\[ ${curl} \\]</p>` });
+    const doc = _getApplySuggestionsTr(editor).doc;
+    const math: AnyBlock[] = [];
+    doc.descendants((n: AnyBlock) => { if (n.type.name === "math") math.push(n.attrs.latex); });
+    expect(math).toEqual([curl]);
   });
 });

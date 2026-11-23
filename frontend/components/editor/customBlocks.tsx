@@ -408,6 +408,15 @@ export const CalloutBlockSpec = createReactBlockSpec(
   },
   {
     render: (props) => <CalloutBlockView block={props.block} />,
+    // The shape parse() reads (its text is in child blocks). Without it the
+    // box exported as its icon alone, came back as a paragraph, and the
+    // editor AI could never change a callout ("html diff", editorAI.ts).
+    toExternalHTML: (props) => (
+      <div data-type="callout" data-callout-type={props.block.props.calloutType}
+        data-callout-icon={props.block.props.calloutIcon || undefined}>
+        {props.block.props.calloutIcon || (CALLOUT_PALETTE[props.block.props.calloutType as CalloutType] ?? CALLOUT_PALETTE.NOTE).icon}
+      </div>
+    ),
     parse: (element: HTMLElement) => {
       if (element.getAttribute("data-type") !== "callout") return undefined;
       const raw = element.getAttribute("data-callout-type");

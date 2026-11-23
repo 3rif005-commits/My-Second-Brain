@@ -369,10 +369,16 @@ export function createNotionCodeBlockSpec() {
     if (!extension?.inputRules) return ext;
     return createExtension({ ...extension, inputRules: undefined });
   });
+  // A live diagram's own export is a <pre> too (InteractiveBlock.tsx); it
+  // carries data-title / data-html, and is left for the diagram to read.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const parseCode = (el: HTMLElement): any =>
+    el.tagName === "PRE" && (el.hasAttribute("data-title") || el.hasAttribute("data-html"))
+      ? undefined : parse?.(el);
   return createBlockSpec(
     { ...base.config, propSchema: { ...base.config.propSchema, wrap: { default: false } } },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    { meta, parse, parseContent, render, toExternalHTML } as any,
+    { meta, parse: parseCode, parseContent, render, toExternalHTML } as any,
     [...extensions, codeFenceRule],
   )();
 }

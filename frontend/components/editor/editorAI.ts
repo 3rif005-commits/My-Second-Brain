@@ -46,7 +46,9 @@ export const EDITOR_AI_PROMPT: string = aiDocumentFormats.html.systemPrompt + HO
 
 // ---- what the model is shown ------------------------------------------------
 
-const NOISE_ATTRS = new Set(["style", "class", "title", "contenteditable", "spellcheck", "data-editable"]);
+// data-html repeats a diagram's code; data-snapshot is its picture.
+const NOISE_ATTRS = new Set(["style", "class", "title", "contenteditable", "spellcheck", "data-editable",
+  "data-html", "data-snapshot"]);
 
 /** A block's editor HTML without what only the browser needs. Everything
  *  BlockNote reads back is in data-* attributes (colours, alignment, levels,
@@ -58,7 +60,7 @@ export function compactBlockHtml(html: string): string {
   for (const el of doc.querySelectorAll(".katex, colgroup")) el.remove();
   for (const el of doc.body.querySelectorAll("*")) {
     for (const { name, value } of [...el.attributes]) {
-      if (NOISE_ATTRS.has(name) || name.startsWith("aria-")
+      if (NOISE_ATTRS.has(name) || name.startsWith("aria-") || value.startsWith("data:")
           || ((name === "colspan" || name === "rowspan") && value === "1")) {
         el.removeAttribute(name);
       }
@@ -222,12 +224,26 @@ export function normalizeAIHtml(html: string): string {
 }
 
 /** The editor as the AI's tools see it: the model's HTML is normalised before
- *  BlockNote parses it. Everything else goes to the real editor. */
+ *  BlockNote parses it. Everything else goes to the real editor.
+ *
+ *  Not the editor's own HTML: before each edit xl-ai turns the current block
+ *  into HTML and back (html-blocks/tools/rebaseTool.ts) and refuses the edit
+ *  if anything changed ("html diff"). Normalising that round trip turned a
+ *  block's `\[ … \]` text into a formula, and every fix of such a block
+ *  failed with "Oops! Something went wrong" (live, 2026-11-23). */
 export function withNormalizedParse(editor: AnyEditor): AnyEditor {
+  const own = new Set<string>();
   return new Proxy(editor, {
     get(target, prop) {
+      if (prop === "blocksToHTMLLossy") {
+        return async (...args: unknown[]) => {
+          const html: string = await target.blocksToHTMLLossy(...args);
+          own.add(html);
+          return html;
+        };
+      }
       if (prop === "tryParseHTMLToBlocks") {
-        return (html: string) => target.tryParseHTMLToBlocks(normalizeAIHtml(html));
+        return (html: string) => target.tryParseHTMLToBlocks(own.delete(html) ? html : normalizeAIHtml(html));
       }
       const v = Reflect.get(target, prop, target);
       return typeof v === "function" ? v.bind(target) : v;
