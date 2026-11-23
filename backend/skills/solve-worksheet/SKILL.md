@@ -33,60 +33,83 @@ Read the whole worksheet first. Then, before writing anything:
 5. List every rule and formula the worksheet needs, and give each one an
    importance level (RULES & FORMULAS below).
 
-THE PAGE
+THE PAGE: NESTED TOGGLE HEADINGS
+The page is a tree of toggle headings, each level one step smaller, ending in
+a plain toggle with no heading. Closed, the page reads like a table of
+contents; the student opens only what they need.
 
-<h1>[Worksheet title]: Solutions</h1>
-OVERVIEW callout                 (see THE TOP OF THE PAGE)
-<h2>Part A: [the worksheet's own part title]</h2>
-  <h3> one per question
-  ...
-<h2>Revision sheet</h2>          (see THE REVISION SHEET)
+<h1>[Worksheet title]: Solutions</h1>          (not a toggle)
+OVERVIEW callout                                (see THE TOP OF THE PAGE)
+<details><summary><h2>Exercise 01 · Laser beam</h2></summary>        level 2: the worksheet's exercise
+  the exercise's shared data, in grey
+  <details><summary><h3>Frequency and intensity</h3></summary>       level 3: one question or topic
+    the Insight quote
+    <details><summary><h4>(a) Frequency</h4></summary>              level 4: a sub-part
+      question in grey · Rule · <details><summary>Solution</summary>…</details> · answer band · callouts
+    </details>
+  </details>
+</details>
+<h2>Revision sheet</h2>                          (not a toggle, see THE REVISION SHEET)
 
-Use the worksheet's own parts as the <h2> groups. If it has no parts, use a
-single <h2>Solutions</h2>.
+- Level 2 is the worksheet's own exercise, with its own label and a 2 to 5
+  word topic: "Exercise 01 · Laser beam". An exercise with a single question
+  has no level 3: its content goes straight under the level 2.
+- Level 3 groups what one question (or one theme of the exercise) asks:
+  "Frequency and intensity", "Fields from intensity". Name the thing, not a
+  sentence. Never repeat the exercise number in it.
+- Level 4 is a sub-part, with the worksheet's letter: "(a) Frequency".
+  A question with no sub-parts has no level 4: its question line, Rule,
+  Solution and band go straight under the level 3.
+- The deepest level is always the plain toggle "Solution", with no heading.
+- A heading inside <summary> is how a toggle heading is written; never put a
+  heading outside a <details>, except the <h1> and the revision sheet.
 
-ONE QUESTION, ALWAYS IN THIS ORDER
-0. A divider before every question except the first one under an <h2>: <hr>.
-   It makes each question its own card when scrolling.
-1. Heading: <h3 data-anchor="1:p:2">Q3 · Short topic label</h3>. Write the
-   worksheet's own label exactly ("Q3", "Exercise 3", "3."), then 2 to 5 words
-   naming what the question is about. Name the thing, not a sentence:
-   "Q3 · Projectile range", not "Q3 · How far does the ball go?".
-2. The goal, alone in a quote: <blockquote><p><strong>Goal:</strong> …</p></blockquote>
-   One short idea, at most 12 words, and NO formula: the formula is the Rule's
-   job. Say what you are doing and why it works: "Goal: energy = energy
-   density × volume", "Goal: a fall from rest is uniform acceleration from
-   zero speed". Never repeat the question or its number.
-3. The question, condensed, in grey, as its own line:
-     <p><span data-style-type="textColor" data-value="gray">Calculate the energy in 0.7 m of the beam ($P = 1\,\text{mW}$, $r = 1\,\text{mm}$).</span></p>
+ONE QUESTION (the content under a level 3 or level 4 toggle)
+1. The Insight, once per level 3, as a quote:
+     <blockquote><p><strong>Insight:</strong> …</p></blockquote>
+   This is the theory the question rests on, not what the question asks. Pick
+   the one or two quantities or ideas the question revolves around and say,
+   briefly and deeply, what each one REALLY represents: what it measures
+   physically, why it behaves as it does, what it would look like if you
+   could see it. One line per idea, separated by <br>, each under about 25
+   words, no formula:
+     "<strong>Frequency</strong> is how many times per second the field
+     oscillates: the source sets it, so it never changes when light enters glass;
+     only the wavelength shrinks.<br><strong>Intensity</strong> is the power
+     crossing each square metre: what a detector or your eye actually responds
+     to, not the total power."
+   Even a pure computation has ideas behind its quantities: say what they are.
+   No formula and no symbol-heavy maths in an Insight: words only, with at
+   most a symbol name like $E_0$. Write your own sentences for THIS worksheet;
+   the example's Insights below show the depth wanted, never text to copy.
+   The discard test: could the sentence sit, word for word, in a glossary
+   without teaching anything? Then rewrite it with the meaning or the
+   consequence. Never write "Goal:", never restate the question.
+2. The question, condensed, in grey, as its own line:
+     <p><span data-style-type="textColor" data-value="gray">Calculate the frequency of the wave ($\lambda = 632.8\,\text{nm}$).</span></p>
    Keep every given value with its unit and exactly what is asked, without the
-   story around it and without the question's number. For multiple choice,
-   the options go on a new line after <br>: "A) … · B) … · C) … · D) …".
-4. The rule: its name on one line, then its formula alone, big, as a display
+   story around it and without the question's number. Data shared by the whole
+   exercise goes once, in grey, right under the level 2 heading. For multiple
+   choice, the options go on a new line after <br>: "A) … · B) … · C) … · D) …".
+3. The rule: its name on one line, then its formula alone, big, as a display
    block:
-     <p><strong>Rule:</strong> energy density × volume</p>
-     <div data-type="math">\langle u \rangle = \tfrac12 \varepsilon_0 E_0^2 \qquad U = \langle u \rangle\, A L</div>
-   The formula is what the eye should land on first, so it is never buried
-   in a sentence. Every answer names its rule, as the course names it. Two
-   rules go in the same block, separated by \qquad. When the course tool is
-   a procedure rather than an equation (a canonical form, a proof technique,
-   an algorithm, a way to build an automaton), the Rule line states it and
-   there is no display block: "Rule: one state per amount of the pattern read
-   so far". A recall question gives the definition or law it recalls.
-5. The working, folded away: <details><summary>Solution</summary>…</details>.
+     <p><strong>Rule:</strong> wave relation</p>
+     <div data-type="math">c = \lambda f</div>
+   Every answer names its rule, as the course names it. Two rules go in the
+   same block, separated by \qquad. When the course tool is a procedure rather
+   than an equation (a canonical form, a proof technique, an algorithm, a way to
+   build an automaton), the Rule line states it and there is no display block.
+   A recall question gives the definition or law it recalls.
+4. The working, folded away: <details><summary>Solution</summary>…</details>.
    See WORKING.
-6. The answer band: <p data-background-color="green"><strong>Answer:</strong> …</p>.
-7. Callouts: none, one or two, only when they are earned. See CALLOUTS.
-
-Sub-parts (a), (b), …: the Goal and the shared data go once, under the <h3>.
-Each part then gets <h4>(a) Short label</h4> followed by its own grey question
-line, Rule, Solution, answer band and callouts. No divider between parts.
+5. The answer band: <p data-background-color="green"><strong>Answer:</strong> …</p>.
+6. Callouts: none, one or two, only when they are earned. See CALLOUTS.
 
 WHY THE ANSWER COMES AFTER THE WORKING
 You write from top to bottom and cannot go back. The band sits under the folded
 Solution so that every answer you state has already been worked out above it.
-When the toggle is closed, the band sits right under the question, so the
-reader loses nothing. Never write an answer you have not derived.
+When the Solution toggle is closed, the band sits right under the Rule, so
+the reader loses nothing. Never write an answer you have not derived.
 
 DEPTH: SET BY THE QUESTION, NOT BY HABIT
 
@@ -159,7 +182,7 @@ line, because the code or diagram is right above it. The band never repeats
 the working. Never write "see above".
 
 CALLOUTS
-Use none, one or two per question, and only when they add something the Goal,
+Use none, one or two per question, and only when they add something the Insight,
 the answer and the working do not. An easy question normally has none. A
 callout always stands alone, never inside a list, a table or the band:
   <div data-type="callout" data-callout-type="CAUTION"><p><strong>Trap:</strong> …</p></div>
@@ -176,18 +199,19 @@ In the revision sheet, the callout types are used as colours (see RULES &
 FORMULAS). An unknown type is silently shown as a grey NOTE, and the colour
 coding is lost.
 
-HEADING HIGHLIGHTS: WHAT TO REDO FIRST
-Question headings have no highlight by default. Only these get one, as a span
-inside the heading:
-  <h3 data-anchor="1:p:2"><span data-style-type="backgroundColor" data-value="red">Q4 · Projectile range</span></h3>
+HEADING HIGHLIGHTS: IMPORTANCE
+Level 3 and level 4 toggle headings show their importance as a highlight, a
+span inside the heading:
+  <details><summary><h3><span data-style-type="backgroundColor" data-value="red">Frequency and intensity</span></h3></summary>
 red     at most 2: the questions most like what the exam will ask. If the
-        student redoes only two questions, it should be these.
+        student redoes only two, it should be these.
 orange  at most 3: the questions that carry the worksheet's core method.
-A question you could only answer by assuming something gets no highlight.
-Nothing else gets a highlight: no other colour, and none on an <h2> or <h4>.
-Choose them in step 4 of BEFORE WRITING, not as you go. Never put the colour on
-the heading element itself (data-background-color on the <h3>): that tints
-everything under it.
+yellow  at most 4: multi-step work that needs real understanding.
+Everything else stays bare. Never highlight a level 2 exercise heading or the
+<h1>, and a question you could only answer by assuming something gets no
+highlight. Choose them in step 4 of BEFORE WRITING, not as you go. Never put the
+colour on the heading element itself (data-background-color on the <h3>): that
+tints everything inside the toggle.
 
 MATHS
 - Maths inside a sentence goes between single dollar signs, in LaTeX:
@@ -253,14 +277,9 @@ Inside a box: the rule's name in bold with the questions that use it, the
 formula as a display block (or the procedure in one line), then one line
 naming the variables.
 
-ANCHORS
-Every question's <h3> carries data-anchor="SOURCE:TYPE:VALUE":
-- SOURCE is the worksheet's number in "=== SOURCE N ===".
-- TYPE is p when the source text is tagged [page N], or s when it is tagged
-  [section N].
-- VALUE is the number in the tag just before the question in the source text.
-The anchor lets the student jump from an answer to the original question and its
-figure. Put it on no other element.
+NO ANCHORS
+Write no data-anchor attribute: the headings are nested inside toggles, where
+an anchor would pin to the wrong heading.
 
 HONESTY
 - If the worksheet gives the result ("show that…", or answers at the end), your
@@ -295,37 +314,54 @@ once with <h1>.
 
 EXAMPLE: copy the shapes, not the content.
 
-<h1>Worksheet 3, Falling Bodies: Solutions</h1>
+<h1>TD 3, Electromagnetic Waves: Solutions</h1>
 <div data-type="callout" data-callout-type="OVERVIEW"><details><summary>Overview</summary><ul>
-<li><strong>Tests:</strong> motion under gravity, and the units of mechanics.</li>
-<li><strong>Map:</strong> Q1 free fall · Q2 units · Q3 air resistance.</li>
-<li><strong>Toolkit:</strong> uniform acceleration, the definition of momentum, force balance.</li>
+<li><strong>Tests:</strong> describing a laser beam by its wave quantities and the energy it carries.</li>
+<li><strong>Map:</strong> Exercise 01 laser beam · Exercise 02 units.</li>
+<li><strong>Toolkit:</strong> wave relation, intensity of a beam, intensity–field relation.</li>
 </ul></details></div>
-<h2>Solutions</h2>
-<h3 data-anchor="1:p:1"><span data-style-type="backgroundColor" data-value="red">Q1 · Ball dropped from a roof</span></h3>
-<blockquote><p><strong>Goal:</strong> a fall from rest is uniform acceleration from zero speed</p></blockquote>
-<p><span data-style-type="textColor" data-value="gray">A ball is dropped from rest from a $20\,\text{m}$ roof; ignore air resistance.</span></p>
-<h4>(a) Time to fall</h4>
-<p><span data-style-type="textColor" data-value="gray">How long does it take to land?</span></p>
-<p><strong>Rule:</strong> uniform acceleration from rest</p>
-<div data-type="math">s = \tfrac12 g t^2</div>
+<details><summary><h2>Exercise 01 · Laser beam</h2></summary>
+<p><span data-style-type="textColor" data-value="gray">A laser beam: $\lambda = 632.8\,\text{nm}$, average power $P = 1\,\text{mW}$, beam diameter $D = 2\,\text{mm}$.</span></p>
+<details><summary><h3><span data-style-type="backgroundColor" data-value="orange">Frequency and intensity</span></h3></summary>
+<blockquote><p><strong>Insight:</strong> <strong>Frequency</strong> is how many times per second the field oscillates; the source fixes it, so in glass only the wavelength shrinks.<br><strong>Intensity</strong> is the power through each square metre: a thin beam of modest power can be far more intense than a bulb.</p></blockquote>
+<details><summary><h4>(a) Frequency</h4></summary>
+<p><span data-style-type="textColor" data-value="gray">Find the frequency of the wave.</span></p>
+<p><strong>Rule:</strong> wave relation</p>
+<div data-type="math">c = \lambda f</div>
+<p data-background-color="green"><strong>Answer:</strong> $f = c/\lambda = 3 \times 10^8 / 632.8 \times 10^{-9} \approx 4.74 \times 10^{14}\,\text{Hz}$</p>
+</details>
+<details><summary><h4>(b) Intensity</h4></summary>
+<p><span data-style-type="textColor" data-value="gray">Find the intensity of the beam.</span></p>
+<p><strong>Rule:</strong> intensity of a uniform beam</p>
+<div data-type="math">I = \frac{P}{A} \qquad A = \pi \left(\frac{D}{2}\right)^2</div>
 <details><summary>Solution</summary>
 <ol>
-<li>Solve for the time → $t = \sqrt{2s/g}$</li>
-<li>Substitute → $t = \sqrt{2 \times 20 / 9.8} = 2.02\,\text{s}$</li>
+<li>Beam area → $A = \pi (10^{-3})^2 = 3.14 \times 10^{-6}\,\text{m}^2$</li>
+<li>Intensity → $I = 10^{-3} / 3.14 \times 10^{-6} = 318\,\text{W/m}^2$</li>
 </ol>
-<p><strong>Check:</strong> about $2\,\text{s}$ for a $20\,\text{m}$ drop is plausible.</p>
+<p><strong>Check:</strong> $1\,\text{mW}$ spread over $3\,\text{mm}^2$ gives hundreds of $\text{W/m}^2$, as expected.</p>
 </details>
-<p data-background-color="green"><strong>Answer:</strong> $t \approx 2.0\,\text{s}$</p>
-<h4>(b) Landing speed</h4>
-<p><span data-style-type="textColor" data-value="gray">How fast is it moving when it lands?</span></p>
-<p><strong>Rule:</strong> uniform acceleration</p>
-<div data-type="math">v = u + g t</div>
-<p data-background-color="green"><strong>Answer:</strong> $v = 9.8 \times 2.02 \approx 20\,\text{m/s}$, downward</p>
-<div data-type="callout" data-callout-type="TIP"><p><strong>Shortcut:</strong> $v = \sqrt{2gs}$ gives the speed without the time, and checks (a) and (b) together.</p></div>
-<hr>
-<h3 data-anchor="1:p:1">Q2 · Unit of momentum</h3>
-<blockquote><p><strong>Goal:</strong> a unit follows from the quantity's defining formula</p></blockquote>
+<p data-background-color="green"><strong>Answer:</strong> $I \approx 318\,\text{W/m}^2$</p>
+<div data-type="callout" data-callout-type="CAUTION"><p><strong>Trap:</strong> $D$ is the diameter: using $\pi D^2$ makes the area four times too big.</p></div>
+</details>
+</details>
+<details><summary><h3><span data-style-type="backgroundColor" data-value="red">Field amplitudes</span></h3></summary>
+<blockquote><p><strong>Insight:</strong> <strong>The field amplitudes</strong> are how hard the wave pushes on charges; intensity grows with their square, so doubling $E_0$ quadruples the energy delivered.</p></blockquote>
+<p><span data-style-type="textColor" data-value="gray">Find the amplitudes $E_0$ and $B_0$ of the beam's fields.</span></p>
+<p><strong>Rule:</strong> intensity of a plane wave, and the field ratio</p>
+<div data-type="math">I = \tfrac12 c \varepsilon_0 E_0^2 \qquad B_0 = \frac{E_0}{c}</div>
+<details><summary>Solution</summary>
+<ol>
+<li>Electric amplitude → $E_0 = \sqrt{2I / c\varepsilon_0} = \sqrt{2 \times 318 / (3 \times 10^8 \times 8.85 \times 10^{-12})} \approx 490\,\text{V/m}$</li>
+<li>Magnetic amplitude → $B_0 = 490 / 3 \times 10^8 \approx 1.63 \times 10^{-6}\,\text{T}$</li>
+</ol>
+<p><strong>Check:</strong> substituting back, $\tfrac12 c\varepsilon_0 (490)^2 \approx 318\,\text{W/m}^2$.</p>
+</details>
+<p data-background-color="green"><strong>Answer:</strong> $E_0 \approx 490\,\text{V/m}$, $B_0 \approx 1.63 \times 10^{-6}\,\text{T}$</p>
+</details>
+</details>
+<details><summary><h2>Exercise 02 · Unit of momentum</h2></summary>
+<blockquote><p><strong>Insight:</strong> <strong>Momentum</strong> is motion that resists being stopped: a slow truck and a fast bullet can carry the same amount.</p></blockquote>
 <p><span data-style-type="textColor" data-value="gray">Which is the SI unit of momentum?<br>A) N · B) kg·m/s · C) J/s · D) kg·m/s²</span></p>
 <p><strong>Rule:</strong> definition of momentum</p>
 <div data-type="math">p = m v</div>
@@ -336,28 +372,17 @@ EXAMPLE: copy the shapes, not the content.
 <li>D ✗ this is the newton again, written out.</li>
 </ul></details>
 <p data-background-color="green"><strong>Answer:</strong> B, kg·m/s</p>
-<div data-type="callout" data-callout-type="CAUTION"><p><strong>Trap:</strong> A and D are the same unit. When two options are equal, both are wrong.</p></div>
-<hr>
-<h3 data-anchor="1:p:2"><span data-style-type="backgroundColor" data-value="orange">Q3 · Terminal speed with a parachute</span></h3>
-<blockquote><p><strong>Goal:</strong> a steady speed means the forces balance</p></blockquote>
-<p><span data-style-type="textColor" data-value="gray">Explain why a skydiver falls at a lower terminal speed once the parachute opens.</span></p>
-<p><strong>Rule:</strong> Newton's first law at terminal speed</p>
-<div data-type="math">F_{\text{drag}}(v) = m g</div>
-<p data-background-color="green"><strong>Answer:</strong> The canopy raises the drag at every speed, so drag balances the weight at a lower speed.</p>
-<ul>
-<li><strong>Just after opening:</strong> drag exceeds weight, so the net force points up and the skydiver slows down.</li>
-<li><strong>Slowing lowers the drag:</strong> until drag equals the weight again, at a lower speed.</li>
-</ul>
-<div data-type="callout" data-callout-type="EXAM"><p><strong>Marks:</strong> one mark for each link in the chain: area up, drag up, net force up, slows down, balance at a lower speed.</p></div>
+</details>
 <h2>Revision sheet</h2>
 <h3>Rules &amp; formulas</h3>
 <p>🟥 must know · 🟧 core · 🟨 needed · 🟦 supporting · ⬜ background</p>
-<div data-type="callout" data-callout-type="CAUTION" data-callout-icon="📐"><p><strong>Uniform acceleration from rest</strong> (Q1)</p><div data-type="math">s = \tfrac12 g t^2 \qquad v = u + g t \qquad v = \sqrt{2 g s}</div><p>$s$ distance fallen · $t$ time · $u$ start speed · $g = 9.8\,\text{m/s}^2$</p></div>
-<div data-type="callout" data-callout-type="WARNING" data-callout-icon="📐"><p><strong>Force balance at terminal speed</strong> (Q3)</p><div data-type="math">F_{\text{drag}}(v) = m g</div><p>drag grows with speed $v$ and area; $m g$ is the weight</p></div>
-<div data-type="callout" data-callout-type="OVERVIEW" data-callout-icon="📐"><p><strong>Definition of momentum</strong> (Q2)</p><div data-type="math">p = m v</div><p>$m$ mass in kg · $v$ velocity in m/s</p></div>
+<div data-type="callout" data-callout-type="CAUTION" data-callout-icon="📐"><p><strong>Intensity of a plane wave</strong> (Ex. 01)</p><div data-type="math">I = \tfrac12 c \varepsilon_0 E_0^2 \qquad B_0 = \frac{E_0}{c}</div><p>$E_0$, $B_0$ field amplitudes · $\varepsilon_0 = 8.85 \times 10^{-12}\,\text{F/m}$</p></div>
+<div data-type="callout" data-callout-type="WARNING" data-callout-icon="📐"><p><strong>Intensity of a beam</strong> (Ex. 01b)</p><div data-type="math">I = \frac{P}{A}</div><p>$P$ power · $A$ beam cross-section</p></div>
+<div data-type="callout" data-callout-type="IMPORTANT" data-callout-icon="📐"><p><strong>Wave relation</strong> (Ex. 01a)</p><div data-type="math">c = \lambda f</div><p>$\lambda$ wavelength · $f$ frequency · $c = 3 \times 10^8\,\text{m/s}$</p></div>
+<div data-type="callout" data-callout-type="OVERVIEW" data-callout-icon="📐"><p><strong>Definition of momentum</strong> (Ex. 02)</p><div data-type="math">p = m v</div><p>$m$ mass · $v$ velocity</p></div>
 <h3>Answer key</h3>
 <table><tr><th>Q</th><th>Answer</th></tr>
-<tr><td>1(a)</td><td>$t \approx 2.0\,\text{s}$</td></tr>
-<tr><td>1(b)</td><td>$v \approx 20\,\text{m/s}$, downward</td></tr>
-<tr><td>2</td><td>B, kg·m/s</td></tr>
-<tr><td>3</td><td>drag balances the weight at a lower speed</td></tr></table>
+<tr><td>01 (a)</td><td>$f \approx 4.74 \times 10^{14}\,\text{Hz}$</td></tr>
+<tr><td>01 (b)</td><td>$I \approx 318\,\text{W/m}^2$</td></tr>
+<tr><td>01 fields</td><td>$E_0 \approx 490\,\text{V/m}$, $B_0 \approx 1.63 \times 10^{-6}\,\text{T}$</td></tr>
+<tr><td>02</td><td>B, kg·m/s</td></tr></table>

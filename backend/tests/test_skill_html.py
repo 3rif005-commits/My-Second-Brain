@@ -61,11 +61,20 @@ def test_latex_written_without_dollars_still_becomes_a_formula():
     """Seen live on Nemotron: the Rule line showed raw \\frac{1}{2} \\epsilon_0."""
     out = skill_html.inline_math("<p><strong>Rule:</strong> time-averaged energy density "
                                  "⟨u⟩ = \\frac{1}{2} \\epsilon_0 E_0^2 and energy U = ⟨u⟩ × volume</p>")
-    assert _spans(out) == ["⟨u⟩ = \\frac{1}{2} \\epsilon_0 E_0^2"]
-    assert out.endswith("</span> and energy U = ⟨u⟩ × volume</p>")
+    assert _spans(out) == ["⟨u⟩ = \\frac{1}{2} \\epsilon_0 E_0^2", "U = \\langle u\\rangle"]
+    assert out.endswith("</span> × volume</p>")
     # a trailing comma stays prose, and a Windows path is not maths
     assert _spans(skill_html.inline_math("<p>Use \\sqrt{2gs}, then stop.</p>")) == ["\\sqrt{2gs}"]
     assert _spans(skill_html.inline_math("<p>Open C:\\Users first.</p>")) == []
+
+
+def test_typed_unicode_maths_becomes_a_formula():
+    """Seen live on Nemotron: "f ≈ 4.74 × 10¹⁴ Hz" typed next to real formulas."""
+    assert _spans(skill_html.inline_math("<p>f ≈ 4.74 × 10¹⁴ Hz</p>")) == [
+        "f \\approx 4.74 \\times 10^{14}"]
+    assert _spans(skill_html.inline_math("<p>doubling E₀ quadruples it</p>")) == ["E_{0}"]
+    # a title's separator dot and multiple-choice options are not maths
+    assert _spans(skill_html.inline_math("<h2>Exercise 01 · Laser beam</h2><p>A) 4 · B) 6</p>")) == []
 
 
 def test_a_bare_number_between_dollars_is_maths():
@@ -170,13 +179,13 @@ def test_every_callout_type_the_worksheet_skill_names_exists():
 
 def _example() -> str:
     body = _worksheet_skill().body
-    return body[body.index("<h1>Worksheet 3"):]
+    return body[body.index("<h1>TD 3"):]
 
 
 def test_the_skills_own_example_survives_finishing():
     out = skill_html.finish(_example())
-    assert "t \\approx 2.0\\,\\text{s}" in _spans(out)
-    assert out.count('data-background-color="green"') == 4   # 1a, 1b, 2, 3
+    assert "I \\approx 318\\,\\text{W/m}^2" in _spans(out)
+    assert out.count('data-background-color="green"') == 4   # 01a, 01b, fields, 02
     assert "$" not in re.sub(r"<[^>]+>", "", out)              # no maths left as raw text
 
 

@@ -1,66 +1,72 @@
-<h1>Worksheet 3, Falling Bodies: Solutions</h1>
+<h1>TD 3, Electromagnetic Waves: Solutions</h1>
 <div data-type="callout" data-callout-type="OVERVIEW"><details><summary>Overview</summary><ul>
-<li><strong>Tests:</strong> motion under gravity, and the units of mechanics.</li>
-<li><strong>Map:</strong> Q1 free fall · Q2 units · Q3 air resistance.</li>
-<li><strong>Toolkit:</strong> uniform acceleration, the definition of momentum, force balance.</li>
+<li><strong>Tests:</strong> describing a laser beam by its wave quantities and the energy it carries.</li>
+<li><strong>Map:</strong> Exercise 01 laser beam · Exercise 02 units.</li>
+<li><strong>Toolkit:</strong> wave relation, intensity of a beam, intensity–field relation.</li>
 </ul></details></div>
-<h2>Solutions</h2>
-<h3 data-anchor="1:p:1"><span data-style-type="backgroundColor" data-value="red">Q1 · Ball dropped from a roof</span></h3>
-<blockquote><p><strong>Goal:</strong> a fall from rest is uniform acceleration from zero speed</p></blockquote>
-<p><span data-style-type="textColor" data-value="gray">A ball is dropped from rest from a <span data-inline-content-type="inlineMath" data-latex="20\,\text{m}">20\,\text{m}</span> roof; ignore air resistance.</span></p>
-<h4>(a) Time to fall</h4>
-<p><span data-style-type="textColor" data-value="gray">How long does it take to land?</span></p>
-<p><strong>Rule:</strong> uniform acceleration from rest</p>
-<div data-type="math">s = \tfrac12 g t^2</div>
+<details><summary><h2>Exercise 01 · Laser beam</h2></summary>
+<p><span data-style-type="textColor" data-value="gray">A laser beam: <span data-inline-content-type="inlineMath" data-latex="\lambda = 632.8\,\text{nm}">\lambda = 632.8\,\text{nm}</span>, average power <span data-inline-content-type="inlineMath" data-latex="P = 1\,\text{mW}">P = 1\,\text{mW}</span>, beam diameter <span data-inline-content-type="inlineMath" data-latex="D = 2\,\text{mm}">D = 2\,\text{mm}</span>.</span></p>
+<details><summary><h3><span data-style-type="backgroundColor" data-value="orange">Frequency and intensity</span></h3></summary>
+<blockquote><p><strong>Insight:</strong> <strong>Frequency</strong> is how many times per second the field oscillates; the source fixes it, so in glass only the wavelength shrinks.<br><strong>Intensity</strong> is the power through each square metre: a thin beam of modest power can be far more intense than a bulb.</p></blockquote>
+<details><summary><h4>(a) Frequency</h4></summary>
+<p><span data-style-type="textColor" data-value="gray">Find the frequency of the wave.</span></p>
+<p><strong>Rule:</strong> wave relation</p>
+<div data-type="math">c = \lambda f</div>
+<p data-background-color="green"><strong>Answer:</strong> <span data-inline-content-type="inlineMath" data-latex="f = c/\lambda = 3 \times 10^8 / 632.8 \times 10^{-9} \approx 4.74 \times 10^{14}\,\text{Hz}">f = c/\lambda = 3 \times 10^8 / 632.8 \times 10^{-9} \approx 4.74 \times 10^{14}\,\text{Hz}</span></p>
+</details>
+<details><summary><h4>(b) Intensity</h4></summary>
+<p><span data-style-type="textColor" data-value="gray">Find the intensity of the beam.</span></p>
+<p><strong>Rule:</strong> intensity of a uniform beam</p>
+<div data-type="math">I = \frac{P}{A} \qquad A = \pi \left(\frac{D}{2}\right)^2</div>
 <details><summary>Solution</summary>
 <ol>
-<li>Solve for the time → <span data-inline-content-type="inlineMath" data-latex="t = \sqrt{2s/g}">t = \sqrt{2s/g}</span></li>
-<li>Substitute → <span data-inline-content-type="inlineMath" data-latex="t = \sqrt{2 \times 20 / 9.8} = 2.02\,\text{s}">t = \sqrt{2 \times 20 / 9.8} = 2.02\,\text{s}</span></li>
+<li>Beam area → <span data-inline-content-type="inlineMath" data-latex="A = \pi (10^{-3})^2 = 3.14 \times 10^{-6}\,\text{m}^2">A = \pi (10^{-3})^2 = 3.14 \times 10^{-6}\,\text{m}^2</span></li>
+<li>Intensity → <span data-inline-content-type="inlineMath" data-latex="I = 10^{-3} / 3.14 \times 10^{-6} = 318\,\text{W/m}^2">I = 10^{-3} / 3.14 \times 10^{-6} = 318\,\text{W/m}^2</span></li>
 </ol>
-<p><strong>Check:</strong> about <span data-inline-content-type="inlineMath" data-latex="2\,\text{s}">2\,\text{s}</span> for a <span data-inline-content-type="inlineMath" data-latex="20\,\text{m}">20\,\text{m}</span> drop is plausible.</p>
+<p><strong>Check:</strong> <span data-inline-content-type="inlineMath" data-latex="1\,\text{mW}">1\,\text{mW}</span> spread over <span data-inline-content-type="inlineMath" data-latex="3\,\text{mm}^2">3\,\text{mm}^2</span> gives hundreds of <span data-inline-content-type="inlineMath" data-latex="\text{W/m}^2">\text{W/m}^2</span>, as expected.</p>
 </details>
-<p data-background-color="green"><strong>Answer:</strong> <span data-inline-content-type="inlineMath" data-latex="t \approx 2.0\,\text{s}">t \approx 2.0\,\text{s}</span></p>
-<h4>(b) Landing speed</h4>
-<p><span data-style-type="textColor" data-value="gray">How fast is it moving when it lands?</span></p>
-<p><strong>Rule:</strong> uniform acceleration</p>
-<div data-type="math">v = u + g t</div>
-<p data-background-color="green"><strong>Answer:</strong> <span data-inline-content-type="inlineMath" data-latex="v = 9.8 \times 2.02 \approx 20\,\text{m/s}">v = 9.8 \times 2.02 \approx 20\,\text{m/s}</span>, downward</p>
-<div data-type="callout" data-callout-type="TIP"><p><strong>Shortcut:</strong> <span data-inline-content-type="inlineMath" data-latex="v = \sqrt{2gs}">v = \sqrt{2gs}</span> gives the speed without the time, and checks (a) and (b) together.</p></div>
-<hr>
-<h3 data-anchor="1:p:1">Q2 · Unit of momentum</h3>
-<blockquote><p><strong>Goal:</strong> a unit follows from the quantity's defining formula</p></blockquote>
+<p data-background-color="green"><strong>Answer:</strong> <span data-inline-content-type="inlineMath" data-latex="I \approx 318\,\text{W/m}^2">I \approx 318\,\text{W/m}^2</span></p>
+<div data-type="callout" data-callout-type="CAUTION"><p><strong>Trap:</strong> <span data-inline-content-type="inlineMath" data-latex="D">D</span> is the diameter: using <span data-inline-content-type="inlineMath" data-latex="\pi D^2">\pi D^2</span> makes the area four times too big.</p></div>
+</details>
+</details>
+<details><summary><h3><span data-style-type="backgroundColor" data-value="red">Field amplitudes</span></h3></summary>
+<blockquote><p><strong>Insight:</strong> <strong>The field amplitudes</strong> are how hard the wave pushes on charges; intensity grows with their square, so doubling <span data-inline-content-type="inlineMath" data-latex="E_0">E_0</span> quadruples the energy delivered.</p></blockquote>
+<p><span data-style-type="textColor" data-value="gray">Find the amplitudes <span data-inline-content-type="inlineMath" data-latex="E_0">E_0</span> and <span data-inline-content-type="inlineMath" data-latex="B_0">B_0</span> of the beam's fields.</span></p>
+<p><strong>Rule:</strong> intensity of a plane wave, and the field ratio</p>
+<div data-type="math">I = \tfrac12 c \varepsilon_0 E_0^2 \qquad B_0 = \frac{E_0}{c}</div>
+<details><summary>Solution</summary>
+<ol>
+<li>Electric amplitude → <span data-inline-content-type="inlineMath" data-latex="E_0 = \sqrt{2I / c\varepsilon_0} = \sqrt{2 \times 318 / (3 \times 10^8 \times 8.85 \times 10^{-12})} \approx 490\,\text{V/m}">E_0 = \sqrt{2I / c\varepsilon_0} = \sqrt{2 \times 318 / (3 \times 10^8 \times 8.85 \times 10^{-12})} \approx 490\,\text{V/m}</span></li>
+<li>Magnetic amplitude → <span data-inline-content-type="inlineMath" data-latex="B_0 = 490 / 3 \times 10^8 \approx 1.63 \times 10^{-6}\,\text{T}">B_0 = 490 / 3 \times 10^8 \approx 1.63 \times 10^{-6}\,\text{T}</span></li>
+</ol>
+<p><strong>Check:</strong> substituting back, <span data-inline-content-type="inlineMath" data-latex="\tfrac12 c\varepsilon_0 (490)^2 \approx 318\,\text{W/m}^2">\tfrac12 c\varepsilon_0 (490)^2 \approx 318\,\text{W/m}^2</span>.</p>
+</details>
+<p data-background-color="green"><strong>Answer:</strong> <span data-inline-content-type="inlineMath" data-latex="E_0 \approx 490\,\text{V/m}">E_0 \approx 490\,\text{V/m}</span>, <span data-inline-content-type="inlineMath" data-latex="B_0 \approx 1.63 \times 10^{-6}\,\text{T}">B_0 \approx 1.63 \times 10^{-6}\,\text{T}</span></p>
+</details>
+</details>
+<details><summary><h2>Exercise 02 · Unit of momentum</h2></summary>
+<blockquote><p><strong>Insight:</strong> <strong>Momentum</strong> is motion that resists being stopped: a slow truck and a fast bullet can carry the same amount.</p></blockquote>
 <p><span data-style-type="textColor" data-value="gray">Which is the SI unit of momentum?<br>A) N · B) kg·m/s · C) J/s · D) kg·m/s²</span></p>
 <p><strong>Rule:</strong> definition of momentum</p>
 <div data-type="math">p = m v</div>
 <details><summary>Solution</summary><ul>
 <li>A ✗ the newton is the unit of force.</li>
-<li>B ✓ kg × m/s.</li>
+<li>B ✓ kg <span data-inline-content-type="inlineMath" data-latex="\times m/s">\times m/s</span>.</li>
 <li>C ✗ J/s is the watt, the unit of power.</li>
 <li>D ✗ this is the newton again, written out.</li>
 </ul></details>
 <p data-background-color="green"><strong>Answer:</strong> B, kg·m/s</p>
-<div data-type="callout" data-callout-type="CAUTION"><p><strong>Trap:</strong> A and D are the same unit. When two options are equal, both are wrong.</p></div>
-<hr>
-<h3 data-anchor="1:p:2"><span data-style-type="backgroundColor" data-value="orange">Q3 · Terminal speed with a parachute</span></h3>
-<blockquote><p><strong>Goal:</strong> a steady speed means the forces balance</p></blockquote>
-<p><span data-style-type="textColor" data-value="gray">Explain why a skydiver falls at a lower terminal speed once the parachute opens.</span></p>
-<p><strong>Rule:</strong> Newton's first law at terminal speed</p>
-<div data-type="math">F_{\text{drag}}(v) = m g</div>
-<p data-background-color="green"><strong>Answer:</strong> The canopy raises the drag at every speed, so drag balances the weight at a lower speed.</p>
-<ul>
-<li><strong>Just after opening:</strong> drag exceeds weight, so the net force points up and the skydiver slows down.</li>
-<li><strong>Slowing lowers the drag:</strong> until drag equals the weight again, at a lower speed.</li>
-</ul>
-<div data-type="callout" data-callout-type="EXAM"><p><strong>Marks:</strong> one mark for each link in the chain: area up, drag up, net force up, slows down, balance at a lower speed.</p></div>
+</details>
 <h2>Revision sheet</h2>
 <h3>Rules &amp; formulas</h3>
 <p>🟥 must know · 🟧 core · 🟨 needed · 🟦 supporting · ⬜ background</p>
-<div data-type="callout" data-callout-type="CAUTION" data-callout-icon="📐"><p><strong>Uniform acceleration from rest</strong> (Q1)</p><div data-type="math">s = \tfrac12 g t^2 \qquad v = u + g t \qquad v = \sqrt{2 g s}</div><p><span data-inline-content-type="inlineMath" data-latex="s">s</span> distance fallen · <span data-inline-content-type="inlineMath" data-latex="t">t</span> time · <span data-inline-content-type="inlineMath" data-latex="u">u</span> start speed · <span data-inline-content-type="inlineMath" data-latex="g = 9.8\,\text{m/s}^2">g = 9.8\,\text{m/s}^2</span></p></div>
-<div data-type="callout" data-callout-type="WARNING" data-callout-icon="📐"><p><strong>Force balance at terminal speed</strong> (Q3)</p><div data-type="math">F_{\text{drag}}(v) = m g</div><p>drag grows with speed <span data-inline-content-type="inlineMath" data-latex="v">v</span> and area; <span data-inline-content-type="inlineMath" data-latex="m g">m g</span> is the weight</p></div>
-<div data-type="callout" data-callout-type="OVERVIEW" data-callout-icon="📐"><p><strong>Definition of momentum</strong> (Q2)</p><div data-type="math">p = m v</div><p><span data-inline-content-type="inlineMath" data-latex="m">m</span> mass in kg · <span data-inline-content-type="inlineMath" data-latex="v">v</span> velocity in m/s</p></div>
+<div data-type="callout" data-callout-type="CAUTION" data-callout-icon="📐"><p><strong>Intensity of a plane wave</strong> (Ex. 01)</p><div data-type="math">I = \tfrac12 c \varepsilon_0 E_0^2 \qquad B_0 = \frac{E_0}{c}</div><p><span data-inline-content-type="inlineMath" data-latex="E_0">E_0</span>, <span data-inline-content-type="inlineMath" data-latex="B_0">B_0</span> field amplitudes · <span data-inline-content-type="inlineMath" data-latex="\varepsilon_0 = 8.85 \times 10^{-12}\,\text{F/m}">\varepsilon_0 = 8.85 \times 10^{-12}\,\text{F/m}</span></p></div>
+<div data-type="callout" data-callout-type="WARNING" data-callout-icon="📐"><p><strong>Intensity of a beam</strong> (Ex. 01b)</p><div data-type="math">I = \frac{P}{A}</div><p><span data-inline-content-type="inlineMath" data-latex="P">P</span> power · <span data-inline-content-type="inlineMath" data-latex="A">A</span> beam cross-section</p></div>
+<div data-type="callout" data-callout-type="IMPORTANT" data-callout-icon="📐"><p><strong>Wave relation</strong> (Ex. 01a)</p><div data-type="math">c = \lambda f</div><p><span data-inline-content-type="inlineMath" data-latex="\lambda">\lambda</span> wavelength · <span data-inline-content-type="inlineMath" data-latex="f">f</span> frequency · <span data-inline-content-type="inlineMath" data-latex="c = 3 \times 10^8\,\text{m/s}">c = 3 \times 10^8\,\text{m/s}</span></p></div>
+<div data-type="callout" data-callout-type="OVERVIEW" data-callout-icon="📐"><p><strong>Definition of momentum</strong> (Ex. 02)</p><div data-type="math">p = m v</div><p><span data-inline-content-type="inlineMath" data-latex="m">m</span> mass · <span data-inline-content-type="inlineMath" data-latex="v">v</span> velocity</p></div>
 <h3>Answer key</h3>
 <table><tr><th>Q</th><th>Answer</th></tr>
-<tr><td>1(a)</td><td><span data-inline-content-type="inlineMath" data-latex="t \approx 2.0\,\text{s}">t \approx 2.0\,\text{s}</span></td></tr>
-<tr><td>1(b)</td><td><span data-inline-content-type="inlineMath" data-latex="v \approx 20\,\text{m/s}">v \approx 20\,\text{m/s}</span>, downward</td></tr>
-<tr><td>2</td><td>B, kg·m/s</td></tr>
-<tr><td>3</td><td>drag balances the weight at a lower speed</td></tr></table>
+<tr><td>01 (a)</td><td><span data-inline-content-type="inlineMath" data-latex="f \approx 4.74 \times 10^{14}\,\text{Hz}">f \approx 4.74 \times 10^{14}\,\text{Hz}</span></td></tr>
+<tr><td>01 (b)</td><td><span data-inline-content-type="inlineMath" data-latex="I \approx 318\,\text{W/m}^2">I \approx 318\,\text{W/m}^2</span></td></tr>
+<tr><td>01 fields</td><td><span data-inline-content-type="inlineMath" data-latex="E_0 \approx 490\,\text{V/m}">E_0 \approx 490\,\text{V/m}</span>, <span data-inline-content-type="inlineMath" data-latex="B_0 \approx 1.63 \times 10^{-6}\,\text{T}">B_0 \approx 1.63 \times 10^{-6}\,\text{T}</span></td></tr>
+<tr><td>02</td><td>B, kg·m/s</td></tr></table>

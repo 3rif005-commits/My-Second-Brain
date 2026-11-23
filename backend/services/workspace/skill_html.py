@@ -69,18 +69,53 @@ def _math_span(latex: str) -> str:
             f"{html.escape(latex, quote=False)}</span>")
 
 
-# LaTeX a model wrote without its dollar signs (Nemotron, seen live:
-# "density ⟨u⟩ = \frac{1}{2} \epsilon_0 E_0^2 and energy"). A run of math-like
-# words around a \command becomes a formula; ordinary words end the run.
+# Maths a model wrote outside dollar signs, in two shapes seen live on
+# Nemotron: bare LaTeX ("density ⟨u⟩ = \\frac{1}{2} \\epsilon_0 E_0^2 and") and
+# typed Unicode ("f ≈ 4.74 × 10¹⁴ Hz"). Both appear next to real formulas and
+# make the eye jump between two fonts, so a run of math-like words around a
+# \\command or a Unicode maths sign becomes a formula. Ordinary words (two or
+# more letters, unless a unit with a power like m² or a function like cos)
+# end the run.
 _LATEX_CMD = re.compile(r"\\[A-Za-z]+")
-_MATH_WORD = re.compile(r"^(?:\\[A-Za-z]+|[A-Za-z]|[A-Za-z]?[_^]|[\d.,]+|[=+\-−×·*/<>≈≤≥()\[\]{}|⟨⟩'])"
-                        r"[A-Za-z0-9\\{}_^()\[\]⟨⟩.,+\-−×·*/=|']*$")
+_SUP = dict(zip("⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺", "0123456789-+"))
+_SUB = dict(zip("₀₁₂₃₄₅₆₇₈₉", "0123456789"))
+_SYMBOLS = {"×": r"\times ", "≈": r"\approx ", "−": "-", "π": r"\pi ", "ε": r"\varepsilon ",
+            "μ": r"\mu ", "λ": r"\lambda ", "ω": r"\omega ", "θ": r"\theta ", "Δ": r"\Delta ",
+            "√": r"\sqrt", "∞": r"\infty ", "≤": r"\le ", "≥": r"\ge ", "⟨": r"\langle ",
+            "⟩": r"\rangle ", "·": r"\cdot ", "½": r"\tfrac12 ", "¼": r"\tfrac14 "}
+_UNICODE_MATH = set(_SUP) | set(_SUB) | set(_SYMBOLS) - {"·"}
+_FUNCTIONS = {"sin", "cos", "tan", "exp", "ln", "log"}
 _TRAIL = ".,;:"
 
 
+def _mathy(word: str) -> bool:
+    w = word.rstrip(_TRAIL)
+    if not w or any(c in w for c in ':"?!'):    # a path, a quote, a question: prose
+        return False
+    if _LATEX_CMD.search(w):
+        return True                            # \sqrt{2gs}: letters inside a command are maths
+    for m in re.finditer(r"(?<![\\A-Za-z])[A-Za-z]{2,}", w):
+        after = w[m.end():m.end() + 1]
+        if m.group(0) not in _FUNCTIONS and not (after and after in _SUP):
+            return False                       # an ordinary word
+    return bool(re.search(r"[\d=+\-*/^_{}()<>|\[\]]|\\[A-Za-z]|^[A-Za-z]", w)
+                or any(c in _UNICODE_MATH for c in w))
+
+
+def _to_latex(chunk: str) -> str:
+    chunk = re.sub(r"[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+", lambda m: "^{" + "".join(_SUP[c] for c in m.group(0)) + "}", chunk)
+    chunk = re.sub(r"[₀₁₂₃₄₅₆₇₈₉]+", lambda m: "_{" + "".join(_SUB[c] for c in m.group(0)) + "}", chunk)
+    chunk = re.sub(r"(?<!\\)\b([A-Za-z]{2,})(?=\^)", lambda m: m.group(1) if m.group(1) in _FUNCTIONS
+                   else r"\text{" + m.group(1) + "}", chunk)
+    chunk = re.sub(r"\b(" + "|".join(_FUNCTIONS) + r")\b", r"\\\1", chunk)
+    for k, v in _SYMBOLS.items():
+        chunk = chunk.replace(k, v)
+    return re.sub(r"\s+", " ", chunk).strip()
+
+
 def _bare_latex(text: str) -> str:
-    """Wrap runs of bare LaTeX in `text` as inline formulas."""
-    if not _LATEX_CMD.search(text):
+    """Wrap runs of bare LaTeX or typed Unicode maths in `text` as formulas."""
+    if not (_LATEX_CMD.search(text) or any(c in _UNICODE_MATH for c in text)):
         return text
     words = re.split(r"(\s+)", text)
     out, run = [], []
@@ -88,15 +123,22 @@ def _bare_latex(text: str) -> str:
     def flush() -> None:
         if not run:
             return
-        chunk = "".join(run).rstrip()
-        tail_ws = "".join(run)[len(chunk):]
+        whole = "".join(run)
+        chunk = whole.rstrip()
+        tail_ws = whole[len(chunk):]
         trail = ""
         while chunk and chunk[-1] in _TRAIL:
             trail, chunk = chunk[-1] + trail, chunk[:-1]
-        if _LATEX_CMD.search(chunk):
-            out.append(_math_span(chunk) + trail + tail_ws)
+        # "U = ⟨u⟩ × volume": the × belongs to the word after it, which is prose
+        dangling = re.search(r"\s*[=+\-−×·≈*/]+$", chunk)
+        if dangling:
+            trail, chunk = chunk[dangling.start():] + trail, chunk[:dangling.start()]
+        if _LATEX_CMD.search(chunk) or any(c in _UNICODE_MATH for c in chunk):
+            latex = chunk if _LATEX_CMD.search(chunk) and not any(c in _UNICODE_MATH - set("⟨⟩") for c in chunk) \
+                else _to_latex(chunk)
+            out.append(_math_span(latex) + trail + tail_ws)
         else:
-            out.append("".join(run))
+            out.append(whole)
         run.clear()
 
     for w in words:
@@ -104,9 +146,10 @@ def _bare_latex(text: str) -> str:
             continue
         if w.isspace():
             (run if run else out).append(w)
-            continue
-        if _MATH_WORD.match(w.rstrip(_TRAIL)) and not (len(w.rstrip(_TRAIL)) > 1 and w.rstrip(_TRAIL).isalpha()):
+        elif _mathy(w):
             run.append(w)
+            if w[-1] in ",;":                 # a clause ends here; so does the formula
+                flush()
         else:
             flush()
             out.append(w)
@@ -163,7 +206,8 @@ def inline_math(doc: str) -> str:
             elif skip_until and low.startswith(skip_until):
                 skip_until = None
             out.append(part)
-        elif code_depth or skip_until or ("$" not in part and "\\" not in part):
+        elif code_depth or skip_until or ("$" not in part and "\\" not in part
+                                          and not any(c in _UNICODE_MATH for c in part)):
             out.append(part)
         else:
             out.append(_inline_math_in_text(part))
