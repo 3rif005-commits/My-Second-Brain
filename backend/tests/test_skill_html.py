@@ -57,6 +57,11 @@ def test_money_code_and_display_maths_are_left_alone():
     assert _spans(out) == ["y"]                            # the span written already, only
 
 
+def test_a_bare_number_between_dollars_is_maths():
+    """Nemotron writes "Roots are $2$ and $3$"; that is no price."""
+    assert _spans(skill_html.inline_math("<p>Roots are $2$ and $3$.</p>")) == ["2", "3"]
+
+
 def test_an_escaped_less_than_reaches_latex_as_a_less_than():
     out = skill_html.inline_math("<p>$a &lt; b$</p>")
     assert _spans(out) == ["a < b"]
@@ -85,6 +90,17 @@ def test_a_mermaid_code_block_becomes_a_live_diagram_block():
         "html": "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Run: start"}}]
 
 
+def test_only_the_last_draft_of_a_diagram_is_kept_and_its_notes_go():
+    """Nemotron drew the DFA three times under one question, with "%% Let me
+    rebuild correctly" between them; only the last version was right."""
+    m = lambda body: f'<pre><code class="language-mermaid">{body}</code></pre>'
+    doc = ('<h3>Q8 · DFA</h3>' + m("stateDiagram-v2\n  q0 --&gt; q2: 1\n  %% wrong, redo")
+           + m("stateDiagram-v2\n  q0 --&gt; q1: 0\n  %% q2 accepts")
+           + '<h3>Q9 · Tree</h3>' + m("flowchart TD\n  A --&gt; B"))
+    assert [b["props"]["html"] for b in _embedded(skill_html.diagrams(doc))] == [
+        "stateDiagram-v2\n  q0 --> q1: 0", "flowchart TD\n  A --> B"]
+
+
 def test_code_that_is_not_a_diagram_stays_a_code_block():
     doc = '<pre><code class="language-mermaid">A to B</code></pre>'
     assert skill_html.diagrams(doc) == doc
@@ -102,6 +118,18 @@ def test_the_model_cannot_write_a_ready_made_block_itself():
 
 def test_finish_drops_a_fence_around_the_whole_answer():
     assert skill_html.finish("```html\n<h1>T</h1>\n<p>$x$</p>\n```").startswith("<h1>T</h1>")
+
+
+def test_rule_box_colours_keep_their_caps():
+    box = lambda t: f'<div data-type="callout" data-callout-type="{t}" data-callout-icon="📐"><p>r</p></div>'
+    doc = "".join(box(t) for t in ["CAUTION"] * 3 + ["WARNING"] * 4 + ["NOTE"])
+    out = re.findall(r'data-callout-type="([A-Z]+)" data-callout-icon', skill_html.rule_caps(doc))
+    # the third red moves to orange, which then fills up, so two oranges move to yellow
+    assert out == ["CAUTION", "CAUTION", "WARNING", "WARNING", "WARNING",
+                   "IMPORTANT", "IMPORTANT", "NOTE"]
+    # a trap callout inside a question is not a rule box and is never touched
+    trap = '<div data-type="callout" data-callout-type="CAUTION"><p>Trap</p></div>'
+    assert skill_html.rule_caps(trap * 4) == trap * 4
 
 
 # ── the shipped skill ────────────────────────────────────────────────────────

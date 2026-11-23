@@ -124,6 +124,9 @@ WORKING (inside the Solution toggle)
   It becomes a live diagram in the note. Mermaid is for boxes and arrows only.
   A function's graph, a circuit, a free-body diagram or a geometric figure is
   described instead, as a list or table of what to draw.
+- Write each diagram once, already correct: work it out before writing the
+  code block, never inside it. No %% comments in Mermaid, and never a second
+  version of a diagram.
 - Code and automata are checked too. Their Check runs two or three inputs
   through them, including one that must be rejected, following every
   transition one by one: "01 ✓, 1101 ✓, 011 ✗". A drawing that fails its own
