@@ -159,7 +159,10 @@ def test_env_anthropic_outranks_a_saved_provider_row():
     take the synthesis job back from Claude — the note prompts target this
     app's BlockNote block structure and are written against Claude."""
     from services.ai import providers as prov_mod
-    with patch.object(prov_mod, "_user_providers", return_value=[_gemini()]), \
+    from core.config import settings
+    # The order among these providers; Nemotron-first is tested in test_nebius.py.
+    with patch.object(settings, "nebius_first_for_all", False), \
+         patch.object(prov_mod, "_user_providers", return_value=[_gemini()]), \
          patch.object(prov_mod, "_env_providers", return_value=[_anthropic("env-key")]):
         ranked = prov_mod.list_providers("u")
     assert [p.provider for p in ranked] == ["anthropic", "gemini", "local"]
@@ -169,7 +172,10 @@ def test_a_saved_anthropic_key_still_beats_the_env_one():
     """The Anthropic pin is a stable sort, so 'user-configured wins' still
     holds within the Anthropic group."""
     from services.ai import providers as prov_mod
-    with patch.object(prov_mod, "_user_providers",
+    from core.config import settings
+    # The order among these providers; Nemotron-first is tested in test_nebius.py.
+    with patch.object(settings, "nebius_first_for_all", False), \
+         patch.object(prov_mod, "_user_providers",
                       return_value=[_gemini(), _anthropic("user-key")]), \
          patch.object(prov_mod, "_env_providers", return_value=[_anthropic("env-key")]):
         ranked = prov_mod.list_providers("u")

@@ -145,6 +145,9 @@ class Settings(BaseSettings):
     # Accounts (user ids, comma-separated) whose every AI call runs on Nebius —
     # the hackathon demo account. Everyone else keeps their usual providers.
     nebius_only_users: str = ""
+    # Nemotron first for EVERY account (user, 2026-11-23), Claude and the rest
+    # kept behind it as the fallback. False = Claude first again.
+    nebius_first_for_all: bool = True
 
     # ── HACKATHON-TAVILY: web research in chat (services/web_research.py) ──
     # Unset = the tool is not offered. Removal: docs/hackathon/TAVILY.md

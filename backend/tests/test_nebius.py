@@ -244,8 +244,23 @@ def test_an_only_nebius_account_gets_nebius_and_nothing_else(on, monkeypatch):
     assert [p.provider for p in demo] == ["openai_compatible", "local"]
     assert demo[0].label == "Nebius Token Factory"
     assert demo[0].chat_model == settings.nebius_strong_model     # the heavy work
-    # Everyone else keeps their own providers, Claude first.
+    # Everyone else keeps their own providers: Claude first when Nemotron is
+    # not made the default for all.
+    monkeypatch.setattr(settings, "nebius_first_for_all", False)
     assert providers.list_providers("someone-else")[0].provider == "anthropic"
+
+
+def test_nemotron_first_for_every_account_with_claude_behind_it(on, monkeypatch):
+    """The user's choice (2026-11-23): Nemotron is the default for everyone,
+    and a Nebius outage still falls back to Claude rather than failing."""
+    monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-real")
+    monkeypatch.setattr(settings, "nebius_first_for_all", True)
+    chain = providers.list_providers("anyone")
+    assert chain[0].label == "Nebius Token Factory"
+    assert chain[0].chat_model == settings.nebius_strong_model
+    assert [p.provider for p in chain[1:]] == ["anthropic", "local"]   # Token Factory once
+    monkeypatch.setattr(settings, "nebius_api_key", "")                # add-on off: untouched
+    assert providers.list_providers("anyone")[0].provider == "anthropic"
 
 
 def test_only_nebius_needs_a_user_and_the_add_on(on, monkeypatch):

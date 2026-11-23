@@ -192,4 +192,5 @@ def list_providers(user_id: str) -> list[Provider]:
         return nebius.only_providers()
     ordered = _drop_disabled(
         _user_providers(user_id) + _env_providers()) + [local_provider()]
-    return sorted(ordered, key=lambda p: 0 if p.provider == "anthropic" else 1)
+    ordered = sorted(ordered, key=lambda p: 0 if p.provider == "anthropic" else 1)
+    return nebius.first_for_all(ordered)            # HACKATHON-NEBIUS

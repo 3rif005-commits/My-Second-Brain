@@ -205,6 +205,19 @@ def only_nebius(user_id: str) -> bool:
     return user_id in {u.strip() for u in settings.nebius_only_users.split(",") if u.strip()}
 
 
+def first_for_all(providers: list) -> list:
+    """Every account's chain with Token Factory's strong model in front
+    (NEBIUS_FIRST_FOR_ALL). Unlike an only-Nebius account, the rest of the
+    chain stays behind it, so a Nebius outage falls back to Claude instead of
+    failing the job."""
+    if not enabled() or not settings.nebius_first_for_all:
+        return providers
+    from dataclasses import replace
+    host = provider_key()
+    rest = [p for p in providers if host not in (p.base_url or "")]
+    return [replace(token_factory(), chat_model=settings.nebius_strong_model)] + rest
+
+
 def only_providers() -> list:
     """The providers such an account gets: Token Factory, with the strong
     model for one-shot jobs (a study guide is the heavy work), and the local

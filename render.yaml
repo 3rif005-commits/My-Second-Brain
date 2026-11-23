@@ -63,6 +63,8 @@ services:
         sync: false
       - key: NEBIUS_ONLY_USERS     # the demo account: every AI call on Nebius
         sync: false
+      - key: NEBIUS_FIRST_FOR_ALL  # Nemotron first for every account, Claude as fallback
+        value: "true"
       # HACKATHON-TAVILY: web research in chat (backend/services/web_research.py).
       # Unset = off. Removal: docs/hackathon/TAVILY.md
       - key: TAVILY_API_KEY
