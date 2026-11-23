@@ -10,7 +10,7 @@ import { aiDocumentFormats, StreamToolExecutor, _getApplySuggestionsTr } from "@
 import { multiColSchema } from "./noteSchema";
 import {
   EDITOR_AI_PROMPT, compactBlockHtml, editorDocumentState, editorStreamTools,
-  normalizeAIHtml, windowAround, SELECTION_BUDGET, cleanEveryAICall, cleanedProvider,
+  normalizeAIHtml, windowAround, SELECTION_BUDGET, cleanEveryAICall, cleanedProvider, bareLatex,
 } from "./editorAI";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -126,6 +126,17 @@ describe("how the editor AI's answer is read", () => {
   it("turns a formula inside a sentence into an inline formula", () => {
     expect(latexOf(normalizeAIHtml("<p>so \\(E_0 = cB_0\\) and $B_0$ grow</p>"))).toEqual(["E_0 = cB_0", "B_0"]);
     expect(latexOf(normalizeAIHtml("<ol><li><p>\\vec{k} \\times \\vec{E} = 0</p></li></ol>"))).toEqual(["\\vec{k} \\times \\vec{E} = 0"]);
+  });
+
+  it("takes the delimiters out of a formula's own LaTeX (live: red KaTeX error)", () => {
+    // Nemotron's answer to "fix it" on the k × E step, shape for shape
+    const live = '<ol><li><p><span data-inline-content-type="inlineMath" data-latex="$\\vec{k} \\times \\vec{E} = 0$"></span></p></li></ol>';
+    expect(latexOf(normalizeAIHtml(live))).toEqual(["\\vec{k} \\times \\vec{E} = 0"]);
+    expect(latexOf(normalizeAIHtml('<div data-type="math">\\[ E = mc^2 \\]</div>'))).toEqual(["E = mc^2"]);
+    expect(bareLatex("$$x$$")).toBe("x");
+    expect(bareLatex("\\(a+b\\)")).toBe("a+b");
+    expect(bareLatex("$a$ + $b$")).toBe("$a$ + $b$");      // not one wrapped formula
+    expect(bareLatex("\\frac{1}{2}")).toBe("\\frac{1}{2}");
   });
 
   it("leaves prices, prose about LaTeX, code and existing formulas alone", () => {

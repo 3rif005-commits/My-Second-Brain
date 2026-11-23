@@ -27,10 +27,10 @@ type Item = { id?: string; block?: string; cursor?: true };
 /** This app's own HTML, on top of BlockNote's generic block format. */
 export const HOUSE_RULES = `---
 THIS EDITOR'S HTML. Use exactly these shapes; anything else becomes plain text.
-- Inline formula: <span data-inline-content-type="inlineMath" data-latex="LATEX"></span>. The LaTeX goes only in data-latex (write " as &quot;).
+- Inline formula: <span data-inline-content-type="inlineMath" data-latex="LATEX"></span>. The LaTeX goes only in data-latex, bare: no $ or \\( around it (write " as &quot;).
 - Formula on its own line: <div data-type="math">LATEX</div>, one block. Use it for long formulas, matrices and anything with \\begin…\\end.
 - NEVER write maths as text: no $…$, $$…$$, \\(…\\), \\[…\\], no bare \\frac or \\vec in a sentence.
-- The LaTeX must compile in KaTeX: balanced braces, \\left and \\right in pairs, no $ inside.
+- The LaTeX must compile in KaTeX: balanced braces, \\left and \\right in pairs, no $ inside. In a matrix, & separates columns and \\\\ ends a row: \\begin{vmatrix} a & b \\\\ c & d \\end{vmatrix}.
 - Text colour: <span data-style-type="textColor" data-value="red">…</span>. Highlight: data-style-type="backgroundColor". A whole block: data-background-color="green" (or data-text-color) on its element. Colours: gray, brown, red, orange, yellow, green, blue, purple, pink.
 - <strong>, <em>, <u>, <s>, <code>, <a href="…"> as usual.
 EDITING
@@ -161,6 +161,15 @@ function isBareFormula(text: string): boolean {
   return !/[A-Za-z]{4,}/.test(rest.replace(/\b(sin|cos|tan|exp|log|det|lim|max|min|mathrm|text|operatorname)\b/g, ""));
 }
 
+/** LaTeX without the delimiters around it: `$…$`, `$$…$$`, `\\(…\\)`, `\\[…\\]`. */
+export function bareLatex(latex: string): string {
+  let t = latex.trim();
+  for (let m; (m = /^(?:\$\$([^$]*)\$\$|\$([^$]*)\$|\\\(([\s\S]*)\\\)|\\\[([\s\S]*)\\\])$/.exec(t));) {
+    t = (m[1] ?? m[2] ?? m[3] ?? m[4]).trim();
+  }
+  return t;
+}
+
 const span = (doc: Document, latex: string) => {
   const el = doc.createElement("span");
   el.setAttribute("data-inline-content-type", "inlineMath");
@@ -174,6 +183,17 @@ const span = (doc: Document, latex: string) => {
 export function normalizeAIHtml(html: string): string {
   if (!/[$\\]/.test(html)) return html;
   const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+
+  // A formula the model wrote with its delimiters inside: `$x^2$` as LaTeX
+  // shows as a red KaTeX error (live, 2026-11-23).
+  for (const el of doc.body.querySelectorAll('[data-inline-content-type="inlineMath"]')) {
+    const latex = el.getAttribute("data-latex");
+    if (latex != null) el.setAttribute("data-latex", bareLatex(latex));
+  }
+  for (const el of doc.body.querySelectorAll('[data-type="math"]')) {
+    el.textContent = bareLatex(el.textContent ?? "");
+    if (el.hasAttribute("data-latex")) el.setAttribute("data-latex", bareLatex(el.getAttribute("data-latex")!));
+  }
   const skip = 'code, pre, a, [data-inline-content-type="inlineMath"], [data-type="math"]';
 
   // A paragraph that is one formula, delimited or bare → a math block.
