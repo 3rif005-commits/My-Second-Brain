@@ -13,6 +13,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { en as coreEn } from "@blocknote/core/locales";
 // @ts-ignore — locales subpath export
 import { en as aiEn } from "@blocknote/xl-ai/locales";
+import { EDITOR_AI_PROMPT, editorDocumentState, editorStreamTools } from "./editorAI";
 import { multiColumnDropCursor, getMultiColumnSlashMenuItems, locales as multiColumnLocales } from "@blocknote/xl-multi-column";
 import { useTheme } from "@/app/providers";
 import { Sparkles } from "lucide-react";
@@ -255,6 +256,9 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
               (_url: string) => `/api/ai/blocknote?noteId=${encodeURIComponent(_noteId)}`
             ),
           }).chat("gpt-4o"),
+          // BlockNote's block-format rules plus this app's (formulas,
+          // colours); without it the model got no instructions (editorAI.ts).
+          systemPrompt: EDITOR_AI_PROMPT,
         }),
       [_noteId]
     );
@@ -269,7 +273,16 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         })(),
         // NotionBlockSelection: blocks as selectable units (Esc, Ctrl+A twice,
         // ↑/↓, Shift+↑/↓, drag from the margin…) — see blockSelection.ts.
-        extensions: [AIExtension({ transport: inlineTransport }), NotionBlockSelection()],
+        extensions: [
+          AIExtension({
+            transport: inlineTransport,
+            // Compact HTML around the selection or cursor, not the whole note.
+            documentStateBuilder: editorDocumentState,
+            // The model's maths written as text becomes real formulas.
+            streamToolsProvider: editorStreamTools(),
+          }),
+          NotionBlockSelection(),
+        ],
         // Pictures captured into a note used to carry a 24-hour link (ledger B2): swap an old link to our own
         // storage for a fresh one when it is shown. Stored content is untouched.
         resolveFileUrl: freshFileUrl,

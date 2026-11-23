@@ -343,7 +343,7 @@ const INLINE_MATH = /(?<![$\\])\$(?!\s)((?:[^$\n\\]|\\.)+?)(?<!\s)\$(?!\$)/g;
 /** Rejects the money-and-numbers false positives that survive the delimiter
  *  rules above: a run with no letters, no backslash and no math operator is
  *  far likelier to be a price than a formula. */
-function looksLikeMath(latex: string): boolean {
+export function looksLikeMath(latex: string): boolean {
   return !/^[\s\d.,%]+$/.test(latex) && /[A-Za-z\\^_{}=+\-*/()[\]|]/.test(latex);
 }
 

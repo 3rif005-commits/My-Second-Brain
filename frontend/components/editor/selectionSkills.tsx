@@ -19,9 +19,8 @@ import {
   AIExtension, AIMenu, AIToolbarButton, getDefaultAIMenuItems,
   type AIMenuSuggestionItem,
 } from "@blocknote/xl-ai";
-// @ts-ignore — xl-ai@0.48.0 exports aiDocumentFormats at runtime but its
-// index.d.ts leaves the api module out (same upstream gap as @blocknote/core)
-import { aiDocumentFormats } from "@blocknote/xl-ai";
+// The model's formulas written as text become real ones (editorAI.ts).
+import { editorStreamTools } from "./editorAI";
 
 export type SelectionSkill = {
   name: string;
@@ -117,7 +116,7 @@ export function selectionMenuItems(
       await editor.getExtension(AIExtension)?.invokeAI({
         useSelection: true,
         userPrompt: s.prompt,
-        streamToolsProvider: aiDocumentFormats.html.getStreamToolsProvider({
+        streamToolsProvider: editorStreamTools({
           defaultStreamTools: streamToolsFor(s.output),
         }),
       });
