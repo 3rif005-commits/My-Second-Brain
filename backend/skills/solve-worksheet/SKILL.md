@@ -5,6 +5,7 @@ surfaces: [workspace]
 inputs: sources
 output: draft_note
 format: html
+temperature: 0.2
 model_tier: standard
 auto: false
 confirm: true
@@ -30,8 +31,9 @@ Read the whole worksheet first. Then, before writing anything:
    one gets an answer. Skip none, merge none, reorder none.
 3. Give each one a kind from DEPTH below. The kind decides how much you write.
 4. Choose the revision-priority highlights (HEADING HIGHLIGHTS below).
-5. List every rule and formula the worksheet needs, and give each one an
-   importance level (RULES & FORMULAS below).
+5. List the general laws the worksheet needs. Give each one name, the one you
+   will use on every Rule line and in its revision box, and an importance
+   level (RULES & FORMULAS below).
 
 THE PAGE: NESTED TOGGLE HEADINGS
 The page is a tree of toggle headings, each level one step smaller, ending in
@@ -91,15 +93,24 @@ ONE QUESTION (the content under a level 3 or level 4 toggle)
    story around it and without the question's number. Data shared by the whole
    exercise goes once, in grey, right under the level 2 heading. For multiple
    choice, the options go on a new line after <br>: "A) … · B) … · C) … · D) …".
-3. The rule: its name on one line, then its formula alone, big, as a display
-   block:
+3. The rule: the GENERAL law the answer rests on, as the course states it, the
+   form that still holds when the exam changes the data. Its name on one line,
+   then its general formula alone, big, as a display block:
      <p><strong>Rule:</strong> wave relation</p>
-     <div data-type="math">c = \lambda f</div>
-   Every answer names its rule, as the course names it. Two rules go in the
-   same block, separated by \qquad. When the course tool is a procedure rather
-   than an equation (a canonical form, a proof technique, an algorithm, a way to
-   build an automaton), the Rule line states it and there is no display block.
-   A recall question gives the definition or law it recalls.
+     <div data-type="math">v = \lambda f</div>
+   When the question uses a special form of it, one more line says which, and
+   why it applies:
+     <p><em>Here:</em> light in vacuum, $v = c$, so $c = \lambda f$.</p>
+   Never put the question's own result or numbers in the Rule. Two rules: their
+   names on one Rule line separated by " · ", their formulas in the same order
+   in one block, separated by \qquad. Name each law the same way, word for
+   word, every time it is used: the revision sheet is built from these names.
+   When the course tool is a procedure rather than an equation (a canonical
+   form, a proof technique, an algorithm, a way to build an automaton), the
+   Rule line states it and there is no display block. A recall question gives
+   the definition or law it recalls. A Rule is a law or definition of the
+   course: maths tools (a vector product, the average of cos², a trig
+   identity, a derivative) are never a Rule; they stay in the working.
 4. The working, folded away: <details><summary>Solution</summary>…</details>.
    See WORKING.
 5. The answer band: <p data-background-color="green"><strong>Answer:</strong> …</p>.
@@ -248,14 +259,42 @@ nothing new. Its headings carry no anchor and no highlight.
 Nothing else goes in the revision sheet.
 
 RULES & FORMULAS
-Every rule and formula used anywhere in the worksheet, each exactly once, as
-one callout per rule. The callout's COLOUR shows how important the rule is,
-and every one carries the 📐 icon so it still reads as a formula:
-  <div data-type="callout" data-callout-type="CAUTION" data-callout-icon="📐">
-    <p><strong>Uniform acceleration from rest</strong> (Q1, Q4)</p>
-    <div data-type="math">s = \tfrac12 g t^2 \qquad v = \sqrt{2 g s}</div>
-    <p>$s$ distance fallen · $t$ time · $g = 9.8\,\text{m/s}^2$</p>
+This is the sheet the student memorises before the exam. With only these
+boxes they must be able to solve every question of the worksheet again, and
+the same questions with other data. It is built from the Rule lines of your
+solutions: one box per distinct rule, named exactly as on its Rule lines,
+with every question that uses it. A rule a solution uses and that has no box
+is an error, and nothing appears here that no solution uses. The same
+worksheet must always give the same boxes.
+
+Each box, in this order (leave out a line that has nothing to say):
+  <div data-type="callout" data-callout-type="WARNING" data-callout-icon="📐">
+    <p><strong>Intensity of a beam</strong> (Ex. 01b)</p>
+    <div data-type="math">I = \frac{P}{A}</div>
+    <p><em>Holds when:</em> the power is spread evenly over the area $A$.</p>
+    <p><em>In this worksheet:</em> circular beam of diameter $D$, $A = \pi (D/2)^2$ (01b).</p>
+    <p>$P$ power (W) · $A$ area (m²) · $I$ intensity (W/m²)</p>
   </div>
+- First the general law: the form that stays true when the exam changes the
+  data, the geometry or the medium. A law that is an equation always has its
+  display block; only a procedure is a sentence.
+- "Holds when" states the law's real limit, the one an exam can break: "the
+  power is spread evenly", "plane wave in vacuum", "time average". A
+  fundamental law (Maxwell's equations, a definition) has no limit worth
+  memorising: leave the line out. Never pad it ("no magnetic monopoles").
+- "In this worksheet" is FORMULAS: the special forms the solutions used, each
+  with its condition and where, the results worth knowing by heart:
+    <p><em>In this worksheet:</em> plane wave in vacuum, $\langle R \rangle = \frac{E_0^2}{2\mu_0 c} = c \langle u \rangle$ (01.3, 01.4).</p>
+  Never "used to find E" or "E and B as found": that says nothing. No special
+  form used: leave the line out. A special case never stands alone as the
+  rule: "B_0 = E_0/c in vacuum" goes under the general law, not instead of it.
+- Never numbers from the exercises, never answers, never a worked result:
+  "E = -(ωB₀/k) cos(ωt - kx) ẑ" is the answer of one question, not a rule.
+- No box for trivia: arithmetic, unit conversions, the area of a circle, a
+  definition taught before this course. They go in the "In this worksheet"
+  line of the law that needs them.
+- The last line names every symbol with its unit, and gives the constants.
+- Maths only between $ signs, never \( \) or \[ \].
 
 Pick the type from the rule's importance. Here the type is only a colour:
 | Importance                                                     | data-callout-type | Colour |
@@ -265,17 +304,13 @@ Pick the type from the rule's importance. Here the type is only a colour:
 | needed: required for some questions                            | IMPORTANT         | yellow |
 | supporting: a helper, a unit, a standard identity              | OVERVIEW          | blue   |
 | background: a prerequisite the student almost surely knows     | NOTE              | gray   |
-Importance is about the worksheet, not the topic in general: a rule that
-only answers a one-mark recall question is "background" or "supporting",
-however famous it is. Before writing the boxes, count: more than 2 CAUTION or
-more than 3 WARNING means you move the weakest down one level until the caps
-hold. Never use TIP (green is kept for answers) and never use FORMULA, EXAM or
-ANALOGY here. Order the boxes from most to least important, and open the
-section with this line, exactly:
+Importance is about the worksheet, not the topic in general. A rule used in
+three questions or more is at least core; in two, at least needed. More than
+2 CAUTION or 3 WARNING: move the weakest down one level until the caps hold.
+Never use TIP (green is kept for answers), FORMULA, EXAM or ANALOGY here.
+Order the boxes from most to least important, ties in order of first use,
+and open the section with this line, exactly:
   <p>🟥 must know · 🟧 core · 🟨 needed · 🟦 supporting · ⬜ background</p>
-Inside a box: the rule's name in bold with the questions that use it, the
-formula as a display block (or the procedure in one line), then one line
-naming the variables.
 
 NO ANCHORS
 Write no data-anchor attribute: the headings are nested inside toggles, where
@@ -327,13 +362,15 @@ EXAMPLE: copy the shapes, not the content.
 <details><summary><h4>(a) Frequency</h4></summary>
 <p><span data-style-type="textColor" data-value="gray">Find the frequency of the wave.</span></p>
 <p><strong>Rule:</strong> wave relation</p>
-<div data-type="math">c = \lambda f</div>
+<div data-type="math">v = \lambda f</div>
+<p><em>Here:</em> light in vacuum, $v = c$.</p>
 <p data-background-color="green"><strong>Answer:</strong> $f = c/\lambda = 3 \times 10^8 / 632.8 \times 10^{-9} \approx 4.74 \times 10^{14}\,\text{Hz}$</p>
 </details>
 <details><summary><h4>(b) Intensity</h4></summary>
 <p><span data-style-type="textColor" data-value="gray">Find the intensity of the beam.</span></p>
-<p><strong>Rule:</strong> intensity of a uniform beam</p>
-<div data-type="math">I = \frac{P}{A} \qquad A = \pi \left(\frac{D}{2}\right)^2</div>
+<p><strong>Rule:</strong> intensity of a beam</p>
+<div data-type="math">I = \frac{P}{A}</div>
+<p><em>Here:</em> a circular beam of diameter $D$, $A = \pi (D/2)^2$.</p>
 <details><summary>Solution</summary>
 <ol>
 <li>Beam area → $A = \pi (10^{-3})^2 = 3.14 \times 10^{-6}\,\text{m}^2$</li>
@@ -348,7 +385,7 @@ EXAMPLE: copy the shapes, not the content.
 <details><summary><h3><span data-style-type="backgroundColor" data-value="red">Field amplitudes</span></h3></summary>
 <blockquote><p><strong>Insight:</strong> <strong>The field amplitudes</strong> are how hard the wave pushes on charges; intensity grows with their square, so doubling $E_0$ quadruples the energy delivered.</p></blockquote>
 <p><span data-style-type="textColor" data-value="gray">Find the amplitudes $E_0$ and $B_0$ of the beam's fields.</span></p>
-<p><strong>Rule:</strong> intensity of a plane wave, and the field ratio</p>
+<p><strong>Rule:</strong> intensity of a plane wave · field ratio of a plane wave</p>
 <div data-type="math">I = \tfrac12 c \varepsilon_0 E_0^2 \qquad B_0 = \frac{E_0}{c}</div>
 <details><summary>Solution</summary>
 <ol>
@@ -376,10 +413,11 @@ EXAMPLE: copy the shapes, not the content.
 <h2>Revision sheet</h2>
 <h3>Rules &amp; formulas</h3>
 <p>🟥 must know · 🟧 core · 🟨 needed · 🟦 supporting · ⬜ background</p>
-<div data-type="callout" data-callout-type="CAUTION" data-callout-icon="📐"><p><strong>Intensity of a plane wave</strong> (Ex. 01)</p><div data-type="math">I = \tfrac12 c \varepsilon_0 E_0^2 \qquad B_0 = \frac{E_0}{c}</div><p>$E_0$, $B_0$ field amplitudes · $\varepsilon_0 = 8.85 \times 10^{-12}\,\text{F/m}$</p></div>
-<div data-type="callout" data-callout-type="WARNING" data-callout-icon="📐"><p><strong>Intensity of a beam</strong> (Ex. 01b)</p><div data-type="math">I = \frac{P}{A}</div><p>$P$ power · $A$ beam cross-section</p></div>
-<div data-type="callout" data-callout-type="IMPORTANT" data-callout-icon="📐"><p><strong>Wave relation</strong> (Ex. 01a)</p><div data-type="math">c = \lambda f</div><p>$\lambda$ wavelength · $f$ frequency · $c = 3 \times 10^8\,\text{m/s}$</p></div>
-<div data-type="callout" data-callout-type="OVERVIEW" data-callout-icon="📐"><p><strong>Definition of momentum</strong> (Ex. 02)</p><div data-type="math">p = m v</div><p>$m$ mass · $v$ velocity</p></div>
+<div data-type="callout" data-callout-type="CAUTION" data-callout-icon="📐"><p><strong>Intensity of a plane wave</strong> (Ex. 01)</p><div data-type="math">I = \tfrac12 c \varepsilon_0 E_0^2</div><p><em>Holds when:</em> a sinusoidal plane wave in vacuum; $I$ is the time average.</p><p>$E_0$ electric amplitude (V/m) · $\varepsilon_0 = 8.85 \times 10^{-12}\,\text{F/m}$ · $c = 3 \times 10^8\,\text{m/s}$</p></div>
+<div data-type="callout" data-callout-type="WARNING" data-callout-icon="📐"><p><strong>Intensity of a beam</strong> (Ex. 01b)</p><div data-type="math">I = \frac{P}{A}</div><p><em>Holds when:</em> the power is spread evenly over the area $A$.</p><p><em>In this worksheet:</em> circular beam of diameter $D$, $A = \pi (D/2)^2$ (01b).</p><p>$P$ power (W) · $A$ area (m²) · $I$ intensity (W/m²)</p></div>
+<div data-type="callout" data-callout-type="IMPORTANT" data-callout-icon="📐"><p><strong>Wave relation</strong> (Ex. 01a)</p><div data-type="math">v = \lambda f</div><p><em>Holds when:</em> any periodic wave; $v$ is its speed in the medium.</p><p><em>In this worksheet:</em> light in vacuum, $v = c$ (01a).</p><p>$\lambda$ wavelength (m) · $f$ frequency (Hz) · $c = 3 \times 10^8\,\text{m/s}$</p></div>
+<div data-type="callout" data-callout-type="IMPORTANT" data-callout-icon="📐"><p><strong>Field ratio of a plane wave</strong> (Ex. 01)</p><div data-type="math">B_0 = \frac{E_0}{v}</div><p><em>Holds when:</em> a plane wave; $v$ its speed in the medium.</p><p><em>In this worksheet:</em> vacuum, $B_0 = E_0/c$ (01).</p><p>$B_0$ magnetic amplitude (T) · $E_0$ electric amplitude (V/m)</p></div>
+<div data-type="callout" data-callout-type="OVERVIEW" data-callout-icon="📐"><p><strong>Definition of momentum</strong> (Ex. 02)</p><div data-type="math">p = m v</div><p>$m$ mass (kg) · $v$ velocity (m/s)</p></div>
 <h3>Answer key</h3>
 <table><tr><th>Q</th><th>Answer</th></tr>
 <tr><td>01 (a)</td><td>$f \approx 4.74 \times 10^{14}\,\text{Hz}$</td></tr>

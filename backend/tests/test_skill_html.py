@@ -201,3 +201,144 @@ def test_the_editor_fixture_is_the_skills_example_finished():
 
 def write_fixture() -> None:
     FIXTURE.write_text(skill_html.finish(_example()) + "\n", encoding="utf-8")
+
+
+# ---- the revision sheet's rules, from the solutions --------------------------
+
+_SOLUTIONS = r'''<h1>T</h1>
+<details><summary><h2>Exercise 01 · Beam</h2></summary>
+<details><summary><h4>(a) F</h4></summary><p><strong>Rule:</strong> wave relation</p><div data-type="math">v = \lambda f</div></details>
+<details><summary><h4>(b) G</h4></summary><p><strong>Rule:</strong> Poynting vector · Faraday's law</p><div data-type="math">\vec S = \vec E \times \vec H \qquad \nabla \times \vec E = -\partial_t \vec B</div></details>
+</details>
+<details><summary><h2>Exercise 02 · Wave</h2></summary>
+<p><strong>Rule:</strong> Poynting vector</p><div data-type="math">\vec S = \vec E \times \vec H</div>
+<details><summary><h3>Energy</h3></summary><p><strong>Rule:</strong> the Poynting vector</p></details>
+</details>
+<h2>Revision sheet</h2>
+<h3>Rules &amp; formulas</h3>
+<p>🟥 must know · 🟧 core · 🟨 needed · 🟦 supporting · ⬜ background</p>
+'''
+
+
+def _box(level: str, name: str) -> str:
+    return (f'<div data-type="callout" data-callout-type="{level}" data-callout-icon="📐">'
+            f'<p><strong>{name}</strong></p><div data-type="math">x</div></div>\n')
+
+
+def _boxes(doc: str) -> list[tuple[str, str]]:
+    return re.findall(r'data-callout-type="([A-Z]+)" data-callout-icon="📐"><p><strong>(.*?)</strong>', doc)
+
+
+def test_a_rule_the_solutions_use_always_gets_a_box():
+    # live: the same worksheet gave different boxes each run, Faraday's law
+    # used and never boxed
+    doc = _SOLUTIONS + _box("CAUTION", "Wave relation") + _box("OVERVIEW", "Poynting vector") + "<h3>Answer key</h3>"
+    out = skill_html.rule_sheet(doc)
+    assert _boxes(out) == [("CAUTION", "Wave relation"), ("WARNING", "Poynting vector"),
+                           ("OVERVIEW", "Faraday's law")]
+    added = out[out.index("Faraday's law</strong>"):]
+    assert added.startswith("Faraday's law</strong> (Ex. 01b)</p>")
+    assert r'<div data-type="math">\nabla \times \vec E = -\partial_t \vec B</div>' in added
+    assert out.index("Faraday's law") < out.index("<h3>Answer key</h3>")
+
+
+def test_a_rule_used_often_is_never_ranked_low():
+    # Poynting in 01b, 02 and 02 "Energy": three questions, at least core
+    out = skill_html.rule_sheet(_SOLUTIONS + _box("NOTE", "The Poynting vector") + "<h3>Answer key</h3>")
+    assert ("WARNING", "The Poynting vector") in _boxes(out)
+
+
+def test_boxes_go_most_important_first_and_the_same_every_time():
+    doc = (_SOLUTIONS + _box("OVERVIEW", "Faraday's law in vacuum") + _box("CAUTION", "Wave relation")
+           + _box("WARNING", "Poynting vector") + "<h3>Answer key</h3>")
+    out = skill_html.rule_sheet(doc)
+    assert [lvl for lvl, _ in _boxes(out)] == ["CAUTION", "WARNING", "OVERVIEW"]
+    assert skill_html.rule_sheet(out) == out
+
+
+def test_rule_names_match_by_their_words_not_their_wording():
+    t = skill_html._tokens
+    same = skill_html._same_rule
+    assert same(t("Faraday's law"), t("Faraday's law in vacuum"))
+    assert same(t("Poynting vector"), t("the Poynting vector"))
+    assert not same(t("wave relation"), t("wave equation"))
+    assert not same(t("intensity of a beam"), t("intensity of a plane wave"))
+    assert not same(t("intensity"), t("intensity of a plane wave"))
+
+
+def test_a_page_without_a_revision_sheet_is_left_alone():
+    doc = _SOLUTIONS.split("<h2>Revision sheet</h2>")[0]
+    assert skill_html.rule_sheet(doc) == doc
+
+
+def test_the_example_teaches_the_general_law_then_the_worksheet_case():
+    doc = skill_html.finish(_example())
+    sheet = doc[doc.index("<h3>Rules"):doc.index("<h3>Answer key")]
+    assert [lvl for lvl, _ in _boxes(sheet)] == ["CAUTION", "WARNING", "IMPORTANT", "IMPORTANT", "OVERVIEW"]
+    assert sheet.count("<em>Holds when:</em>") == 4
+    assert sheet.count("<em>In this worksheet:</em>") == 3
+    # every rule the solutions name has its box, none added by the check
+    assert skill_html.rule_sheet(skill_html.rule_caps(_example())).count('data-callout-icon="📐"') == 5
+    for answer in ("4.74", "318", "490", "1.63"):
+        assert answer not in sheet
+
+
+def test_paren_and_bracket_delimiters_become_formulas_without_them():
+    # live (Nemotron): "\(\mathbf{E}\) electric field" became a formula with
+    # \( \) inside it, a red KaTeX error
+    out = skill_html.inline_math(r"<p>\(\mathbf{E}\) field · \(\mu_0 = 4\pi\)</p>")
+    assert re.findall(r'data-latex="([^"]*)"', out) == [r"\mathbf{E}", r"\mu_0 = 4\pi"]
+    assert skill_html.inline_math(r"<p>\[ \nabla \cdot E = 0 \]</p>") == r'<div data-type="math">\nabla \cdot E = 0</div>'
+    assert skill_html.inline_math(r'<div data-type="math">\[ E = mc^2 \]</div>') == r'<div data-type="math">E = mc^2</div>'
+
+
+def test_the_solver_runs_at_a_low_temperature_for_the_same_sheet_each_time():
+    skill = SkillRegistry.load([SKILLS]).get("solve-worksheet")
+    assert skill is not None and skill.temperature == 0.2
+
+
+def test_sampling_sets_the_temperature_only_inside_its_block():
+    from services.ai import client
+    from services.ai.providers import Provider
+    p = Provider("anthropic", api_key="k", chat_model="claude-haiku-4-5")
+    msgs = [{"role": "user", "content": "hi"}]
+    assert "temperature" not in client._anthropic_payload(p, msgs, 10, stream=True)
+    with client.sampling(0.2):
+        assert client._anthropic_payload(p, msgs, 10, stream=True)["temperature"] == 0.2
+    assert "temperature" not in client._anthropic_payload(p, msgs, 10, stream=True)
+
+
+def test_a_box_no_solution_uses_is_dropped():
+    # live: a run copied the example's "Definition of momentum" into a
+    # worksheet about waves
+    doc = (_SOLUTIONS + _box("CAUTION", "Wave relation") + _box("WARNING", "Poynting vector")
+           + _box("OVERVIEW", "Faraday's law") + _box("OVERVIEW", "Definition of momentum") + "<h3>Answer key</h3>")
+    assert [n for _, n in _boxes(skill_html.rule_sheet(doc))] == ["Wave relation", "Poynting vector", "Faraday's law"]
+
+
+def test_a_box_named_a_little_differently_keeps_its_content():
+    doc = (_SOLUTIONS + _box("CAUTION", "Wave relation") + _box("WARNING", "Poynting vector")
+           + '<div data-type="callout" data-callout-type="OVERVIEW" data-callout-icon="📐"><p><strong>Faraday induction</strong></p>'
+             '<p><em>In this worksheet:</em> mine $x = 1$</p></div>\n' + "<h3>Answer key</h3>")
+    out = skill_html.rule_sheet(doc)
+    assert [n for _, n in _boxes(out)] == ["Wave relation", "Poynting vector", "Faraday induction"]
+    assert "mine" in out
+
+
+def test_one_law_named_after_someone_is_one_box():
+    t, same = skill_html._tokens, skill_html._same_rule
+    assert same(t("Faraday’s law in differential form"), t("Faraday's law for plane waves"))
+    assert same(t("Energy density in EM fields"), t("Electromagnetic energy density"))
+    assert not same(t("Gauss’s law"), t("Faraday's law"))
+
+
+def test_a_worksheet_case_with_no_formula_is_dropped():
+    # live (Nemotron, most runs): "In this worksheet: used to find E from B"
+    box = ('<div data-type="callout" data-callout-type="CAUTION" data-callout-icon="📐"><p><strong>Wave relation</strong></p>'
+           '<p><em>In this worksheet:</em> plane wave in vacuum, used to find E from B (01).</p>'
+           '<p><em>In this worksheet:</em> vacuum, $v = c$ (01a).</p>'
+           '<p><em>In this worksheet:</em> vacuum, B0 = E0/c (01).</p>'
+           r'<p><em>In this worksheet:</em> \langle R \rangle (01).</p></div>' + "\n")
+    out = skill_html.rule_sheet(_SOLUTIONS + box + "<h3>Answer key</h3>")
+    assert "used to find" not in out
+    assert out.count("<em>In this worksheet:</em>") == 3

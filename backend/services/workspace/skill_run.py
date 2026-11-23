@@ -29,6 +29,7 @@ from services.agent.skills import Skill, SkillRegistry
 from services.ai import budget as budget_guard
 from services.ai import usage as usage_log
 from services.ai.pricing import estimate_usd, tokens_from_chars
+from services.ai.client import sampling
 from services.ai.router import complete_with_fallback, pick
 from services.ai.client import last_call_truncated
 from services.workspace.md_to_blocks import TRUNCATION_NOTICE_MD, markdown_to_html
@@ -242,9 +243,10 @@ def run_skill(note_id: str, user_id: str, skill_name: str,
              budget_guard.limit(settings.max_usd_per_run or None):
             budget_guard.check(estimate(note_id, user_id, skill)["usd"],
                                what=f"Running {skill.name}")
-            answer = _strip_fences(complete_with_fallback(
-                "summarize_text", user_id,
-                [{"role": "user", "content": prompt}], max_tokens=OUTPUT_CAP))
+            with sampling(skill.temperature):
+                answer = _strip_fences(complete_with_fallback(
+                    "summarize_text", user_id,
+                    [{"role": "user", "content": prompt}], max_tokens=OUTPUT_CAP))
 
         if not answer.strip():
             raise RuntimeError("The model returned nothing.")
@@ -403,10 +405,11 @@ def produce_skill_result(note_id: str, user_id: str, name: str,
         else:
             budget_guard.check(estimate(note_id, user_id, skill)["usd"],
                                what=f"Running {job_title(name)}")
-            answer = _strip_fences(complete_with_fallback(
-                "summarize_text", user_id,
-                [{"role": "user", "content": _focused(build_prompt(skill, blocks), focus)}],
-                max_tokens=OUTPUT_CAP))
+            with sampling(skill.temperature):
+                answer = _strip_fences(complete_with_fallback(
+                    "summarize_text", user_id,
+                    [{"role": "user", "content": _focused(build_prompt(skill, blocks), focus)}],
+                    max_tokens=OUTPUT_CAP))
             truncated = last_call_truncated()
             if not answer.strip():
                 raise ValueError("The model returned nothing.")

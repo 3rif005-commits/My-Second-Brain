@@ -199,6 +199,8 @@ def _write_user_skill(user_id: str, name: str, description: str, body: str, wher
     # would arrive as escaped tags (an html skill) or unparsed fences.
     if base and base.format != "markdown":
         meta["format"] = base.format
+    if base and base.temperature is not None:
+        meta["temperature"] = base.temperature
     meta["auto"] = False
     meta["confirm"] = base.confirm if base else (where == "chat")
     if base and base.priority:

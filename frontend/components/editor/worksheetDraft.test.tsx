@@ -114,7 +114,14 @@ describe("a worksheet solution, inserted into a note", () => {
 
   it("colours each rule box by importance and marks it with the formula icon", () => {
     const boxes = all.filter((b) => b.type === "callout" && b.props.calloutIcon === "📐");
-    expect(boxes.map((b) => b.props.calloutType)).toEqual(["CAUTION", "WARNING", "IMPORTANT", "OVERVIEW"]);
+    expect(boxes.map((b) => b.props.calloutType)).toEqual(["CAUTION", "WARNING", "IMPORTANT", "IMPORTANT", "OVERVIEW"]);
+  });
+
+  it("gives each rule box the general law, then when it holds, then this worksheet's case", () => {
+    const beam = all.find((b) => b.type === "callout" && b.props.calloutIcon === "📐"
+      && text(b.children[0]).startsWith("Intensity of a beam"));
+    expect(beam.children.map((c: AnyBlock) => c.type === "math" ? "math" : text(c).split(":")[0]))
+      .toEqual(["Intensity of a beam (Ex. 01b)", "math", "Holds when", "In this worksheet", expect.stringContaining("power (W)")]);
   });
 
   it("ends with the answer key", () => {

@@ -14,6 +14,7 @@ stream(provider, messages)    → AsyncIterator[str]  (chat SSE)
 from __future__ import annotations
 
 import base64
+import contextlib
 import contextvars
 import json
 from typing import AsyncIterator
@@ -161,6 +162,8 @@ def _anthropic_payload(p: Provider, messages: list[dict], max_tokens: int,
         payload["system"] = system
     if stream:
         payload["stream"] = True
+    if _temperature.get() is not None:
+        payload["temperature"] = _temperature.get()
     return payload
 
 
@@ -235,6 +238,22 @@ _TRUNCATED = {"max_tokens", "length"}
 def last_call_truncated() -> bool:
     """True if the last completion in this context ran out of output tokens."""
     return _last_stop.get() in _TRUNCATED
+
+
+_temperature: contextvars.ContextVar[float | None] = contextvars.ContextVar(
+    "completion_temperature", default=None)
+
+
+@contextlib.contextmanager
+def sampling(temperature: float | None):
+    """Completions inside this block use `temperature` (None: the provider's
+    default). For a job that must come out the same every run: the worksheet
+    solver at the default gave a different revision sheet each time."""
+    token = _temperature.set(temperature)
+    try:
+        yield
+    finally:
+        _temperature.reset(token)
 
 
 def complete(p: Provider, messages: list[dict], max_tokens: int = 4096) -> str:
@@ -341,6 +360,8 @@ def _openai_compatible_complete(url: str, headers: dict, model: str,
     """
     payload = {"model": model, "messages": _to_openai_messages(messages),
                "max_tokens": max_tokens, "stream": True}
+    if _temperature.get() is not None:
+        payload["temperature"] = _temperature.get()
     if "openrouter.ai" in url:
         payload["reasoning"] = {"exclude": True}
     from services import nebius                     # HACKATHON-NEBIUS

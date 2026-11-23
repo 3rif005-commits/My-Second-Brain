@@ -62,8 +62,24 @@ def _looks_like_math(latex: str) -> bool:
     return bool(_MATHY.search(latex)) or bool(_NUMBER.match(latex))
 
 
+_WRAPPED = re.compile(r"^(?:\$\$([^$]*)\$\$|\$([^$]*)\$|\\\(([\s\S]*)\\\)|\\\[([\s\S]*)\\\])$")
+_PAREN_MATH = re.compile(r"\\\((.+?)\\\)")
+_BRACKET_MATH = re.compile(r"\\\[(.+?)\\\]")
+_LONE_BRACKET = re.compile(r"<p>\s*\\\[(.+?)\\\]\s*</p>", re.DOTALL)
+_MATH_DIV = re.compile(r'(<div data-type="math">)(.*?)(</div>)', re.DOTALL)
+
+
+def _unwrap(latex: str) -> str:
+    r"""LaTeX without delimiters around it. Nemotron wrote `\(\mathbf{E}\)`
+    inside formulas: kept, it shows as a red KaTeX error."""
+    t = latex.strip()
+    while (m := _WRAPPED.match(t)):
+        t = next(g for g in m.groups() if g is not None).strip()
+    return t
+
+
 def _math_span(latex: str) -> str:
-    latex = html.unescape(latex).strip()
+    latex = _unwrap(html.unescape(latex))
     return (f'<span data-inline-content-type="inlineMath" '
             f'data-latex="{html.escape(latex, quote=True)}">'
             f"{html.escape(latex, quote=False)}</span>")
@@ -160,6 +176,9 @@ def _bare_latex(text: str) -> str:
 def _inline_math_in_text(text: str) -> str:
     """One text node: every formula becomes a span, and what is left between
     them is prose, where a `\\$` is the writer's literal dollar sign."""
+    # \( … \) and \[ … \] are the other LaTeX delimiters (Nemotron uses them).
+    text = _PAREN_MATH.sub(lambda m: f"${m.group(1).strip()}$", text)
+    text = _BRACKET_MATH.sub(lambda m: f"$${m.group(1).strip()}$$", text)
     found: list[tuple[int, int, str]] = [
         (m.start(), m.end(), m.group(1)) for m in _DISPLAY_IN_TEXT.finditer(text)]
     for m in _INLINE_MATH.finditer(text):
@@ -184,6 +203,10 @@ def inline_math(doc: str) -> str:
     Text inside code, a display-maths block or an existing formula span is left
     alone: there a dollar sign is a shell prompt, a variable, or already maths.
     """
+    doc = _MATH_DIV.sub(lambda m: m.group(1) + _unwrap(m.group(2)) + m.group(3), doc)
+    doc = _LONE_BRACKET.sub(
+        lambda m: f'<div data-type="math">{html.escape(html.unescape(m.group(1)).strip(), quote=False)}</div>',
+        doc)
     doc = _LONE_DISPLAY.sub(
         lambda m: f'<div data-type="math">{html.escape(html.unescape(m.group(1)).strip(), quote=False)}</div>',
         doc)
@@ -274,6 +297,201 @@ def rule_caps(doc: str) -> str:
     return _RULE_BOX.sub(demote, doc)
 
 
+# ---- the revision sheet's rules, from the solutions ---------------------------
+#
+# The model wrote the box list from memory, so the same worksheet gave a
+# different set each run: a law used in three questions could be missing, and
+# a box could hold one exercise's result instead of the law. The boxes are now
+# checked against the Rule lines of the solutions: every rule used has a box,
+# a rule used often is never ranked low, and the boxes go most important first.
+
+_RULE_LINE = re.compile(
+    r'<p><strong>Rules?:</strong>\s*(.*?)</p>\s*(?:<div data-type="math">(.*?)</div>)?',
+    re.IGNORECASE | re.DOTALL)
+_HEADING = re.compile(r"<h([2-4])[^>]*>(.*?)</h\1>", re.IGNORECASE | re.DOTALL)
+_SHEET = re.compile(r"<h2[^>]*>\s*Revision sheet\s*</h2>", re.IGNORECASE)
+_RULES_H3 = re.compile(r"<h3[^>]*>\s*Rules\s*(?:&amp;|&|and)\s*formulas\s*</h3>", re.IGNORECASE)
+_BOX_OPEN = re.compile(r'<div data-type="callout" data-callout-type="([A-Z]+)"\s+data-callout-icon="📐">')
+_BOX_NAME = re.compile(r"<p><strong>(.*?)</strong>")
+_EMPTY_CASES = re.compile(
+    r"<p><em>In this worksheet:</em>(?:(?!</p>)[^$\\=])*</p>", re.IGNORECASE)
+_STOP = {"of", "the", "a", "an", "in", "for", "and", "to", "on", "law", "rule", "formula", "s",
+         "vacuum", "general", "form", "definition", "condition"}
+
+
+def _plain(html: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", html)).strip()
+
+
+_NAMED = re.compile(r"([A-Za-zÀ-ÿ]+)['’]s\b")
+
+
+class _Name(frozenset):
+    """A rule name's word stems, and the person it is named after if any."""
+    named: str | None = None
+
+
+def _tokens(name: str) -> _Name:
+    text = _plain(name).replace("’", "'")
+    words = re.findall(r"[a-z0-9]+", text.lower().replace("'s", ""))
+    out = _Name(w[:6] for w in words if w not in _STOP)
+    person = _NAMED.search(text)
+    out.named = person.group(1).lower()[:6] if person else None
+    return out
+
+
+def _same_rule(a: frozenset[str], b: frozenset[str]) -> bool:
+    """Two names of one law. The same law named after someone ("Faraday's law",
+    "Faraday's law for plane waves"); otherwise at least two shared stems
+    covering two thirds of the shorter name ("Energy density in EM fields" =
+    "Electromagnetic energy density"), so "intensity of a beam" ≠ "intensity
+    of a plane wave" and "wave relation" ≠ "wave equation"."""
+    if not (a and b):
+        return False
+    if a == b:
+        return True
+    na, nb = getattr(a, "named", None), getattr(b, "named", None)
+    if na and na == nb:
+        return True
+    shared = len(a & b)
+    return shared >= 2 and shared >= 2 * min(len(a), len(b)) / 3
+
+
+def _ref(headings: list[tuple[int, str]]) -> str:
+    """'Ex. 01a' from the exercise heading and the part's letter."""
+    ex = next((t for lvl, t in headings if lvl == 2), "")
+    num = re.search(r"\d+", ex)
+    part = next((re.match(r"\(?([a-z])\)", t.strip()) for lvl, t in headings if lvl == 4), None)
+    if not num:
+        return ""
+    return f"Ex. {num.group(0)}{part.group(1) if part else ''}"
+
+
+def _rule_uses(body: str) -> list[dict]:
+    """Every rule named in the solutions: name, formula, where it is used."""
+    uses: list[dict] = []
+    path: list[tuple[int, str]] = []
+    events = sorted([(m.start(), "h", m) for m in _HEADING.finditer(body)]
+                    + [(m.start(), "r", m) for m in _RULE_LINE.finditer(body)], key=lambda e: e[0])
+    for _, kind, m in events:
+        if kind == "h":
+            lvl = int(m.group(1))
+            path = [(l, t) for l, t in path if l < lvl] + [(lvl, _plain(m.group(2)))]
+            continue
+        names = [n.strip() for n in re.split(r"\s+·\s+|\s*;\s*", _plain(m.group(1))) if n.strip()]
+        formula = (m.group(2) or "").strip()
+        parts = [f.strip() for f in re.split(r"\\qquad", formula)] if formula else []
+        for i, name in enumerate(names):
+            f = parts[i] if len(parts) == len(names) else (formula if i == 0 else "")
+            uses.append({"name": name, "tokens": _tokens(name), "formula": f, "ref": _ref(path),
+                         "question": " / ".join(t for _, t in path)})
+    return uses
+
+
+def _split_boxes(section: str) -> tuple[str, list[tuple[str, str]], str]:
+    """The rules section → (text before the boxes, [(level, box html)], after)."""
+    boxes: list[tuple[str, str]] = []
+    first = last = None
+    pos = 0
+    while (m := _BOX_OPEN.search(section, pos)):
+        depth, i = 0, m.start()
+        for t in re.finditer(r"<div\b|</div>", section[m.start():]):
+            depth += 1 if t.group(0) != "</div>" else -1
+            if depth == 0:
+                i = m.start() + t.end()
+                break
+        else:
+            break
+        if first is None:
+            first = m.start()
+        boxes.append((m.group(1), section[m.start():i]))
+        last = pos = i
+    if first is None:
+        return section, [], ""
+    return section[:first], boxes, section[last:]
+
+
+def _box(level: str, name: str, refs: list[str], formula: str) -> str:
+    where = f" ({', '.join(refs)})" if refs else ""
+    title = name[:1].upper() + name[1:]
+    math = f'<div data-type="math">{formula}</div>' if formula else ""
+    return (f'<div data-type="callout" data-callout-type="{level}" data-callout-icon="📐">'
+            f"<p><strong>{title}</strong>{where}</p>{math}</div>")
+
+
+def _pair_loose_names(named: list, rules: list[dict]) -> list:
+    """A box and a rule that match nothing else but share a word stem are one
+    law named twice ("Transversality condition" / "Transverse wave
+    condition"): the box takes the rule's name, so its content is kept."""
+    free_rules = [r for r in rules if not any(_same_rule(r["tokens"], b[2]) for b in named)]
+    out = []
+    for lvl, html, toks in named:
+        if not any(_same_rule(r["tokens"], toks) for r in rules) and free_rules:
+            best = max(free_rules, key=lambda r: len(r["tokens"] & toks))
+            if best["tokens"] & toks:
+                free_rules.remove(best)
+                toks = best["tokens"]
+        out.append((lvl, html, toks))
+    return out
+
+
+def rule_sheet(doc: str) -> str:
+    """Checks the revision sheet's rule boxes against the solutions' Rule lines."""
+    sheet = _SHEET.search(doc)
+    if not sheet:
+        return doc
+    rules_h3 = _RULES_H3.search(doc, sheet.end())
+    if not rules_h3:
+        return doc
+    end = re.compile(r"<h[23][\s>]", re.IGNORECASE).search(doc, rules_h3.end())
+    stop = end.start() if end else len(doc)
+    # "In this worksheet: used to find E from B" says nothing to memorise; the
+    # line is for the special formulas. Nemotron wrote the empty kind in most
+    # runs despite the instruction, so a line with no formula goes.
+    section = _EMPTY_CASES.sub("", doc[rules_h3.end():stop])
+    head, boxes, tail = _split_boxes(section)
+
+    # one entry per distinct rule, in order of first use
+    rules: list[dict] = []
+    for u in _rule_uses(doc[:sheet.start()]):
+        hit = next((r for r in rules if _same_rule(r["tokens"], u["tokens"])), None)
+        if hit:
+            hit["refs"] += [u["ref"]] if u["ref"] and u["ref"] not in hit["refs"] else []
+            hit["questions"] |= {u["question"]}
+            hit["formula"] = hit["formula"] or u["formula"]
+        else:
+            rules.append({**u, "refs": [u["ref"]] if u["ref"] else [], "questions": {u["question"]}})
+
+    levels = _RULE_LEVELS
+    named = [(lvl, html, _tokens(m.group(1)) if (m := _BOX_NAME.search(html)) else frozenset())
+             for lvl, html in boxes]
+    # A box no solution uses is a rule the model remembered, not one this
+    # worksheet needs (live: the example's "Definition of momentum").
+    if rules:
+        named = _pair_loose_names(named, rules)
+        named = [b for b in named if any(_same_rule(r["tokens"], b[2]) for r in rules)]
+    out: list[tuple[str, str]] = []
+    for lvl, html, toks in named:
+        uses = sum(len(r["questions"]) for r in rules if _same_rule(r["tokens"], toks))
+        floor = "WARNING" if uses >= 3 else "IMPORTANT" if uses == 2 else None
+        if lvl in levels and floor and levels.index(lvl) > levels.index(floor):
+            html = html.replace(f'data-callout-type="{lvl}"', f'data-callout-type="{floor}"', 1)
+            lvl = floor
+        out.append((lvl, html))
+    for r in rules:
+        if any(_same_rule(r["tokens"], toks) for _, _, toks in named):
+            continue
+        n = len(r["questions"])
+        lvl = "WARNING" if n >= 3 else "IMPORTANT" if n == 2 else "OVERVIEW"
+        out.append((lvl, _box(lvl, r["name"], r["refs"], r["formula"])))
+
+    out.sort(key=lambda b: levels.index(b[0]) if b[0] in levels else len(levels))
+    joined = "\n".join(html for _, html in out)
+    if not named:
+        head = head.rstrip() + ("\n" if joined else "")
+    return doc[:rules_h3.end()] + head + joined + tail + doc[stop:]
+
+
 _STRAY_DIVIDER = re.compile(r"(<h[12][^>]*>.*?</h[12]>\s*)<hr\s*/?>", re.IGNORECASE | re.DOTALL)
 
 
@@ -282,4 +500,4 @@ def finish(answer: str) -> str:
     doc = _EMBED_ATTR.sub("", _strip_fences(answer))
     # A divider separates two questions; right under a title it separates nothing.
     doc = _STRAY_DIVIDER.sub(r"\1", doc)
-    return inline_math(diagrams(rule_caps(doc)))
+    return inline_math(diagrams(rule_caps(rule_sheet(doc))))

@@ -64,6 +64,9 @@ class Skill:
     #: "html" (the editor's own dialect, the study guide's: colours, inline
     #: maths, toggles with any block inside — services/workspace/skill_html.py)
     format: str = "markdown"
+    #: sampling temperature for the skill's call; None leaves the provider's
+    #: default. Low for a skill whose output must not change between runs.
+    temperature: float | None = None
     #: where it came from: "builtin" (this repo, reviewed), "user" (written or
     #: edited by the user), "assistant" (drafted by the chat, saved by the
     #: user), "installed" (from outside the app). Set by the loader from the
@@ -159,6 +162,7 @@ def parse_frontmatter(raw: str, source_path: Path,
         icon=meta.get("icon"),
         multi_source=meta.get("multi_source"),
         format="html" if str(meta.get("format", "")).strip().lower() == "html" else "markdown",
+        temperature=_temperature(meta.get("temperature")),
         origin=origin,
     )
 
@@ -280,3 +284,12 @@ def classify_skills(
     # Sort: higher overlap first, then higher priority
     scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
     return [s for (_, _, s) in scored[:limit]]
+
+
+def _temperature(value) -> float | None:
+    """A frontmatter temperature, kept between 0 and 1; anything else is None."""
+    try:
+        t = float(value)
+    except (TypeError, ValueError):
+        return None
+    return min(max(t, 0.0), 1.0)
