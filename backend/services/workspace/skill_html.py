@@ -69,6 +69,51 @@ def _math_span(latex: str) -> str:
             f"{html.escape(latex, quote=False)}</span>")
 
 
+# LaTeX a model wrote without its dollar signs (Nemotron, seen live:
+# "density ⟨u⟩ = \frac{1}{2} \epsilon_0 E_0^2 and energy"). A run of math-like
+# words around a \command becomes a formula; ordinary words end the run.
+_LATEX_CMD = re.compile(r"\\[A-Za-z]+")
+_MATH_WORD = re.compile(r"^(?:\\[A-Za-z]+|[A-Za-z]|[A-Za-z]?[_^]|[\d.,]+|[=+\-−×·*/<>≈≤≥()\[\]{}|⟨⟩'])"
+                        r"[A-Za-z0-9\\{}_^()\[\]⟨⟩.,+\-−×·*/=|']*$")
+_TRAIL = ".,;:"
+
+
+def _bare_latex(text: str) -> str:
+    """Wrap runs of bare LaTeX in `text` as inline formulas."""
+    if not _LATEX_CMD.search(text):
+        return text
+    words = re.split(r"(\s+)", text)
+    out, run = [], []
+
+    def flush() -> None:
+        if not run:
+            return
+        chunk = "".join(run).rstrip()
+        tail_ws = "".join(run)[len(chunk):]
+        trail = ""
+        while chunk and chunk[-1] in _TRAIL:
+            trail, chunk = chunk[-1] + trail, chunk[:-1]
+        if _LATEX_CMD.search(chunk):
+            out.append(_math_span(chunk) + trail + tail_ws)
+        else:
+            out.append("".join(run))
+        run.clear()
+
+    for w in words:
+        if not w:
+            continue
+        if w.isspace():
+            (run if run else out).append(w)
+            continue
+        if _MATH_WORD.match(w.rstrip(_TRAIL)) and not (len(w.rstrip(_TRAIL)) > 1 and w.rstrip(_TRAIL).isalpha()):
+            run.append(w)
+        else:
+            flush()
+            out.append(w)
+    flush()
+    return "".join(out)
+
+
 def _inline_math_in_text(text: str) -> str:
     """One text node: every formula becomes a span, and what is left between
     them is prose, where a `\\$` is the writer's literal dollar sign."""
@@ -83,10 +128,10 @@ def _inline_math_in_text(text: str) -> str:
         found.append((m.start(), m.end(), m.group(1)))
     out, cursor = [], 0
     for start, end, latex in sorted(found):
-        out.append(text[cursor:start].replace("\\$", "$"))
+        out.append(_bare_latex(text[cursor:start]).replace("\\$", "$"))
         out.append(_math_span(latex))
         cursor = end
-    out.append(text[cursor:].replace("\\$", "$"))
+    out.append(_bare_latex(text[cursor:]).replace("\\$", "$"))
     return "".join(out)
 
 
@@ -118,7 +163,7 @@ def inline_math(doc: str) -> str:
             elif skip_until and low.startswith(skip_until):
                 skip_until = None
             out.append(part)
-        elif code_depth or skip_until or "$" not in part:
+        elif code_depth or skip_until or ("$" not in part and "\\" not in part):
             out.append(part)
         else:
             out.append(_inline_math_in_text(part))
@@ -185,7 +230,12 @@ def rule_caps(doc: str) -> str:
     return _RULE_BOX.sub(demote, doc)
 
 
+_STRAY_DIVIDER = re.compile(r"(<h[12][^>]*>.*?</h[12]>\s*)<hr\s*/?>", re.IGNORECASE | re.DOTALL)
+
+
 def finish(answer: str) -> str:
     """The model's answer → the HTML the editor applies."""
     doc = _EMBED_ATTR.sub("", _strip_fences(answer))
+    # A divider separates two questions; right under a title it separates nothing.
+    doc = _STRAY_DIVIDER.sub(r"\1", doc)
     return inline_math(diagrams(rule_caps(doc)))

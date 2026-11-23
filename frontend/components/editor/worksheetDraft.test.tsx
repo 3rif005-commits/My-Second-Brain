@@ -67,16 +67,25 @@ describe("a worksheet solution, inserted into a note", () => {
     expect(h3.every((b) => b.props.backgroundColor === "default")).toBe(true);
   });
 
-  it("opens every question's quote with its goal", () => {
+  it("puts only the goal in each quote, and the question below it in grey", () => {
     const quotes = all.filter((b) => b.type === "quote");
     expect(quotes).toHaveLength(3);
-    for (const q of quotes) expect(inline(q)[0]).toMatchObject({ text: "Goal:", styles: { bold: true } });
+    for (const q of quotes) {
+      expect(inline(q)[0]).toMatchObject({ text: "Goal:", styles: { bold: true } });
+      expect(inline(q).some((c: AnyBlock) => c.type === "inlineMath")).toBe(false);   // no formula in a goal
+    }
+    const grey = all.filter((b) => b.type === "paragraph" && inline(b)[0]?.styles?.textColor === "gray");
+    expect(grey).toHaveLength(5);                            // Q1 stem, 1(a), 1(b), Q2, Q3
   });
 
-  it("names the rule used by every answer", () => {
-    const rules = all.filter((b) => b.type === "paragraph" && /^Rules?:/.test(text(b)));
-    expect(rules).toHaveLength(4);                           // 1(a), 1(b), 2, 3
-    expect(rules.every((r) => inline(r).some((c: AnyBlock) => c.type === "inlineMath"))).toBe(true);
+  it("names the rule used by every answer, with its formula alone on the next line", () => {
+    const i = blocks.map((b, n) => (b.type === "paragraph" && /^Rules?:/.test(text(b)) ? n : -1)).filter((n) => n >= 0);
+    expect(i).toHaveLength(4);                               // 1(a), 1(b), 2, 3
+    for (const n of i) expect(blocks[n + 1].type).toBe("math");
+  });
+
+  it("separates questions with a divider", () => {
+    expect(blocks.filter((b) => b.type === "divider")).toHaveLength(2);
   });
 
   it("puts each answer in a green band, and nothing else is green", () => {
@@ -88,19 +97,23 @@ describe("a worksheet solution, inserted into a note", () => {
     }
   });
 
-  it("folds the working into a Solution toggle of numbered steps with equations", () => {
+  it("folds the working into a Solution toggle of one-line steps", () => {
     const solutions = all.filter((b) => b.type === "toggleListItem" && text(b) === "Solution");
     expect(solutions).toHaveLength(2);
     const steps = solutions[0].children.filter((b: AnyBlock) => b.type === "numberedListItem");
     expect(steps).toHaveLength(2);
-    expect(steps.every((s: AnyBlock) => s.children[0]?.type === "math")).toBe(true);
+    // one line per step: words, an arrow, the result as a formula
+    for (const st of steps) {
+      expect(text(st)).toContain("→");
+      expect(inline(st).at(-1).type).toBe("inlineMath");
+    }
     expect(text(solutions[0].children.at(-1))).toMatch(/^Check:/);
   });
 
   it("writes mid-sentence maths as real formulas, and leaves no dollar sign behind", () => {
     const withMath = all.filter((b) => inline(b).some((c: AnyBlock) => c.type === "inlineMath"));
     const kinds = new Set(withMath.map((b) => b.type));
-    for (const k of ["paragraph", "table"]) expect(kinds).toContain(k);
+    for (const k of ["paragraph", "numberedListItem", "table"]) expect(kinds).toContain(k);
     expect(all.filter((b) => text(b).includes("$")).map(text)).toEqual([]);
   });
 

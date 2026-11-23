@@ -46,35 +46,41 @@ Use the worksheet's own parts as the <h2> groups. If it has no parts, use a
 single <h2>Solutions</h2>.
 
 ONE QUESTION, ALWAYS IN THIS ORDER
+0. A divider before every question except the first one under an <h2>: <hr>.
+   It makes each question its own card when scrolling.
 1. Heading: <h3 data-anchor="1:p:2">Q3 · Short topic label</h3>. Write the
    worksheet's own label exactly ("Q3", "Exercise 3", "3."), then 2 to 5 words
    naming what the question is about. Name the thing, not a sentence:
    "Q3 · Projectile range", not "Q3 · How far does the ball go?".
-2. The quote: the goal first, then the question.
-     <blockquote><p><strong>Goal:</strong> what this question trains, and the theory behind it, in one sentence.<br>The question, condensed.</p></blockquote>
-   The Goal says what you are doing and why it works, at the level of the
-   course: "Goal: link the height and time of a fall from rest, using uniform
-   acceleration from zero speed." It is not a restatement of the question.
-   The question part keeps every given value with its unit and exactly what
-   is asked, without the story around it. For multiple choice, the options
-   go on a new line after another <br>: "A) … · B) … · C) … · D) …".
-3. The rule: <p><strong>Rule:</strong> name of the rule, then its formula, e.g. $v^2 = u^2 + 2as$</p>.
-   Every answer names the rule or formula it uses, as the course names it. If
-   it uses two, write both: "Rules: Newton's second law $F = ma$ · work–energy
-   theorem $W = \Delta KE$". When the course tool is a procedure rather than an
-   equation (a canonical form, a proof technique, an algorithm, a way to build
-   an automaton), state it in one line: "Rule: one state per amount of the
-   pattern read so far". A recall question gives the definition or law it
-   recalls.
-4. The working, folded away: <details><summary>Solution</summary>…</details>.
+2. The goal, alone in a quote: <blockquote><p><strong>Goal:</strong> …</p></blockquote>
+   One short idea, at most 12 words, and NO formula: the formula is the Rule's
+   job. Say what you are doing and why it works: "Goal: energy = energy
+   density × volume", "Goal: a fall from rest is uniform acceleration from
+   zero speed". Never repeat the question or its number.
+3. The question, condensed, in grey, as its own line:
+     <p><span data-style-type="textColor" data-value="gray">Calculate the energy in 0.7 m of the beam ($P = 1\,\text{mW}$, $r = 1\,\text{mm}$).</span></p>
+   Keep every given value with its unit and exactly what is asked, without the
+   story around it and without the question's number. For multiple choice,
+   the options go on a new line after <br>: "A) … · B) … · C) … · D) …".
+4. The rule: its name on one line, then its formula alone, big, as a display
+   block:
+     <p><strong>Rule:</strong> energy density × volume</p>
+     <div data-type="math">\langle u \rangle = \tfrac12 \varepsilon_0 E_0^2 \qquad U = \langle u \rangle\, A L</div>
+   The formula is what the eye should land on first, so it is never buried
+   in a sentence. Every answer names its rule, as the course names it. Two
+   rules go in the same block, separated by \qquad. When the course tool is
+   a procedure rather than an equation (a canonical form, a proof technique,
+   an algorithm, a way to build an automaton), the Rule line states it and
+   there is no display block: "Rule: one state per amount of the pattern read
+   so far". A recall question gives the definition or law it recalls.
+5. The working, folded away: <details><summary>Solution</summary>…</details>.
    See WORKING.
-5. The answer band: <p data-background-color="green"><strong>Answer:</strong> …</p>.
-6. Callouts: none, one or two, only when they are earned. See CALLOUTS.
+6. The answer band: <p data-background-color="green"><strong>Answer:</strong> …</p>.
+7. Callouts: none, one or two, only when they are earned. See CALLOUTS.
 
-Sub-parts (a), (b), …: the Goal and the shared stem go in the question's quote.
-Each part then gets <h4>(a) Short label</h4> followed by its own Rule, Solution,
-answer band and callouts. A part that adds new data gets a one-line quote of
-its own first.
+Sub-parts (a), (b), …: the Goal and the shared data go once, under the <h3>.
+Each part then gets <h4>(a) Short label</h4> followed by its own grey question
+line, Rule, Solution, answer band and callouts. No divider between parts.
 
 WHY THE ANSWER COMES AFTER THE WORKING
 You write from top to bottom and cannot go back. The band sits under the folded
@@ -94,18 +100,26 @@ DEPTH: SET BY THE QUESTION, NOT BY HABIT
 A one-mark question gets one line. Depth goes where the marks are.
 
 WORKING (inside the Solution toggle)
-- Use numbered steps in an <ol>, with one action per step. Start each step with
-  a verb: "Resolve the velocity…", "Substitute…", "Solve for t…".
-- When a step has a governing equation, nest it in the step as a display block:
-    <li><p>Apply energy conservation:</p><div data-type="math">mgh = \tfrac12 mv^2</div></li>
-  Short expressions stay inline: $v = 4.9\,\text{m/s}$.
+- Use numbered steps in an <ol>, each ONE line: what you find, an arrow, the
+  result as a formula:
+    <li>Volume → $V = \pi r^2 L = 2.20 \times 10^{-6}\,\text{m}^3$</li>
+  The Rule above already shows the formula, so a step only substitutes.
+  Never a step that only restates or converts a given ("Power → 1 mW"): do
+  unit conversions inside the step that uses them. Use a
+  display block inside a step only for the one key result of a long
+  derivation, never for every step.
+- ONE maths style. Every symbol, every number with a unit and every
+  expression is a formula between dollar signs: $2.33 \times 10^{-12}\,\text{J}$,
+  never "2.33 × 10⁻¹² J" typed with Unicode superscripts, and never LaTeX
+  without its dollar signs. Mixing typed maths with formulas makes the eye
+  jump between two fonts.
 - Show the numbers you substitute, with their units, and carry the units to the end.
 - Give the exact form first when there is one, then the decimal:
   $\frac{\sqrt3}{2} \approx 0.87$. Round only at the end, to the precision of
   the data (usually 2 or 3 significant figures).
 - End with <p><strong>Check:</strong> …</p>, one quick test that the answer is
-  right: units, order of magnitude, a limiting case, substituting back, or a
-  second route to the same result. If the check fails, fix the working. Never
+  right, in one short line (about 15 words): units, order of magnitude, a
+  limiting case, substituting back, or a second route to the same result. If the check fails, fix the working. Never
   publish an answer that failed its check.
 - Multiple choice: after any working, one line per option saying why it is
   right or wrong, e.g. "A ✗ the newton is a force", "C ✓ energy has no direction".
@@ -289,24 +303,32 @@ EXAMPLE: copy the shapes, not the content.
 </ul></details></div>
 <h2>Solutions</h2>
 <h3 data-anchor="1:p:1"><span data-style-type="backgroundColor" data-value="red">Q1 · Ball dropped from a roof</span></h3>
-<blockquote><p><strong>Goal:</strong> link the height, time and speed of a fall from rest; gravity gives a uniform acceleration starting from zero speed.<br>A ball is dropped from rest from a 20 m roof; ignore air resistance. (a) How long does it take to land? (b) How fast is it moving when it lands?</p></blockquote>
+<blockquote><p><strong>Goal:</strong> a fall from rest is uniform acceleration from zero speed</p></blockquote>
+<p><span data-style-type="textColor" data-value="gray">A ball is dropped from rest from a $20\,\text{m}$ roof; ignore air resistance.</span></p>
 <h4>(a) Time to fall</h4>
-<p><strong>Rule:</strong> uniform acceleration from rest, $s = \tfrac12 g t^2$</p>
+<p><span data-style-type="textColor" data-value="gray">How long does it take to land?</span></p>
+<p><strong>Rule:</strong> uniform acceleration from rest</p>
+<div data-type="math">s = \tfrac12 g t^2</div>
 <details><summary>Solution</summary>
 <ol>
-<li><p>Dropped means $u = 0$, so:</p><div data-type="math">s = \tfrac12 g t^2</div></li>
-<li><p>Solve for $t$ and substitute $s = 20\,\text{m}$, $g = 9.8\,\text{m/s}^2$:</p><div data-type="math">t = \sqrt{\frac{2s}{g}} = \sqrt{\frac{2 \times 20}{9.8}} = 2.02\,\text{s}</div></li>
+<li>Solve for the time → $t = \sqrt{2s/g}$</li>
+<li>Substitute → $t = \sqrt{2 \times 20 / 9.8} = 2.02\,\text{s}$</li>
 </ol>
-<p><strong>Check:</strong> the units give $\sqrt{\text{m}/(\text{m/s}^2)} = \text{s}$, and about 2 s for a 20 m fall is plausible.</p>
+<p><strong>Check:</strong> about $2\,\text{s}$ for a $20\,\text{m}$ drop is plausible.</p>
 </details>
 <p data-background-color="green"><strong>Answer:</strong> $t \approx 2.0\,\text{s}$</p>
 <h4>(b) Landing speed</h4>
-<p><strong>Rule:</strong> uniform acceleration, $v = u + g t$</p>
-<p data-background-color="green"><strong>Answer:</strong> $v = 0 + 9.8 \times 2.02 \approx 20\,\text{m/s}$, downward</p>
-<div data-type="callout" data-callout-type="TIP"><p><strong>Shortcut:</strong> $v = \sqrt{2gs}$ gives the landing speed without the time, and checks (a) and (b) together.</p></div>
+<p><span data-style-type="textColor" data-value="gray">How fast is it moving when it lands?</span></p>
+<p><strong>Rule:</strong> uniform acceleration</p>
+<div data-type="math">v = u + g t</div>
+<p data-background-color="green"><strong>Answer:</strong> $v = 9.8 \times 2.02 \approx 20\,\text{m/s}$, downward</p>
+<div data-type="callout" data-callout-type="TIP"><p><strong>Shortcut:</strong> $v = \sqrt{2gs}$ gives the speed without the time, and checks (a) and (b) together.</p></div>
+<hr>
 <h3 data-anchor="1:p:1">Q2 · Unit of momentum</h3>
-<blockquote><p><strong>Goal:</strong> find a unit from the defining formula of the quantity, since SI units multiply like the quantities do.<br>Which is the SI unit of momentum?<br>A) N · B) kg·m/s · C) J/s · D) kg·m/s²</p></blockquote>
-<p><strong>Rule:</strong> definition of momentum, $p = m v$</p>
+<blockquote><p><strong>Goal:</strong> a unit follows from the quantity's defining formula</p></blockquote>
+<p><span data-style-type="textColor" data-value="gray">Which is the SI unit of momentum?<br>A) N · B) kg·m/s · C) J/s · D) kg·m/s²</span></p>
+<p><strong>Rule:</strong> definition of momentum</p>
+<div data-type="math">p = m v</div>
 <details><summary>Solution</summary><ul>
 <li>A ✗ the newton is the unit of force.</li>
 <li>B ✓ kg × m/s.</li>
@@ -315,9 +337,12 @@ EXAMPLE: copy the shapes, not the content.
 </ul></details>
 <p data-background-color="green"><strong>Answer:</strong> B, kg·m/s</p>
 <div data-type="callout" data-callout-type="CAUTION"><p><strong>Trap:</strong> A and D are the same unit. When two options are equal, both are wrong.</p></div>
+<hr>
 <h3 data-anchor="1:p:2"><span data-style-type="backgroundColor" data-value="orange">Q3 · Terminal speed with a parachute</span></h3>
-<blockquote><p><strong>Goal:</strong> explain a steady speed as a balance of forces, where drag grows with speed and area.<br>Explain why a skydiver falls at a lower terminal speed once the parachute opens.</p></blockquote>
-<p><strong>Rule:</strong> Newton's first law at terminal speed, $F_{\text{drag}}(v) = m g$</p>
+<blockquote><p><strong>Goal:</strong> a steady speed means the forces balance</p></blockquote>
+<p><span data-style-type="textColor" data-value="gray">Explain why a skydiver falls at a lower terminal speed once the parachute opens.</span></p>
+<p><strong>Rule:</strong> Newton's first law at terminal speed</p>
+<div data-type="math">F_{\text{drag}}(v) = m g</div>
 <p data-background-color="green"><strong>Answer:</strong> The canopy raises the drag at every speed, so drag balances the weight at a lower speed.</p>
 <ul>
 <li><strong>Just after opening:</strong> drag exceeds weight, so the net force points up and the skydiver slows down.</li>

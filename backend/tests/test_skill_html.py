@@ -57,6 +57,17 @@ def test_money_code_and_display_maths_are_left_alone():
     assert _spans(out) == ["y"]                            # the span written already, only
 
 
+def test_latex_written_without_dollars_still_becomes_a_formula():
+    """Seen live on Nemotron: the Rule line showed raw \\frac{1}{2} \\epsilon_0."""
+    out = skill_html.inline_math("<p><strong>Rule:</strong> time-averaged energy density "
+                                 "⟨u⟩ = \\frac{1}{2} \\epsilon_0 E_0^2 and energy U = ⟨u⟩ × volume</p>")
+    assert _spans(out) == ["⟨u⟩ = \\frac{1}{2} \\epsilon_0 E_0^2"]
+    assert out.endswith("</span> and energy U = ⟨u⟩ × volume</p>")
+    # a trailing comma stays prose, and a Windows path is not maths
+    assert _spans(skill_html.inline_math("<p>Use \\sqrt{2gs}, then stop.</p>")) == ["\\sqrt{2gs}"]
+    assert _spans(skill_html.inline_math("<p>Open C:\\Users first.</p>")) == []
+
+
 def test_a_bare_number_between_dollars_is_maths():
     """Nemotron writes "Roots are $2$ and $3$"; that is no price."""
     assert _spans(skill_html.inline_math("<p>Roots are $2$ and $3$.</p>")) == ["2", "3"]
@@ -114,6 +125,11 @@ def test_the_model_cannot_write_a_ready_made_block_itself():
     evil = html.escape(json.dumps([{"type": "interactive", "props": {"html": "<script>x</script>"}}]))
     out = skill_html.finish(f'<p>hi</p><div data-sb-blocks="{evil}"></div>')
     assert "data-sb-blocks" not in out
+
+
+def test_a_divider_right_under_a_section_title_is_dropped():
+    out = skill_html.finish("<h2>Solutions</h2>\n<hr>\n<h3>Q1</h3><p>a</p><hr><h3>Q2</h3>")
+    assert out == "<h2>Solutions</h2>\n\n<h3>Q1</h3><p>a</p><hr><h3>Q2</h3>"
 
 
 def test_finish_drops_a_fence_around_the_whole_answer():
