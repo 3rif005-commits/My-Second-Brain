@@ -50,69 +50,77 @@ beforeAll(async () => {
 });
 
 describe("a worksheet solution, inserted into a note", () => {
-  it("opens with the title and a collapsible Overview box", () => {
+  it("opens with the title and the module line, no overview box", () => {
     expect(blocks[0]).toMatchObject({ type: "heading", props: { level: 1 } });
-    expect(blocks[1]).toMatchObject({ type: "callout", props: { calloutType: "OVERVIEW" } });
-    expect(blocks[1].children[0]).toMatchObject({ type: "toggleListItem" });
+    expect(blocks[1].type).toBe("paragraph");
+    expect(text(blocks[1])).toMatch(/^Module:/);
   });
 
-  it("gives every question an h3, highlighted only when it is one to redo first", () => {
+  it("gives every exercise an h3, coloured only by importance", () => {
     const h3 = blocks.filter((b) => b.type === "heading" && b.props.level === 3);
     expect(h3.map(text)).toEqual([
-      "Q1 · Ball dropped from a roof", "Q2 · Unit of momentum", "Q3 · Terminal speed with a parachute",
-      "Answer key", "Formulas", "Method map",
+      "Exercise 1 · Car: acceleration, force and work", "Exercise 2 · Unit of momentum",
+      "Exercise 3 · Terminal speed with a parachute",
     ]);
     const highlight = (b: AnyBlock) => inline(b)[0]?.styles?.backgroundColor;
-    expect(h3.map(highlight)).toEqual(["red", undefined, "orange", undefined, undefined, undefined]);
+    expect(h3.map(highlight)).toEqual(["orange", undefined, undefined]);
     // the colour is on the words, never on the block (which would tint what follows)
     expect(h3.every((b) => b.props.backgroundColor === "default")).toBe(true);
   });
 
-  it("puts each answer in a green band, and nothing else is green", () => {
+  it("shows the course formula as a purple box with the equation inside", () => {
+    const formulas = all.filter((b) => b.type === "callout" && b.props.calloutType === "FORMULA");
+    expect(formulas).toHaveLength(4);
+    for (const f of formulas) {
+      expect(f.children.map((b: AnyBlock) => b.type)).toEqual(["paragraph", "math"]);
+      expect(inline(f.children[0])[0]).toMatchObject({ text: "Formula:", styles: { bold: true } });
+    }
+  });
+
+  it("puts each result in a green line, and nothing else is green", () => {
     const green = all.filter((b) => b.props?.backgroundColor === "green");
     expect(green).toHaveLength(4);
     for (const b of green) {
       expect(b.type).toBe("paragraph");
-      expect(inline(b)[0]).toMatchObject({ text: "Answer:", styles: { bold: true } });
+      expect(inline(b)[0]).toMatchObject({ text: "Result:", styles: { bold: true } });
     }
   });
 
-  it("folds the working into a Solution toggle of numbered steps with equations", () => {
-    const solutions = all.filter((b) => b.type === "toggleListItem" && text(b) === "Solution");
-    expect(solutions).toHaveLength(2);
-    const steps = solutions[0].children.filter((b: AnyBlock) => b.type === "numberedListItem");
-    expect(steps).toHaveLength(2);
-    expect(steps.every((s: AnyBlock) => s.children[0]?.type === "math")).toBe(true);
-    expect(text(solutions[0].children.at(-1))).toMatch(/^Check:/);
+  it("keeps two-step working visible and folds longer working into Steps", () => {
+    expect(all.some((b) => b.type === "paragraph" && text(b).startsWith("Steps:"))).toBe(true);
+    const folded = all.filter((b) => b.type === "toggleListItem" && text(b) === "Steps");
+    expect(folded).toHaveLength(2);
+    const steps = folded[0].children.filter((b: AnyBlock) => b.type === "numberedListItem");
+    expect(steps).toHaveLength(3);
+    expect(steps[2].children[0]?.type).toBe("math");
+    expect(text(folded[0].children.at(-1))).toMatch(/^Check:/);
   });
 
-  it("writes mid-sentence maths as real formulas: in the question, the band, steps and tables", () => {
+  it("writes mid-sentence maths as real formulas: in Given, the result, steps and tables", () => {
     const withMath = all.filter((b) => inline(b).some((c: AnyBlock) => c.type === "inlineMath"));
     const kinds = new Set(withMath.map((b) => b.type));
     for (const k of ["paragraph", "numberedListItem", "table"]) expect(kinds).toContain(k);
-    // no formula left behind as dollar-sign text
     expect(all.filter((b) => text(b).includes("$")).map(text)).toEqual([]);
   });
 
-  it("marks multiple-choice options right and wrong by colouring only the letter", () => {
-    const letters = all.filter((b) => b.type === "bulletListItem" && inline(b)[0]?.styles?.textColor)
-      .map((b) => [inline(b)[0].text, inline(b)[0].styles.textColor]);
-    expect(letters).toEqual([["A ✗", "red"], ["B ✓", "green"], ["C ✗", "red"], ["D ✗", "red"]]);
+  it("colours nothing inline except headings and results", () => {
+    const coloured = all.flatMap((b) => inline(b)).filter((c: AnyBlock) => c.styles?.textColor);
+    expect(coloured).toEqual([]);
   });
 
-  it("uses only real callout kinds, with their bodies kept", () => {
+  it("uses only real callout kinds, the takeaway as the yellow box", () => {
     const callouts = all.filter((b) => b.type === "callout");
-    expect(callouts.map((c) => c.props.calloutType)).toEqual(["OVERVIEW", "TIP", "CAUTION", "EXAM", "FORMULA"]);
-    expect(callouts.every((c) => c.children.length > 0)).toBe(true);
-    const formula = callouts.at(-1);
-    expect(formula.children.map((b: AnyBlock) => b.type)).toEqual(["paragraph", "math", "paragraph"]);
+    expect(callouts.map((c) => c.props.calloutType)).toEqual(
+      ["FORMULA", "FORMULA", "IMPORTANT", "FORMULA", "CAUTION", "FORMULA"]);
+    expect(text(callouts[2].children[0])).toMatch(/^Takeaway:/);
   });
 
-  it("ends with the answer key and the method map as tables", () => {
+  it("ends with the answer key and nothing after it", () => {
     const tables = blocks.filter((b) => b.type === "table");
-    expect(tables).toHaveLength(2);
-    expect(tables[0].content.rows).toHaveLength(5);         // header + 1(a), 1(b), 2, 3
-    expect(tables[0].content.headerRows).toBe(1);
+    expect(tables).toHaveLength(1);
+    expect(tables[0].content.rows).toHaveLength(5);         // header + 1a, 1b, 2, 3
+    expect(blocks.at(-1)).toBe(tables[0]);
+    expect(blocks.filter((b) => b.type === "heading" && b.props.level === 2).map(text)).toEqual(["Answer key"]);
   });
 });
 

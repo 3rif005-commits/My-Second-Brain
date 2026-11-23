@@ -1,58 +1,45 @@
-<h1>Worksheet 3, Falling Bodies: Solutions</h1>
-<div data-type="callout" data-callout-type="OVERVIEW"><details><summary>Overview</summary><ul>
-<li><strong>Tests:</strong> motion under gravity, and the units of mechanics.</li>
-<li><strong>Map:</strong> Q1 free fall · Q2 units · Q3 air resistance.</li>
-<li><strong>Toolkit:</strong> constant-acceleration equations, energy conservation, force balance.</li>
-</ul></details></div>
-<h2>Solutions</h2>
-<h3 data-anchor="1:p:1"><span data-style-type="backgroundColor" data-value="red">Q1 · Ball dropped from a roof</span></h3>
-<blockquote><p>A ball is dropped from rest from a 20 m roof; ignore air resistance. (a) How long does it take to land? (b) How fast is it moving when it lands?</p></blockquote>
-<h4>(a) Time to fall</h4>
-<p><strong>Method:</strong> constant acceleration from rest, <span data-inline-content-type="inlineMath" data-latex="s = \tfrac12 g t^2">s = \tfrac12 g t^2</span>.</p>
-<details><summary>Solution</summary>
+<h1>TD 2, Motion and Units</h1>
+<p><strong>Module:</strong> Mechanics 1 · <strong>Type:</strong> TD</p>
+<h3 data-anchor="1:p:1"><span data-style-type="backgroundColor" data-value="orange">Exercise 1 · Car: acceleration, force and work</span></h3>
+<p><strong>Given:</strong> <span data-inline-content-type="inlineMath" data-latex="m = 1200\,\text{kg}">m = 1200\,\text{kg}</span> · <span data-inline-content-type="inlineMath" data-latex="u = 10\,\text{m/s}">u = 10\,\text{m/s}</span> · <span data-inline-content-type="inlineMath" data-latex="v = 25\,\text{m/s}">v = 25\,\text{m/s}</span> · <span data-inline-content-type="inlineMath" data-latex="t = 6.0\,\text{s}">t = 6.0\,\text{s}</span> <strong>Find:</strong> <span data-inline-content-type="inlineMath" data-latex="a">a</span>, <span data-inline-content-type="inlineMath" data-latex="F">F</span>, <span data-inline-content-type="inlineMath" data-latex="W">W</span></p>
+<h4>a) Acceleration</h4>
+<div data-type="callout" data-callout-type="FORMULA"><p><strong>Formula:</strong> uniform acceleration</p><div data-type="math">a = \frac{v - u}{t}</div></div>
+<p><strong>Steps:</strong> <span data-inline-content-type="inlineMath" data-latex="a = \frac{25 - 10}{6.0}">a = \frac{25 - 10}{6.0}</span> → <span data-inline-content-type="inlineMath" data-latex="2.5\,\text{m/s}^2">2.5\,\text{m/s}^2</span></p>
+<p data-background-color="green"><strong>Result:</strong> <span data-inline-content-type="inlineMath" data-latex="a = 2.5\,\text{m/s}^2">a = 2.5\,\text{m/s}^2</span></p>
+<h4>b) Work done by the resultant force</h4>
+<div data-type="callout" data-callout-type="FORMULA"><p><strong>Formula:</strong> work–energy theorem</p><div data-type="math">W = \Delta KE = \tfrac12 m (v^2 - u^2)</div></div>
+<details><summary>Steps</summary>
 <ol>
-<li><p>Dropped means <span data-inline-content-type="inlineMath" data-latex="u = 0">u = 0</span>, so:</p><div data-type="math">s = \tfrac12 g t^2</div></li>
-<li><p>Solve for <span data-inline-content-type="inlineMath" data-latex="t">t</span> and substitute <span data-inline-content-type="inlineMath" data-latex="s = 20\,\text{m}">s = 20\,\text{m}</span>, <span data-inline-content-type="inlineMath" data-latex="g = 9.8\,\text{m/s}^2">g = 9.8\,\text{m/s}^2</span>:</p><div data-type="math">t = \sqrt{\frac{2s}{g}} = \sqrt{\frac{2 \times 20}{9.8}} = 2.02\,\text{s}</div></li>
+<li><p>Initial kinetic energy → <span data-inline-content-type="inlineMath" data-latex="\tfrac12 \times 1200 \times 10^2 = 60\,\text{kJ}">\tfrac12 \times 1200 \times 10^2 = 60\,\text{kJ}</span></p></li>
+<li><p>Final kinetic energy → <span data-inline-content-type="inlineMath" data-latex="\tfrac12 \times 1200 \times 25^2 = 375\,\text{kJ}">\tfrac12 \times 1200 \times 25^2 = 375\,\text{kJ}</span></p></li>
+<li><p>Take the difference:</p><div data-type="math">W = 375 - 60 = 315\,\text{kJ}</div></li>
 </ol>
-<p><strong>Check:</strong> the units give <span data-inline-content-type="inlineMath" data-latex="\sqrt{\text{m}/(\text{m/s}^2)} = \text{s}">\sqrt{\text{m}/(\text{m/s}^2)} = \text{s}</span>, and about 2 s for a 20 m fall is plausible.</p>
+<p><strong>Check:</strong> by a second route, <span data-inline-content-type="inlineMath" data-latex="s = \frac{v^2 - u^2}{2a} = 105\,\text{m}">s = \frac{v^2 - u^2}{2a} = 105\,\text{m}</span> and <span data-inline-content-type="inlineMath" data-latex="W = F s = 3000 \times 105 = 315\,\text{kJ}">W = F s = 3000 \times 105 = 315\,\text{kJ}</span>.</p>
 </details>
-<p data-background-color="green"><strong>Answer:</strong> <span data-inline-content-type="inlineMath" data-latex="t \approx 2.0\,\text{s}">t \approx 2.0\,\text{s}</span></p>
-<h4>(b) Landing speed</h4>
-<p><strong>Method:</strong> <span data-inline-content-type="inlineMath" data-latex="v = u + gt = 0 + 9.8 \times 2.02">v = u + gt = 0 + 9.8 \times 2.02</span>.</p>
-<p data-background-color="green"><strong>Answer:</strong> <span data-inline-content-type="inlineMath" data-latex="v \approx 20\,\text{m/s}">v \approx 20\,\text{m/s}</span>, downward</p>
-<div data-type="callout" data-callout-type="TIP"><p><strong>Shortcut:</strong> <span data-inline-content-type="inlineMath" data-latex="v = \sqrt{2gs}">v = \sqrt{2gs}</span> gives the landing speed without the time, and checks (a) and (b) together.</p></div>
-<h3 data-anchor="1:p:1">Q2 · Unit of momentum</h3>
+<p data-background-color="green"><strong>Result:</strong> <span data-inline-content-type="inlineMath" data-latex="W = 315\,\text{kJ}">W = 315\,\text{kJ}</span></p>
+<div data-type="callout" data-callout-type="IMPORTANT"><p><strong>Takeaway:</strong> 315 kJ is 5.25 times the starting 60 kJ while the speed only rose 2.5 times, because kinetic energy grows with <span data-inline-content-type="inlineMath" data-latex="v^2">v^2</span>.</p></div>
+<h3 data-anchor="1:p:1">Exercise 2 · Unit of momentum</h3>
 <blockquote><p>Which is the SI unit of momentum?<br>A) N · B) kg·m/s · C) J/s · D) kg·m/s²</p></blockquote>
-<p><strong>Method:</strong> find the units of <span data-inline-content-type="inlineMath" data-latex="p = mv">p = mv</span>.</p>
-<details><summary>Solution</summary><ul>
-<li><span data-style-type="textColor" data-value="red">A ✗</span>: the newton is the unit of force.</li>
-<li><span data-style-type="textColor" data-value="green">B ✓</span>: kg × m/s.</li>
-<li><span data-style-type="textColor" data-value="red">C ✗</span>: J/s is the watt, the unit of power.</li>
-<li><span data-style-type="textColor" data-value="red">D ✗</span>: this is the newton again, written out.</li>
+<div data-type="callout" data-callout-type="FORMULA"><p><strong>Formula:</strong> definition of momentum</p><div data-type="math">p = m v</div></div>
+<details><summary>Steps</summary><ul>
+<li>A ✗ the newton is a force</li>
+<li>B ✓ kg × m/s</li>
+<li>C ✗ J/s is the watt, a power</li>
+<li>D ✗ the newton again, written out</li>
 </ul></details>
-<p data-background-color="green"><strong>Answer:</strong> B, kg·m/s</p>
+<p data-background-color="green"><strong>Result:</strong> B, kg·m/s</p>
 <div data-type="callout" data-callout-type="CAUTION"><p><strong>Trap:</strong> A and D are the same unit. When two options are equal, both are wrong.</p></div>
-<h3 data-anchor="1:p:2"><span data-style-type="backgroundColor" data-value="orange">Q3 · Terminal speed with a parachute</span></h3>
+<h3 data-anchor="1:p:2">Exercise 3 · Terminal speed with a parachute</h3>
 <blockquote><p>Explain why a skydiver falls at a lower terminal speed once the parachute opens.</p></blockquote>
-<p data-background-color="green"><strong>Answer:</strong> The canopy raises the drag at every speed, so drag balances the weight at a lower speed.</p>
+<div data-type="callout" data-callout-type="FORMULA"><p><strong>Formula:</strong> terminal speed is reached when the forces balance</p><div data-type="math">F_{\text{drag}}(v) = m g</div></div>
+<p data-background-color="green"><strong>Result:</strong> The canopy raises the drag at every speed, so drag balances the weight at a lower speed.</p>
 <ul>
-<li><strong>Drag grows with area and speed:</strong> the canopy greatly increases the area.</li>
-<li><strong>Just after opening:</strong> drag exceeds weight, so the net force points up and the skydiver slows down.</li>
-<li><strong>Slowing lowers the drag:</strong> until drag equals the weight again.</li>
-<li><strong>New balance:</strong> it is reached at a lower speed, which is the new terminal speed.</li>
+<li>When the canopy opens, drag exceeds the weight, so the net force points up and the skydiver slows down.</li>
+<li>Slowing lowers the drag, until it equals the weight again, at the new, lower terminal speed.</li>
 </ul>
-<div data-type="callout" data-callout-type="EXAM"><p><strong>Marks:</strong> one mark for each link in the chain: area up, drag up, net force up, slows down, balance at a lower speed. Writing only "the parachute slows them down" scores nothing.</p></div>
-<h2>Revision sheet</h2>
-<h3>Answer key</h3>
-<table><tr><th>Q</th><th>Answer</th></tr>
-<tr><td>1(a)</td><td><span data-inline-content-type="inlineMath" data-latex="t \approx 2.0\,\text{s}">t \approx 2.0\,\text{s}</span></td></tr>
-<tr><td>1(b)</td><td><span data-inline-content-type="inlineMath" data-latex="v \approx 20\,\text{m/s}">v \approx 20\,\text{m/s}</span>, downward</td></tr>
+<h2>Answer key</h2>
+<table><tr><th>Exercise</th><th>Result</th></tr>
+<tr><td>1a</td><td><span data-inline-content-type="inlineMath" data-latex="a = 2.5\,\text{m/s}^2">a = 2.5\,\text{m/s}^2</span></td></tr>
+<tr><td>1b</td><td><span data-inline-content-type="inlineMath" data-latex="W = 315\,\text{kJ}">W = 315\,\text{kJ}</span></td></tr>
 <tr><td>2</td><td>B, kg·m/s</td></tr>
 <tr><td>3</td><td>drag balances the weight at a lower speed</td></tr></table>
-<h3>Formulas</h3>
-<div data-type="callout" data-callout-type="FORMULA"><p><strong>Fall from rest</strong> (Q1)</p><div data-type="math">s = \tfrac12 g t^2 \qquad v = \sqrt{2gs}</div><p><span data-inline-content-type="inlineMath" data-latex="s">s</span> height fallen · <span data-inline-content-type="inlineMath" data-latex="t">t</span> time · <span data-inline-content-type="inlineMath" data-latex="g = 9.8\,\text{m/s}^2">g = 9.8\,\text{m/s}^2</span></p></div>
-<h3>Method map</h3>
-<table><tr><th>When the question…</th><th>Do this</th><th>Qs</th></tr>
-<tr><td>drops something and asks for a time or speed</td><td>constant-acceleration equations with <span data-inline-content-type="inlineMath" data-latex="u = 0">u = 0</span></td><td>1</td></tr>
-<tr><td>asks for the unit of a quantity</td><td>write its defining formula and multiply the units</td><td>2</td></tr>
-<tr><td>asks why a speed settles</td><td>build the force chain until the forces balance</td><td>3</td></tr></table>
