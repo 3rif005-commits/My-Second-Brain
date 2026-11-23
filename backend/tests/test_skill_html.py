@@ -342,3 +342,14 @@ def test_a_worksheet_case_with_no_formula_is_dropped():
     out = skill_html.rule_sheet(_SOLUTIONS + box + "<h3>Answer key</h3>")
     assert "used to find" not in out
     assert out.count("<em>In this worksheet:</em>") == 3
+
+
+def test_a_holds_when_line_that_names_no_limit_is_dropped():
+    # live (Nemotron): "Holds when: general law; in differential form."
+    box = ('<div data-type="callout" data-callout-type="CAUTION" data-callout-icon="📐"><p><strong>Wave relation</strong></p>'
+           '<p><em>Holds when:</em> general law; in differential form.</p>'
+           '<p><em>Holds when:</em> General definition of energy flux density.</p>'
+           '<p><em>Holds when:</em> always.</p>'
+           '<p><em>Holds when:</em> a plane wave in vacuum.</p></div>\n')
+    out = skill_html.rule_sheet(_SOLUTIONS + box + "<h3>Answer key</h3>")
+    assert re.findall(r"<em>Holds when:</em>([^<]*)", out) == [" a plane wave in vacuum."]

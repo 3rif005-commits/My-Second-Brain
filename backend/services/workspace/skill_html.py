@@ -315,6 +315,9 @@ _BOX_OPEN = re.compile(r'<div data-type="callout" data-callout-type="([A-Z]+)"\s
 _BOX_NAME = re.compile(r"<p><strong>(.*?)</strong>")
 _EMPTY_CASES = re.compile(
     r"<p><em>In this worksheet:</em>(?:(?!</p>)[^$\\=])*</p>", re.IGNORECASE)
+_NO_LIMIT = re.compile(
+    r"<p><em>Holds when:</em>\s*(?:always|everywhere|in general|general|any(?:\s+\w+)?\s*(?:field|case|situation)s?\b)[^<]*</p>",
+    re.IGNORECASE)
 _STOP = {"of", "the", "a", "an", "in", "for", "and", "to", "on", "law", "rule", "formula", "s",
          "vacuum", "general", "form", "definition", "condition"}
 
@@ -449,6 +452,8 @@ def rule_sheet(doc: str) -> str:
     # line is for the special formulas. Nemotron wrote the empty kind in most
     # runs despite the instruction, so a line with no formula goes.
     section = _EMPTY_CASES.sub("", doc[rules_h3.end():stop])
+    # "Holds when: general law" is no limit; the line is for one an exam can break.
+    section = _NO_LIMIT.sub("", section)
     head, boxes, tail = _split_boxes(section)
 
     # one entry per distinct rule, in order of first use
