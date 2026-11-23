@@ -95,6 +95,8 @@ export const MathBlockSpec = createReactBlockSpec(
   },
   {
     render: (props) => <MathBlockView block={props.block} editor={props.editor} />,
+    // The LaTeX, not KaTeX's markup (see InlineMathSpec.toExternalHTML).
+    toExternalHTML: (props) => <div data-type="math">{props.block.props.latex}</div>,
     parse: (element: HTMLElement) => {
       if (element.getAttribute("data-type") !== "math") return undefined;
       // Same defensive pattern as CalloutBlockSpec below: BlockNote auto-maps
@@ -248,8 +250,25 @@ export const InlineMathSpec = createInlineContentSpec(
       showFormula();
       return { dom: el };
     },
+    // Outside the editor (the editor AI's view of the note, copy to another
+    // app) a formula is its LaTeX, in the markup the parse rule reads back.
+    // Without this BlockNote falls back to render(): full KaTeX HTML+MathML,
+    // and a note full of formulas went to the editor AI as 262k+ tokens —
+    // over Nemotron's limit, "Oops! Something went wrong" (live, 2026-11-23).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    toExternalHTML: (inlineContent: any) => ({ dom: inlineMathExternal(inlineContent.props?.latex ?? "") }),
   }
 );
+
+/** `<span data-inline-content-type="inlineMath" data-latex="…">…</span>`, the
+ *  same shape skill_html.py writes and BlockNote's parse rule reads. */
+export function inlineMathExternal(latex: string): HTMLElement {
+  const el = document.createElement("span");
+  el.setAttribute("data-inline-content-type", "inlineMath");
+  el.setAttribute("data-latex", latex);
+  el.textContent = latex;
+  return el;
+}
 
 function checkpointHref(p: {
   noteId: string; resourceId: string; anchorType: string; value: string;
