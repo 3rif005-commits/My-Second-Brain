@@ -126,12 +126,12 @@ def test_every_callout_type_the_worksheet_skill_names_exists():
 
 def _example() -> str:
     body = _worksheet_skill().body
-    return body[body.index("<h1>TD 2"):]
+    return body[body.index("<h1>Worksheet 3"):]
 
 
 def test_the_skills_own_example_survives_finishing():
     out = skill_html.finish(_example())
-    assert "W = 315\\,\\text{kJ}" in _spans(out)
+    assert "t \\approx 2.0\\,\\text{s}" in _spans(out)
     assert out.count('data-background-color="green"') == 4   # 1a, 1b, 2, 3
     assert "$" not in re.sub(r"<[^>]+>", "", out)              # no maths left as raw text
 
