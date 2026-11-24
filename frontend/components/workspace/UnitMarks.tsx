@@ -9,7 +9,7 @@
 // Keep or Back. An exercise's mark is the worst of its answers, so a closed
 // toggle still shows what is inside. Click it for: the question in the sheet,
 // Mark checked, Redo, Redo with a note.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronRight, ExternalLink, Loader2, RotateCcw, Sparkles, Undo2 } from "lucide-react";
 import { childrenOf, markOf, progress, type MarkKind, type SolveProgress, type Unit } from "@/lib/units";
 import type { NoteUnits } from "./useNoteUnits";
@@ -111,7 +111,7 @@ export function UnitMarks({ api, contentRef, sourceTitle, onOpenSource, openKey,
         const busy = api.busy.has(u.key);
         return (
           <div key={u.key} className="absolute right-0" style={{ top: top + 2 }}>
-            <button type="button" onClick={() => setOpenKey(openKey === u.key ? null : u.key)}
+            <button type="button" data-unit-mark onClick={() => setOpenKey(openKey === u.key ? null : u.key)}
               aria-label={`${u.title}: ${g.label}`} title={m.problems.length ? m.problems.join("\n") : g.label}
               className={`flex size-5 items-center justify-center rounded-full text-[12px] hover:bg-surface-hover ${g.cls}`}>
               {busy ? <Loader2 size={12} className="animate-spin" /> : g.text}
@@ -133,6 +133,28 @@ function UnitMenu({ u, api, problems, isLeaf, sourceTitle, onOpenSource, onClose
   onOpenSource: (resourceId: string, page: number) => void;
   onClose: () => void;
 }) {
+  const box = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  // Close on Escape anywhere and on a click outside (the mark itself toggles).
+  // Then bring the menu into view: opened by Next, it can sit off-screen
+  // while the toggles above it are still opening (live 2026-11-24).
+  useEffect(() => {
+    const down = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (box.current?.contains(t) || t.closest?.("[data-unit-mark]")) return;
+      closeRef.current();
+    };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") closeRef.current(); };
+    document.addEventListener("mousedown", down);
+    document.addEventListener("keydown", key);
+    const t = setTimeout(() => box.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 700);
+    return () => {
+      document.removeEventListener("mousedown", down);
+      document.removeEventListener("keydown", key);
+      clearTimeout(t);
+    };
+  }, []);
   const [asking, setAsking] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -150,8 +172,8 @@ function UnitMenu({ u, api, problems, isLeaf, sourceTitle, onOpenSource, onClose
   }
 
   return (
-    <div className="absolute right-6 top-0 z-30 w-72 rounded-lg border border-border bg-surface p-2.5 text-[12.5px] shadow-lg"
-      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }} data-testid="unit-menu">
+    <div ref={box} className="absolute right-6 top-0 z-30 w-72 rounded-lg border border-border bg-surface p-2.5 text-[12.5px] shadow-lg"
+      data-testid="unit-menu">
       <p className="mb-1.5 font-medium text-ink">{u.title}</p>
       {problems.length > 0 && (
         <ul className="mb-2 space-y-0.5 text-amber-700 dark:text-amber-300">
