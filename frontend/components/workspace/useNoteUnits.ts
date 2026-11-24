@@ -156,12 +156,25 @@ export function useNoteUnits(noteId: string,
         return b ? { ...u, block_id: b.block_id } : u;
       }));
       await unitsApi.bind(noteId, old.bindings).catch(() => {});
+    } else if (ed && now) {
+      // After a reload the old blocks are gone from memory: the server kept
+      // the HTML each Redo replaced (live 2026-11-24: Back did nothing).
+      const unit = unitsRef.current.find((u) => u.key === key);
+      const last = (unit?.versions ?? []).at(-1) as { html?: string } | undefined;
+      if (!last?.html) throw new Error("The old version isn't stored — use Ctrl+Z in the note.");
+      const landed = await ed.replaceBlockWithHtml(now.id, last.html);
+      // That HTML came from the editor and carries no data-unit: the part and
+      // its sub-parts are its headings, in page order.
+      const keys = unitsRef.current
+        .filter((u) => u.key === key || u.key.startsWith(key + "."))
+        .sort((a, b) => a.position - b.position).map((u) => u.key);
+      await bindBlocks(landed, keys);
     }
     oldVersions.current.delete(key);
     put(unitsRef.current.map((u) => u.key === key ? { ...u, pending: false } : u));
     await unitsApi.patch(noteId, key, { pending: false, state: "written" }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [noteId, editorRef]);
+  }, [noteId, editorRef, bindBlocks]);
 
   return { units, refresh, collect, bindApplied, fill, setChecked, redo, keep, backToOld, busy };
 }

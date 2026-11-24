@@ -665,7 +665,7 @@ def solve_parallel(runner: Runner, plan: dict, keys: list[str]) -> Iterator[dict
 #: what the client gets for each unit
 PUBLIC = ("key", "parent_key", "depth", "label", "title", "question", "quote", "page",
           "kind", "rules", "importance", "state", "problems", "block_id", "pending",
-          "resource_id", "position")
+          "resource_id", "position", "versions")
 
 
 def _db():

@@ -30,6 +30,8 @@ export interface Unit {
   pending: boolean;
   resource_id: string | null;
   position: number;
+  /** Earlier AI versions (HTML), newest last — what Back to old restores. */
+  versions?: unknown[];
 }
 
 /** A part of the page to put into the note: an exercise, "overview" or "revision". */

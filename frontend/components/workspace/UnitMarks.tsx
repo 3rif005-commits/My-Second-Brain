@@ -167,7 +167,7 @@ function UnitMenu({ u, api, problems, isLeaf, sourceTitle, onOpenSource, onClose
         <div className="my-1.5 flex items-center gap-1 rounded-md bg-accent-500/10 px-2 py-1">
           <span className="mr-auto text-accent-600">New version</span>
           <button type="button" className={btn} onClick={() => void api.keep(u.key)}><Check size={12} /> Keep</button>
-          <button type="button" className={btn} onClick={() => void api.backToOld(u.key)}><Undo2 size={12} /> Back to old</button>
+          <button type="button" className={btn} onClick={() => { api.backToOld(u.key).catch((e) => setError(e instanceof Error ? e.message : "Could not go back.")); }}><Undo2 size={12} /> Back to old</button>
         </div>
       )}
       <div className="flex flex-wrap gap-1">
