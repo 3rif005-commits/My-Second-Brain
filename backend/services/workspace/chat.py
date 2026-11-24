@@ -179,6 +179,12 @@ def workspace_chunks(query: str, note_id: str, user_id: str,
 def summarize_result(result: dict) -> str:
     """'3 chapters · 24 boxes · 6 tables' — what a job's result holds."""
     html = result.get("html") or ""
+    if result.get("kind") == "units":
+        # A worksheet's map: the list is in the note; nothing is solved yet.
+        f = result.get("found") or {}
+        return (f"found {f.get('exercises', 0)} exercises and {f.get('questions', 0)} questions; "
+                "the list is in the note, each question tinted in the sheet; "
+                "the student clicks Solve all (on the card or in the note) to write the answers")
     parts = []
     for pattern, one, many in ((r"<h2[\s>]", "chapter", "chapters"),
                                (r'data-type="callout"', "box", "boxes"),

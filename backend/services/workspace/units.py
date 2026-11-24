@@ -456,11 +456,10 @@ def free_checks(html: str, units: list[dict], sheet_text: str) -> dict[str, list
             continue
         probs: list[str] = []
         if not children(units, u["key"]):
-            bands = len(_BAND.findall(seg))
-            if bands == 0:
+            # Several bands are fine: a question asking for F1 and F2 has two
+            # answers (live 2026-11-24, ESD tutorial 3). None is a gap.
+            if not _BAND.findall(seg):
                 probs.append("no answer band")
-            elif bands > 1:
-                probs.append(f"{bands} answer bands, one expected")
         grey = _GREY_LINE.search(seg)
         if grey and sheet_text:
             missing = sorted(n for n in _numbers(_TAGS.sub(" ", grey.group(1)))

@@ -33,7 +33,7 @@ import { answerToHtml } from "@/lib/answerToHtml";
 import type { SourceInsert } from "@/lib/sourceInserts";
 import { getQuote, priceLine, queueJob, tonight, type BgJob } from "@/lib/backgroundJobs";
 import { offerDraft, stageDraft, undoDraft, type NoteDraft } from "@/lib/noteDraft";
-import { offerUnit, streamSolve, unitsApi } from "@/lib/units";
+import { solveAll } from "@/lib/units";
 import type { SkillDraftProposal } from "@/lib/skills";
 
 const ACCEPTED_EXT = ACCEPTED_WORKSPACE_FILES.split(",");
@@ -744,47 +744,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   /** Solve all: each exercise is written into its heading as it lands, then
    *  the Overview and the revision sheet (lib/units.ts). */
   async function solveJob(cardId: string, job: PanelJob) {
-    const noteId = job.noteId;
-    const titles = new Map<string, string>();
-    try {
-      for (const u of await unitsApi.list(noteId)) titles.set(u.key, u.title);
-    } catch { /* titles are only for messages */ }
-    const name = (k: string) => titles.get(k) ?? (k === "revision" ? "Revision sheet" : `Part ${k}`);
     const total = job.result?.found?.exercises ?? 0;
     patchJob(cardId, (j) => ({ ...j, solving: { running: true, total, done: 0, errors: [], edited: [] } }));
-    const step = (fn: (s: NonNullable<PanelJob["solving"]>) => NonNullable<PanelJob["solving"]>) =>
-      patchJob(cardId, (j) => (j.solving ? { ...j, solving: fn(j.solving) } : j));
-    try {
-      await streamSolve(noteId, async (ev) => {
-        if (ev.type === "start") {
-          step((s) => ({ ...s, total: ev.keys.length }));
-        } else if (ev.type === "unit") {
-          const out = await offerUnit({ noteId, key: ev.key, html: ev.html });
-          step((s) => ({
-            ...s, done: s.done + 1,
-            edited: out === "edited" ? [...s.edited, name(ev.key)] : s.edited,
-            errors: out === "missing" || out === false
-              ? [...s.errors, `${name(ev.key)}: its heading is no longer in the note — open the note and Solve the rest.`]
-              : s.errors,
-          }));
-        } else if (ev.type === "unit_error") {
-          step((s) => ({ ...s, errors: [...s.errors, `${name(ev.key)} could not be written: ${ev.content}`] }));
-        } else if (ev.type === "finishing") {
-          step((s) => ({ ...s, finishing: true }));
-        } else if (ev.type === "finish") {
-          if (ev.overview) await offerUnit({ noteId, key: "overview", html: ev.overview });
-          if (ev.revision) await offerUnit({ noteId, key: "revision", html: ev.revision });
-        } else if (ev.type === "done") {
-          step((s) => ({ ...s, usd: ev.usd }));
-        } else if (ev.type === "error") {
-          step((s) => ({ ...s, errors: [...s.errors, ev.content] }));
-        }
-      });
-    } catch (e) {
-      step((s) => ({ ...s, errors: [...s.errors, e instanceof Error ? e.message : "Solving stopped."] }));
-    } finally {
-      step((s) => ({ ...s, running: false, finishing: false }));
-    }
+    await solveAll(job.noteId, (fn) =>
+      patchJob(cardId, (j) => (j.solving ? { ...j, solving: fn(j.solving) } : j)));
   }
 
   async function undoJob(cardId: string, job: PanelJob) {

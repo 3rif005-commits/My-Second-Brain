@@ -9,6 +9,7 @@ import {
   Loader2, RotateCcw, Sparkles, Undo2, X,
 } from "lucide-react";
 import { PREVIEW_CSS, resultSummary, type JobResult } from "@/lib/chatJobs";
+import type { SolveProgress } from "@/lib/units";
 import type { UploadFile } from "./panelSources";
 
 export interface PanelJob {
@@ -31,16 +32,7 @@ export interface PanelJob {
   solving?: SolveProgress;
 }
 
-export interface SolveProgress {
-  running: boolean;
-  total: number;
-  done: number;
-  finishing?: boolean;
-  /** Parts that could not be written, and parts left alone because you edited them. */
-  errors: string[];
-  edited: string[];
-  usd?: number | null;
-}
+export type { SolveProgress };
 
 function Elapsed({ since }: { since: number }) {
   const [now, setNow] = useState(Date.now());

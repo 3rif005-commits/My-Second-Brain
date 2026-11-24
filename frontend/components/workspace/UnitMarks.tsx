@@ -10,8 +10,8 @@
 // toggle still shows what is inside. Click it for: the question in the sheet,
 // Mark checked, Redo, Redo with a note.
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronRight, ExternalLink, Loader2, RotateCcw, Undo2 } from "lucide-react";
-import { childrenOf, markOf, progress, type MarkKind, type Unit } from "@/lib/units";
+import { Check, ChevronRight, ExternalLink, Loader2, RotateCcw, Sparkles, Undo2 } from "lucide-react";
+import { childrenOf, markOf, progress, type MarkKind, type SolveProgress, type Unit } from "@/lib/units";
 import type { NoteUnits } from "./useNoteUnits";
 
 const GLYPH: Record<MarkKind, { text: string; cls: string; label: string }> = {
@@ -26,15 +26,38 @@ const PRESETS = ["More steps", "Shorter", "Use the course's notation"];
 
 const btn = "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[12px] hover:bg-surface-hover disabled:opacity-50";
 
-export function UnitProgressLine({ units, onNext }: { units: Unit[]; onNext: (u: Unit) => void }) {
+export function UnitProgressLine({ units, onNext, onSolve, solving }: {
+  units: Unit[]; onNext: (u: Unit) => void;
+  /** Solve all from the note itself: the AI panel's card is gone after a reload. */
+  onSolve?: () => void;
+  solving?: SolveProgress;
+}) {
   const p = progress(units);
   if (!p.total) return null;
+  if (solving?.running) {
+    return (
+      <div className="mb-2 text-[12px] text-ink-secondary" data-testid="unit-progress">
+        <Loader2 size={12} className="mr-1 inline animate-spin" />
+        {solving.finishing ? "Writing the revision sheet…" : `Solving… ${solving.done} of ${solving.total || "…"} exercises`}
+      </div>
+    );
+  }
   const parts = [p.written < p.total ? `${p.written} of ${p.total} written` : null,
     `${p.checked} of ${p.total} checked`, p.toLook ? `${p.toLook} to look at` : null].filter(Boolean);
   return (
-    <div className="mb-2 flex items-center gap-2 text-[12px] text-ink-secondary" data-testid="unit-progress">
+    <div className="mb-2 flex flex-wrap items-center gap-2 text-[12px] text-ink-secondary" data-testid="unit-progress">
       <span>{parts.join(" · ")}</span>
-      {p.next && (
+      {p.written < p.total && onSolve && (
+        <button type="button" onClick={onSolve}
+          className="inline-flex h-6 items-center gap-1 rounded-md bg-accent-600 px-2 text-white hover:bg-accent-500">
+          <Sparkles size={11} /> {p.written ? "Solve the rest" : "Solve all"}
+        </button>
+      )}
+      {solving && !solving.running && [...solving.edited.map((e) => `${e}: kept your edits (Redo it for the AI's version)`),
+        ...solving.errors].map((e) => (
+        <span key={e} className="w-full text-amber-700 dark:text-amber-300">{e}</span>
+      ))}
+      {p.next && p.written > 0 && (
         <button type="button" className="inline-flex items-center gap-0.5 text-ink hover:underline"
           onClick={() => onNext(p.next!)}>
           Next <ChevronRight size={12} />

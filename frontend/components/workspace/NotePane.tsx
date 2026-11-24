@@ -18,7 +18,7 @@ import { anchorRows, findLevelHeadings, readDraftAnchors, type DraftAnchor } fro
 import { markdownTableToBlock } from "@/lib/sourceInserts";
 import { hasContent, textBlocks } from "./sendBlocks";
 import { quotedPassages, type Passage } from "./viewers/passageMarks";
-import { unitPassages, type FillOutcome } from "@/lib/units";
+import { solveAll, unitPassages, type FillOutcome, type SolveProgress } from "@/lib/units";
 import { useNoteUnits } from "./useNoteUnits";
 import { UnitMarks, UnitProgressLine } from "./UnitMarks";
 
@@ -115,6 +115,28 @@ export function NotePane({
   const unitsRef = useRef(units);
   unitsRef.current = units;
   const [openUnit, setOpenUnit] = useState<string | null>(null);
+  // Only the parts still in the note count: a part whose heading was deleted
+  // (or replaced) has no mark and no place in "N of M checked".
+  const [docTick, setDocTick] = useState(0);
+  const liveUnits = useMemo(() => ({
+    ...units,
+    units: units.units.filter((u) => !!u.block_id && !!editorRef.current?.getBlock(u.block_id)),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [units, docTick]);
+  const liveRef = useRef(liveUnits.units);
+  liveRef.current = liveUnits.units;
+  // The editor mounts after the units arrive: look again until it can answer.
+  useEffect(() => {
+    if (!units.units.length || liveUnits.units.length || docTick > 8) return;
+    const t = setTimeout(() => setDocTick((n) => n + 1), 800);
+    return () => clearTimeout(t);
+  }, [units.units, liveUnits.units, docTick]);
+  const [solving, setSolving] = useState<SolveProgress | undefined>();
+  const solveHere = useCallback(() => {
+    setSolving({ running: true, total: 0, done: 0, errors: [], edited: [] });
+    void solveAll(note.id, (fn) => setSolving((s) => (s ? fn(s) : s)))
+      .finally(() => { void unitsRef.current.refresh(); });
+  }, [note.id]);
   // The page's title heads the pane, as it heads the note page: without it the
   // pane opened on bare text (or nothing) and you couldn't tell which note it was.
   const [title, setTitle] = useState(note.title);
@@ -185,14 +207,15 @@ export function NotePane({
   passagesRef.current = onPassages;
   // The note's quotes and, for a solved worksheet, each question's own words.
   const emitPassages = useCallback((blocks: AnyBlock[]) => {
-    passagesRef.current?.([...quotedPassages(blocks), ...unitPassages(unitsRef.current.units)]);
+    passagesRef.current?.([...quotedPassages(blocks), ...unitPassages(liveRef.current)]);
   }, []);
   useEffect(() => { emitPassages(editorRef.current?.getDocument() ?? note.content); },
-    [note.id, units.units, emitPassages]); // eslint-disable-line react-hooks/exhaustive-deps
+    [note.id, liveUnits.units, emitPassages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = useCallback(async (blocks: AnyBlock[], plainText: string) => {
     currentTextRef.current = plainText;
     setEmpty(!hasContent(blocks));
+    setDocTick((t) => t + 1);
     emitPassages(blocks);
     onSavingChange?.(true);
     // Returns whether the note is durably stored — `persistApplied` below only
@@ -292,8 +315,14 @@ export function NotePane({
       document: () => editorRef.current?.getDocument() ?? null,
       fillUnit: async (key, html) => {
         applyingRef.current = true;             // the AI's writing, not the user's typing
-        try { return await unitsRef.current.fill(key, html); }
-        finally { setTimeout(() => { applyingRef.current = false; }, 400); }
+        try {
+          const out = await unitsRef.current.fill(key, html);
+          // A solved worksheet is work to keep: the next Insert must append
+          // to it, never replace it, and Undo of the list must not wipe it.
+          // (Live 2026-11-24: an Insert after Solve all replaced the whole note.)
+          if (out === "filled") { userEditedRef.current = true; beforeApplyRef.current = null; }
+          return out;
+        } finally { setTimeout(() => { applyingRef.current = false; }, 400); }
       },
       hasUserEdits: () => {
         // Without a draft applied in this session we cannot prove where the
@@ -450,7 +479,7 @@ export function NotePane({
               </button>
             );
           })}
-          <UnitMarks api={units} contentRef={contentRef} openKey={openUnit} setOpenKey={setOpenUnit}
+          <UnitMarks api={liveUnits} contentRef={contentRef} openKey={openUnit} setOpenKey={setOpenUnit}
             sourceTitle={(id) => sourceById.get(id)?.title ?? "source"}
             onOpenSource={(id, page) => onJump(id, page)} />
           <label htmlFor={`pane-title-${note.id}`} className="sr-only">Note title</label>
@@ -462,7 +491,7 @@ export function NotePane({
             onChange={(e) => { setTitle(e.target.value); saveTitle(e.target.value); }}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusEditor(); } }}
           />
-          <UnitProgressLine units={units.units} onNext={(u) => {
+          <UnitProgressLine units={liveUnits.units} solving={solving} onSolve={solveHere} onNext={(u) => {
             if (u.block_id) editorRef.current?.scrollToBlock(u.block_id);
             setOpenUnit(u.key);
           }} />
