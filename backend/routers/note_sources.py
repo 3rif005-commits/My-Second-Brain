@@ -857,16 +857,23 @@ def bind_units(note_id: str, body: list[UnitBind], authorization: str = Header()
                                                    [b.model_dump() for b in body])}
 
 
+class UnitSolve(BaseModel):
+    #: what each part must show, as the note's "Needs:" lines say now
+    needs: dict[str, list[str]] = {}
+
+
 @router.post("/notes/{note_id}/units/solve")
-async def solve_units(note_id: str, authorization: str = Header()):
+async def solve_units(note_id: str, body: UnitSolve | None = None,
+                      authorization: str = Header()):
     """Solve all, streamed: one `unit` event per exercise as it lands, then
     `finish` (Overview + revision sheet), then `done`."""
     user_id = get_user_id(authorization)
     _own_note(note_id, user_id)
     from services.workspace import units
+    needs = {k: [str(x)[:80] for x in v][:8] for k, v in ((body.needs if body else {}) or {}).items()}
 
     async def stream():
-        async for ev in units.solve_events(note_id, user_id):
+        async for ev in units.solve_events(note_id, user_id, needs):
             yield "data: " + json.dumps(ev) + "\n\n"
         yield "data: [DONE]\n\n"
 

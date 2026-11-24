@@ -14,7 +14,7 @@ import {
 } from "@/components/editor/calloutChildren";
 import { extractEmbeddedBlocks, restoreEmbeddedBlocks } from "@/lib/embeddedBlocks";
 import {
-  bindUnits, headingBlocks, isUntouchedSkeleton, markOf, progress, readDraftUnits, unitPassages,
+  bindUnits, headingBlocks, isUntouchedSkeleton, markOf, needsOf, progress, readDraftUnits, unitPassages,
   type Unit,
 } from "./units";
 
@@ -110,5 +110,23 @@ describe("progress and marks", () => {
   it("tints each question's own words in its page of the sheet", () => {
     const withQuote = [unit("1.1", { quote: "Find  the frequency", resource_id: "r1", page: 2 }), unit("1.2")];
     expect(unitPassages(withQuote)).toEqual([{ resourceId: "r1", page: 2, text: "Find the frequency" }]);
+  });
+});
+
+describe("the Needs line", () => {
+  const p = (text: string, styles = {}) => ({ type: "paragraph", content: [{ type: "text", text, styles }], children: [] });
+  const part = (needs: AnyBlock) => ({
+    type: "heading", props: { level: 3, isToggleable: true }, content: [{ type: "text", text: "(a) PAL", styles: {} }],
+    children: [p("Design a PAL.", { textColor: "gray" }), needs, p("Not solved yet.")],
+  });
+
+  it("is read as the list the student left", () => {
+    expect(needsOf(part(p("Needs: K-map F1 · K-map F2, circuit", { textColor: "gray" }))))
+      .toEqual(["K-map F1", "K-map F2", "circuit"]);
+    expect(needsOf({ children: [p("Design a PAL.")] })).toBeNull();
+  });
+
+  it("can be edited without the part counting as the student's own work", () => {
+    expect(isUntouchedSkeleton(part(p("Needs: K-map F1 · PAL table")))).toBe(true);   // typed plain
   });
 });

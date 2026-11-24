@@ -11,7 +11,8 @@
 |---|------|-----------|
 | 1 | Every database query from Render to Supabase takes ~180 ms (measured with the CSV import's Server-Timing header); a simple database list takes ~1 s. Likely the two services are in different regions (`render.yaml` sets no region, so Render's default, Oregon). Check the Supabase project's region; co-locating would speed up every database page | the whole app, not one feature |
 | 2 | Settings at phone width not re-checked after the settings rework (Chrome wouldn't resize); Connected apps has no "how to connect" text because the app's own MCP server isn't deployed with Render | small |
-| 3 | Editor AI: one Revert (after Simplify) left stray letters in the paragraph ("foronr"); two later Simplify/Fix-spelling reverts restored the text exactly. Watch for it; if it recurs, check xl-ai's revert with large rewrites | couldn't reproduce |
+| 3 | **A real circuit block** (`docs/CIRCUIT_SCHEMATIC_BLOCK.md`): circuits as netlists the AI writes and a library draws (and can simulate and check). App-wide: worksheets, study guides, source capture, the editor. Today circuits are Mermaid gate diagrams | user asked to document it as a big feature (2026-11-24) |
+| 4 | Editor AI: one Revert (after Simplify) left stray letters in the paragraph ("foronr"); two later Simplify/Fix-spelling reverts restored the text exactly. Watch for it; if it recurs, check xl-ai's revert with large rewrites | couldn't reproduce |
 
 **Worksheet solver, part by part (2026-11-24, Phase 1 built, NOT pushed):** `/solve-worksheet`
 now maps the sheet first (every question with its own words and page), puts that list into the

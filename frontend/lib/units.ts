@@ -23,6 +23,8 @@ export interface Unit {
   page: number | null;
   kind: string;
   rules: unknown[];
+  /** What the answer must show ("K-map F1", "circuit"); the note's "Needs:" line. */
+  needs?: string[];
   importance: string;
   state: UnitState;
   problems: string[];
@@ -110,7 +112,9 @@ export function isUntouchedSkeleton(block: AnyBlock): boolean {
     const text = inlineText(b).trim();
     const grey = Array.isArray(b.content) && b.content.length > 0 && b.content.every((c: AnyBlock) =>
       c?.type !== "text" || c.styles?.textColor === "gray" || !c.text?.trim());
-    return (text === NOT_SOLVED || text === "" || grey) && (b.children ?? []).length === 0;
+    // The "Needs:" line is meant to be edited before solving.
+    const needsLine = text.startsWith(NEEDS_LABEL);
+    return (text === NOT_SOLVED || text === "" || grey || needsLine) && (b.children ?? []).length === 0;
   };
   return ok(block);
 }
@@ -230,14 +234,15 @@ export interface SolveProgress {
  *  the note), then the Overview and the revision sheet. `step` updates the
  *  caller's progress; the AI panel's card and the note's own line both use it. */
 export async function solveAll(noteId: string,
-                               step: (fn: (s: SolveProgress) => SolveProgress) => void): Promise<void> {
+                               step: (fn: (s: SolveProgress) => SolveProgress) => void,
+                               needs?: Record<string, string[]>): Promise<void> {
   const titles = new Map<string, string>();
   try {
     for (const u of await unitsApi.list(noteId)) titles.set(u.key, u.title);
   } catch { /* titles are only for messages */ }
   const name = (k: string) => titles.get(k) ?? (k === "revision" ? "Revision sheet" : `Part ${k}`);
   try {
-    await streamSolve(noteId, async (ev) => {
+    await streamSolve(noteId, needs, async (ev) => {
       if (ev.type === "start") {
         step((s) => ({ ...s, total: ev.keys.length }));
       } else if (ev.type === "unit") {
@@ -270,9 +275,13 @@ export async function solveAll(noteId: string,
 }
 
 /** Solve all, as a stream of events (POST /notes/{id}/units/solve). */
-export async function streamSolve(noteId: string, onEvent: (e: SolveEvent) => void | Promise<void>,
+export async function streamSolve(noteId: string, needs: Record<string, string[]> | undefined,
+                                  onEvent: (e: SolveEvent) => void | Promise<void>,
                                   signal?: AbortSignal): Promise<void> {
-  const res = await fetch(`${base(noteId)}/solve`, { method: "POST", signal });
+  const res = await fetch(`${base(noteId)}/solve`, {
+    method: "POST", signal, headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ needs: needs ?? {} }),
+  });
   if (!res.ok || !res.body) {
     await json(res);
     throw new Error(`Server ${res.status}`);
@@ -293,4 +302,18 @@ export async function streamSolve(noteId: string, onEvent: (e: SolveEvent) => vo
       await onEvent(ev);
     }
   }
+}
+
+export const NEEDS_LABEL = "Needs:";
+
+/** The "Needs:" line right under a part's heading, as the student left it:
+ *  null when the part has none. */
+export function needsOf(block: AnyBlock): string[] | null {
+  for (const b of block?.children ?? []) {
+    if (b?.type !== "paragraph") continue;
+    const text = inlineText(b).trim();
+    if (!text.startsWith(NEEDS_LABEL)) continue;
+    return text.slice(NEEDS_LABEL.length).split(/[·,;]/).map((x) => x.trim()).filter(Boolean);
+  }
+  return null;
 }

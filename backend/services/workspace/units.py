@@ -48,6 +48,7 @@ HIGHLIGHT_CAPS = {"red": 2, "orange": 3, "yellow": 4}
 KINDS = ("Recall", "Short", "Multi-step", "Open")
 RULE_LEVELS = ("must know", "core", "needed", "supporting", "background")
 
+NEEDS_LABEL = "Needs:"
 QUOTE_PROBLEM = "this question's words were not found in the sheet"
 GREY = '<span data-style-type="textColor" data-value="gray">'
 NOT_SOLVED = "<p><em>Not solved yet.</em></p>"
@@ -78,6 +79,7 @@ choose the HEADING HIGHLIGHTS, name the general laws) and answer with JSON only:
        "page": <page>,
        "kind": "Recall" | "Short" | "Multi-step" | "Open",
        "rules": ["<rule name>"],
+       "needs": ["<what the answer must contain besides steps and the band, e.g. K-map F1, truth table, PAL programming table, circuit>"],
        "parts": [<the sub-parts, each with the same fields as a question and its letter as label, e.g. "(a)"; [] when there are none>]}]}],
  "rules": [{"name": "<rule name>", "importance": "must know" | "core" | "needed" | "supporting" | "background"}]}
 
@@ -89,6 +91,11 @@ choose the HEADING HIGHLIGHTS, name the general laws) and answer with JSON only:
 - "quote" must be findable in the source text above: copy it, never reword it.
 - A rule name is what you would write on the Rule line, the same words every
   time; every name used by a question is also in the top-level "rules".
+- "needs" lists what the answer must SHOW, from the question and from the
+  method the course uses for it: a Karnaugh map for each function minimised
+  (3 or 4 variables), a truth table, a PLA/PAL programming table, a circuit
+  for "design/draw/implement a circuit", a diagram, code. Name each one with
+  what it is of ("K-map F2", "circuit"). [] when the steps and the band are enough.
 - Highlights follow HEADING HIGHLIGHTS: red at most 2, orange at most 3,
   yellow at most 4, on questions and sub-parts only.
 """
@@ -175,6 +182,7 @@ def _unit(key: str, parent: str | None, depth: int, raw: dict, label: str, title
         "source": source, "page": _int(raw.get("page")),
         "kind": kind if kind in KINDS else "",
         "rules": [_text(r) for r in (raw.get("rules") or []) if _text(r)],
+        "needs": [_text(n) for n in (raw.get("needs") or []) if _text(n)][:8],
         "importance": importance if importance in HIGHLIGHTS and depth >= 3 else "",
         "problems": [],
     }
@@ -200,7 +208,7 @@ def parse_plan(raw: str, sources: list[dict]) -> dict:
     units: list[dict] = [{"key": "", "parent_key": None, "depth": 1, "label": "",
                           "title": f"{title}: Solutions", "question": "", "quote": "",
                           "source": sheet, "page": None, "kind": "", "rules": [],
-                          "importance": "", "problems": []}]
+                          "needs": [], "importance": "", "problems": []}]
     for e, ex in enumerate(exercises, start=1):
         if not isinstance(ex, dict):
             continue
@@ -215,7 +223,7 @@ def parse_plan(raw: str, sources: list[dict]) -> dict:
             # SKILL.md: an exercise with a single question has no level 3 —
             # the exercise IS the question.
             q = questions[0]
-            for f in ("question", "quote", "kind", "rules"):
+            for f in ("question", "quote", "kind", "rules", "needs"):
                 exu[f] = _unit(ek, "", 2, q, "", "", sheet)[f] or exu[f]
             exu["page"] = exu["page"] or _int(q.get("page"))
             continue
@@ -224,7 +232,7 @@ def parse_plan(raw: str, sources: list[dict]) -> dict:
             parts = [p for p in (q.get("parts") or []) if isinstance(p, dict)]
             if lone:
                 # One question with sub-parts: its parts sit right under the exercise.
-                for f in ("question", "quote", "kind", "rules"):
+                for f in ("question", "quote", "kind", "rules", "needs"):
                     exu[f] = exu[f] or _unit(ek, "", 2, q, "", "", sheet)[f]
                 for pi, p in enumerate(parts, start=1):
                     pl = _text(p.get("label")) or f"({chr(96 + pi)})"
@@ -237,7 +245,7 @@ def parse_plan(raw: str, sources: list[dict]) -> dict:
                 # One sub-part is the question itself, not a level below it
                 # (live: each task of an exercise came back as "(a)" alone).
                 p = parts[0]
-                merged = {**p, **{f: q.get(f) for f in ("question", "quote", "kind", "rules", "importance")
+                merged = {**p, **{f: q.get(f) for f in ("question", "quote", "kind", "rules", "importance", "needs")
                                   if q.get(f)}}
                 units.append(_unit(qk, ek, 3, merged, qlabel,
                                    _text(q.get("title")) or _text(p.get("title")) or qlabel or f"Question {qi}",
@@ -331,6 +339,9 @@ def _skeleton_unit(u: dict, units: list[dict]) -> str:
     body = []
     if u["question"]:
         body.append(f"<p>{GREY}{_esc(u['question'])}</span></p>")
+    if u.get("needs"):
+        # Editable before Solve all: the note's line is what gets written.
+        body.append(f"<p>{GREY}{NEEDS_LABEL} {_esc(' · '.join(u['needs']))}</span></p>")
     if kids:
         body.extend(_skeleton_unit(k, units) for k in kids)
     else:
@@ -374,6 +385,7 @@ def _unit_spec(u: dict, units: list[dict]) -> str:
         if x["question"]:
             out.append(f"{pad}  grey line: {x['question']}")
         bits = [f"kind {x['kind']}" if x["kind"] else "",
+                f"MUST SHOW: {', '.join(x['needs'])}" if x.get("needs") else "",
                 f"rules: {', '.join(x['rules'])}" if x["rules"] else ""]
         if any(bits):
             out.append(f"{pad}  plan: {'; '.join(b for b in bits if b)}")
@@ -402,6 +414,13 @@ its heading:
 - No <h1>, no Overview, no revision sheet and no Answer key: they are written
   separately.
 - Name the rules exactly as in the plan: {rules}. Add no highlight.
+- Every item a part MUST SHOW is written, inside its Solution toggle, as its
+  own block between the steps: a Karnaugh map is a table with Gray-code
+  headers (00, 01, 11, 10) and one line per group under it ("m12, m13 →
+  $AB\bar C$"); a PLA/PAL programming table has one row per product term,
+  inputs as 1/0/–, outputs as ×; a circuit is a Mermaid flowchart LR (inputs,
+  one node per gate named by type and term, arrows as wires, the output); a
+  truth table is a table. Never describe in words something the part must show.
 - Everything else follows the instructions above, at full depth for this part.
 {extra}Write it now:"""
 
@@ -489,7 +508,8 @@ def _significant(n: str) -> bool:
     return "." in n or len(n) >= 3
 
 
-def free_checks(html: str, units: list[dict], sheet_text: str) -> dict[str, list[str]]:
+def free_checks(html: str, units: list[dict], sheet_text: str,
+                everyone: list[dict] | None = None) -> dict[str, list[str]]:
     """Problems per unit key, found without a model. Leaves need exactly one
     answer band; a number in a grey question line must be in the sheet."""
     segs = _segments(html)
@@ -514,9 +534,53 @@ def free_checks(html: str, units: list[dict], sheet_text: str) -> dict[str, list
             if missing:
                 probs.append("not in the sheet: " + ", ".join(missing[:4])
                              + " — check the question's data")
+        # What the part must show (the map's "needs"): a K-map or a table is a
+        # <table>, a circuit or a diagram is a Mermaid block — in this part or
+        # its sub-parts (live: PLA/PAL design came back as words only).
+        if u.get("needs"):
+            body = "".join(segs.get(x["key"], "") for x in units
+                           if x["key"] == u["key"] or x["key"].startswith(u["key"] + "."))
+            tables = len(re.findall(r"<table\b", body, re.I))
+            drawings = len(re.findall(r"language-mermaid|data-sb-blocks", body, re.I))
+            missing = []
+            for need in u["needs"]:
+                if _DRAWING_NEED.search(need):
+                    if drawings:
+                        drawings -= 1
+                    else:
+                        missing.append(need)
+                elif _TABLE_NEED.search(need):
+                    if tables:
+                        tables -= 1
+                    else:
+                        missing.append(need)
+            if missing:
+                probs.append("missing: " + ", ".join(missing) + " — Redo it")
+        # A Boolean answer is checked against the function the question gives.
+        bands = _BAND_P.findall(seg)
+        if bands:
+            from services.workspace import logic_check
+            asked = " ; ".join(x["question"] for x in _ancestry(u, everyone or units)
+                               if x.get("question"))
+            for band in bands:
+                probs += logic_check.check(asked, band)
         if probs:
             out[u["key"]] = probs
     return out
+
+
+_TABLE_NEED = re.compile(r"k-?map|karnaugh|table", re.I)
+_DRAWING_NEED = re.compile(r"circuit|diagram|schematic|drawing|logic gate", re.I)
+
+
+def _ancestry(u: dict, units: list[dict]) -> list[dict]:
+    """The unit and the units above it, nearest first (their questions hold
+    the data a sub-part answers)."""
+    chain, k = [], u
+    while k is not None:
+        chain.append(k)
+        k = next((x for x in units if x["key"] == k.get("parent_key")), None) if k.get("parent_key") else None
+    return chain
 
 
 # ── the answer key ──────────────────────────────────────────────────────────
@@ -614,7 +678,7 @@ class Runner:
         if not raw.strip():
             raise ValueError("The model returned nothing.")
         raw = restore_keys(raw, subtree(units, key))
-        problems = free_checks(raw, subtree(units, key), self.sheet_text(plan))
+        problems = free_checks(raw, subtree(units, key), self.sheet_text(plan), units)
         return {"key": key, "raw": raw, "problems": problems}
 
     def finish(self, plan: dict, written_raw: list[str]) -> dict:
@@ -673,7 +737,7 @@ def solve_parallel(runner: Runner, plan: dict, keys: list[str]) -> Iterator[dict
 # ── the note's units in the database ────────────────────────────────────────
 
 #: what the client gets for each unit
-PUBLIC = ("key", "parent_key", "depth", "label", "title", "question", "quote", "page",
+PUBLIC = ("key", "parent_key", "depth", "label", "title", "question", "quote", "page", "needs",
           "kind", "rules", "importance", "state", "problems", "block_id", "pending",
           "resource_id", "position", "versions")
 
@@ -699,6 +763,7 @@ def save_plan(note_id: str, user_id: str, plan: dict, source_ids: list[str]) -> 
             "page": u["page"], "kind": u["kind"],
             "rules": plan["rules"] if u["key"] == "" else u["rules"],
             "importance": u["importance"],
+            "needs": u.get("needs") or [],
             # Not written yet, whatever the map found: Solve all writes every
             # exercise still "planned". The problems show on the mark meanwhile.
             "state": "planned",
@@ -709,11 +774,20 @@ def save_plan(note_id: str, user_id: str, plan: dict, source_ids: list[str]) -> 
     rows.append({"note_id": note_id, "user_id": user_id, "key": "revision", "skill": SKILL,
                  "parent_key": None, "depth": 2, "label": "", "title": "Revision sheet",
                  "question": "", "quote": "", "resource_id": None, "page": None, "kind": "",
-                 "rules": [], "importance": "", "state": "planned", "problems": [],
+                 "rules": [], "needs": [], "importance": "", "state": "planned", "problems": [],
                  "position": len(rows), "updated_at": now})
     db = _db()
     db.table("note_units").delete().eq("note_id", note_id).execute()
-    db.table("note_units").insert(rows).execute()
+    try:
+        db.table("note_units").insert(rows).execute()
+    except Exception as e:                          # noqa: BLE001
+        # Before migration 036 there is no `needs` column: keep working
+        # without it rather than losing the plan.
+        if "needs" not in str(e):
+            raise
+        logger.warning("note_units.needs missing — run migration 036")
+        db.table("note_units").insert([{k: v for k, v in r.items() if k != "needs"}
+                                       for r in rows]).execute()
     return rows
 
 
@@ -739,6 +813,7 @@ def plan_from_rows(rows: list[dict], source_ids: list[str]) -> dict:
                       "source": sheet, "page": r["page"], "kind": r["kind"] or "",
                       "rules": [] if r["key"] == "" else list(r["rules"] or []),
                       "importance": r["importance"] or "", "problems": list(r["problems"] or []),
+                      "needs": list(r.get("needs") or []),
                       "position": r["position"]})
     rules = [x for x in (root.get("rules") or []) if isinstance(x, dict)]
     return {"title": root["title"], "worksheet": sheet, "units": units, "rules": rules}
@@ -845,7 +920,8 @@ def map_result(note_id: str, user_id: str, focus: str = "") -> dict:
             "solve": estimate_solve(runner, plan, user_id)}
 
 
-def solve_sync(note_id: str, user_id: str) -> Iterator[dict]:
+def solve_sync(note_id: str, user_id: str,
+               needs: dict[str, list[str]] | None = None) -> Iterator[dict]:
     """Solve all: every exercise not yet written, then the Overview and the
     revision sheet. Yields events for the stream."""
     from core.config import settings
@@ -856,6 +932,15 @@ def solve_sync(note_id: str, user_id: str) -> Iterator[dict]:
     runner, source_ids, _ = _runner(note_id, user_id)
     rows = load_rows(note_id, user_id)
     plan = plan_from_rows(rows, source_ids)
+    # The note's "Needs:" lines win: the student may have added a K-map or
+    # removed a drawing before clicking Solve all.
+    for u in plan["units"]:
+        if needs and u["key"] in needs and needs[u["key"]] != u["needs"]:
+            u["needs"] = needs[u["key"]]
+            try:
+                update_unit(note_id, user_id, u["key"], {"needs": u["needs"]})
+            except Exception as e:                  # noqa: BLE001 (before migration 036)
+                logger.warning(f"needs not stored: {e}")
     state = {r["key"]: r["state"] for r in rows}
     exercises = [u["key"] for u in children(plan["units"], "")]
     todo = [k for k in exercises if state.get(k, "planned") == "planned"]
@@ -890,7 +975,7 @@ def solve_sync(note_id: str, user_id: str) -> Iterator[dict]:
 
 
 @privacy.reads_note
-async def solve_events(note_id: str, user_id: str):
+async def solve_events(note_id: str, user_id: str, needs: dict[str, list[str]] | None = None):
     """solve_sync, run in a thread, as an async stream. The thread gets this
     context (privacy gate, run log), so its calls are gated like any other."""
     import asyncio
@@ -899,7 +984,7 @@ async def solve_events(note_id: str, user_id: str):
 
     def produce() -> None:
         try:
-            for ev in solve_sync(note_id, user_id):
+            for ev in solve_sync(note_id, user_id, needs):
                 loop.call_soon_threadsafe(queue.put_nowait, ev)
         except Exception as e:                      # noqa: BLE001
             loop.call_soon_threadsafe(queue.put_nowait, {"type": "error", "content": str(e)[:400]})

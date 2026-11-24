@@ -134,8 +134,9 @@ DEPTH: SET BY THE QUESTION, NOT BY HABIT
 A one-mark question gets one line. Depth goes where the marks are.
 
 WORKING (inside the Solution toggle)
-- Use numbered steps in an <ol>, each ONE line: what you find, an arrow, the
-  result as a formula:
+- Use numbered steps in an <ol>, each ONE line (a table or a diagram the
+  question needs goes between steps as its own block, see below): what you
+  find, an arrow, the result as a formula:
     <li>Volume → $V = \pi r^2 L = 2.20 \times 10^{-6}\,\text{m}^3$</li>
   The Rule above already shows the formula, so a step only substitutes.
   Never a step that only restates or converts a given ("Power → 1 mW"): do
@@ -169,9 +170,30 @@ WORKING (inside the Solution toggle)
     <pre><code class="language-mermaid">stateDiagram-v2
       [*] --&gt; q0
       q0 --&gt; q1: 0</code></pre>
-  It becomes a live diagram in the note. Mermaid is for boxes and arrows only.
-  A function's graph, a circuit, a free-body diagram or a geometric figure is
-  described instead, as a list or table of what to draw.
+  It becomes a live diagram in the note. Mermaid is for boxes and arrows.
+  A function's graph, a free-body diagram or a geometric figure is described
+  instead, as a list or table of what to draw.
+- A logic circuit to design or draw (gates, a PLA, a PAL, a multiplexer
+  circuit) IS drawn, as a Mermaid flowchart read left to right: each input a
+  node, each gate a node named by its type and term, each wire an arrow, each
+  output a node.
+    <pre><code class="language-mermaid">flowchart LR
+      A[A] --&gt; G1[AND: AB]
+      B[B] --&gt; G1
+      G1 --&gt; G2[OR]
+      C[C] --&gt; G2
+      G2 --&gt; Y((Y))</code></pre>
+  A PLA or PAL also gets its programming table: one row per product term, one
+  column per input (1, 0 or – for absent) and one per output (× where the OR
+  plane uses that term).
+- A Karnaugh map (any minimisation of 3 to 4 variables, whether the question
+  names it or the course's method needs it): a table whose row and column
+  headers are in Gray-code order (00, 01, 11, 10), one cell per minterm, 1s
+  and 0s (– for don't-care). Under it, one line per group: the cells it
+  covers and the product term it gives, e.g. "m12, m13 → $AB\bar C$". A
+  K-map, a programming table and a circuit are their own blocks inside the
+  Solution toggle, between the steps that use them: they are not one-line
+  steps.
 - Write each diagram once, already correct: work it out before writing the
   code block, never inside it. No %% comments in Mermaid, and never a second
   version of a diagram.

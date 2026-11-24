@@ -18,7 +18,7 @@ import { anchorRows, findLevelHeadings, readDraftAnchors, type DraftAnchor } fro
 import { markdownTableToBlock } from "@/lib/sourceInserts";
 import { hasContent, textBlocks } from "./sendBlocks";
 import { quotedPassages, type Passage } from "./viewers/passageMarks";
-import { SOLVE_EVENT, solveAll, unitPassages, type FillOutcome, type SolveProgress } from "@/lib/units";
+import { SOLVE_EVENT, needsOf, solveAll, unitPassages, type FillOutcome, type SolveProgress } from "@/lib/units";
 import { useNoteUnits } from "./useNoteUnits";
 import { UnitMarks, UnitProgressLine } from "./UnitMarks";
 
@@ -137,7 +137,17 @@ export function NotePane({
     if (solvingRef.current) return;              // one run at a time
     solvingRef.current = true;
     setSolving({ running: true, total: 0, done: 0, errors: [], edited: [] });
-    void solveAll(note.id, (fn) => setSolving((s) => (s ? fn(s) : s)))
+    // What each part must show, as its "Needs:" line says now: the student
+    // may have added "K-map F2" or removed "circuit" before solving.
+    const needs: Record<string, string[]> = {};
+    for (const u of unitsRef.current.units) {
+      const block = u.block_id ? editorRef.current?.getBlock(u.block_id) : undefined;
+      if (!block) continue;
+      const line = needsOf(block);
+      if (line) needs[u.key] = line;
+      else if (u.needs?.length) needs[u.key] = [];
+    }
+    void solveAll(note.id, (fn) => setSolving((s) => (s ? fn(s) : s)), needs)
       .finally(() => { solvingRef.current = false; void unitsRef.current.refresh(); });
   }, [note.id]);
   useEffect(() => {

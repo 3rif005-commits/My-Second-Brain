@@ -288,3 +288,28 @@ def test_the_revision_sheet_gets_a_row_but_is_not_a_part_of_the_plan():
     assert rows[-1]["key"] == "revision"
     again = units.plan_from_rows([{**r, "rules": r["rules"]} for r in rows], ["s1"])
     assert "revision" not in [u["key"] for u in again["units"]]
+
+
+def test_a_part_that_must_show_a_kmap_and_a_circuit_is_flagged_without_them():
+    p = plan()
+    sub = units.subtree(p["units"], "1")
+    for u in sub:
+        if u["key"] == "1.2":
+            u["needs"] = ["K-map I", "circuit"]
+    found = units.free_checks(EX1, sub, SHEET["text"])
+    assert any(x.startswith("missing: K-map I, circuit") for x in found["1.2"])
+    with_both = EX1.replace("</details></details>",
+                            "<table><tr><td>1</td></tr></table>"
+                            '<pre><code class="language-mermaid">flowchart LR\nA--&gt;B</code></pre>'
+                            "</details></details>")
+    found = units.free_checks(with_both, sub, SHEET["text"])
+    assert not any(x.startswith("missing") for x in found.get("1.2", []))
+
+
+def test_a_wrong_boolean_answer_is_flagged_from_the_question():
+    units_ = [{"key": "", "parent_key": None, "question": "", "needs": []},
+              {"key": "3", "parent_key": "", "question": r"$F_2(ABCD) = \sum(1,2,8,12,13)$", "needs": []}]
+    html = ('<h2 data-unit="3">Ex 3</h2><p data-background-color="green"><strong>Answer:</strong> '
+            r"$F_2 = AB\bar C + \bar A\bar B\bar C D$</p>")
+    found = units.free_checks(html, units_, "")
+    assert any("F2 as answered is not the asked function" in x for x in found["3"])
