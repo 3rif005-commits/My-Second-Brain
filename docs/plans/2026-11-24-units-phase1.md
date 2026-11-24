@@ -102,3 +102,23 @@ chapters" summary; revision sheet never written (no row for its heading); a quot
 letter (𝑌) not found and linked to the solution page; one-sub-part questions nested; a redone
 part arrived closed; Back to old did nothing after a reload; the menu stayed open and could sit
 off-screen. Also: an exercise with no words of its own takes its first part's page.
+
+## K-maps, circuits and logic answers (2026-11-24, live on ESD 2 Tutorial 3)
+
+The user found the solved worksheet had no Karnaugh map and no circuit. Causes: SKILL.md forbade
+drawing circuits and didn't know K-maps; the plan had no idea what an answer must show; the
+checks only looked for a band. Built and checked live:
+- SKILL.md (user-approved): circuits as Mermaid gate diagrams, PLA/PAL programming tables, K-maps
+  as Gray-code tables.
+- "Needs:" per part (migration 036), editable in the note and sent with Solve all, plus a code
+  safety net (a K-map per Σ-function of 3–4 variables; table and circuit for design with a
+  PLA/PAL; nothing for "explain/would…" questions).
+- Free checks: a missing need is flagged; Boolean answers are checked on every input
+  (`logic_check.py`); one repair pass for missing items, a missing band and wrong functions.
+- When code knows the answer (≤ 6 variables, Quine–McCluskey) a red **Computed check** box under
+  the band gives the correct simplest form. Live: Nemotron kept its wrong K-map group even when
+  given the right form, so the box is what keeps the note right.
+- Diagrams inside closed toggles were drawn at size zero (a flat line); they now redraw when shown.
+
+Still weak: Mermaid circuits are tangled boxes and arrows, and a wrong circuit isn't caught
+(see docs/CIRCUIT_SCHEMATIC_BLOCK.md). Nemotron rarely fixes its own working.
