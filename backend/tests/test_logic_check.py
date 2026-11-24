@@ -30,3 +30,16 @@ def test_dont_cares_are_free_and_primes_work():
 def test_what_cannot_be_read_is_skipped_never_flagged():
     assert lc.check("Explain how a PAL differs from a PLA.", "Answer: the OR plane is fixed") == []
     assert lc.check(r"$F(ABC) = \sum(1,2)$", r"Answer: $F = \text{see the K-map}$") == []
+
+
+def test_the_live_tutorial_answer_is_caught_for_both_functions():
+    """ESD 2 Tutorial 3, exercise 3, as Nemotron answered it (2026-11-24)."""
+    q = r"$F_1(ABCD) = \sum(2,12,13)$, $F_2(ABCD) = \sum(1,2,8,12,13)$"
+    band = (r"Answer: $F_1 = AB\bar D + \bar A \bar B C \bar D$; $F_2 = AB\bar D + \bar A B \bar C \bar D"
+            r" + \bar A \bar B \bar C D + \bar A \bar B C \bar D$. PAL has 4 AND gates feeding a fixed OR "
+            r"array: AND1 and AND2 to $F_1$.")
+    probs = lc.check(q, band)
+    assert len(probs) == 2
+    assert "13, 14" in probs[0] and probs[1].startswith("F2")
+    right = r"Answer: $F_1 = AB\bar C + \bar A\bar B C\bar D$. The PAL uses two terms."
+    assert lc.check(q, right) == []

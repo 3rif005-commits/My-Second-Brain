@@ -300,6 +300,9 @@ def parse_plan(raw: str, sources: list[dict]) -> dict:
 
 _DESIGN = re.compile(r"\b(design|implement|realis|realiz|draw|build)\w*", re.I)
 _DEVICE = re.compile(r"\b(PLA|PAL)\b")
+#: a question to explain or judge, not to build (live: "Would a PLA also be
+#: capable of implementing this function?" got a table and a circuit)
+_EXPLAIN = re.compile(r"\s*(?:\d+[.)]\s*)?(would|could|can|is|are|does|do|explain|why|how|what|which|compare|discuss|describe)\b", re.I)
 
 
 def ensure_needs(question: str, needs: list[str]) -> list[str]:
@@ -319,7 +322,8 @@ def ensure_needs(question: str, needs: list[str]) -> list[str]:
                 rf"k-?map\W*{re.escape(name.lower())}\b|karnaugh\W*{re.escape(name.lower())}\b", have):
             out.append(f"K-map {name}")
     dev = _DEVICE.search(question or "")
-    if dev and _DESIGN.search(question or ""):
+    asks_to_explain = _EXPLAIN.match(question or "")
+    if dev and _DESIGN.search(question or "") and not asks_to_explain:
         if not re.search(rf"{dev.group(1).lower()}.*table|programming table", have):
             out.append(f"{dev.group(1)} programming table")
         if not re.search(r"circuit|diagram", have):
@@ -715,7 +719,8 @@ class Runner:
         # band (live 2026-11-24: Nemotron skipped every K-map it was told to
         # write). The model gets its own answer and the list; the better of
         # the two answers is kept.
-        fixable = {k: [p for p in v if p.startswith(("missing:", "no answer band"))]
+        fixable = {k: [p for p in v if p.startswith(("missing:", "no answer band"))
+                       or "is not the asked function" in p]
                    for k, v in problems.items()}
         fixable = {k: v for k, v in fixable.items() if v}
         if fixable:

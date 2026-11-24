@@ -151,7 +151,11 @@ def evaluate(expr: str, names: list[str]):
 _FN = r"([A-Z](?:_?\{?\d+\}?)?)"                    # F, F1, F_1, F_{1}
 _SIGMA = re.compile(_FN + r"\s*\(([^()=]{1,40})\)\s*=\s*(?:\\sum|Σ|∑|\\Sigma)\s*(?:_?m)?\s*\(([\d,\s]+)\)"
                     r"(?:\s*\+\s*(?:d|\\sum\s*_?d|Σ\s*d)\s*\(([\d,\s]+)\))?")
-_EXPR = re.compile(_FN + r"(?:\s*\([^()=]{1,40}\))?\s*=\s*([^=,;]+?)(?=,|;|$|\s+and\s|\s+[A-Z](?:_?\{?\d+\}?)?\s*(?:\([^()]*\))?\s*=)")
+# An expression ends at , ; "and", the next "F2 =", a sentence end (". The
+# PAL has…", live 2026-11-24: F2 ran into the prose and was never checked),
+# or a colon.
+_EXPR = re.compile(_FN + r"(?:\s*\([^()=]{1,40}\))?\s*=\s*([^=,;:]+?)"
+                   r"(?=,|;|:|\.(?:\s|$)|$|\s+and\s|\s+[A-Z](?:_?\{?\d+\}?)?\s*(?:\([^()]*\))?\s*=)")
 _VAR = re.compile(r"[A-Za-z]\d*")
 
 

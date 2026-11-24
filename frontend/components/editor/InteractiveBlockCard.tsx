@@ -124,12 +124,24 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
   const fill = detectKind(saved) === "html" && fillsViewport(saved);
   const fillH = fillHeight || defaultFillHeight(previewWidth);
 
+  // A diagram drawn while its toggle is closed is laid out at size zero and
+  // shows as a flat line once opened (live 2026-11-24: every worksheet
+  // circuit, all inside closed Solution toggles). Draw it again the moment
+  // it goes from hidden to shown.
+  const [drawKey, setDrawKey] = useState(0);
+  const wasHidden = useRef(false);
   useEffect(() => {
     const el = previewRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => setPreviewWidth(el.clientWidth));
+    const seen = () => {
+      const w = el.clientWidth;
+      setPreviewWidth(w);
+      if (w === 0) wasHidden.current = true;
+      else if (wasHidden.current) { wasHidden.current = false; setDrawKey((k) => k + 1); }
+    };
+    const ro = new ResizeObserver(seen);
     ro.observe(el);
-    setPreviewWidth(el.clientWidth);
+    seen();
     return () => ro.disconnect();
   }, [view, saved]);
 
@@ -412,6 +424,7 @@ export function InteractiveBlockCard({ block, index, onUpdate, onRemove }: Props
             {showPreview && !savedEmpty ? (
               <div className={`sb-live-preview${fill ? " sb-live-preview-fill" : ""}`} ref={previewRef}>
                 <iframe
+                  key={drawKey}
                   ref={frameRef}
                   srcDoc={srcDoc}
                   sandbox="allow-scripts"

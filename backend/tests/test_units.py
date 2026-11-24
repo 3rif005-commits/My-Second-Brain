@@ -349,3 +349,10 @@ def test_logic_questions_always_need_their_kmaps_tables_and_circuit():
     assert units.ensure_needs(q, ["K-map F1", "K-map F2", "PAL table", "circuit"]) == \
         ["K-map F1", "K-map F2", "PAL table", "circuit"]
     assert units.ensure_needs(r"$F(AB) = \sum(1,2)$", []) == []
+
+
+def test_a_question_to_explain_gets_no_circuit():
+    assert units.ensure_needs("Would a PLA also be capable of implementing this function?", []) == []
+    assert units.ensure_needs("Explain how a PAL could implement the function.", []) == []
+    assert units.ensure_needs("Using the truth table implement the 2 functions with a PLA", []) == \
+        ["PLA programming table", "circuit"]
