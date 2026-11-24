@@ -679,6 +679,24 @@ class Runner:
             raise ValueError("The model returned nothing.")
         raw = restore_keys(raw, subtree(units, key))
         problems = free_checks(raw, subtree(units, key), self.sheet_text(plan), units)
+        # One repair pass for what the free checks can name exactly — a part
+        # that must show a K-map or a circuit and doesn't, a missing answer
+        # band (live 2026-11-24: Nemotron skipped every K-map it was told to
+        # write). The model gets its own answer and the list; the better of
+        # the two answers is kept.
+        fixable = {k: [p for p in v if p.startswith(("missing:", "no answer band"))]
+                   for k, v in problems.items()}
+        fixable = {k: v for k, v in fixable.items() if v}
+        if fixable:
+            todo = "; ".join(f"{k}: {', '.join(v)}" for k, v in fixable.items())
+            again = _strip_fences(self.complete(self.prefix, write_note(
+                u, units, plan["rules"], redo_extra(raw, "Add what is missing, keep the rest: " + todo)),
+                OUTPUT_CAP))
+            if again.strip():
+                again = restore_keys(again, subtree(units, key))
+                second = free_checks(again, subtree(units, key), self.sheet_text(plan), units)
+                if sum(map(len, second.values())) < sum(map(len, problems.values())):
+                    raw, problems = again, second
         return {"key": key, "raw": raw, "problems": problems}
 
     def finish(self, plan: dict, written_raw: list[str]) -> dict:

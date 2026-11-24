@@ -58,3 +58,22 @@ export function restoreEmbeddedBlocks(blocks: AnyBlock[], embedded: AnyBlock[][]
   });
   return walk(blocks);
 }
+
+const MERMAID_FIRST = /^\s*(flowchart|graph|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|gantt|pie|mindmap|timeline|journey|quadrantChart|gitGraph|xychart-beta|sankey-beta|block-beta)\b/;
+
+/** An AI answer's Mermaid code block → the live diagram block, as the
+ *  backend's skill_html.diagrams does. The second net for a diagram the
+ *  backend could not convert (live 2026-11-24: a PLA circuit arrived as raw
+ *  code). Only for AI drafts: a code block the user pasted stays code. */
+export function mermaidToDiagrams(blocks: AnyBlock[]): AnyBlock[] {
+  const walk = (list: AnyBlock[]): AnyBlock[] => list.map((b) => {
+    if (b?.type === "codeBlock" && b.props?.language === "mermaid") {
+      const code = Array.isArray(b.content) ? b.content.map((c: AnyBlock) => c?.text ?? "").join("") : "";
+      if (MERMAID_FIRST.test(code)) {
+        return { type: "interactive", props: { title: "Diagram", html: code.trim() }, children: [] };
+      }
+    }
+    return Array.isArray(b?.children) && b.children.length ? { ...b, children: walk(b.children) } : b;
+  });
+  return walk(blocks);
+}

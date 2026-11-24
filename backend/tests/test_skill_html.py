@@ -353,3 +353,13 @@ def test_a_holds_when_line_that_names_no_limit_is_dropped():
            '<p><em>Holds when:</em> a plane wave in vacuum.</p></div>\n')
     out = skill_html.rule_sheet(_SOLUTIONS + box + "<h3>Answer key</h3>")
     assert re.findall(r"<em>Holds when:</em>([^<]*)", out) == [" a plane wave in vacuum."]
+
+
+def test_a_diagram_left_unclosed_still_becomes_a_live_diagram():
+    """Live 2026-11-24: a PLA circuit whose <pre><code> was never closed stayed raw code."""
+    from services.workspace import skill_html
+    cut = ('<details><summary>Solution</summary><pre><code class="language-mermaid">flowchart LR\n'
+           ' A --> G1[AND]\n</details><p data-background-color="green">ok</p>')
+    out = skill_html.finish(cut)
+    assert "data-sb-blocks" in out and "<pre" not in out
+    assert out.endswith('<p data-background-color="green">ok</p>')

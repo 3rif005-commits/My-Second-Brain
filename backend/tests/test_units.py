@@ -190,7 +190,9 @@ def test_a_whole_run_plans_then_writes_each_exercise_then_the_sheet():
     # every rule a solution names gets its box; the key comes from the bands
     assert "Wave relation" in fin["revision"] or "wave relation" in fin["revision"]
     assert "<h3>Answer key</h3>" in fin["revision"] and "B, kg·m/s" in fin["revision"]
-    assert len(model.calls) == 4                      # map + 2 exercises + finish
+    # map + 2 exercises + 1 repair (1.2 has no band) + finish
+    assert len(model.calls) == 5
+    assert sum("Add what is missing" in c for c in model.calls) == 1
 
 
 def test_a_unit_that_fails_does_not_stop_the_others():
@@ -313,3 +315,27 @@ def test_a_wrong_boolean_answer_is_flagged_from_the_question():
             r"$F_2 = AB\bar C + \bar A\bar B\bar C D$</p>")
     found = units.free_checks(html, units_, "")
     assert any("F2 as answered is not the asked function" in x for x in found["3"])
+
+
+def test_a_part_missing_what_it_must_show_gets_one_repair_pass():
+    calls = []
+
+    def model(prefix, note, max_tokens):
+        calls.append(note)
+        if "THIS CALL ONLY PLANS" in note:
+            plan_ = json.loads(json.dumps(PLAN))
+            plan_["exercises"][1]["questions"][0]["needs"] = ["circuit"]
+            return json.dumps(plan_)
+        if "Add what is missing" in note:
+            return ('<details><summary><h2 data-unit="2">Ex 2</h2></summary>'
+                    '<pre><code class="language-mermaid">flowchart LR\nA--&gt;B</code></pre>'
+                    '<p data-background-color="green"><strong>Answer:</strong> B</p></details>')
+        return ('<details><summary><h2 data-unit="2">Ex 2</h2></summary>'
+                '<p data-background-color="green"><strong>Answer:</strong> B</p></details>')
+
+    runner = units.Runner("S", [SHEET], model)
+    p = runner.plan()
+    res = runner.write(p, "2")
+    assert "missing: circuit" in calls[-1] or "circuit" in calls[-1]
+    assert "language-mermaid" in res["raw"] and res["problems"] == {}
+    assert len(calls) == 3                       # plan, write, one repair

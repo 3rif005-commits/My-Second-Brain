@@ -39,8 +39,13 @@ _MATHY = re.compile(r"[A-Za-z\\^_{}=+\-*/()\[\]|<>]")
 
 _TAG = re.compile(r"(<[^>]*>)")
 _EMBED_ATTR = re.compile(r"""\sdata-sb-blocks\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", re.IGNORECASE)
+# The closing tags are optional: a model that runs out of breath leaves the
+# <pre><code> open (live 2026-11-24: a PLA circuit stayed raw code, the
+# answer cut off after it). Up to </code></pre>, a lone </code> or </pre>,
+# the next block-level tag, or the end.
 _MERMAID = re.compile(
-    r"<pre[^>]*>\s*<code[^>]*class=\"[^\"]*language-mermaid[^\"]*\"[^>]*>(.*?)</code>\s*</pre>",
+    r"<pre[^>]*>\s*<code[^>]*class=[\"'][^\"']*language-mermaid[^\"']*[\"'][^>]*>(.*?)"
+    r"(?:</code>\s*</pre>|</code>|</pre>|(?=<(?:/details|details|p|h[1-6]|div|table|ol|ul)\b)|\Z)",
     re.DOTALL | re.IGNORECASE)
 # lib/liveRuntime.ts MERMAID_START: what the interactive block will draw.
 _MERMAID_START = re.compile(

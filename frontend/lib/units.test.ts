@@ -130,3 +130,15 @@ describe("the Needs line", () => {
     expect(isUntouchedSkeleton(part(p("Needs: K-map F1 · PAL table")))).toBe(true);   // typed plain
   });
 });
+
+describe("a diagram that arrived as code", () => {
+  it("becomes the live diagram block; other code stays code", async () => {
+    const { mermaidToDiagrams } = await import("./embeddedBlocks");
+    const code = (language: string, text: string) =>
+      ({ type: "codeBlock", props: { language }, content: [{ type: "text", text, styles: {} }], children: [] });
+    const out = mermaidToDiagrams([{ type: "heading", children: [
+      code("mermaid", "flowchart LR\n A --> B"), code("python", "print(1)")] }]);
+    expect(out[0].children[0]).toMatchObject({ type: "interactive", props: { html: "flowchart LR\n A --> B" } });
+    expect(out[0].children[1].type).toBe("codeBlock");
+  });
+});

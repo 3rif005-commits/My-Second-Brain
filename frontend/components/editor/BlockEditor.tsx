@@ -34,7 +34,7 @@ import { readAppClipboard, pasteAppClipboard } from "./appClipboard";
 import { modelFileFrom, modelTitle, uploadModel } from "@/lib/modelDrop";
 import { useToast } from "@/app/providers";
 import { freshFileUrl } from "@/lib/freshFileUrl";
-import { extractEmbeddedBlocks, restoreEmbeddedBlocks } from "@/lib/embeddedBlocks";
+import { extractEmbeddedBlocks, restoreEmbeddedBlocks, mermaidToDiagrams } from "@/lib/embeddedBlocks";
 import { insertDatabaseBlock } from "../database/DatabaseBlock";
 import { insertButtonBlock } from "../database/ButtonBlock";
 import { insertInteractiveBlock } from "./InteractiveBlock";
@@ -420,7 +420,8 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
         async (h: string) => (await editor.tryParseHTMLToBlocks(h)) as AnyBlock[]
       );
       const rawParsed = await editor.tryParseHTMLToBlocks(strippedHtml);
-      return restoreEmbeddedBlocks(attachCalloutChildren(rawParsed as AnyBlock[], calloutChildren), embedded);
+      return mermaidToDiagrams(
+        restoreEmbeddedBlocks(attachCalloutChildren(rawParsed as AnyBlock[], calloutChildren), embedded));
     };
 
     useImperativeHandle(ref, () => ({
