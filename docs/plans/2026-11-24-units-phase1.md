@@ -87,3 +87,18 @@ Known limits, left for later:
   first one's marks (its text stays).
 - A mark inside a closed toggle shows only once the toggle is opened; the exercise's mark
   summarizes what is inside it.
+
+## Live test on ESD 2 Tutorial 3 (2026-11-24, deployed site, Nemotron)
+
+Checked in Chrome on the user's worksheet note: map (4 exercises, 8 questions, all tinted),
+Solve all from the card (hands the run to the note) and from the note's line, Overview,
+revision sheet (Rules & formulas boxes + answer key, 9 rows), marks, Next, the sheet link,
+Mark checked, Redo with a note, Keep / Back to old (also after a reload), the menu closing,
+and Insert after solving (appends, the parts stay; Undo restores it).
+
+Found and fixed during the test (11): an Insert after Solve all replaced the whole note; Solve
+all lost on reload; progress counted parts no longer in the note; several bands flagged; "5
+chapters" summary; revision sheet never written (no row for its heading); a quote with a maths
+letter (𝑌) not found and linked to the solution page; one-sub-part questions nested; a redone
+part arrived closed; Back to old did nothing after a reload; the menu stayed open and could sit
+off-screen. Also: an exercise with no words of its own takes its first part's page.

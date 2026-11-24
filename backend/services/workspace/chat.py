@@ -182,9 +182,10 @@ def summarize_result(result: dict) -> str:
     if result.get("kind") == "units":
         # A worksheet's map: the list is in the note; nothing is solved yet.
         f = result.get("found") or {}
-        return (f"found {f.get('exercises', 0)} exercises and {f.get('questions', 0)} questions; "
-                "the list is in the note, each question tinted in the sheet; "
-                "the student clicks Solve all (on the card or in the note) to write the answers")
+        # Read by the model AND shown in a restored chat: written for the person.
+        return (f"found {f.get('exercises', 0)} exercises and {f.get('questions', 0)} questions. "
+                "The list is in the note and each question is tinted in the sheet; "
+                "Solve all (on this card or at the top of the note) writes the answers")
     parts = []
     for pattern, one, many in ((r"<h2[\s>]", "chapter", "chapters"),
                                (r'data-type="callout"', "box", "boxes"),

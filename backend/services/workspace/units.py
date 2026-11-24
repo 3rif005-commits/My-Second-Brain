@@ -265,6 +265,16 @@ def parse_plan(raw: str, sources: list[dict]) -> dict:
             if page:
                 u["page"] = page
 
+    # A unit with no words of its own (an exercise whose questions carry them)
+    # takes the page of its first part that was found (live: Exercise 5 said
+    # page 2, the teacher's solution page, while its tasks are on page 1).
+    for u in units:
+        if u["key"] and not u["quote"]:
+            kid = next((k for k in units if k["key"].startswith(u["key"] + ".") and k["quote"]
+                        and not k["problems"]), None)
+            if kid and kid["page"]:
+                u["page"] = kid["page"]
+
     rules = []
     for r in data.get("rules") or []:
         name = _text(r.get("name") if isinstance(r, dict) else r)
