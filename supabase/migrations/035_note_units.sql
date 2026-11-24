@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS note_units (
   title        TEXT        NOT NULL DEFAULT '',
   question     TEXT        NOT NULL DEFAULT '', -- the grey line
   quote        TEXT        NOT NULL DEFAULT '', -- the question's own words in the source
-  resource_id  UUID        REFERENCES workspace_resources(id) ON DELETE SET NULL,
+  resource_id  UUID        REFERENCES note_resources(id) ON DELETE SET NULL,
   page         INT,
   kind         TEXT        NOT NULL DEFAULT '', -- Recall / Short / Multi-step / Open
   rules        JSONB       NOT NULL DEFAULT '[]',
