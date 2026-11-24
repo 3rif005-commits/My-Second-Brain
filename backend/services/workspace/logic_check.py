@@ -25,7 +25,9 @@ _COMBINING_BAR = {"\u0304", "\u0305"}            # x̄ written with a combining 
 
 def _plain(text: str) -> str:
     """LaTeX and Unicode spellings → one form: A' for NOT A, + for OR, juxtaposition for AND."""
-    t = text or ""
+    # Ā is one character as typed and two (A + bar) decomposed: decompose,
+    # so both spellings reach the combining-bar handling below.
+    t = unicodedata.normalize("NFD", text or "")
     t = re.sub(r"<[^>]+>", " ", t)
     t = t.replace("$", " ").replace("\\,", " ").replace("\\;", " ").replace("\\ ", " ")
     t = re.sub(r"\\(?:mathrm|text|mathit)\{([^}]*)\}", r"\1", t)
@@ -252,6 +254,93 @@ def check(question: str, band_text: str) -> list[str]:
         bad = wrong_inputs(ref, expr)
         if bad:
             shown = ", ".join(str(b) for b in bad[:4]) + ("…" if len(bad) > 4 else "")
+            right = simplest(ref, expr)
             out.append(f"{name} as answered is not the asked function: it differs on "
-                       f"input{'s' if len(bad) > 1 else ''} {shown} (minterm numbers)")
+                       f"input{'s' if len(bad) > 1 else ''} {shown} (minterm numbers)"
+                       + (f"; a correct simplest form is {name} = {right}" if right else ""))
     return out
+
+
+# ── the right answer, computed (Quine–McCluskey) ────────────────────────────
+#
+# Live 2026-11-24: told exactly which minterms its F1 got wrong, the model
+# wrote the same wrong group again. For a function of ≤ 6 variables the
+# simplest sum of products can be computed, so the warning says it and the
+# repair pass is given it as the target — like a CAS behind a step-by-step.
+
+def _implicants(terms: set[int], n: int) -> set[tuple[int, int]]:
+    """Prime implicants as (value, mask): mask bits are the dropped variables."""
+    current = {(t, 0) for t in terms}
+    primes: set[tuple[int, int]] = set()
+    while current:
+        merged, used = set(), set()
+        items = sorted(current)
+        for i, (v1, m1) in enumerate(items):
+            for v2, m2 in items[i + 1:]:
+                diff = v1 ^ v2
+                if m1 == m2 and diff and diff & (diff - 1) == 0:
+                    merged.add((v1 & ~diff, m1 | diff))
+                    used |= {(v1, m1), (v2, m2)}
+        primes |= current - used
+        current = merged
+    return primes
+
+
+def _covers(imp: tuple[int, int], m: int) -> bool:
+    v, mask = imp
+    return (m & ~mask) == v
+
+
+def minimal_terms(n: int, ones: set[int], dc: set[int] = frozenset()) -> list[tuple[int, int]]:
+    """A smallest cover of `ones` by prime implicants: essential primes first,
+    then the one covering most of what is left (exact on textbook sizes)."""
+    if not ones:
+        return []
+    primes = _implicants(set(ones) | set(dc), n)
+    left, chosen = set(ones), []
+    for m in sorted(ones):
+        covering = [p for p in primes if _covers(p, m)]
+        if len(covering) == 1 and covering[0] not in chosen:
+            chosen.append(covering[0])
+    for p in chosen:
+        left -= {m for m in left if _covers(p, m)}
+    while left:
+        best = max(primes, key=lambda p: (sum(_covers(p, m) for m in left), bin(p[1]).count("1")))
+        chosen.append(best)
+        left -= {m for m in left if _covers(best, m)}
+    return chosen
+
+
+_BAR = "̄"
+
+
+def sop_text(terms: list[tuple[int, int]], names: list[str]) -> str:
+    """Readable sum of products: ABC̄ + ĀB̄CD̄ (a combining bar, plain text)."""
+    n = len(names)
+    if not terms:
+        return "0"
+    out = []
+    for v, mask in terms:
+        lits = []
+        for i, name in enumerate(names):
+            bit = 1 << (n - 1 - i)
+            if mask & bit:
+                continue
+            lits.append(name if v & bit else name[0] + _BAR + name[1:])
+        out.append("".join(lits) or "1")
+    return " + ".join(out)
+
+
+def simplest(ref: dict, answer: str = "") -> str | None:
+    """The simplest form of the asked function, or None when it can't be built."""
+    if "ones" in ref:
+        names, ones, dc = ref["names"], ref["ones"], ref["dc"]
+    else:
+        names = _variables(ref["expr"], answer) if answer else _variables(ref["expr"])
+        f = evaluate(ref["expr"], names)
+        if f is None or not names or len(names) > MAX_VARS:
+            return None
+        ones = {i for i, bits in enumerate(itertools.product([False, True], repeat=len(names)))
+                if f(dict(zip(names, bits)))}
+        dc = set()
+    return sop_text(minimal_terms(len(names), ones, dc), names)

@@ -192,7 +192,7 @@ def test_a_whole_run_plans_then_writes_each_exercise_then_the_sheet():
     assert "<h3>Answer key</h3>" in fin["revision"] and "B, kg·m/s" in fin["revision"]
     # map + 2 exercises + 1 repair (1.2 has no band) + finish
     assert len(model.calls) == 5
-    assert sum("Add what is missing" in c for c in model.calls) == 1
+    assert sum("The checks found these problems" in c for c in model.calls) == 1
 
 
 def test_a_unit_that_fails_does_not_stop_the_others():
@@ -326,7 +326,7 @@ def test_a_part_missing_what_it_must_show_gets_one_repair_pass():
             plan_ = json.loads(json.dumps(PLAN))
             plan_["exercises"][1]["questions"][0]["needs"] = ["circuit"]
             return json.dumps(plan_)
-        if "Add what is missing" in note:
+        if "The checks found these problems" in note:
             return ('<details><summary><h2 data-unit="2">Ex 2</h2></summary>'
                     '<pre><code class="language-mermaid">flowchart LR\nA--&gt;B</code></pre>'
                     '<p data-background-color="green"><strong>Answer:</strong> B</p></details>')

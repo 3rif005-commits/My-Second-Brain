@@ -43,3 +43,27 @@ def test_the_live_tutorial_answer_is_caught_for_both_functions():
     assert "13, 14" in probs[0] and probs[1].startswith("F2")
     right = r"Answer: $F_1 = AB\bar C + \bar A\bar B C\bar D$. The PAL uses two terms."
     assert lc.check(q, right) == []
+
+
+def test_the_simplest_form_is_computed_for_the_live_tutorial():
+    names = ["A", "B", "C", "D"]
+    f1 = lc.sop_text(lc.minimal_terms(4, {2, 12, 13}), names)
+    nfc = lambda x: __import__("unicodedata").normalize("NFC", x)   # noqa: E731
+    assert {nfc(t) for t in f1.split(" + ")} == {nfc("ABC̄"), nfc("ĀB̄CD̄")}
+    # and it is right: the checker accepts it written back as LaTeX-free text
+    q = r"$F_1(ABCD) = \sum(2,12,13)$"
+    assert lc.check(q, "Answer: F1 = ABC̄ + ĀB̄CD̄") == []
+    # the warning carries it
+    probs = lc.check(q, r"Answer: $F_1 = AB\bar D + \bar A\bar B C\bar D$")
+    assert "a correct simplest form is F1 = " in probs[0] and nfc("ABC̄") in nfc(probs[0])
+
+
+def test_every_textbook_function_is_minimised_exactly():
+    import itertools as it
+    for ones in ({0, 1, 2, 4}, {0, 5, 6, 7}, {1, 2, 8, 12, 13}, set(range(16)) - {0}):
+        n = 3 if max(ones) < 8 else 4
+        names = ["A", "B", "C", "D"][:n]
+        sop = lc.sop_text(lc.minimal_terms(n, ones), names)
+        f = lc.evaluate(sop, names)
+        got = {i for i, bits in enumerate(it.product([False, True], repeat=n)) if f(dict(zip(names, bits)))}
+        assert got == ones, (ones, sop)

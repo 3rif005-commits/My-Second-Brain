@@ -726,7 +726,11 @@ class Runner:
         if fixable:
             todo = "; ".join(f"{k}: {', '.join(v)}" for k, v in fixable.items())
             again = _strip_fences(self.complete(self.prefix, write_note(
-                u, units, plan["rules"], redo_extra(raw, "Add what is missing, keep the rest: " + todo)),
+                u, units, plan["rules"], redo_extra(raw, (
+                    "The checks found these problems; fix them and keep the rest. Where a "
+                    "function is wrong, the correct simplest form is given: it was computed "
+                    "exactly, so make the K-map groups, the steps, the band and the circuit "
+                    "match it — do not copy the wrong version: " + todo))),
                 OUTPUT_CAP))
             if again.strip():
                 again = restore_keys(again, subtree(units, key))
