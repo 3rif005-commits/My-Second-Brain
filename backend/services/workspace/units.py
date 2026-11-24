@@ -262,6 +262,8 @@ def parse_plan(raw: str, sources: list[dict]) -> dict:
 
     _cap_highlights(units)
     for u in units:
+        u["needs"] = ensure_needs(u.get("question", ""), u.get("needs") or [])
+    for u in units:
         u["position"] = units.index(u)
         if not u["key"] or not u["quote"]:
             continue
@@ -294,6 +296,35 @@ def parse_plan(raw: str, sources: list[dict]) -> dict:
             if not any(x["name"].lower() == name.lower() for x in rules):
                 rules.append({"name": name, "importance": "needed"})
     return {"title": title, "worksheet": sheet, "units": units, "rules": rules}
+
+
+_DESIGN = re.compile(r"\b(design|implement|realis|realiz|draw|build)\w*", re.I)
+_DEVICE = re.compile(r"\b(PLA|PAL)\b")
+
+
+def ensure_needs(question: str, needs: list[str]) -> list[str]:
+    """What a logic question must show, whatever the model planned.
+
+    Live 2026-11-24 (ESD 2 Tutorial 3): the map planned truth tables but no
+    Karnaugh map for Σ(…) functions of 3 and 4 variables, and no circuit for
+    "design a PLA". Rules any course would apply, added in code:
+    - each Σ-function of 3 or 4 variables → "K-map F";
+    - design/implement … with a PLA or PAL → its programming table and a circuit.
+    """
+    from services.workspace.logic_check import reference_functions
+    out = list(needs)
+    have = " ".join(out).lower()
+    for name, ref in reference_functions(question or "").items():
+        if "names" in ref and 3 <= len(ref["names"]) <= 4 and not re.search(
+                rf"k-?map\W*{re.escape(name.lower())}\b|karnaugh\W*{re.escape(name.lower())}\b", have):
+            out.append(f"K-map {name}")
+    dev = _DEVICE.search(question or "")
+    if dev and _DESIGN.search(question or ""):
+        if not re.search(rf"{dev.group(1).lower()}.*table|programming table", have):
+            out.append(f"{dev.group(1)} programming table")
+        if not re.search(r"circuit|diagram", have):
+            out.append("circuit")
+    return out[:8]
 
 
 def _cap_highlights(units: list[dict]) -> None:

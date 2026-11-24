@@ -339,3 +339,13 @@ def test_a_part_missing_what_it_must_show_gets_one_repair_pass():
     assert "missing: circuit" in calls[-1] or "circuit" in calls[-1]
     assert "language-mermaid" in res["raw"] and res["problems"] == {}
     assert len(calls) == 3                       # plan, write, one repair
+
+
+def test_logic_questions_always_need_their_kmaps_tables_and_circuit():
+    q = r"Design a PAL to implement $F_1(ABCD) = \sum(2,12,13)$ and $F_2(ABCD) = \sum(1,2,8,12,13)$"
+    got = units.ensure_needs(q, ["truth table F1"])
+    assert got == ["truth table F1", "K-map F1", "K-map F2", "PAL programming table", "circuit"]
+    # already planned: nothing doubled; two variables: no K-map
+    assert units.ensure_needs(q, ["K-map F1", "K-map F2", "PAL table", "circuit"]) == \
+        ["K-map F1", "K-map F2", "PAL table", "circuit"]
+    assert units.ensure_needs(r"$F(AB) = \sum(1,2)$", []) == []
