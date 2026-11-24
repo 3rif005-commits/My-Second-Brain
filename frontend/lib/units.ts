@@ -208,8 +208,13 @@ export type SolveEvent =
   | { type: "done"; usd: number | null }
   | { type: "error"; content: string };
 
+/** Ask the note to Solve all (the AI panel's card sends it): detail {noteId}. */
+export const SOLVE_EVENT = "note-units-solve";
+
 export interface SolveProgress {
   running: boolean;
+  /** The card handed the run to the note, which shows the progress. */
+  handedOff?: boolean;
   total: number;
   done: number;
   finishing?: boolean;

@@ -120,22 +120,47 @@ def squash(text: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
-def find_quote(quote: str, source_text: str) -> int | None:
-    """The page of `source_text` ("[page N]" tagged) holding `quote`, 0 when it
-    is found in an untagged source, None when it is not there at all. A quote
-    that is long is looked for by its first 60 characters: the model copies the
-    start more faithfully than the end."""
-    q = squash(quote)
+def _alnum(text: str) -> tuple[str, list[int]]:
+    """Letters and digits only, lower case, with maths letters made plain
+    (NFKC: the PDF's italic 𝑌 is a Y), and where each came from in `text`."""
+    import unicodedata
+    out, where = [], []
+    for i, ch in enumerate(text or ""):
+        for c in unicodedata.normalize("NFKC", ch).lower():
+            if c.isalnum():
+                out.append(c)
+                where.append(i)
+    return "".join(out), where
+
+
+def locate_quote(quote: str, source_text: str) -> tuple[int, str] | None:
+    """(page, the quote's words as the source writes them) or None.
+
+    Matched on letters and digits only: the model copies words, not the
+    PDF's spacing, punctuation or maths letters (live: "for Y." against the
+    sheet's "for 𝑌."). A long quote is tried whole, then by its start. The
+    span returned is the source's own text, so the viewer's tint matches the
+    PDF's text layer. Page 0: an untagged source."""
+    q, _ = _alnum(quote)
     if len(q) < 6:
         return None
-    probe = q[:60]
     parts = re.split(r"^\[page (\d+)\]$", source_text or "", flags=re.M)
-    if len(parts) == 1:
-        return 0 if probe in squash(source_text) else None
-    for page, body in zip(parts[1::2], parts[2::2]):
-        if probe in squash(body):
-            return int(page)
+    pages = [(0, source_text or "")] if len(parts) == 1 else \
+        [(int(pg), body) for pg, body in zip(parts[1::2], parts[2::2])]
+    for probe in (q, q[:40]):
+        for page, body in pages:
+            flat, where = _alnum(body)
+            at = flat.find(probe)
+            if at >= 0:
+                span = body[where[at]:where[at + len(probe) - 1] + 1]
+                return page, re.sub(r"\s+", " ", span).strip()
     return None
+
+
+def find_quote(quote: str, source_text: str) -> int | None:
+    """The page holding `quote` (0 for an untagged source), or None."""
+    hit = locate_quote(quote, source_text)
+    return hit[0] if hit else None
 
 
 def _unit(key: str, parent: str | None, depth: int, raw: dict, label: str, title: str,
@@ -208,6 +233,16 @@ def parse_plan(raw: str, sources: list[dict]) -> dict:
                 break
             qk = f"{ek}.{qi}"
             qlabel = _text(q.get("label"))
+            if len(parts) == 1:
+                # One sub-part is the question itself, not a level below it
+                # (live: each task of an exercise came back as "(a)" alone).
+                p = parts[0]
+                merged = {**p, **{f: q.get(f) for f in ("question", "quote", "kind", "rules", "importance")
+                                  if q.get(f)}}
+                units.append(_unit(qk, ek, 3, merged, qlabel,
+                                   _text(q.get("title")) or _text(p.get("title")) or qlabel or f"Question {qi}",
+                                   sheet))
+                continue
             units.append(_unit(qk, ek, 3, q, qlabel, _text(q.get("title")) or qlabel or f"Question {qi}",
                                sheet))
             for pi, p in enumerate(parts, start=1):
@@ -222,11 +257,13 @@ def parse_plan(raw: str, sources: list[dict]) -> dict:
         u["position"] = units.index(u)
         if not u["key"] or not u["quote"]:
             continue
-        page = find_quote(u["quote"], sheet_text)
-        if page is None:
+        hit = locate_quote(u["quote"], sheet_text)
+        if hit is None:
             u["problems"].append(QUOTE_PROBLEM + ": check that it was read right")
-        elif page:
-            u["page"] = page
+        else:
+            page, u["quote"] = hit
+            if page:
+                u["page"] = page
 
     rules = []
     for r in data.get("rules") or []:
@@ -657,6 +694,13 @@ def save_plan(note_id: str, user_id: str, plan: dict, source_ids: list[str]) -> 
             "state": "planned",
             "problems": u["problems"], "position": u["position"], "updated_at": now,
         })
+    # The revision sheet's heading is in the skeleton: it needs a row too, or
+    # the note cannot find where to put the sheet (live: never written).
+    rows.append({"note_id": note_id, "user_id": user_id, "key": "revision", "skill": SKILL,
+                 "parent_key": None, "depth": 2, "label": "", "title": "Revision sheet",
+                 "question": "", "quote": "", "resource_id": None, "page": None, "kind": "",
+                 "rules": [], "importance": "", "state": "planned", "problems": [],
+                 "position": len(rows), "updated_at": now})
     db = _db()
     db.table("note_units").delete().eq("note_id", note_id).execute()
     db.table("note_units").insert(rows).execute()
@@ -677,6 +721,8 @@ def plan_from_rows(rows: list[dict], source_ids: list[str]) -> dict:
              if root.get("resource_id") in source_ids else 1)
     units = []
     for r in rows:
+        if r["key"] in ("revision", "overview"):
+            continue                    # places in the page, not parts of the plan
         units.append({"key": r["key"], "parent_key": r["parent_key"], "depth": r["depth"],
                       "label": r["label"] or "", "title": r["title"] or "",
                       "question": r["question"] or "", "quote": r["quote"] or "",

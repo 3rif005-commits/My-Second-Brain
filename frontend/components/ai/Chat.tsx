@@ -33,7 +33,7 @@ import { answerToHtml } from "@/lib/answerToHtml";
 import type { SourceInsert } from "@/lib/sourceInserts";
 import { getQuote, priceLine, queueJob, tonight, type BgJob } from "@/lib/backgroundJobs";
 import { offerDraft, stageDraft, undoDraft, type NoteDraft } from "@/lib/noteDraft";
-import { solveAll } from "@/lib/units";
+import { SOLVE_EVENT } from "@/lib/units";
 import type { SkillDraftProposal } from "@/lib/skills";
 
 const ACCEPTED_EXT = ACCEPTED_WORKSPACE_FILES.split(",");
@@ -744,10 +744,10 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
   /** Solve all: each exercise is written into its heading as it lands, then
    *  the Overview and the revision sheet (lib/units.ts). */
   async function solveJob(cardId: string, job: PanelJob) {
-    const total = job.result?.found?.exercises ?? 0;
-    patchJob(cardId, (j) => ({ ...j, solving: { running: true, total, done: 0, errors: [], edited: [] } }));
-    await solveAll(job.noteId, (fn) =>
-      patchJob(cardId, (j) => (j.solving ? { ...j, solving: fn(j.solving) } : j)));
+    // The note runs it and shows its progress (one run, one place): the card
+    // and the note's own Solve all would otherwise start two runs.
+    window.dispatchEvent(new CustomEvent(SOLVE_EVENT, { detail: { noteId: job.noteId } }));
+    patchJob(cardId, (j) => ({ ...j, solving: { running: false, handedOff: true, total: 0, done: 0, errors: [], edited: [] } }));
   }
 
   async function undoJob(cardId: string, job: PanelJob) {

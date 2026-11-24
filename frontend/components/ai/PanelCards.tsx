@@ -279,7 +279,13 @@ function UnitsBody({ job, busy, onSolve, onRetry, onApply, onUndo }: {
         </>
       )}
       {job.undoNote && <p className="text-[11.5px] text-gray-500">{job.undoNote}</p>}
-      {s && (
+      {s?.handedOff && (
+        <p className="text-[12px] text-gray-600 dark:text-gray-300">
+          Solving in the note — its progress is at the top of the note, and each answer gets a mark
+          at the end of its heading.
+        </p>
+      )}
+      {s && !s.handedOff && (
         <div className="space-y-1">
           <p className="text-[12px] text-gray-600 dark:text-gray-300">
             {s.running

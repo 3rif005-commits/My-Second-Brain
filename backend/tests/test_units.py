@@ -258,3 +258,33 @@ def test_the_frontend_fixtures_are_this_backends_output():
     skeleton = skill_html.inline_math(units.skeleton_html(plan()))
     assert (fixtures / "worksheet-skeleton.html").read_text().strip() == skeleton.strip()
     assert (fixtures / "worksheet-unit.html").read_text().strip() == skill_html.finish(EX1).strip()
+
+
+def test_a_quote_is_found_despite_maths_letters_and_spacing_and_kept_as_the_sheet_writes_it():
+    sheet = "[page 1]\nTasks:\n1. Write the Boolean  equation for 𝑌.\n"
+    assert units.locate_quote("Write the Boolean equation for Y.", sheet) == (
+        1, "Write the Boolean equation for 𝑌")
+
+
+def test_a_question_with_one_sub_part_is_the_question_itself():
+    one = json.loads(json.dumps(PLAN))
+    one["exercises"][1]["questions"] = [
+        {"label": "1", "title": "Equation", "parts": [
+            {"label": "(a)", "title": "Equation", "question": "Write Y.", "quote": "Which is the SI unit",
+             "kind": "Short"}]},
+        {"label": "2", "title": "Table", "parts": [
+            {"label": "(a)", "question": "Build it.", "quote": "SI unit of momentum", "kind": "Short"}]}]
+    p = units.parse_plan(json.dumps(one), [SHEET])
+    keys = [u["key"] for u in p["units"] if u["key"].startswith("2")]
+    assert keys == ["2", "2.1", "2.2"]
+    assert next(u for u in p["units"] if u["key"] == "2.1")["question"] == "Write Y."
+
+
+def test_the_revision_sheet_gets_a_row_but_is_not_a_part_of_the_plan():
+    from unittest.mock import MagicMock, patch
+    db = MagicMock()
+    with patch.object(units, "_db", return_value=db):
+        rows = units.save_plan("n1", "u1", plan(), ["s1"])
+    assert rows[-1]["key"] == "revision"
+    again = units.plan_from_rows([{**r, "rules": r["rules"]} for r in rows], ["s1"])
+    assert "revision" not in [u["key"] for u in again["units"]]

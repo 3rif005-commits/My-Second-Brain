@@ -129,6 +129,9 @@ export function useNoteUnits(noteId: string,
       const landed = await ed.replaceBlockWithHtml(now.id, res.html);
       await bindBlocks(landed, readDraftUnits(res.html));
       await refresh();
+      // Show what changed: scrolling to its first line opens the toggle.
+      const first = landed[0]?.children?.[0]?.id ?? landed[0]?.id;
+      if (first) ed.scrollToBlock(first);
     } finally {
       setBusy((s) => { const n = new Set(s); n.delete(key); return n; });
     }

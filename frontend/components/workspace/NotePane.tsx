@@ -18,7 +18,7 @@ import { anchorRows, findLevelHeadings, readDraftAnchors, type DraftAnchor } fro
 import { markdownTableToBlock } from "@/lib/sourceInserts";
 import { hasContent, textBlocks } from "./sendBlocks";
 import { quotedPassages, type Passage } from "./viewers/passageMarks";
-import { solveAll, unitPassages, type FillOutcome, type SolveProgress } from "@/lib/units";
+import { SOLVE_EVENT, solveAll, unitPassages, type FillOutcome, type SolveProgress } from "@/lib/units";
 import { useNoteUnits } from "./useNoteUnits";
 import { UnitMarks, UnitProgressLine } from "./UnitMarks";
 
@@ -132,11 +132,21 @@ export function NotePane({
     return () => clearTimeout(t);
   }, [units.units, liveUnits.units, docTick]);
   const [solving, setSolving] = useState<SolveProgress | undefined>();
+  const solvingRef = useRef(false);
   const solveHere = useCallback(() => {
+    if (solvingRef.current) return;              // one run at a time
+    solvingRef.current = true;
     setSolving({ running: true, total: 0, done: 0, errors: [], edited: [] });
     void solveAll(note.id, (fn) => setSolving((s) => (s ? fn(s) : s)))
-      .finally(() => { void unitsRef.current.refresh(); });
+      .finally(() => { solvingRef.current = false; void unitsRef.current.refresh(); });
   }, [note.id]);
+  useEffect(() => {
+    const on = (e: Event) => {
+      if ((e as CustomEvent<{ noteId: string }>).detail?.noteId === note.id) solveHere();
+    };
+    window.addEventListener(SOLVE_EVENT, on);
+    return () => window.removeEventListener(SOLVE_EVENT, on);
+  }, [note.id, solveHere]);
   // The page's title heads the pane, as it heads the note page: without it the
   // pane opened on bare text (or nothing) and you couldn't tell which note it was.
   const [title, setTitle] = useState(note.title);
