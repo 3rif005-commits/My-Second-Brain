@@ -356,3 +356,16 @@ def test_a_question_to_explain_gets_no_circuit():
     assert units.ensure_needs("Explain how a PAL could implement the function.", []) == []
     assert units.ensure_needs("Using the truth table implement the 2 functions with a PLA", []) == \
         ["PLA programming table", "circuit"]
+
+
+def test_a_wrong_function_gets_the_computed_answer_under_its_band():
+    units_ = [{"key": "", "parent_key": None, "question": "", "needs": []},
+              {"key": "3", "parent_key": "", "question": r"$F_1(ABCD) = \sum(2,12,13)$", "needs": []}]
+    band = ('<p data-background-color="green"><strong>Answer:</strong> '
+            r"$F_1 = AB\bar D + \bar A\bar B C\bar D$</p>")
+    html = '<h2 data-unit="3">Ex 3</h2>' + band + "<p>after</p>"
+    out = units.computed_corrections(html, units_, units_)
+    assert out.index(band) < out.index("Computed check") < out.index("<p>after</p>")
+    assert "minterms 13, 14" in out and r"\bar{C}" in out
+    right = html.replace(r"AB\bar D + ", r"AB\bar C + ")
+    assert units.computed_corrections(right, units_, units_) == right

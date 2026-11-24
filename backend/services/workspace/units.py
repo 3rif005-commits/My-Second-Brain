@@ -604,6 +604,40 @@ def free_checks(html: str, units: list[dict], sheet_text: str,
     return out
 
 
+def computed_corrections(html: str, units: list[dict], everyone: list[dict]) -> str:
+    """Under a band whose Boolean function is wrong, the right one, computed.
+
+    Live 2026-11-24: given the exact correct form in the repair pass,
+    Nemotron wrote the same wrong K-map group back. When code KNOWS the
+    answer the note must not depend on the model accepting it: a red box
+    under the band names the inputs that are wrong and gives the correct
+    simplest form. The model's working stays, so the mistake can be seen."""
+    from services.workspace import logic_check
+    segs = _segments(html)
+    for u in units:
+        seg = segs.get(u["key"])
+        if not seg:
+            continue
+        asked = " ; ".join(x["question"] for x in _ancestry(u, everyone) if x.get("question"))
+        for m in _BAND_P.finditer(seg):
+            items = logic_check.wrong_items(asked, m.group(1))
+            if not items:
+                continue
+            lines = "".join(
+                f"<p>${it['name'][0]}_{{{it['name'][1:]}}}$ as written is wrong for minterm"
+                f"{'s' if len(it['bad']) > 1 else ''} {', '.join(map(str, it['bad'][:6]))}"
+                + (f". Correct simplest form: ${it['name'][0]}_{{{it['name'][1:]}}} = {it['latex']}$"
+                   if it.get("latex") else "") + ".</p>"
+                for it in items).replace("_{}", "")
+            box = ('<div data-type="callout" data-callout-type="CAUTION"><p><strong>Computed check:'
+                   '</strong> the answer above does not match the function asked (checked on every '
+                   'input). Fix the grouping in the working, or Redo.</p>' + lines + "</div>")
+            new_seg = seg.replace(m.group(0), m.group(0) + box, 1)
+            html = html.replace(seg, new_seg, 1)
+            seg = new_seg
+    return html
+
+
 _TABLE_NEED = re.compile(r"k-?map|karnaugh|table", re.I)
 _DRAWING_NEED = re.compile(r"circuit|diagram|schematic|drawing|logic gate", re.I)
 
@@ -737,6 +771,7 @@ class Runner:
                 second = free_checks(again, subtree(units, key), self.sheet_text(plan), units)
                 if sum(map(len, second.values())) < sum(map(len, problems.values())):
                     raw, problems = again, second
+        raw = computed_corrections(raw, subtree(units, key), units)
         return {"key": key, "raw": raw, "problems": problems}
 
     def finish(self, plan: dict, written_raw: list[str]) -> dict:

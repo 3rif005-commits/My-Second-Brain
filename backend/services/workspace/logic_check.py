@@ -241,6 +241,22 @@ def wrong_inputs(ref: dict, answer: str) -> list[int] | None:
     return bad
 
 
+def wrong_items(question: str, band_text: str) -> list[dict]:
+    """[{name, bad: [minterms], right: plain text, latex}] for each answered
+    function that is not the asked one."""
+    refs = reference_functions(question)
+    items = []
+    for name, expr in (answer_functions(band_text).items() if refs else []):
+        ref = refs.get(name) or (next(iter(refs.values())) if len(refs) == 1 and name in ("F", "Y") else None)
+        if ref is None:
+            continue
+        bad = wrong_inputs(ref, expr)
+        if bad:
+            items.append({"name": name, "bad": bad, "right": simplest(ref, expr),
+                          "latex": simplest_latex(ref, expr)})
+    return items
+
+
 def check(question: str, band_text: str) -> list[str]:
     """Problems for a part: each answered function that is not the asked one."""
     refs = reference_functions(question)
@@ -344,3 +360,28 @@ def simplest(ref: dict, answer: str = "") -> str | None:
                 if f(dict(zip(names, bits)))}
         dc = set()
     return sop_text(minimal_terms(len(names), ones, dc), names)
+
+
+def simplest_latex(ref: dict, answer: str = "") -> str | None:
+    """The simplest form as LaTeX: A B \\bar{C} + …"""
+    text = simplest(ref, answer)
+    if text is None:
+        return None
+    t = unicodedata.normalize("NFD", text)
+    out, i = [], 0
+    while i < len(t):
+        ch = t[i]
+        if ch.isalpha():
+            j = i + 1
+            digits = ""
+            while j < len(t) and t[j].isdigit():
+                digits += t[j]
+                j += 1
+            bar = j < len(t) and t[j] in _COMBINING_BAR
+            name = ch + (f"_{{{digits}}}" if digits else "")
+            out.append(f"\\bar{{{name}}}" if bar else name)
+            i = j + (1 if bar else 0)
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out).replace("+", " + ").replace("  ", " ")
