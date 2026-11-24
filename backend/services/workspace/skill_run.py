@@ -278,6 +278,12 @@ def run_skill(note_id: str, user_id: str, skill_name: str,
 # nothing is written into the note or its draft row until the user clicks.
 
 STUDY_GUIDE = "study-guide"
+
+
+def unit_skills() -> set[str]:
+    """Jobs written unit by unit (services/workspace/units.py)."""
+    from services.workspace.units import UNIT_SKILLS
+    return UNIT_SKILLS
 CHAT_SURFACES = {"workspace", "chat"}
 
 
@@ -402,6 +408,14 @@ def produce_skill_result(note_id: str, user_id: str, name: str,
             if truncated:
                 from services.workspace.md_to_blocks import TRUNCATION_NOTICE_HTML
                 html += TRUNCATION_NOTICE_HTML
+        elif name in unit_skills():
+            # Map → Write → Check → Fix (docs/INTERACTIVE_NOTES_DESIGN.md): this
+            # job only plans the page; Solve all writes it, one exercise a call.
+            from services.workspace import units
+            budget_guard.check(estimate(note_id, user_id, skill)["usd"],
+                               what=f"Reading {job_title(name).lower()}")
+            mapped = units.map_result(note_id, user_id, focus)
+            html, truncated, check, method = mapped["html"], False, None, None
         else:
             budget_guard.check(estimate(note_id, user_id, skill)["usd"],
                                what=f"Running {job_title(name)}")
@@ -418,7 +432,9 @@ def produce_skill_result(note_id: str, user_id: str, name: str,
 
     rows = list(usage_log.RECENT)[mark:]
     spent = [r["estimated_usd"] for r in rows if r.get("estimated_usd") is not None]
-    return {"skill": name, "title": job_title(name), "html": html,
+    extra = ({k: mapped[k] for k in ("kind", "units", "found", "solve")}
+             if name in unit_skills() else {})
+    return {**extra, "skill": name, "title": job_title(name), "html": html,
             "source_ids": source_ids, "truncated": truncated,
             # study guide only: how it was written, and the quality check
             "method": method, "check": check,
@@ -451,6 +467,8 @@ def batch_eligible(name: str, source_count: int, focus: str = "") -> bool:
     skill = registry().get(name)
     if skill is None or not skill.output:
         return False
+    if name in unit_skills():
+        return False            # a plan, then one call per exercise
     if name == STUDY_GUIDE:
         from services.workspace import synthesis
         chosen, _ = split_method(focus)

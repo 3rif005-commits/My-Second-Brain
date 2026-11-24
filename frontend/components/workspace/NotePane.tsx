@@ -18,6 +18,9 @@ import { anchorRows, findLevelHeadings, readDraftAnchors, type DraftAnchor } fro
 import { markdownTableToBlock } from "@/lib/sourceInserts";
 import { hasContent, textBlocks } from "./sendBlocks";
 import { quotedPassages, type Passage } from "./viewers/passageMarks";
+import { unitPassages, type FillOutcome } from "@/lib/units";
+import { useNoteUnits } from "./useNoteUnits";
+import { UnitMarks, UnitProgressLine } from "./UnitMarks";
 
 const BlockEditor = dynamic(
   () => import("@/components/editor/BlockEditor").then((m) => m.BlockEditor),
@@ -50,6 +53,9 @@ export interface NoteApplyApi {
   /** What the editor holds right now (null before it is ready), so a note moved
    *  to another pane or window opens with it rather than with what it opened with. */
   document: () => AnyBlock[] | null;
+  /** Put a solved part (an exercise, "overview", "revision") into its place
+   *  (lib/units.ts). "edited": the user changed that part, so it was left alone. */
+  fillUnit: (key: string, html: string) => Promise<FillOutcome>;
 }
 
 type PendingAnchor = DraftAnchor;
@@ -105,6 +111,10 @@ export function NotePane({
   const syncOn = follow;
   const [empty, setEmpty] = useState(() => !hasContent(note.content ?? []));
   const editorRef = useRef<BlockEditorHandle>(null);
+  const units = useNoteUnits(note.id, editorRef);
+  const unitsRef = useRef(units);
+  unitsRef.current = units;
+  const [openUnit, setOpenUnit] = useState<string | null>(null);
   // The page's title heads the pane, as it heads the note page: without it the
   // pane opened on bare text (or nothing) and you couldn't tell which note it was.
   const [title, setTitle] = useState(note.title);
@@ -173,12 +183,17 @@ export function NotePane({
   // ── save ──────────────────────────────────────────────────────────────────
   const passagesRef = useRef(onPassages);
   passagesRef.current = onPassages;
-  useEffect(() => { passagesRef.current?.(quotedPassages(note.content)); }, [note.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The note's quotes and, for a solved worksheet, each question's own words.
+  const emitPassages = useCallback((blocks: AnyBlock[]) => {
+    passagesRef.current?.([...quotedPassages(blocks), ...unitPassages(unitsRef.current.units)]);
+  }, []);
+  useEffect(() => { emitPassages(editorRef.current?.getDocument() ?? note.content); },
+    [note.id, units.units, emitPassages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSave = useCallback(async (blocks: AnyBlock[], plainText: string) => {
     currentTextRef.current = plainText;
     setEmpty(!hasContent(blocks));
-    passagesRef.current?.(quotedPassages(blocks));
+    emitPassages(blocks);
     onSavingChange?.(true);
     // Returns whether the note is durably stored — `persistApplied` below only
     // marks a synthesis draft applied once this has actually succeeded.
@@ -197,7 +212,7 @@ export function NotePane({
       }).catch(() => {});
     }, 30_000);
     return ok;
-  }, [note.id, onSavingChange]);
+  }, [note.id, onSavingChange, emitPassages]);
 
   /** Save a freshly applied draft, and only then tell the caller it landed.
    *
@@ -225,6 +240,7 @@ export function NotePane({
   // ── synthesis apply API (used by useSynthesis) ─────────────────────────────
   const collect = useCallback((html: string, sourceIds: string[]) => {
     pendingRef.current = { anchors: readDraftAnchors(html), sourceIds };
+    unitsRef.current.collect(html);
   }, []);
 
   // Close the apply window on a later tick: BlockNote's change events for the
@@ -245,6 +261,7 @@ export function NotePane({
         if (mode === "append") {
           editorRef.current?.insertHtmlAtEnd(html).then((blocks) => {
             registerAnchors(blocks, "append");
+            unitsRef.current.bindApplied(blocks);
             finishApply();
             void persistApplied();
           }).catch(() => { applyingRef.current = false; });
@@ -273,6 +290,11 @@ export function NotePane({
         return true;
       },
       document: () => editorRef.current?.getDocument() ?? null,
+      fillUnit: async (key, html) => {
+        applyingRef.current = true;             // the AI's writing, not the user's typing
+        try { return await unitsRef.current.fill(key, html); }
+        finally { setTimeout(() => { applyingRef.current = false; }, 400); }
+      },
       hasUserEdits: () => {
         // Without a draft applied in this session we cannot prove where the
         // note's content came from, so treat any content as the user's —
@@ -287,6 +309,7 @@ export function NotePane({
 
   const handleBlocksApplied = useCallback((blocks: AnyBlock[]) => {
     registerAnchors(blocks, "replace");
+    unitsRef.current.bindApplied(blocks);
     finishApply();
     void persistApplied();
   }, [registerAnchors, persistApplied, finishApply]);
@@ -427,6 +450,9 @@ export function NotePane({
               </button>
             );
           })}
+          <UnitMarks api={units} contentRef={contentRef} openKey={openUnit} setOpenKey={setOpenUnit}
+            sourceTitle={(id) => sourceById.get(id)?.title ?? "source"}
+            onOpenSource={(id, page) => onJump(id, page)} />
           <label htmlFor={`pane-title-${note.id}`} className="sr-only">Note title</label>
           <input
             id={`pane-title-${note.id}`}
@@ -436,6 +462,10 @@ export function NotePane({
             onChange={(e) => { setTitle(e.target.value); saveTitle(e.target.value); }}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusEditor(); } }}
           />
+          <UnitProgressLine units={units.units} onNext={(u) => {
+            if (u.block_id) editorRef.current?.scrollToBlock(u.block_id);
+            setOpenUnit(u.key);
+          }} />
           <BlockEditor
             ref={editorRef}
             noteId={note.id}

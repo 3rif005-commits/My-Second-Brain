@@ -17,6 +17,9 @@ export interface NoteDraft {
   /** "replace" fills an EMPTY note; on a note with any text the page appends
    *  instead — the user's words are never replaced by a draft. */
   mode: "replace" | "append";
+  /** A solved worksheet's skeleton (lib/units.ts): it goes to the note whose
+   *  sources it answers, never to another writing target. */
+  units?: boolean;
 }
 
 export type UndoOutcome = "undone" | "edited" | "gone";

@@ -37,6 +37,7 @@ import {
 } from "./sessionLayout";
 import { useAIPanel } from "@/context/AIPanelContext";
 import { DRAFT_EVENT, UNDO_EVENT, type NoteDraft, type UndoOutcome } from "@/lib/noteDraft";
+import { UNIT_EVENT, type FillOutcome, type UnitFill } from "@/lib/units";
 
 const SPLIT_KEY = "workspace:splitPct";
 /** Below this, one pane at a time. */
@@ -478,7 +479,9 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       const { draft, respond } = (e as CustomEvent<{ draft: NoteDraft; respond: (ok: boolean) => void }>).detail;
       if (draft.noteId !== noteId) return;
       respond(true);
-      const id = layRef.current?.target ?? noteId!;
+      // A solved worksheet's skeleton belongs to the note whose sources it
+      // answers: its parts are stored against that note (lib/units.ts).
+      const id = draft.units ? noteId! : (layRef.current?.target ?? noteId!);
       withNote(id, (r) => {
         const api = r.apply.current;
         if (!api) return;
@@ -493,11 +496,22 @@ export function WorkspaceShell({ noteId }: WorkspaceShellProps) {
       if (t !== noteId) return;
       respond(refsFor(lastInserted.current ?? noteId!).apply.current?.undoApply() ? "undone" : "edited");
     }
+    function onUnit(e: Event) {
+      const { fill, respond } = (e as CustomEvent<{ fill: UnitFill; respond: (o: FillOutcome) => void }>).detail;
+      if (fill.noteId !== noteId) return;
+      withNote(noteId!, (r) => {
+        const api = r.apply.current;
+        if (!api) { respond("missing"); return; }
+        void api.fillUnit(fill.key, fill.html).then(respond, () => respond("missing"));
+      });
+    }
     window.addEventListener(DRAFT_EVENT, onDraft);
     window.addEventListener(UNDO_EVENT, onUndo);
+    window.addEventListener(UNIT_EVENT, onUnit);
     return () => {
       window.removeEventListener(DRAFT_EVENT, onDraft);
       window.removeEventListener(UNDO_EVENT, onUndo);
+      window.removeEventListener(UNIT_EVENT, onUnit);
     };
   }, [noteId, withNote, revealNote, refsFor]);
 

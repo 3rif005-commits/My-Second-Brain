@@ -25,6 +25,21 @@ export interface PanelJob {
   applied?: { noteId: string; title: string };
   /** What Undo said, when it could not undo. */
   undoNote?: string;
+  /** A units result put itself into its note once (decision 1, 2026-11-24). */
+  autoApplied?: boolean;
+  /** Solve all, while it runs and after. */
+  solving?: SolveProgress;
+}
+
+export interface SolveProgress {
+  running: boolean;
+  total: number;
+  done: number;
+  finishing?: boolean;
+  /** Parts that could not be written, and parts left alone because you edited them. */
+  errors: string[];
+  edited: string[];
+  usd?: number | null;
 }
 
 function Elapsed({ since }: { since: number }) {
@@ -90,7 +105,7 @@ export function GuideCheckLine({ result, busy, onRetryDeep }: {
   );
 }
 
-export function PanelJobCard({ job, pageNoteId, insertLabel, inWorkspace, busy, badge, warning, onApply, onUndo, onRetry, onRetryDeep, onDiscard, onOpen }: {
+export function PanelJobCard({ job, pageNoteId, insertLabel, inWorkspace, busy, badge, warning, onApply, onUndo, onRetry, onRetryDeep, onDiscard, onOpen, onSolve }: {
   job: PanelJob;
   /** The note open behind the panel, if any. */
   pageNoteId: string | null;
@@ -111,6 +126,8 @@ export function PanelJobCard({ job, pageNoteId, insertLabel, inWorkspace, busy, 
   onRetryDeep?: () => void;
   onDiscard: () => void;
   onOpen: (href: string) => void;
+  /** A worksheet's map: write every exercise into the note. */
+  onSolve?: () => void;
 }) {
   const [preview, setPreview] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -153,7 +170,11 @@ export function PanelJobCard({ job, pageNoteId, insertLabel, inWorkspace, busy, 
         </div>
       )}
 
-      {r && (
+      {r && r.kind === "units" && (
+        <UnitsBody job={job} busy={busy} onSolve={onSolve} onRetry={onRetry} onApply={onApply} onUndo={onUndo} />
+      )}
+
+      {r && r.kind !== "units" && (
         <div className="px-3 py-2 space-y-2">
           <p className="text-[12px] text-gray-500 dark:text-gray-400">
             From <span className="font-medium text-gray-700 dark:text-gray-200">{job.noteTitle}</span>
@@ -217,6 +238,81 @@ export function PanelJobCard({ job, pageNoteId, insertLabel, inWorkspace, busy, 
             className="inline-flex items-center gap-1 text-[11.5px] text-gray-400 hover:text-accent-500">
             <Layers size={11} /> Open in workspace — the note beside its sources
           </button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A worksheet's map (lib/units.ts): what was found, then Solve all and its progress. */
+function UnitsBody({ job, busy, onSolve, onRetry, onApply, onUndo }: {
+  job: PanelJob; busy: boolean; onSolve?: () => void; onRetry: () => void;
+  onApply: (noteId: string) => void; onUndo: () => void;
+}) {
+  const r = job.result!;
+  const f = r.found ?? { exercises: 0, questions: 0 };
+  const s = job.solving;
+  const usd = r.solve?.usd;
+  const price = usd != null ? ` · ~$${usd < 0.01 ? usd.toFixed(3) : usd.toFixed(2)}` : "";
+  const finished = s && !s.running;
+  return (
+    <div className="px-3 py-2 space-y-2" data-testid="units-card">
+      <p className="text-[12px] text-gray-600 dark:text-gray-300">
+        Found <b>{f.exercises}</b> {f.exercises === 1 ? "exercise" : "exercises"} and <b>{f.questions}</b>{" "}
+        {f.questions === 1 ? "question" : "questions"}
+        {job.applied ? " — they're in the note, and each question is tinted in the sheet." : "."}
+      </p>
+      {!job.applied && (
+        <button onClick={() => onApply(job.noteId)} className={`${chip} font-medium bg-accent-600 text-white hover:bg-accent-500`}>
+          <FileText size={12} /> Put the list in the note
+        </button>
+      )}
+      {job.applied && !s && (
+        <>
+          <p className="text-[11.5px] text-gray-500">
+            A question with no tint in the sheet was missed. Fix the list in the note first if needed, then:
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button onClick={onSolve} disabled={busy || !onSolve}
+              className={`${chip} font-medium bg-accent-600 text-white hover:bg-accent-500 disabled:opacity-50`}>
+              <Sparkles size={12} /> Solve all{price}
+            </button>
+            <button onClick={onUndo} className={`${chip} text-accent-600 hover:bg-accent-500/10`}>
+              <Undo2 size={12} /> Undo
+            </button>
+            <button onClick={onRetry} disabled={busy} title="Read the sheet again" className={quiet}>
+              <RotateCcw size={12} /> Read again
+            </button>
+          </div>
+        </>
+      )}
+      {job.undoNote && <p className="text-[11.5px] text-gray-500">{job.undoNote}</p>}
+      {s && (
+        <div className="space-y-1">
+          <p className="text-[12px] text-gray-600 dark:text-gray-300">
+            {s.running
+              ? <><Loader2 size={12} className="inline -mt-0.5 mr-1 animate-spin" />
+                  {s.finishing ? "Writing the revision sheet…" : `Solving… ${s.done} of ${s.total} exercises in the note`}</>
+              : <><CheckCircle2 size={12} className="inline -mt-0.5 mr-1 text-emerald-500" />
+                  Solved{s.usd != null ? ` · $${s.usd.toFixed(3)}` : ""}</>}
+          </p>
+          {finished && (
+            <p className="text-[11.5px] text-gray-500">
+              Each answer has a mark at the end of its heading: click it to open the question in the
+              sheet, mark it checked, or redo it.
+            </p>
+          )}
+          {s.edited.map((e) => (
+            <p key={e} className="text-[11.5px] text-amber-700 dark:text-amber-300">
+              {e}: you had edited it, so it was left alone. Use its mark → Redo to get the AI&apos;s version.
+            </p>
+          ))}
+          {s.errors.map((e) => (
+            <p key={e} className="text-[11.5px] text-amber-700 dark:text-amber-300">{e}</p>
+          ))}
+          {finished && s.errors.length > 0 && onSolve && (
+            <button onClick={onSolve} disabled={busy} className={quiet}><RotateCcw size={12} /> Solve the rest</button>
+          )}
         </div>
       )}
     </div>

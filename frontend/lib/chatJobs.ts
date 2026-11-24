@@ -23,6 +23,11 @@ export interface JobResult {
   input_tokens: number;
   output_tokens: number;
   usd: number | null;
+  /** A worksheet solved unit by unit (lib/units.ts): this result is the map —
+   *  the skeleton in `html` — and Solve all writes the rest into the note. */
+  kind?: "units";
+  found?: { exercises: number; questions: number };
+  solve?: { calls: number; usd: number | null };
   /** The study guide only (E9): how it was written, and the check on it. */
   method?: "single" | "chapters" | null;
   check?: GuideCheck | null;

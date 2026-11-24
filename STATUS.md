@@ -13,6 +13,17 @@
 | 2 | Settings at phone width not re-checked after the settings rework (Chrome wouldn't resize); Connected apps has no "how to connect" text because the app's own MCP server isn't deployed with Render | small |
 | 3 | Editor AI: one Revert (after Simplify) left stray letters in the paragraph ("foronr"); two later Simplify/Fix-spelling reverts restored the text exactly. Watch for it; if it recurs, check xl-ai's revert with large rewrites | couldn't reproduce |
 
+**Worksheet solver, part by part (2026-11-24, Phase 1 built, NOT pushed):** `/solve-worksheet`
+now maps the sheet first (every question with its own words and page), puts that list into the
+note as empty toggle headings and tints each question in the sheet; **Solve all** writes one
+exercise per call, in parallel, into its heading; each answer gets a mark (○ ● ✓ ! ↻) to open
+its question in the sheet, mark it checked, Redo or Redo with a note (Keep / Back to old); a
+line shows "N of M checked". The answer key is built from the bands. SKILL.md is unchanged.
+Design `docs/INTERACTIVE_NOTES_DESIGN.md`, plan + known limits
+`docs/plans/2026-11-24-units-phase1.md`. **Run migration 035 in Supabase, then push, then a
+live run on a real worksheet.** Phase 2 (AI check, refresh, Add as a question) and Phase 3
+(study guide) not started.
+
 **Worksheet solver (2026-11-23, `backend/skills/solve-worksheet/`):** a workspace job
 (`/solve-worksheet` in the AI panel) that answers every question of an attached worksheet for
 revision. Each question: condensed question quote → **Method** line → working folded in a

@@ -823,6 +823,86 @@ def note_chat_skills(note_id: str, authorization: str = Header()):
     return {"skills": chat_skills(note_id, user_id)}
 
 
+# ── units: a worksheet solved part by part (docs/INTERACTIVE_NOTES_DESIGN.md) ──
+
+class UnitBind(BaseModel):
+    key: str
+    block_id: str
+
+
+class UnitRedo(BaseModel):
+    current_html: str = ""
+    note: str = ""
+
+
+class UnitPatch(BaseModel):
+    state: str | None = None      # "checked" / "written" (unchecked)
+    pending: bool | None = None   # False once Keep / Back to old is chosen
+
+
+@router.get("/notes/{note_id}/units")
+def get_units(note_id: str, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    from services.workspace import units
+    return {"units": units.public(units.load_rows(note_id, user_id))}
+
+
+@router.put("/notes/{note_id}/units/bind")
+def bind_units(note_id: str, body: list[UnitBind], authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    from services.workspace import units
+    return {"ok": True, "count": units.bind_blocks(note_id, user_id,
+                                                   [b.model_dump() for b in body])}
+
+
+@router.post("/notes/{note_id}/units/solve")
+async def solve_units(note_id: str, authorization: str = Header()):
+    """Solve all, streamed: one `unit` event per exercise as it lands, then
+    `finish` (Overview + revision sheet), then `done`."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    from services.workspace import units
+
+    async def stream():
+        async for ev in units.solve_events(note_id, user_id):
+            yield "data: " + json.dumps(ev) + "\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+@router.post("/notes/{note_id}/units/{key}/redo")
+def redo_unit(note_id: str, key: str, body: UnitRedo, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    from services.workspace import units
+    try:
+        return units.redo(note_id, user_id, key, body.current_html[:60_000], body.note[:1000])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail={"error": str(e)})
+
+
+@router.patch("/notes/{note_id}/units/{key}")
+def patch_unit(note_id: str, key: str, body: UnitPatch, authorization: str = Header()):
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    from services.workspace import units
+    fields: dict = {}
+    if body.state is not None:
+        if body.state not in ("checked", "written"):
+            raise HTTPException(status_code=400, detail={"error": "state must be checked or written"})
+        fields["state"] = body.state
+        if body.state == "checked":
+            fields["problems"] = []      # you looked: what the checks found is settled
+    if body.pending is not None:
+        fields["pending"] = body.pending
+    if fields:
+        units.update_unit(note_id, user_id, "" if key == "_root" else key, fields)
+    return {"ok": True}
+
+
 # ── recent sessions (the empty shell's recents strip) ────────────────────────
 
 @router.get("/sessions/recent")

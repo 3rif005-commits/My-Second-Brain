@@ -81,7 +81,9 @@ def test_a_run_writes_a_ready_draft_the_editor_can_apply():
 
 
 def _html_skill():
-    return Skill(name="solve-worksheet", description="d", body="Write HTML.", tools=None,
+    # Not solve-worksheet: that one plans first (test_units.py). Any skill
+    # with `format: html` takes this path.
+    return Skill(name="html-answers", description="d", body="Write HTML.", tools=None,
                  priority=4, source_path=Path("/x"), surfaces=("workspace",),
                  inputs="sources", output="draft_note", model_tier="standard",
                  auto=False, confirm=True, format="html")
@@ -97,7 +99,7 @@ def test_an_html_skills_answer_reaches_the_editor_as_html_not_escaped_text():
          patch.object(skill_run, "complete_with_fallback", return_value=answer), \
          patch.object(skill_run, "last_call_truncated", return_value=False):
         reg.return_value.get.return_value = _html_skill()
-        out = skill_run.produce_skill_result("n1", "u1", "solve-worksheet")
+        out = skill_run.produce_skill_result("n1", "u1", "html-answers")
 
     assert out["html"].startswith("<h1>Sheet 1: Solutions</h1>")
     assert '<h3 data-anchor="1:p:2">' in out["html"]
@@ -235,3 +237,19 @@ def test_a_failed_source_is_named_instead_of_asking_for_another():
     assert skill_run._runnable(skill, 1) == "comparing needs at least two sources"
     assert skill_run._runnable(skill, 2, [{"title": "x", "status": "failed"}]) is None
     assert skill_run._runnable(_skill("flashcards"), 0) == "no sources are ready yet"
+
+
+def test_solve_worksheet_plans_first_and_returns_a_skeleton():
+    """/solve-worksheet maps the sheet; Solve all writes it (units.py)."""
+    mapped = {"kind": "units", "html": "<h1>S</h1>", "source_ids": ["s1"], "units": [],
+              "found": {"exercises": 1, "questions": 2}, "solve": {"usd": 0.05}}
+    with patch.object(skill_run, "_blocks_for", return_value=(BLOCKS[:1], ["s1"])), \
+         patch.object(skill_run, "registry") as reg, \
+         patch.object(skill_run, "estimate", return_value={"usd": 0.01}), \
+         patch("services.workspace.units.map_result", return_value=mapped) as m:
+        reg.return_value.get.return_value = _skill(name="solve-worksheet")
+        out = skill_run.produce_skill_result("n1", "u1", "solve-worksheet", focus="only Q2")
+
+    m.assert_called_once_with("n1", "u1", "only Q2")
+    assert out["kind"] == "units" and out["html"] == "<h1>S</h1>"
+    assert out["found"] == {"exercises": 1, "questions": 2}

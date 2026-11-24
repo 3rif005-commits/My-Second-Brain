@@ -173,6 +173,20 @@ export interface BlockEditorHandle {
   getDocument: () => AnyBlock[];
   /** Replace the whole document with these blocks — how a draft is undone. */
   replaceDocument: (blocks: AnyBlock[]) => void;
+  // ── one unit of an AI-written note (lib/units.ts) ──
+  /** A block (with its children) by id, or undefined. */
+  getBlock: (blockId: string) => AnyBlock | undefined;
+  /** Swap one block (and its children) for this HTML and save; returns what landed. */
+  replaceBlockWithHtml: (blockId: string, html: string) => Promise<AnyBlock[]>;
+  /** Swap one block for these blocks (Back to old) and save. */
+  replaceBlockWithBlocks: (blockId: string, blocks: AnyBlock[]) => AnyBlock[];
+  /** Parse HTML and put it right after a block; save; returns what landed. */
+  insertHtmlAfter: (blockId: string, html: string) => Promise<AnyBlock[]>;
+  /** Replace a heading and the blocks after it, up to the next heading of the
+   *  same level or higher, with this HTML; save; returns what landed. */
+  replaceSectionWithHtml: (headingId: string, html: string) => Promise<AnyBlock[]>;
+  /** The editor's HTML of a block and its children. */
+  blockHtml: (blockId: string) => Promise<string>;
 }
 
 export type InteractiveView = "preview" | "code" | "split";
@@ -389,6 +403,11 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       const stored = restoreUnknown(blocks);
       onSave?.(stored, getPlainText(stored));
     };
+    /** Save at once (cancelling the autosave wait): an AI part just landed. */
+    const saveNow = () => {
+      if (saveTimer.current) { clearTimeout(saveTimer.current); saveTimer.current = null; }
+      persist(editor.document as AnyBlock[]);
+    };
 
     // A generated draft → blocks, with the callout bodies BlockNote's own
     // parser would drop (see calloutChildren.ts).
@@ -574,6 +593,45 @@ export const BlockEditor = forwardRef<BlockEditorHandle, BlockEditorProps>(
       },
       blockIds() {
         return (editor.document as AnyBlock[]).map((b) => b.id);
+      },
+      getBlock(blockId: string) {
+        return editor.getBlock(blockId) as AnyBlock | undefined;
+      },
+      async replaceBlockWithHtml(blockId: string, html: string) {
+        const parsed = await parseDraftHtml(html);
+        if (!editor.getBlock(blockId) || !parsed.length) return [];
+        const { insertedBlocks } = editor.replaceBlocks([blockId], parsed) as { insertedBlocks: AnyBlock[] };
+        saveNow();
+        return insertedBlocks;
+      },
+      replaceBlockWithBlocks(blockId: string, blocks: AnyBlock[]) {
+        if (!editor.getBlock(blockId) || !blocks.length) return [];
+        const { insertedBlocks } = editor.replaceBlocks([blockId], sanitizeBlocks(blocks)) as { insertedBlocks: AnyBlock[] };
+        saveNow();
+        return insertedBlocks;
+      },
+      async insertHtmlAfter(blockId: string, html: string) {
+        const parsed = await parseDraftHtml(html);
+        if (!editor.getBlock(blockId) || !parsed.length) return [];
+        const inserted = editor.insertBlocks(parsed, blockId, "after") as AnyBlock[];
+        saveNow();
+        return inserted;
+      },
+      async replaceSectionWithHtml(headingId: string, html: string) {
+        const parsed = await parseDraftHtml(html);
+        const doc = editor.document as AnyBlock[];
+        const at = doc.findIndex((b) => b.id === headingId);
+        if (at < 0 || !parsed.length) return [];
+        const level = doc[at].props?.level ?? 1;
+        let end = at + 1;
+        while (end < doc.length && !(doc[end].type === "heading" && (doc[end].props?.level ?? 1) <= level)) end++;
+        const { insertedBlocks } = editor.replaceBlocks(doc.slice(at, end).map((b) => b.id), parsed) as { insertedBlocks: AnyBlock[] };
+        saveNow();
+        return insertedBlocks;
+      },
+      async blockHtml(blockId: string) {
+        const b = editor.getBlock(blockId);
+        return b ? await editor.blocksToHTMLLossy([b]) : "";
       },
     }));
 

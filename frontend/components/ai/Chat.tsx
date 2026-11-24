@@ -33,6 +33,7 @@ import { answerToHtml } from "@/lib/answerToHtml";
 import type { SourceInsert } from "@/lib/sourceInserts";
 import { getQuote, priceLine, queueJob, tonight, type BgJob } from "@/lib/backgroundJobs";
 import { offerDraft, stageDraft, undoDraft, type NoteDraft } from "@/lib/noteDraft";
+import { offerUnit, streamSolve, unitsApi } from "@/lib/units";
 import type { SkillDraftProposal } from "@/lib/skills";
 
 const ACCEPTED_EXT = ACCEPTED_WORKSPACE_FILES.split(",");
@@ -705,8 +706,11 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
     const own = noteId === job.noteId;
     // Page anchors point at the job note's sources; elsewhere they would
     // point at sources that note does not have.
+    const units = job.result.kind === "units";
     await deliver({ noteId, html: job.result.html, mode: "replace",
-      sourceIds: own ? job.result.source_ids : [] });
+      sourceIds: own ? job.result.source_ids : [], units });
+    // A worksheet's skeleton is a list, not writing to learn a style from.
+    if (units) return;
     // Never waits, never blocks the insert.
     void fetch(`/api/ws/notes/${noteId}/ai-outputs`, {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -720,6 +724,67 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
     const title = own ? job.noteTitle : (await readNote(noteId)).title;
     await putResultInNote(job, noteId);
     patchJob(cardId, (j) => ({ ...j, applied: { noteId, title }, undoNote: undefined }));
+  }
+
+  // A worksheet's map goes into its note as soon as it is ready (decision 1,
+  // 2026-11-24): the note beside the sheet is where the list is checked. Only
+  // when that note is the one open, so nothing navigates away under the user.
+  useEffect(() => {
+    for (const it of items) {
+      if (it.kind !== "job") continue;
+      const j = it.job;
+      if (j.result?.kind === "units" && !j.applied && !j.autoApplied && j.noteId === pageNoteId) {
+        patchJob(it.id, (x) => ({ ...x, autoApplied: true }));
+        void applyJob(it.id, j, j.noteId);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, pageNoteId]);
+
+  /** Solve all: each exercise is written into its heading as it lands, then
+   *  the Overview and the revision sheet (lib/units.ts). */
+  async function solveJob(cardId: string, job: PanelJob) {
+    const noteId = job.noteId;
+    const titles = new Map<string, string>();
+    try {
+      for (const u of await unitsApi.list(noteId)) titles.set(u.key, u.title);
+    } catch { /* titles are only for messages */ }
+    const name = (k: string) => titles.get(k) ?? (k === "revision" ? "Revision sheet" : `Part ${k}`);
+    const total = job.result?.found?.exercises ?? 0;
+    patchJob(cardId, (j) => ({ ...j, solving: { running: true, total, done: 0, errors: [], edited: [] } }));
+    const step = (fn: (s: NonNullable<PanelJob["solving"]>) => NonNullable<PanelJob["solving"]>) =>
+      patchJob(cardId, (j) => (j.solving ? { ...j, solving: fn(j.solving) } : j));
+    try {
+      await streamSolve(noteId, async (ev) => {
+        if (ev.type === "start") {
+          step((s) => ({ ...s, total: ev.keys.length }));
+        } else if (ev.type === "unit") {
+          const out = await offerUnit({ noteId, key: ev.key, html: ev.html });
+          step((s) => ({
+            ...s, done: s.done + 1,
+            edited: out === "edited" ? [...s.edited, name(ev.key)] : s.edited,
+            errors: out === "missing" || out === false
+              ? [...s.errors, `${name(ev.key)}: its heading is no longer in the note — open the note and Solve the rest.`]
+              : s.errors,
+          }));
+        } else if (ev.type === "unit_error") {
+          step((s) => ({ ...s, errors: [...s.errors, `${name(ev.key)} could not be written: ${ev.content}`] }));
+        } else if (ev.type === "finishing") {
+          step((s) => ({ ...s, finishing: true }));
+        } else if (ev.type === "finish") {
+          if (ev.overview) await offerUnit({ noteId, key: "overview", html: ev.overview });
+          if (ev.revision) await offerUnit({ noteId, key: "revision", html: ev.revision });
+        } else if (ev.type === "done") {
+          step((s) => ({ ...s, usd: ev.usd }));
+        } else if (ev.type === "error") {
+          step((s) => ({ ...s, errors: [...s.errors, ev.content] }));
+        }
+      });
+    } catch (e) {
+      step((s) => ({ ...s, errors: [...s.errors, e instanceof Error ? e.message : "Solving stopped."] }));
+    } finally {
+      step((s) => ({ ...s, running: false, finishing: false }));
+    }
   }
 
   async function undoJob(cardId: string, job: PanelJob) {
@@ -982,6 +1047,7 @@ export function Chat({ threadId: controlledThreadId, onThreadIdChange, onClose, 
                 }}
                 onDiscard={() => setItems((prev) => prev.filter((p) => p.id !== it.id))}
                 onOpen={(href) => router.push(href)}
+                onSolve={it.job.noteId === pageNoteId ? () => void solveJob(it.id, it.job) : undefined}
               />
             )}
             renderAnswerActions={(it) => {
