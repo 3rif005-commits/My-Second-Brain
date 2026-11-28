@@ -15,7 +15,24 @@ import {
   answersUnder, checkSummary, childrenOf, markOf, progress,
   type CheckResult, type MarkKind, type SolveProgress, type Unit,
 } from "@/lib/units";
+import katex from "katex";
 import type { NoteUnits } from "./useNoteUnits";
+
+/** Text with $…$ formulas, drawn (the checks quote answers in LaTeX). */
+function MathText({ text }: { text: string }) {
+  const parts = text.split(/(\$[^$]+\$)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (!(part.length > 2 && part.startsWith("$") && part.endsWith("$"))) return <span key={i}>{part}</span>;
+        const html = katex.renderToString(part.slice(1, -1), { throwOnError: false, output: "html" });
+        return <span key={i} dangerouslySetInnerHTML={{ __html: html }} />;
+      })}
+    </>
+  );
+}
+
+const AI_CHECK = "AI check:";
 
 const GLYPH: Record<MarkKind, { text: string; cls: string; label: string }> = {
   planned: { text: "○", cls: "text-gray-400", label: "Not written yet" },
@@ -180,6 +197,8 @@ function UnitMenu({ u, api, problems, isLeaf, sourceTitle, onOpenSource, onClose
   const answers = answersUnder(api.units, u.key);
   const verdicts = answers.map((a) => ({ a, r: api.checks.get(a.key) })).filter((x) => x.r) as
     { a: Unit; r: CheckResult }[];
+  // A difference the check just found is listed with its verdict below, not twice.
+  const shownProblems = verdicts.length ? problems.filter((p) => !p.startsWith(AI_CHECK)) : problems;
 
   async function check() {
     setError(null);
@@ -205,9 +224,9 @@ function UnitMenu({ u, api, problems, isLeaf, sourceTitle, onOpenSource, onClose
     <div ref={box} className="absolute right-6 top-0 z-30 w-72 rounded-lg border border-border bg-surface p-2.5 text-[12.5px] shadow-lg"
       data-testid="unit-menu">
       <p className="mb-1.5 font-medium text-ink">{u.title}</p>
-      {problems.length > 0 && (
+      {shownProblems.length > 0 && (
         <ul className="mb-2 space-y-0.5 text-amber-700 dark:text-amber-300">
-          {problems.map((p) => <li key={p}>• {p}</li>)}
+          {shownProblems.map((p) => <li key={p}>• <MathText text={p} /></li>)}
         </ul>
       )}
       {u.resource_id && u.page && (
@@ -253,9 +272,13 @@ function UnitMenu({ u, api, problems, isLeaf, sourceTitle, onOpenSource, onClose
                 {r.verdict === "agree" ? "✓" : r.verdict === "differ" ? "≠" : "?"}
               </span>{" "}
               {answers.length > 1 && <span className="font-medium">{a.label || a.title} </span>}
-              {r.verdict === "agree" && <span className="text-ink-secondary">agrees{r.blind ? `: ${r.blind}` : ""}</span>}
+              {r.verdict === "agree" && <span className="text-ink-secondary">agrees{r.blind ? ": " : ""}<MathText text={r.blind} /></span>}
               {r.verdict === "differ" && (
-                <span>second solve: <em>{r.blind}</em>{r.why ? <span className="text-ink-secondary"> — {r.why}</span> : null}</span>
+                <span>
+                  second solve: <MathText text={r.blind} />
+                  <span className="block text-ink-secondary">the note: <MathText text={r.note} /></span>
+                  {r.why ? <span className="block text-ink-secondary">{r.why}</span> : null}
+                </span>
               )}
               {r.verdict === "unsure" && <span className="text-ink-secondary">{r.why || "could not compare"}</span>}
             </div>
