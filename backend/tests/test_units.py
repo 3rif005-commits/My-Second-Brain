@@ -80,6 +80,19 @@ def test_highlights_keep_their_caps():
     assert len(reds) == 2
 
 
+def test_markup_the_model_copied_into_a_plan_field_is_dropped():
+    # Live (AI Grid / Qwen): the map wrote the skill's grey span into "question",
+    # and the note showed `<span data-style-type=...>` as text on every question.
+    marked = json.loads(json.dumps(PLAN))
+    marked["exercises"][1]["questions"][0]["question"] = (
+        '<span data-style-type="textColor" data-value="gray">Which is the SI unit of '
+        'momentum, $p &amp; m$ with a < b?</span>')
+    p = units.parse_plan(json.dumps(marked), [SHEET])
+    by = {u["key"]: u for u in p["units"]}
+    assert by["2"]["question"] == "Which is the SI unit of momentum, $p & m$ with a < b?"
+    assert "&lt;span" not in units.skeleton_html(p)
+
+
 def test_an_unusable_plan_says_why():
     with pytest.raises(ValueError):
         units.parse_plan("I could not read the sheet.", [SHEET])

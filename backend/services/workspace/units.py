@@ -26,6 +26,7 @@ that question's first sub-part; "" is the title, "revision" the revision sheet.
 """
 from __future__ import annotations
 
+import html as _html
 import json
 import logging
 import re
@@ -101,8 +102,14 @@ choose the HEADING HIGHLIGHTS, name the general laws) and answer with JSON only:
 """
 
 
+# A tag the model copied from the skill's own HTML (the grey question span) into a
+# plan field: the field is plain text, escaped into the skeleton, so the tag showed
+# as code in the note. Only a real tag goes (a letter after "<"): "a < b" stays.
+_TAG = re.compile(r"</?[a-zA-Z][^<>]*>")
+
+
 def _text(v) -> str:
-    return str(v or "").strip()
+    return _html.unescape(_TAG.sub("", str(v or ""))).strip()
 
 
 def _int(v) -> int | None:
