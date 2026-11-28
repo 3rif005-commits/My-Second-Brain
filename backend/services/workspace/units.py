@@ -721,9 +721,15 @@ JUDGE_PREFIX = "You compare a student's answer with an independent answer to the
 JUDGE_NOTE = """
 For each pair, say whether the two give the SAME FINAL RESULT: the same value within rounding
 (units may be written differently), an equivalent expression, or the same claim. Wording,
-notation, extra steps and explanation do not matter. Output ONLY one JSON object:
+notation, extra steps and explanation do not matter. For a design (a circuit, a PLA or PAL):
+two designs are the same when they realise the same functions — a simplified and an
+unsimplified form of one function are the same. Check equivalence before saying they differ.
+The independent answer can be wrong too: if you can't tell which is right, or they answer
+different readings of the question, say null.
+Output ONLY one JSON object:
 {{"verdicts": [{{"key": "1.2", "same": true, "why": ""}}]}}
-"why": empty when they agree; one short line naming the difference when they don't.
+"same": true, false or null. "why": empty when they agree; one short line naming the
+difference (or the doubt) otherwise.
 
 {pairs}
 """
@@ -908,12 +914,16 @@ class Runner:
                 continue
             asked = " ; ".join(x["question"] for x in _ancestry(u, units) if x.get("question"))
             refs = logic_check.reference_functions(asked)
+            # The editor keeps a formula in data-latex with no text: read the
+            # bands as $latex$ text (live 2026-11-28: raw HTML hid F1 = x1, and a
+            # right answer went to the model and came back "differ").
+            texts = [band_text(b) for b in bands]
             got = {}
-            for b in bands:
-                got.update(logic_check.answer_functions(b))
+            for t in texts:
+                got.update(logic_check.answer_functions(t))
             if refs and any(name in refs for name in got):
                 # Code knows the answer: every input checked, no model needed.
-                probs = [p for b in bands for p in logic_check.check(asked, b)]
+                probs = [p for t in texts for p in logic_check.check(asked, t)]
                 results[u["key"]] = {"key": u["key"], "verdict": "differ" if probs else "agree",
                                      "blind": "computed on every input", "note": note,
                                      "why": "; ".join(probs)}
@@ -935,10 +945,11 @@ class Runner:
                 if not r["blind"]:
                     r["why"] = "the second solve gave no answer"
                     continue
-                verdict = compare_numbers(r["blind"], r["note"])
-                if verdict:
-                    r["verdict"] = verdict
-                    r["why"] = "" if verdict == "agree" else "the values differ"
+                # Matching numbers settle an agreement. Numbers that don't match
+                # may count different things (live: "5 product terms" against
+                # "6 product terms" for two right designs): the judge decides.
+                if compare_numbers(r["blind"], r["note"]) == "agree":
+                    r["verdict"] = "agree"
                 else:
                     judge.append(k)
             if judge:
@@ -956,6 +967,8 @@ class Runner:
                     if v is not None and isinstance(v.get("same"), bool):
                         results[k]["verdict"] = "agree" if v["same"] else "differ"
                         results[k]["why"] = "" if v["same"] else _text(v.get("why"))
+                    elif v is not None:
+                        results[k]["why"] = _text(v.get("why")) or "the two answers can't be compared"
         return [results[u["key"]] for u in targets]
 
     def finish(self, plan: dict, written_raw: list[str]) -> dict:

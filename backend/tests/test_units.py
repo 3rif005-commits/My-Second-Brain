@@ -6,6 +6,7 @@ the skeleton with a data-unit on every heading, keys that survive a model
 dropping them, the free checks, and the answer key built from the bands.
 """
 import json
+import re
 
 import pytest
 
@@ -412,8 +413,9 @@ class CheckModel:
         if "CHECKS A STUDENT'S ANSWERS" in note:
             return json.dumps({"answers": [{"key": k, "answer": a} for k, a in self.blind.items()]})
         if "SAME FINAL RESULT" in note:
-            return json.dumps({"verdicts": [{"key": "2", "same": self.same,
-                                             "why": "" if self.same else "picks A"}]})
+            keys = re.findall(r"^- ([\d.]+):", note, re.M)
+            return json.dumps({"verdicts": [{"key": k, "same": self.same,
+                                             "why": "" if self.same else "picks A"} for k in keys]})
         raise AssertionError(note[:80])
 
 
@@ -430,13 +432,16 @@ def test_the_ai_check_solves_blind_then_compares():
         "1.2": band("<strong>Answer:</strong> I = 637 W/m²"),
         "2": band("<strong>Answer:</strong> B, kg·m/s")})
     got = {r["key"]: r["verdict"] for r in out}
-    assert got == {"1.1": "agree", "1.2": "differ", "2": "agree"}
+    # the judge (fake) says "same" for everything it gets: 1.2's numbers differ, so it
+    # went to the judge rather than being called a difference by code
+    assert got == {"1.1": "agree", "1.2": "agree", "2": "agree"}
     blind_note = model.calls[0][1]
     # blind: the questions go out, the note's answers don't
     assert "Find the intensity." in blind_note and "637" not in blind_note
-    # only the pair numbers can't settle goes to the judge, without the sources
+    # only the pairs numbers can't settle go to the judge, without the sources
     assert len(model.calls) == 2 and model.calls[1][0] == units.JUDGE_PREFIX
-    assert "- 2:" in model.calls[1][1] and "1.1" not in model.calls[1][1]
+    judged = model.calls[1][1]
+    assert "- 2:" in judged and "- 1.2:" in judged and "- 1.1:" not in judged
 
 
 def test_a_boolean_answer_is_checked_by_code_not_by_the_model():
@@ -445,9 +450,14 @@ def test_a_boolean_answer_is_checked_by_code_not_by_the_model():
         {"key": "1", "parent_key": "", "depth": 2, "label": "Ex 1", "title": "F",
          "question": r"Implement $F(A,B,C) = \sum(0,1,2,4)$ with a PLA."}], "rules": []}
     model = CheckModel({})
-    out = units.Runner("S", [SHEET], model).check(
-        p, "1", {"1": band(r"<strong>Answer:</strong> $F = \bar{A}\bar{B} + \bar{A}\bar{C} + \bar{B}\bar{C}$")})
+    # as the editor exports it: the formula only in data-latex (live 2026-11-28)
+    exported = band('<strong>Answer:</strong> <span data-inline-content-type="inlineMath" '
+                    'data-latex="F = \\bar{A}\\bar{B} + \\bar{A}\\bar{C} + \\bar{B}\\bar{C}"></span>')
+    out = units.Runner("S", [SHEET], model).check(p, "1", {"1": exported})
     assert out[0]["verdict"] == "agree" and out[0]["blind"] == "computed on every input"
+    wrong = exported.replace("\\bar{B}\\bar{C}", "BC")
+    out = units.Runner("S", [SHEET], model).check(p, "1", {"1": wrong})
+    assert out[0]["verdict"] == "differ" and "minterm" in out[0]["why"]
     assert model.calls == []
 
 
@@ -466,7 +476,7 @@ def test_a_difference_flags_the_answer_and_an_agreement_clears_it(monkeypatch):
     rows[-1]["state"] = "flagged"
     saved = {}
     monkeypatch.setattr(units, "_runner", lambda n, u: (units.Runner("S", [SHEET], CheckModel(
-        {"1.1": "1 Hz", "1.2": "318 W/m²", "2": "kg·m/s"})), [], None))
+        {"1.1": "1 Hz", "1.2": "318 W/m²", "2": "kg·m/s"}, same=False)), [], None))
     monkeypatch.setattr(units, "load_rows", lambda n, u: rows)
     monkeypatch.setattr(units, "plan_from_rows", lambda r, s: p)
     monkeypatch.setattr(units, "update_unit", lambda n, u, k, f: saved.__setitem__(k, f))
@@ -477,5 +487,6 @@ def test_a_difference_flags_the_answer_and_an_agreement_clears_it(monkeypatch):
         pytest.skip("privacy wrapper hides the function")
     assert saved["1.1"]["state"] == "flagged"
     assert saved["1.1"]["problems"][0].startswith("AI check: a second solve got “1 Hz”")
+    assert saved["1.1"]["problems"][0].endswith("— picks A")
     assert saved["1.2"] == {"problems": [], "state": "written"}
     assert "2" not in saved                                      # not under part 1
