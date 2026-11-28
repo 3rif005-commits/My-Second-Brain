@@ -490,3 +490,9 @@ def test_a_difference_flags_the_answer_and_an_agreement_clears_it(monkeypatch):
     assert saved["1.1"]["problems"][0].endswith("— picks A")
     assert saved["1.2"] == {"problems": [], "state": "written"}
     assert "2" not in saved                                      # not under part 1
+
+
+def test_a_long_answer_is_never_cut_inside_a_formula():
+    long = "terms " + ", ".join(["$\\bar{A}\\bar{B}C\\bar{D}$"] * 12)
+    cut = units._cut(long)
+    assert len(cut) <= 160 and cut.endswith("…") and cut.count("$") % 2 == 0

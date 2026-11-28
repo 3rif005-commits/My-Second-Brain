@@ -803,8 +803,19 @@ def check_spec(keys: list[str], units: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _cut(text: str, size: int = 160) -> str:
+    """Shortened for a problem line, never inside a $…$ formula (half a
+    formula broke every formula after it in the menu, live 2026-11-28)."""
+    if len(text) <= size:
+        return text
+    head = text[:size - 1]
+    if head.count("$") % 2:
+        head = head[:head.rfind("$")]
+    return head.rstrip(" ,;") + "…"
+
+
 def _check_message(blind: str, note: str, why: str) -> str:
-    cut = lambda t: t if len(t) <= 160 else t[:157] + "…"          # noqa: E731
+    cut = _cut
     return (f"{AI_CHECK} a second solve got “{cut(blind)}”; the note says “{cut(note)}”"
             + (f" — {cut(why)}" if why else ""))
 
