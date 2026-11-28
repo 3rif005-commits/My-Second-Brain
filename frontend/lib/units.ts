@@ -186,6 +186,36 @@ async function json<T>(res: Response): Promise<T> {
   return body as T;
 }
 
+/** One answer's AI check: a blind second solve compared with the note. */
+export interface CheckResult {
+  key: string;
+  verdict: "agree" | "differ" | "unsure";
+  /** The second solve's answer ("computed on every input" for a Boolean function). */
+  blind: string;
+  /** The note's answer, as the check read it. */
+  note: string;
+  why: string;
+}
+
+/** "" checks every answer of the worksheet; the URL names it "_root". */
+const keyPath = (key: string) => encodeURIComponent(key === "" ? "_root" : key);
+
+/** The answers under a part (every answer for ""): leaves only, page order. */
+export function answersUnder(units: Unit[], key: string): Unit[] {
+  return units
+    .filter((u) => u.key && u.key !== "revision" && (key === "" || u.key === key || u.key.startsWith(key + ".")))
+    .filter((u) => !units.some((c) => c.parent_key === u.key))
+    .sort((a, b) => a.position - b.position);
+}
+
+/** "6 agree · 1 differs · 1 not sure" */
+export function checkSummary(results: CheckResult[]): string {
+  const n = (v: CheckResult["verdict"]) => results.filter((r) => r.verdict === v).length;
+  return [n("agree") ? `${n("agree")} agree${n("agree") === 1 ? "s" : ""}` : null,
+    n("differ") ? `${n("differ")} differ${n("differ") === 1 ? "s" : ""}` : null,
+    n("unsure") ? `${n("unsure")} not sure` : null].filter(Boolean).join(" · ");
+}
+
 export const unitsApi = {
   list: async (noteId: string): Promise<Unit[]> =>
     (await json<{ units: Unit[] }>(await fetch(base(noteId)))).units,
@@ -197,6 +227,12 @@ export const unitsApi = {
     json(await fetch(`${base(noteId)}/${encodeURIComponent(key === "" ? "_root" : key)}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     })),
+  check: async (noteId: string, key: string, answers: Record<string, string>) =>
+    json<{ key: string; results: CheckResult[]; usd: number | null }>(
+      await fetch(`${base(noteId)}/${keyPath(key)}/check`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers }),
+      })),
   redo: async (noteId: string, key: string, currentHtml: string, note: string) =>
     json<{ key: string; html: string; problems: Record<string, string[]>; usd: number | null }>(
       await fetch(`${base(noteId)}/${encodeURIComponent(key)}/redo`, {

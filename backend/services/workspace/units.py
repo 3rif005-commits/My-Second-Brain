@@ -695,6 +695,114 @@ def answer_key(html: str, units: list[dict]) -> str:
             + "\n".join(rows) + "</table>")
 
 
+# ── the AI check (Phase 2): a second, blind solve compared with the note ──────
+
+AI_CHECK = "AI check:"
+CHECK_OUTPUT_CAP = 3000
+#: how close two numbers must be to be the same answer (rounding in the steps)
+NUMBER_TOLERANCE = 0.02
+
+CHECK_NOTE = """
+---
+THIS CALL CHECKS A STUDENT'S ANSWERS. Solve each question below yourself, from the
+sheet and the course above, as if no answer existed. Do not write a page, do not explain.
+Output ONLY one JSON object:
+{{"answers": [{{"key": "1.2", "answer": "<the final answer only: the value with its unit, the expression, or one short sentence>"}}]}}
+
+One entry per key, in this order. Use the sheet's own symbols. Numbers with 3 significant
+figures, in scientific notation when large or small (4.74 × 10^14 Hz).
+
+QUESTIONS (key — label — the question; the lines in brackets are the data it builds on):
+{spec}
+"""
+
+JUDGE_PREFIX = "You compare a student's answer with an independent answer to the same exam question.\n"
+
+JUDGE_NOTE = """
+For each pair, say whether the two give the SAME FINAL RESULT: the same value within rounding
+(units may be written differently), an equivalent expression, or the same claim. Wording,
+notation, extra steps and explanation do not matter. Output ONLY one JSON object:
+{{"verdicts": [{{"key": "1.2", "same": true, "why": ""}}]}}
+"why": empty when they agree; one short line naming the difference when they don't.
+
+{pairs}
+"""
+
+_MATH_SPAN = re.compile(r'<span[^>]*data-latex="([^"]*)"[^>]*>.*?</span>', re.S)
+_SUPERSCRIPT = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
+_SCI = re.compile(
+    r"(-?\d+(?:[.,]\d+)?)\s*(?:\\times|\\cdot|×|·|\*|x)\s*10\s*(?:\^\s*\{?\s*([-−]?\s*\d+)\s*\}?"
+    r"|([⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+))")
+_E_NOTATION = re.compile(r"(-?\d+(?:\.\d+)?)[eE]([-+]?\d+)\b")
+_PLAIN_NUMBER = re.compile(r"(?<![\w.^{])-?\d+(?:[.,]\d+)?(?![\w.])")
+
+
+def band_text(band_html: str) -> str:
+    """A band's HTML → text, its formulas kept as $latex$ (the editor exports
+    them as empty spans that carry data-latex)."""
+    text = _MATH_SPAN.sub(lambda m: f" ${_html.unescape(m.group(1))}$ ", band_html)
+    text = _ANSWER_LABEL.sub("", text)
+    return re.sub(r"\s+", " ", _html.unescape(_TAGS.sub(" ", text))).strip()
+
+
+def answer_values(text: str) -> list[float]:
+    """The numbers an answer gives: 4.74 \\times 10^{14}, 4.74×10¹⁴ and 4.74e14
+    are one value each; a bare 2 or 10 counts too."""
+    out: list[float] = []
+
+    def sci(m: re.Match) -> str:
+        exp = (m.group(2) or (m.group(3) or "").translate(_SUPERSCRIPT)).replace("−", "-").replace(" ", "")
+        try:
+            out.append(float(m.group(1).replace(",", ".")) * 10 ** int(exp))
+        except ValueError:
+            pass
+        return " "
+    rest = _SCI.sub(sci, text)
+    rest = _E_NOTATION.sub(lambda m: (out.append(float(m.group(1)) * 10 ** int(m.group(2))), " ")[1], rest)
+    # a subscript or exponent is a name, not a value (x_1, 10^{3} handled above)
+    rest = re.sub(r"[_^]\s*\{[^}]*\}|[_^]\s*\w", " ", rest)
+    for n in _PLAIN_NUMBER.findall(rest):
+        try:
+            out.append(float(n.replace(",", ".")))
+        except ValueError:
+            pass
+    return out
+
+
+def _close(a: float, b: float) -> bool:
+    return abs(a - b) <= NUMBER_TOLERANCE * max(abs(a), abs(b)) or abs(a - b) < 1e-12
+
+
+def compare_numbers(blind: str, note: str) -> str | None:
+    """"agree", "differ", or None when numbers can't settle it (no value in
+    the blind answer, or only some match)."""
+    bv, nv = answer_values(blind), answer_values(note)
+    if not bv or not nv:
+        return None
+    hits = [any(_close(b, n) for n in nv) for b in bv]
+    if all(hits):
+        return "agree"
+    if not any(hits):
+        return "differ"
+    return None
+
+
+def check_spec(keys: list[str], units: list[dict]) -> str:
+    lines = []
+    for k in keys:
+        u = next(x for x in units if x["key"] == k)
+        above = [x["question"] for x in _ancestry(u, units)[1:] if x.get("question")]
+        lines.append(f"- {k} — {u['label'] or u['title']} — {u['question'] or u['title']}"
+                     + (f"  [{' | '.join(reversed(above))}]" if above else ""))
+    return "\n".join(lines)
+
+
+def _check_message(blind: str, note: str, why: str) -> str:
+    cut = lambda t: t if len(t) <= 160 else t[:157] + "…"          # noqa: E731
+    return (f"{AI_CHECK} a second solve got “{cut(blind)}”; the note says “{cut(note)}”"
+            + (f" — {cut(why)}" if why else ""))
+
+
 FINISH_NOTE = """
 ---
 THIS CALL WRITES THE TOP AND THE END OF A SOLUTIONS PAGE whose questions are
@@ -780,6 +888,75 @@ class Runner:
                     raw, problems = again, second
         raw = computed_corrections(raw, subtree(units, key), units)
         return {"key": key, "raw": raw, "problems": problems}
+
+    def check(self, plan: dict, key: str, answers: dict[str, str]) -> list[dict]:
+        """The AI check of a part: each answer under it (as the note has it now,
+        `answers` = key → that answer's HTML) against a blind solve. Returns one
+        verdict per answer: {key, verdict: agree|differ|unsure, blind, note, why}."""
+        from services.workspace import logic_check
+        units = plan["units"]
+        scope = units if key == "" else subtree(units, key)      # "": the whole worksheet
+        targets = [u for u in scope if u["key"] and not children(units, u["key"])]
+        results: dict[str, dict] = {}
+        ask: list[str] = []
+        for u in targets:
+            bands = _BAND_P.findall(answers.get(u["key"], ""))
+            note = " · ".join(band_text(b) for b in bands)
+            if not bands:
+                results[u["key"]] = {"key": u["key"], "verdict": "unsure", "blind": "", "note": "",
+                                     "why": "no answer band to compare"}
+                continue
+            asked = " ; ".join(x["question"] for x in _ancestry(u, units) if x.get("question"))
+            refs = logic_check.reference_functions(asked)
+            got = {}
+            for b in bands:
+                got.update(logic_check.answer_functions(b))
+            if refs and any(name in refs for name in got):
+                # Code knows the answer: every input checked, no model needed.
+                probs = [p for b in bands for p in logic_check.check(asked, b)]
+                results[u["key"]] = {"key": u["key"], "verdict": "differ" if probs else "agree",
+                                     "blind": "computed on every input", "note": note,
+                                     "why": "; ".join(probs)}
+                continue
+            results[u["key"]] = {"key": u["key"], "verdict": "unsure", "blind": "", "note": note, "why": ""}
+            ask.append(u["key"])
+        if ask:
+            raw = self.complete(self.prefix, CHECK_NOTE.format(spec=check_spec(ask, units)),
+                                CHECK_OUTPUT_CAP)
+            try:
+                blind = {str(a.get("key")): _text(a.get("answer"))
+                         for a in _json_object(raw).get("answers") or [] if isinstance(a, dict)}
+            except (ValueError, json.JSONDecodeError):
+                raise ValueError("The check could not read the second solve.")
+            judge: list[str] = []
+            for k in ask:
+                r = results[k]
+                r["blind"] = blind.get(k, "")
+                if not r["blind"]:
+                    r["why"] = "the second solve gave no answer"
+                    continue
+                verdict = compare_numbers(r["blind"], r["note"])
+                if verdict:
+                    r["verdict"] = verdict
+                    r["why"] = "" if verdict == "agree" else "the values differ"
+                else:
+                    judge.append(k)
+            if judge:
+                pairs = "\n".join(f"- {k}: QUESTION: {check_spec([k], units).split(' — ', 2)[-1]}\n"
+                                  f"  STUDENT: {results[k]['note']}\n  INDEPENDENT: {results[k]['blind']}"
+                                  for k in judge)
+                raw = self.complete(JUDGE_PREFIX, JUDGE_NOTE.format(pairs=pairs), 1500)
+                try:
+                    verdicts = {str(v.get("key")): v for v in _json_object(raw).get("verdicts") or []
+                                if isinstance(v, dict)}
+                except (ValueError, json.JSONDecodeError):
+                    verdicts = {}
+                for k in judge:
+                    v = verdicts.get(k)
+                    if v is not None and isinstance(v.get("same"), bool):
+                        results[k]["verdict"] = "agree" if v["same"] else "differ"
+                        results[k]["why"] = "" if v["same"] else _text(v.get("why"))
+        return [results[u["key"]] for u in targets]
 
     def finish(self, plan: dict, written_raw: list[str]) -> dict:
         """The Overview, the revision sheet (its boxes checked against the Rule
@@ -1126,3 +1303,38 @@ def redo(note_id: str, user_id: str, key: str, current_html: str, note: str = ""
              if r.get("estimated_usd") is not None]
     return {"key": key, "html": finished(res["raw"]), "problems": res["problems"],
             "usd": round(sum(spent), 4) if spent else None}
+
+
+@privacy.reads_note
+def ai_check(note_id: str, user_id: str, key: str, answers: dict[str, str]) -> dict:
+    """Check with AI: a blind solve of the part, compared with the note. A
+    difference becomes a problem on that answer (the mark turns !); an
+    agreement clears an earlier AI-check problem. It only flags."""
+    from core.config import settings
+    from services.ai import budget as budget_guard
+    from services.ai import usage as usage_log
+    runner, source_ids, _ = _runner(note_id, user_id)
+    rows = load_rows(note_id, user_id)
+    plan = plan_from_rows(rows, source_ids)
+    if key and not any(u["key"] == key for u in plan["units"]):
+        raise ValueError("That part is not in this note's plan.")
+    mark = len(usage_log.RECENT)
+    with usage_log.annotate(surface="workspace", job="skill", skill=SKILL, trigger="user",
+                            note_id=note_id, user_id=user_id), \
+         budget_guard.limit(settings.max_usd_per_run or None):
+        results = runner.check(plan, key, answers)
+    by_key = {r["key"]: r for r in rows}
+    for res in results:
+        row = by_key.get(res["key"]) or {}
+        kept = [p for p in (row.get("problems") or []) if not p.startswith(AI_CHECK)]
+        probs = kept + ([_check_message(res["blind"], res["note"], res["why"])]
+                        if res["verdict"] == "differ" else [])
+        state = row.get("state") or "written"
+        if probs:
+            state = "flagged"
+        elif state == "flagged":
+            state = "written"
+        update_unit(note_id, user_id, res["key"], {"problems": probs, "state": state})
+    spent = [r["estimated_usd"] for r in list(usage_log.RECENT)[mark:]
+             if r.get("estimated_usd") is not None]
+    return {"key": key, "results": results, "usd": round(sum(spent), 4) if spent else None}

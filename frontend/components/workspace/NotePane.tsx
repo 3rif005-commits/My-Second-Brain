@@ -18,7 +18,7 @@ import { anchorRows, findLevelHeadings, readDraftAnchors, type DraftAnchor } fro
 import { markdownTableToBlock } from "@/lib/sourceInserts";
 import { hasContent, textBlocks } from "./sendBlocks";
 import { quotedPassages, type Passage } from "./viewers/passageMarks";
-import { SOLVE_EVENT, needsOf, solveAll, unitPassages, type FillOutcome, type SolveProgress } from "@/lib/units";
+import { SOLVE_EVENT, checkSummary, needsOf, solveAll, unitPassages, type FillOutcome, type SolveProgress } from "@/lib/units";
 import { useNoteUnits } from "./useNoteUnits";
 import { UnitMarks, UnitProgressLine } from "./UnitMarks";
 
@@ -132,6 +132,13 @@ export function NotePane({
     return () => clearTimeout(t);
   }, [units.units, liveUnits.units, docTick]);
   const [solving, setSolving] = useState<SolveProgress | undefined>();
+  const [checkNote, setCheckNote] = useState<string | null>(null);
+  const checkAll = useCallback(() => {
+    setCheckNote(null);
+    unitsRef.current.check("")
+      .then((results) => setCheckNote(`AI check: ${checkSummary(results)}`))
+      .catch((e) => setCheckNote(e instanceof Error ? e.message : "The check failed."));
+  }, []);
   const solvingRef = useRef(false);
   const solveHere = useCallback(() => {
     if (solvingRef.current) return;              // one run at a time
@@ -511,7 +518,8 @@ export function NotePane({
             onChange={(e) => { setTitle(e.target.value); saveTitle(e.target.value); }}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); focusEditor(); } }}
           />
-          <UnitProgressLine units={liveUnits.units} solving={solving} onSolve={solveHere} onNext={(u) => {
+          <UnitProgressLine units={liveUnits.units} solving={solving} onSolve={solveHere}
+            onCheckAll={checkAll} checkingAll={units.checking.has("")} checkNote={checkNote} onNext={(u) => {
             if (u.block_id) editorRef.current?.scrollToBlock(u.block_id);
             setOpenUnit(u.key);
           }} />

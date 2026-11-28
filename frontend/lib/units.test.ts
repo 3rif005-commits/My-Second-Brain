@@ -142,3 +142,21 @@ describe("a diagram that arrived as code", () => {
     expect(out[0].children[1].type).toBe("codeBlock");
   });
 });
+
+describe("the AI check", () => {
+  const units = ["", "1", "1.1", "1.2", "2", "revision"].map((k, i) =>
+    unit(k, { position: i, ...(k === "" ? { parent_key: null } : k === "revision" ? { parent_key: "" } : {}) }));
+
+  it("sends the answers under a part, or every answer for the whole sheet", async () => {
+    const { answersUnder } = await import("./units");
+    expect(answersUnder(units, "1").map((u) => u.key)).toEqual(["1.1", "1.2"]);
+    expect(answersUnder(units, "1.2").map((u) => u.key)).toEqual(["1.2"]);
+    expect(answersUnder(units, "").map((u) => u.key)).toEqual(["1.1", "1.2", "2"]);
+  });
+
+  it("sums up what it found", async () => {
+    const { checkSummary } = await import("./units");
+    const r = (verdict: "agree" | "differ" | "unsure") => ({ key: "k", verdict, blind: "", note: "", why: "" });
+    expect(checkSummary([r("agree"), r("agree"), r("differ"), r("unsure")])).toBe("2 agree · 1 differs · 1 not sure");
+  });
+});

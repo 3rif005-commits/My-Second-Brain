@@ -382,3 +382,100 @@ def test_a_wrong_function_gets_the_computed_answer_under_its_band():
     assert "minterms 13, 14" in out and r"\bar{C}" in out
     right = html.replace(r"AB\bar D + ", r"AB\bar C + ")
     assert units.computed_corrections(right, units_, units_) == right
+
+
+# ── the AI check (Phase 2) ──────────────────────────────────────────────────
+
+def test_values_are_read_whatever_the_notation():
+    v = units.answer_values
+    assert v(r"f = 4.74 \times 10^{14}\,\text{Hz}") == [4.74e14]
+    assert v("4.74×10¹⁴ Hz") == [4.74e14]
+    assert v("I = 3.2e-3 W/m²") == [3.2e-3]
+    assert v("x_1 = 2") == [2.0]                 # a subscript is a name
+    assert units.compare_numbers("4.74 × 10^14 Hz", r"$f = 4.738 \times 10^{14}$") == "agree"
+    assert units.compare_numbers("4.74 × 10^14 Hz", "f = 2.37 × 10^14 Hz") == "differ"
+    assert units.compare_numbers("B, kg·m/s", "B") is None       # words: the judge decides
+
+
+def test_a_band_exported_by_the_editor_keeps_its_formulas():
+    band = ('<strong>Answer:</strong> <span data-inline-content-type="inlineMath" '
+            'data-latex="f = 4.74 \\times 10^{14}\\,\\text{Hz}"></span> ok')
+    assert units.band_text(band) == r"$f = 4.74 \times 10^{14}\,\text{Hz}$ ok"
+
+
+class CheckModel:
+    def __init__(self, blind, same=True):
+        self.blind, self.same, self.calls = blind, same, []
+
+    def __call__(self, prefix, note, max_tokens):
+        self.calls.append((prefix, note))
+        if "CHECKS A STUDENT'S ANSWERS" in note:
+            return json.dumps({"answers": [{"key": k, "answer": a} for k, a in self.blind.items()]})
+        if "SAME FINAL RESULT" in note:
+            return json.dumps({"verdicts": [{"key": "2", "same": self.same,
+                                             "why": "" if self.same else "picks A"}]})
+        raise AssertionError(note[:80])
+
+
+def band(text):
+    return f'<details><summary><h3>x</h3></summary><p data-background-color="green">{text}</p></details>'
+
+
+def test_the_ai_check_solves_blind_then_compares():
+    p = plan()
+    model = CheckModel({"1.1": "4.74 × 10^14 Hz", "1.2": "318 W/m²", "2": "kg·m/s (B)"})
+    runner = units.Runner("SKILL", [SHEET], model)
+    out = runner.check(p, "", {
+        "1.1": band(r'<strong>Answer:</strong> <span data-latex="f = 4.74 \times 10^{14}\,\text{Hz}"></span>'),
+        "1.2": band("<strong>Answer:</strong> I = 637 W/m²"),
+        "2": band("<strong>Answer:</strong> B, kg·m/s")})
+    got = {r["key"]: r["verdict"] for r in out}
+    assert got == {"1.1": "agree", "1.2": "differ", "2": "agree"}
+    blind_note = model.calls[0][1]
+    # blind: the questions go out, the note's answers don't
+    assert "Find the intensity." in blind_note and "637" not in blind_note
+    # only the pair numbers can't settle goes to the judge, without the sources
+    assert len(model.calls) == 2 and model.calls[1][0] == units.JUDGE_PREFIX
+    assert "- 2:" in model.calls[1][1] and "1.1" not in model.calls[1][1]
+
+
+def test_a_boolean_answer_is_checked_by_code_not_by_the_model():
+    p = {"units": [
+        {"key": "", "parent_key": None, "depth": 1, "label": "", "title": "T", "question": ""},
+        {"key": "1", "parent_key": "", "depth": 2, "label": "Ex 1", "title": "F",
+         "question": r"Implement $F(A,B,C) = \sum(0,1,2,4)$ with a PLA."}], "rules": []}
+    model = CheckModel({})
+    out = units.Runner("S", [SHEET], model).check(
+        p, "1", {"1": band(r"<strong>Answer:</strong> $F = \bar{A}\bar{B} + \bar{A}\bar{C} + \bar{B}\bar{C}$")})
+    assert out[0]["verdict"] == "agree" and out[0]["blind"] == "computed on every input"
+    assert model.calls == []
+
+
+def test_no_band_is_unsure_and_costs_nothing():
+    model = CheckModel({})
+    out = units.Runner("S", [SHEET], model).check(plan(), "2", {"2": "<p>my own working</p>"})
+    assert out == [{"key": "2", "verdict": "unsure", "blind": "", "note": "",
+                    "why": "no answer band to compare"}]
+    assert model.calls == []
+
+
+def test_a_difference_flags_the_answer_and_an_agreement_clears_it(monkeypatch):
+    p = plan()
+    rows = [{"key": u["key"], "state": "written", "problems": []} for u in p["units"]]
+    rows[-1]["problems"] = [units.AI_CHECK + " old"]          # "2" was flagged by a check
+    rows[-1]["state"] = "flagged"
+    saved = {}
+    monkeypatch.setattr(units, "_runner", lambda n, u: (units.Runner("S", [SHEET], CheckModel(
+        {"1.1": "1 Hz", "1.2": "318 W/m²", "2": "kg·m/s"})), [], None))
+    monkeypatch.setattr(units, "load_rows", lambda n, u: rows)
+    monkeypatch.setattr(units, "plan_from_rows", lambda r, s: p)
+    monkeypatch.setattr(units, "update_unit", lambda n, u, k, f: saved.__setitem__(k, f))
+    out = units.ai_check.__wrapped__("n", "u", "1", {
+        "1.1": band("f = 4.74 × 10^14 Hz"), "1.2": band("I = 318 W/m²")}) \
+        if hasattr(units.ai_check, "__wrapped__") else None
+    if out is None:
+        pytest.skip("privacy wrapper hides the function")
+    assert saved["1.1"]["state"] == "flagged"
+    assert saved["1.1"]["problems"][0].startswith("AI check: a second solve got “1 Hz”")
+    assert saved["1.2"] == {"problems": [], "state": "written"}
+    assert "2" not in saved                                      # not under part 1

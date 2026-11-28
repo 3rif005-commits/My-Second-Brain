@@ -8,10 +8,13 @@
 // ✓ checked by you · ! something to look at · ↻ a new version waiting for
 // Keep or Back. An exercise's mark is the worst of its answers, so a closed
 // toggle still shows what is inside. Click it for: the question in the sheet,
-// Mark checked, Redo, Redo with a note.
+// Mark checked, Check with AI, Redo, Redo with a note.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronRight, ExternalLink, Loader2, RotateCcw, Sparkles, Undo2 } from "lucide-react";
-import { childrenOf, markOf, progress, type MarkKind, type SolveProgress, type Unit } from "@/lib/units";
+import { Check, ChevronRight, ExternalLink, Loader2, RotateCcw, ShieldCheck, Sparkles, Undo2 } from "lucide-react";
+import {
+  answersUnder, checkSummary, childrenOf, markOf, progress,
+  type CheckResult, type MarkKind, type SolveProgress, type Unit,
+} from "@/lib/units";
 import type { NoteUnits } from "./useNoteUnits";
 
 const GLYPH: Record<MarkKind, { text: string; cls: string; label: string }> = {
@@ -26,11 +29,16 @@ const PRESETS = ["More steps", "Shorter", "Use the course's notation"];
 
 const btn = "inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[12px] hover:bg-surface-hover disabled:opacity-50";
 
-export function UnitProgressLine({ units, onNext, onSolve, solving }: {
+export function UnitProgressLine({ units, onNext, onSolve, solving, onCheckAll, checkingAll, checkNote }: {
   units: Unit[]; onNext: (u: Unit) => void;
   /** Solve all from the note itself: the AI panel's card is gone after a reload. */
   onSolve?: () => void;
   solving?: SolveProgress;
+  /** Check every written answer with AI, in one call. */
+  onCheckAll?: () => void;
+  checkingAll?: boolean;
+  /** What the last Check all found, or why it failed. */
+  checkNote?: string | null;
 }) {
   const p = progress(units);
   if (!p.total) return null;
@@ -57,6 +65,15 @@ export function UnitProgressLine({ units, onNext, onSolve, solving }: {
         ...solving.errors].map((e) => (
         <span key={e} className="w-full text-amber-700 dark:text-amber-300">{e}</span>
       ))}
+      {p.written > 0 && onCheckAll && (
+        <button type="button" onClick={onCheckAll} disabled={checkingAll}
+          title="A second, blind solve of every answer, compared with the note. It only flags."
+          className="inline-flex h-6 items-center gap-1 rounded-md px-2 ring-1 ring-border hover:bg-surface-hover disabled:opacity-60">
+          {checkingAll ? <Loader2 size={11} className="animate-spin" /> : <ShieldCheck size={11} />}
+          {checkingAll ? "Checking…" : "Check all with AI"}
+        </button>
+      )}
+      {checkNote && !checkingAll && <span>{checkNote}</span>}
       {p.next && p.written > 0 && (
         <button type="button" className="inline-flex items-center gap-0.5 text-ink hover:underline"
           onClick={() => onNext(p.next!)}>
@@ -159,6 +176,19 @@ function UnitMenu({ u, api, problems, isLeaf, sourceTitle, onOpenSource, onClose
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const busy = api.busy.has(u.key);
+  const checking = api.checking.has(u.key) || api.checking.has("");
+  const answers = answersUnder(api.units, u.key);
+  const verdicts = answers.map((a) => ({ a, r: api.checks.get(a.key) })).filter((x) => x.r) as
+    { a: Unit; r: CheckResult }[];
+
+  async function check() {
+    setError(null);
+    try {
+      await api.check(u.key);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not check it.");
+    }
+  }
 
   async function redo(withNote: string) {
     setError(null);
@@ -206,7 +236,32 @@ function UnitMenu({ u, api, problems, isLeaf, sourceTitle, onOpenSource, onClose
             Redo with a note…
           </button>
         )}
+        {u.state !== "planned" && (
+          <button type="button" className={btn} disabled={busy || checking} onClick={() => void check()}
+            title="A second, blind solve compared with the answer in the note. It only flags.">
+            <ShieldCheck size={12} /> Check with AI
+          </button>
+        )}
       </div>
+      {checking && <p className="mt-1.5 text-ink-secondary"><Loader2 size={11} className="mr-1 inline animate-spin" />Solving it again, blind…</p>}
+      {!checking && verdicts.length > 0 && (
+        <div className="mt-2 space-y-1 border-t border-border pt-1.5" data-testid="unit-checks">
+          <p className="text-ink-secondary">AI check: {checkSummary(verdicts.map((v) => v.r))}</p>
+          {verdicts.map(({ a, r }) => (
+            <div key={a.key} className="leading-snug">
+              <span className={r.verdict === "agree" ? "text-emerald-600" : r.verdict === "differ" ? "font-bold text-amber-600" : "text-ink-secondary"}>
+                {r.verdict === "agree" ? "✓" : r.verdict === "differ" ? "≠" : "?"}
+              </span>{" "}
+              {answers.length > 1 && <span className="font-medium">{a.label || a.title} </span>}
+              {r.verdict === "agree" && <span className="text-ink-secondary">agrees{r.blind ? `: ${r.blind}` : ""}</span>}
+              {r.verdict === "differ" && (
+                <span>second solve: <em>{r.blind}</em>{r.why ? <span className="text-ink-secondary"> — {r.why}</span> : null}</span>
+              )}
+              {r.verdict === "unsure" && <span className="text-ink-secondary">{r.why || "could not compare"}</span>}
+            </div>
+          ))}
+        </div>
+      )}
       {asking && (
         <div className="mt-1.5 space-y-1.5">
           <div className="flex flex-wrap gap-1">

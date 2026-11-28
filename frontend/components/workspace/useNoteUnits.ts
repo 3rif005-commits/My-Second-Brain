@@ -7,8 +7,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { BlockEditorHandle } from "@/components/editor/BlockEditor";
 import { compactBlockHtml } from "@/components/editor/editorAI";
 import {
-  bindUnits, isUntouchedSkeleton, readDraftUnits, unitsApi,
-  type FillOutcome, type Unit,
+  answersUnder, bindUnits, isUntouchedSkeleton, readDraftUnits, unitsApi,
+  type CheckResult, type FillOutcome, type Unit,
 } from "@/lib/units";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,6 +30,13 @@ export interface NoteUnits {
   backToOld: (key: string) => Promise<void>;
   /** The keys being written again right now. */
   busy: Set<string>;
+  /** Check with AI: a blind second solve of the part ("" = every answer),
+   *  compared with the answers as the note has them now. */
+  check: (key: string) => Promise<CheckResult[]>;
+  /** The last AI check of each answer, this session (a difference is also a problem). */
+  checks: Map<string, CheckResult>;
+  /** The parts being checked right now ("" = the whole worksheet). */
+  checking: Set<string>;
 }
 
 export function useNoteUnits(noteId: string,
@@ -40,6 +47,8 @@ export function useNoteUnits(noteId: string,
   /** The version a Redo replaced, and where its keys pointed, for Back to old. */
   const oldVersions = useRef<Map<string, { block: AnyBlock; bindings: { key: string; block_id: string }[] }>>(new Map());
   const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [checks, setChecks] = useState<Map<string, CheckResult>>(new Map());
+  const [checking, setChecking] = useState<Set<string>>(new Set());
 
   const put = (next: Unit[]) => { unitsRef.current = next; setUnits(next); };
 
@@ -176,5 +185,30 @@ export function useNoteUnits(noteId: string,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId, editorRef, bindBlocks]);
 
-  return { units, refresh, collect, bindApplied, fill, setChecked, redo, keep, backToOld, busy };
+  const check = useCallback(async (key: string): Promise<CheckResult[]> => {
+    const ed = editorRef.current;
+    if (!ed) throw new Error("The note isn't open.");
+    const answers: Record<string, string> = {};
+    for (const u of answersUnder(unitsRef.current, key)) {
+      const block = u.block_id ? ed.getBlock(u.block_id) : undefined;
+      if (block) answers[u.key] = compactBlockHtml(await ed.blockHtml(block.id));
+    }
+    if (!Object.keys(answers).length) throw new Error("No written answer to check here.");
+    setChecking((s) => new Set(s).add(key));
+    try {
+      const res = await unitsApi.check(noteId, key, answers);
+      setChecks((m) => {
+        const n = new Map(m);
+        for (const r of res.results) n.set(r.key, r);
+        return n;
+      });
+      await refresh();
+      return res.results;
+    } finally {
+      setChecking((s) => { const n = new Set(s); n.delete(key); return n; });
+    }
+  }, [noteId, editorRef, refresh]);
+
+  return { units, refresh, collect, bindApplied, fill, setChecked, redo, keep, backToOld, busy,
+    check, checks, checking };
 }

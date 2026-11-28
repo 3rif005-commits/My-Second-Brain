@@ -835,6 +835,11 @@ class UnitRedo(BaseModel):
     note: str = ""
 
 
+class UnitCheck(BaseModel):
+    #: each answer under the part, as the note has it now: key → its heading block's HTML
+    answers: dict[str, str] = {}
+
+
 class UnitPatch(BaseModel):
     state: str | None = None      # "checked" / "written" (unchecked)
     pending: bool | None = None   # False once Keep / Back to old is chosen
@@ -887,6 +892,20 @@ def redo_unit(note_id: str, key: str, body: UnitRedo, authorization: str = Heade
     from services.workspace import units
     try:
         return units.redo(note_id, user_id, key, body.current_html[:60_000], body.note[:1000])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail={"error": str(e)})
+
+
+@router.post("/notes/{note_id}/units/{key}/check")
+def check_unit(note_id: str, key: str, body: UnitCheck, authorization: str = Header()):
+    """Check with AI: a blind solve of the part compared with the note's answers
+    (`_root`: every answer of the worksheet, in one call)."""
+    user_id = get_user_id(authorization)
+    _own_note(note_id, user_id)
+    from services.workspace import units
+    answers = {k[:40]: v[:30_000] for k, v in list(body.answers.items())[:60]}
+    try:
+        return units.ai_check(note_id, user_id, "" if key == "_root" else key, answers)
     except ValueError as e:
         raise HTTPException(status_code=400, detail={"error": str(e)})
 
