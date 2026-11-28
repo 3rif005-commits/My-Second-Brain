@@ -33,7 +33,22 @@ No migration: verdicts that disagree live in `problems`; agreements are shown in
 - [x] backend `units.ai_check` + `POST /notes/{id}/units/{key}/check`
 - [x] frontend: menu button, verdict list, mark refresh; **Check all with AI** on the progress line (one call: key `_root`)
 - [x] tests: number parsing, compare, the blind and judge calls with a fake model, storage
-- [ ] live run on ESD 2 Tutorial 3 (AI Grid / Qwen)
+- [x] live run on ESD 2 Tutorial 3 (AI Grid / Qwen)
+
+### Live (2026-11-28, deployed site, AI Grid Qwen3.8-27B)
+
+Solve all on Qwen: 8 answers, every free check passed (K-maps, tables, circuits, logic).
+Check all with AI, first run: 5 agree · 3 differ, two of them false — Exercises 1 and 2 were
+right, but the code path read the editor's band HTML (formulas only in `data-latex`) and
+sent them to the model; numbers like "5 product terms" vs "6" counted as a difference.
+Fixed (bands read as `$latex$`; numbers only confirm; the judge knows a simplified design
+equals the unsimplified one and may say null). Second run: **7 agree · 1 differs** —
+Exercise 3, a true error (the note's PAL terms cover minterm 15, which neither function has;
+the free checks miss it because the band lists gates, not `F = …`). Also fixed: raw LaTeX
+and the difference listed twice in the menu; a line cut inside a formula.
+
+Cost and time: Check all ≈ 40 s; one part ≈ 2½ min once (Qwen thinking).
+Gap found: a band that lists product terms instead of `F = …` escapes the exact logic check.
 
 ## 2. Later in this phase
 
