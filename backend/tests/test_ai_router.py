@@ -192,3 +192,33 @@ def test_anthropic_pin_does_not_steal_the_video_job():
          patch.object(prov_mod, "_env_providers", return_value=[_anthropic()]):
         p = pick("summarize_video", "u")
     assert p is not None and p.provider == "gemini"
+
+
+def test_a_custom_provider_can_lead_for_everyone_but_the_nebius_demo(monkeypatch):
+    """CUSTOM_LLM_FIRST (2026-11-28): AI Grid first once the Nebius credit ran out."""
+    from core.config import settings
+    from services.ai import providers
+    from services.routing import policy
+    from services import nebius
+    monkeypatch.setattr(settings, "custom_llm_base_url", "https://app.ai-grid.io/v1")
+    monkeypatch.setattr(settings, "custom_llm_api_key", "k")
+    monkeypatch.setattr(settings, "custom_llm_model", "Qwen/Qwen3.8-27B")
+    monkeypatch.setattr(settings, "custom_llm_first", True)
+    monkeypatch.setattr(settings, "nebius_api_key", "nk")
+    monkeypatch.setattr(settings, "nebius_only_users", "demo-user")
+    monkeypatch.setattr(providers, "_user_providers", lambda uid: [])
+    chain = providers.list_providers("someone")
+    assert chain[0].base_url == "https://app.ai-grid.io/v1"
+    assert chain[0].chat_model == "Qwen/Qwen3.8-27B"
+    # slots follow the order instead of being pinned to Nebius
+    assert policy.default_policy("someone")["slots"]["fast"]["provider"] == "auto"
+    # the demo account stays on Nemotron
+    assert all("ai-grid" not in (p.base_url or "") for p in providers.list_providers("demo-user"))
+    assert policy.default_policy("demo-user")["slots"]["fast"]["provider"] == nebius.provider_key()
+
+
+def test_a_thinking_block_is_not_the_answer():
+    from services.ai.client import strip_thinking
+    assert strip_thinking("<think>let me see…</think>\n<h1>Answer</h1>") == "<h1>Answer</h1>"
+    assert strip_thinking("<think>still thinking when the budget ran out") == ""
+    assert strip_thinking("<h1>No thinking</h1>") == "<h1>No thinking</h1>"

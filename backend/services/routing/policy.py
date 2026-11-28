@@ -84,10 +84,16 @@ class PolicyError(ValueError):
     """User-facing: names the field that is wrong."""
 
 
-def default_policy() -> dict[str, Any]:
+def default_policy(user_id: str | None = None) -> dict[str, Any]:
     p = copy.deepcopy(DEFAULT_POLICY)
     from services import nebius                     # HACKATHON-NEBIUS
-    return nebius.apply_defaults(p) if nebius.enabled() else p
+    from services.ai.providers import custom_first
+    # With the custom provider first (CUSTOM_LLM_FIRST), the slots stay on
+    # "auto" and follow the provider order; only the Nebius demo account
+    # keeps the Nemotron slots.
+    if nebius.enabled() and (not custom_first() or nebius.only_nebius(user_id or "")):
+        return nebius.apply_defaults(p)
+    return p
 
 
 def validate(raw: dict[str, Any]) -> dict[str, Any]:
@@ -190,20 +196,20 @@ def _table():
 def load(user_id: str) -> dict[str, Any]:
     """The active policy. Never raises: a broken or missing row is the default."""
     if not user_id:
-        return default_policy()
+        return default_policy(user_id)
     try:
         rows = (_table().select("policy, version").eq("user_id", user_id)
                 .order("version", desc=True).limit(1).execute().data or [])
     except Exception as e:                             # noqa: BLE001
         logger.info("routing_policies unavailable (%s); using default", e)
-        return default_policy()
+        return default_policy(user_id)
     if not rows:
-        return default_policy()
+        return default_policy(user_id)
     try:
         return validate(rows[0]["policy"])
     except PolicyError as e:
         logger.warning("stored routing policy invalid (%s); using default", e)
-        return default_policy()
+        return default_policy(user_id)
 
 
 def versions(user_id: str) -> list[dict[str, Any]]:

@@ -53,6 +53,19 @@ services:
       # Losing it means every Notion connection must be reconnected.
       - key: SECRETS_KEY
         sync: false
+      # The default model for every account (2026-11-28): AI Grid, OpenAI-
+      # compatible. The key is set in the dashboard. CUSTOM_LLM_FIRST puts it
+      # first; NEBIUS_ONLY_USERS (the demo) stays on Nemotron.
+      - key: CUSTOM_LLM_BASE_URL
+        value: "https://app.ai-grid.io/v1"
+      - key: CUSTOM_LLM_MODEL
+        value: "Qwen/Qwen3.8-27B"
+      - key: CUSTOM_LLM_LABEL
+        value: "AI Grid"
+      - key: CUSTOM_LLM_API_KEY
+        sync: false
+      - key: CUSTOM_LLM_FIRST
+        value: "true"
       # HACKATHON-NEBIUS: Nemotron on Nebius (backend/services/nebius.py).
       # Unset = off. Removal: docs/hackathon/NEBIUS.md
       - key: NEBIUS_API_KEY

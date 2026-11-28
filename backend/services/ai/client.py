@@ -17,6 +17,7 @@ import base64
 import contextlib
 import contextvars
 import json
+import re
 from typing import AsyncIterator
 
 import httpx
@@ -396,7 +397,21 @@ def _openai_compatible_complete(url: str, headers: dict, model: str,
             text = (data.get("choices") or [{}])[0].get("delta", {}).get("content")
             if text:
                 chunks.append(text)
-    return "".join(chunks)
+    return strip_thinking("".join(chunks))
+
+
+_THINK = re.compile(r"^\s*<think>.*?</think>\s*", re.S)
+
+
+def strip_thinking(text: str) -> str:
+    """A reasoning model's thinking, written into the answer (Qwen3 and
+    others put `<think>…</think>` first), is not the answer. Unclosed, the
+    model never got to answering: nothing, so the caller's check fails and
+    the next provider is tried instead of a note full of thoughts."""
+    if not text.lstrip().startswith("<think>"):
+        return text
+    m = _THINK.match(text)
+    return text[m.end():] if m else ""
 
 
 # ── async streaming (text deltas) ────────────────────────────────────────────

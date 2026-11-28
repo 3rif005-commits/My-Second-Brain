@@ -125,6 +125,10 @@ class Settings(BaseSettings):
     custom_llm_api_key: str = ""
     custom_llm_model: str = ""         # e.g. deepseek-flash
     custom_llm_label: str = ""         # shown in the run log and eval reports
+    # The custom provider FIRST for every account (user, 2026-11-28: AI Grid
+    # once the Nebius credit ran out). It also stops Nebius taking the routing
+    # slots by default; NEBIUS_ONLY_USERS (the demo) stays on Nebius.
+    custom_llm_first: bool = False
     # USD per 1M tokens. Leave empty when unknown: the run log then reports no
     # dollar figure rather than pretending a call was free. Set 0 for a genuinely
     # free tier.

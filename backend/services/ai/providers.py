@@ -193,4 +193,16 @@ def list_providers(user_id: str) -> list[Provider]:
     ordered = _drop_disabled(
         _user_providers(user_id) + _env_providers()) + [local_provider()]
     ordered = sorted(ordered, key=lambda p: 0 if p.provider == "anthropic" else 1)
+    if custom_first():
+        # The .env custom provider leads; everything else stays behind it
+        # as the fallback, in its usual order.
+        base = settings.custom_llm_base_url.rstrip("/")
+        return sorted(ordered, key=lambda p: 0 if (p.provider == "openai_compatible"
+                                                   and p.base_url == base) else 1)
     return nebius.first_for_all(ordered)            # HACKATHON-NEBIUS
+
+
+def custom_first() -> bool:
+    """CUSTOM_LLM_FIRST with a usable custom provider in .env."""
+    return bool(settings.custom_llm_first and settings.custom_llm_base_url
+                and settings.custom_llm_api_key)
